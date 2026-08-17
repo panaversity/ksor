@@ -1,3 +1,6 @@
 node_modules/
 *.tgz
 .DS_Store
+dist/
+.mypy_cache/
+__pycache__/
