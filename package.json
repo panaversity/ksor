@@ -1,39 +1,42 @@
 {
-  "name": "@panaversity/ksor",
+  "name": "ksor-monorepo",
   "version": "0.0.0",
-  "description": "Knowledge System of Record — the authoritative, governed source of knowledge that humans and AI agents operate from. Name reserved; implementation in progress.",
+  "private": true,
+  "description": "Monorepo for ksor — the Knowledge System of Record for humans and AI agents.",
+  "homepage": "https://github.com/panaversity/ksor#readme",
   "license": "Apache-2.0",
   "author": "Panaversity",
-  "homepage": "https://github.com/panaversity/ksor#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/panaversity/ksor.git"
   },
-  "bugs": {
-    "url": "https://github.com/panaversity/ksor/issues"
+  "type": "module",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck && tsc -p scripts",
+    "lint": "oxlint --fix",
+    "lint:ci": "oxlint",
+    "fmt": "oxfmt",
+    "fmt:ci": "oxfmt --check",
+    "guard": "node scripts/guard-invariants.mjs",
+    "check:corpus": "node scripts/check-corpus.mjs",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "publint": "turbo run publint",
+    "changeset": "changeset",
+    "prepare": "node scripts/install-git-hooks.mjs"
   },
-  "keywords": [
-    "knowledge-system-of-record",
-    "system-of-record",
-    "mcp",
-    "model-context-protocol",
-    "governance",
-    "provenance",
-    "citations",
-    "abstention",
-    "documentation",
-    "docusaurus"
-  ],
-  "bin": {
-    "ksor": "bin/ksor.js"
+  "devDependencies": {
+    "@changesets/cli": "^3.0.0",
+    "@types/node": "catalog:",
+    "oxfmt": "0.63.0",
+    "oxlint": "1.78.0",
+    "turbo": "^2.10.10",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
-  "files": [
-    "bin"
-  ],
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
-  "publishConfig": {
-    "access": "public"
-  }
+  "packageManager": "pnpm@11.22.0"
 }

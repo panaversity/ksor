@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".nvmrc", "pnpm-workspace.yaml", "tools/tsconfig/tsconfig.base.json"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "cache": false
+    },
+    "publint": {
+      "dependsOn": ["build"],
+      "cache": false
+    }
+  }
+}
