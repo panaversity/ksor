@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — Knowledge System of Record: authoritative knowledge for humans and AI agents" width="100%">
+</p>
+
 # KSoR
 
 **The Knowledge System of Record for humans and AI agents.**
