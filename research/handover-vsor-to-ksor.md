@@ -1,5 +1,5 @@
 ---
-issue: recorded via the base-environment PR (link updated on PR creation)
+issue: https://github.com/panaversity/ksor/pull/1
 status: accepted
 last_updated: 2026-08-18
 ---
