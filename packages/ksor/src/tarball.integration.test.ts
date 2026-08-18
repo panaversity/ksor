@@ -35,6 +35,7 @@ const REQUIRED_IN_TARBALL = [
   "templates/scaffold/package.json",
   "templates/scaffold/pnpm-lock.yaml",
   "templates/scaffold/instance.md",
+  "templates/scaffold/vercel.json",
   // Not ".gitignore": npm pack drops that name from every tarball, so the
   // template ships bare and init renames it on emit.
   "templates/scaffold/gitignore",

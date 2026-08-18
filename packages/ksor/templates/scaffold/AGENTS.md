@@ -43,6 +43,14 @@ pnpm build       # static site into system/site/out/
 pnpm check       # the format checker — run before handing off any knowledge change
 ```
 
+## Publishing
+
+`pnpm build` emits a fully static site (`system/site/out/`) deployable to
+any host — Vercel reads the shipped `vercel.json` (deploy from the repo
+ROOT, never `system/site/`), and every other host just serves the folder.
+`KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. Details in
+README → Deploying.
+
 ## Writing knowledge
 
 - One document per file under `knowledge/`; the path is the document's

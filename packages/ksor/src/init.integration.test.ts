@@ -452,6 +452,7 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "system",
+        "vercel.json",
       ].sort(),
     );
   });
