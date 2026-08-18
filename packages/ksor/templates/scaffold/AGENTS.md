@@ -48,8 +48,11 @@ pnpm check       # the format checker — run before handing off any knowledge c
 `pnpm build` emits a fully static site (`system/site/out/`) deployable to
 any host — Vercel reads the shipped `vercel.json` (deploy from the repo
 ROOT, never `system/site/`), and every other host just serves the folder.
-`KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. Details in
-README → Deploying.
+`KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With
+`audiences:` declared, plain `pnpm build` is always the public tier;
+`KSOR_AUDIENCE=<audience> pnpm build` builds a wider tier that belongs
+behind that audience's own access control, never on a public host.
+Details in README → Deploying.
 
 ## Writing knowledge
 
