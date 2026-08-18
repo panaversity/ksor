@@ -44,6 +44,20 @@ browser smoke, contain no authored content — the shell is a slot);
 The predecessor's Docusaurus shell is reference material for porting
 components and tokens, not a shipped option.
 
+_Evidence appended 2026-08-18 — the side-by-side experiment:_ both shells
+were stood up locally over the same three-document corpus. Docusaurus (vsor
+shell): ~10 min, zero source edits — its `VSOR_KNOWLEDGE_DIR` seam is
+genuinely well-engineered. Fumadocs (official starter): ~18 min, four small
+edits — friction was obtaining a coherent starter (its create-CLI cannot run
+non-interactively and git tags lag npm; both moot for ksor, whose template
+ships pre-built and version-pinned) — after which governance frontmatter
+rendered untouched and `llms.txt` listed every page for zero work. The owner
+compared both UIs directly and judged Fumadocs better and more powerful; the
+enterprise lens (SSO/middleware capability for private corpora, first-party
+agent surface, extensibility as a normal Next app, platform velocity)
+concurred. Decision 9 stands validated by research, by eyes, and by
+measurement.
+
 ## Resolutions locked by the hunt (the ones that were live grenades)
 
 - **No symlinks anywhere in scaffold output** — Windows git materializes
