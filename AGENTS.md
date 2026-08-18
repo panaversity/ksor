@@ -345,6 +345,8 @@ duplicate this file — they go deeper.
 
 - $implement-spec — the implementation discipline: red-first, live
   verification, detail pass, truth sweep
+- $release — the release airlock, pre-publish testing, and the red-Release
+  runbook (trusted publisher, org PR-permission, snapshots)
 - $find-skills — discover/install ecosystem skills (hash-pinned in skills-lock.json)
 - $skill-creator — vendored (anthropics/skills): create, improve, and eval skills
 - $mcp-builder — vendored (anthropics/skills): MCP server design and tooling,
