@@ -2,20 +2,21 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-18.
+updated: 2026-08-19.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.2** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.3** on npm (trusted publishing, provenance
 attached — published by the release merging this page). It ships the
-working `ksor init` described below, plus the CLI contract: `dev`,
+working `ksor init` described below — including the visibility model and
+the deploy story — plus the CLI contract: `dev`,
 `build` and `serve` still report "designed but not implemented" and exit
 `2`; an unknown verb is refused with exit `1` and a stable
 `error: unknown-verb` stderr slug. The package root exports `exitCodes`,
 `verbs`, and `resolveCommand`, and docs ship inside the tarball under
 `docs/`.
 
-## Implemented (released in 0.0.2)
+## Implemented (released in 0.0.3)
 
 - **`ksor init`** — the first working verb, implemented red-first against
   the ratified spec (`specs/ksor/init/spec.md`). One command emits a
@@ -46,7 +47,17 @@ working `ksor init` described below, plus the CLI contract: `dev`,
   client bundle; non-public builds label themselves; seven checker rules
   including the cross-audience link no single build can catch. Absent
   `audiences:`, nothing changes. Conformance-tested with canary sweeps
-  and positive controls in CI.
+  and positive controls in CI. Hardened by two adversarial review rounds
+  (16 findings fixed): one canonical frontmatter grammar across the
+  checker and both shells, and every malformed shape fails closed —
+  including the two that once failed open (a block-list `visibility:`,
+  a `----`-closed frontmatter block).
+
+- **The deploy story** — the scaffold ships `vercel.json` answering
+  Vercel's setup interview (repo root, static export), and the scaffolded
+  README/AGENTS.md document deploying to any static host, including the
+  rule that a `KSOR_AUDIENCE` build belongs behind that audience's own
+  access control, never on a public host.
 
 - **Base environment**: pnpm 11 workspace with catalog pins, TypeScript 7
   (native compiler), pure-ESM package build via tsdown, vitest unit +
