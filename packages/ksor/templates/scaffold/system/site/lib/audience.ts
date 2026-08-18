@@ -1,0 +1,137 @@
+import { instanceFrontmatter } from "./shared";
+
+/**
+ * The audience model, declared in instance.md — the record says who its
+ * readers are, and the build enforces it:
+ *
+ *     audiences:
+ *       - public
+ *       - internal
+ *       - restricted
+ *     default_visibility: public
+ *
+ * Ordered least- to most-restricted, so "build the internal site" means
+ * "public and internal included" with no further configuration. A record
+ * that declares no audiences has no model and publishes every document —
+ * the behaviour of every instance written before this key existed.
+ */
+export interface AudienceModel {
+  /** Least- to most-restricted, `public` first. */
+  readonly audiences: readonly string[];
+  /** The tier of a document that declares no `visibility:`. */
+  readonly defaultVisibility: string;
+}
+
+function unquote(raw: string): string {
+  const trimmed = raw.trim();
+  return /^(['"])(.*)\1$/.exec(trimmed)?.[2] ?? trimmed;
+}
+
+/** Every refusal this feature makes: a slug a pipeline can match, then the remedy. */
+export function refuse(slug: string, what: string, why: string, fix: string): never {
+  // The slug leads, so a pipeline can match on it, and the three lines below
+  // it are the whole remedy — an operator never has to read this file.
+  throw new Error(`${slug}: ${what}\n  why: ${why}\n  fix: ${fix}`);
+}
+
+function readAudienceModel(): AudienceModel | null {
+  const block = instanceFrontmatter();
+  // Top-level key only: `^` under /m cannot match an indented child.
+  if (!/^audiences:/m.test(block)) return null;
+
+  const flow = /^audiences:[ \t]*\[(.*)\][ \t]*$/m.exec(block)?.[1];
+  const list = /^audiences:[ \t]*\r?\n((?:[ \t]+-[ \t]*.*\r?\n?)+)/m.exec(block)?.[1];
+  const audiences = (
+    flow !== undefined
+      ? flow.split(",")
+      : (list ?? "").split(/\r?\n/).map((line) => /^[ \t]+-[ \t]*(.*)$/.exec(line)?.[1] ?? "")
+  )
+    .map(unquote)
+    .filter((value) => value !== "");
+
+  // A declared-but-unreadable model must never read as "no model": that is
+  // the one parse failure that publishes the whole record.
+  if (audiences.length === 0) {
+    refuse(
+      "ksor-audiences-unreadable",
+      "instance.md declares `audiences:` but no audience could be read from it",
+      "an unreadable model reads as no model, and no model publishes every document — the one parse failure that leaks",
+      "write the audiences as a list, least-restricted first:\n    audiences:\n      - public\n      - internal",
+    );
+  }
+
+  const defaultVisibility = unquote(/^default_visibility:[ \t]*(.*)$/m.exec(block)?.[1] ?? "");
+  if (defaultVisibility === "") {
+    refuse(
+      "ksor-default-visibility-missing",
+      "instance.md declares `audiences:` without `default_visibility:`",
+      "there is no safe guess: assuming the widest tier leaks on the first document that forgets the key, assuming the narrowest hides the record",
+      `add the tier a document without a visibility: key belongs to, e.g. default_visibility: ${audiences[0]}`,
+    );
+  }
+  if (!audiences.includes(defaultVisibility)) {
+    refuse(
+      "ksor-default-visibility-undeclared",
+      `default_visibility: ${defaultVisibility} is not one of the declared audiences (${audiences.join(", ")})`,
+      "every document without a visibility: key belongs to this tier — a tier no build understands is a record no build can publish honestly",
+      `set default_visibility: to one of ${audiences.join(", ")}, or declare ${defaultVisibility} in audiences:`,
+    );
+  }
+
+  return { audiences, defaultVisibility };
+}
+
+/** The declared model, or null when this record declares none. */
+export const audienceModel: AudienceModel | null = readAudienceModel();
+
+function resolveBuildAudience(model: AudienceModel | null): string {
+  const requested = process.env.KSOR_AUDIENCE?.trim() ?? "";
+  if (model === null) {
+    if (requested !== "") {
+      refuse(
+        "ksor-audiences-not-declared",
+        `KSOR_AUDIENCE="${requested}" was requested, but instance.md declares no audiences`,
+        "this build would publish every document — a build that cannot filter must never look like one that did",
+        "declare the model in instance.md (audiences: + default_visibility:), or build without KSOR_AUDIENCE",
+      );
+    }
+    return "";
+  }
+  // Unset means the least-restricted tier: the only default that cannot leak,
+  // so `pnpm build` keeps publishing the public site out of the box.
+  if (requested === "") return model.audiences[0] as string;
+  if (!model.audiences.includes(requested)) {
+    refuse(
+      "ksor-audience-undeclared",
+      `KSOR_AUDIENCE="${requested}" is not an audience this record declares (${model.audiences.join(", ")})`,
+      "an unrecognized audience could only be honoured by publishing more than the record names — so it refuses instead of widening",
+      `build with one of ${model.audiences.join(", ")}, or add "${requested}" to instance.md's audiences: list`,
+    );
+  }
+  return requested;
+}
+
+/** The audience this build publishes for; "" when the record has no model. */
+export const buildAudience: string = resolveBuildAudience(audienceModel);
+
+/** Whether a document of this visibility belongs in THIS build. */
+export function visibleInBuild(visibility: string | null): boolean {
+  if (audienceModel === null) return true;
+  const value =
+    visibility === null || visibility === "" ? audienceModel.defaultVisibility : visibility;
+  const rank = audienceModel.audiences.indexOf(value);
+  // An undeclared visibility is refused, never published: a value no build
+  // understands is a typo, and a typo reads as a restriction.
+  if (rank === -1) return false;
+  return rank <= audienceModel.audiences.indexOf(buildAudience);
+}
+
+/**
+ * What a non-public build calls itself, in the site chrome — so a leaked
+ * screenshot of an internal site says which audience it was built for. The
+ * public build (the least-restricted tier) says nothing new.
+ */
+export const audienceNotice: string | null =
+  audienceModel === null || buildAudience === audienceModel.audiences[0]
+    ? null
+    : `${buildAudience} build — not for publication`;

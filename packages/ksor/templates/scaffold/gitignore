@@ -5,6 +5,9 @@ node_modules/
 system/site/.next/
 system/site/.source/
 system/site/out/
+# the per-audience copy of the record a build stages — a filtered derivative,
+# never a second record; committing it would publish what a build excluded
+system/site/.staged-knowledge/
 *.tsbuildinfo
 
 # secrets never enter the record — system/ is their future home (serve)
