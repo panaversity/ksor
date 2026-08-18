@@ -23,7 +23,8 @@ const REQUIRED_IN_TARBALL = [
 ];
 
 describe("published tarball", () => {
-  it("ships every contract file (run `pnpm build` first)", () => {
+  // npm startup on a cold CI runner can exceed vitest's 5s default.
+  it("ships every contract file (run `pnpm build` first)", { timeout: 30_000 }, () => {
     const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
       cwd: pkgDir,
       encoding: "utf8",
