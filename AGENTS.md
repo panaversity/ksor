@@ -85,6 +85,7 @@ Used precisely; do not repurpose.
 | `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface      |
 | `docs/status.md`            | the only authority on what is implemented (npm links it)  |
 | `research/`                 | plans and records; frontmatter is guard-enforced          |
+| `specs/`                    | one-page feature contracts; frontmatter is guard-enforced |
 | `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)  |
 | `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest |
 | `tsconfig.base.json`        | the shared strict base — extend, don't fork               |
@@ -253,8 +254,9 @@ verbs, scaffold contents, MCP tools, `build.lock.json`, response envelopes),
 crosses a package boundary, is expensive to reverse, or will be built
 unattended by an agent. A spec is one page: status, the business claim it
 serves, the observable contract, acceptance, out-of-scope. Where spec and code
-disagree, the code wins and the spec is corrected in the same commit. `specs/`
-appears with the first spec, never before.
+disagree, the code wins and the spec is corrected in the same commit. Specs
+cite the research they distill; guard rule 8 enforces the frontmatter
+(status + claim). `specs/` appeared with its first spec: `specs/base-env/`.
 
 ## Coding principles
 

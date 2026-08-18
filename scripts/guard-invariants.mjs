@@ -215,9 +215,44 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 8 — every specs/**/spec.md carries enforced frontmatter: a closed
+// status lifecycle and the business claim it serves.
+{
+  const specsRoot = path.join(repoRoot, "specs");
+  const SPEC_STATUS = new Set(["draft", "ratified", "superseded"]);
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory()
+        ? walk(path.join(dir, e.name))
+        : e.name === "spec.md"
+          ? [path.join(dir, e.name)]
+          : [],
+    );
+  for (const abs of existsSync(specsRoot) ? walk(specsRoot) : []) {
+    const rel = path.relative(repoRoot, abs);
+    const fm = parseFrontmatter(readFileSync(abs, "utf8"));
+    if (!fm || !SPEC_STATUS.has(fm["status"] ?? "")) {
+      violate(
+        8,
+        `${rel} has status ${JSON.stringify(fm?.["status"] ?? null)}, not draft | ratified | superseded`,
+        "a spec's lifecycle is a closed set — an unstated status makes the contract's authority unknowable",
+        "set status: draft | ratified | superseded in the frontmatter",
+      );
+    }
+    if (!fm || !fm["claim"]) {
+      violate(
+        8,
+        `${rel} names no business claim`,
+        "every change names its business claim (How we work 11); a spec that cannot say which promise it serves does not get built",
+        "add a claim: line naming the promise this spec serves",
+      );
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error(`guard: ${violations.length} invariant violation(s):\n`);
   for (const v of violations) console.error(`  ${v}\n`);
   process.exit(1);
 }
-console.log("guard: ok (7 rules)");
+console.log("guard: ok (8 rules)");
