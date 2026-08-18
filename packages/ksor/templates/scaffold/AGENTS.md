@@ -15,8 +15,11 @@ The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
 record; the record never references the system.
 
-`instance.md` carries a closed key set — `format`, `name`, `ksor`, `site` —
-and everything that matters about it is the prose below that frontmatter;
+`instance.md` carries a closed key set — `format`, `name`, `ksor`, `site`,
+and the optional pair `audiences` + `default_visibility` (the record's reader
+audiences, ordered least- to most-restricted with `public` first, and the one
+a document takes when it names none — declared together or not at all) — and
+everything that matters about it is the prose below that frontmatter;
 `pnpm check` names any other key rather than ignoring it.
 
 ## Critical rules
@@ -27,6 +30,8 @@ and everything that matters about it is the prose below that frontmatter;
 2. **`knowledge/` is CommonMark `.md` only.** No `.mdx`, no `meta.json`, no
    framework files. A document must read cleanly in any markdown viewer.
 3. **Never edit generated files** — `system/site/.source/`, `.next/`, `out/`,
+   `system/site/.staged-knowledge/` (a build's per-audience copy of the
+   record — edit `knowledge/`, or the next build erases the change),
    lockfiles by hand.
 
 ## Commands (run at the repo root)
@@ -51,10 +56,23 @@ pnpm check       # the format checker — run before handing off any knowledge c
 - Frontmatter: `title` and `status` (`draft | review | approved | superseded`)
   are required. `owner` and `provenance` (a list naming real sources) are
   strongly encouraged — they become required as this project climbs the
-  governance ladder. `description`, `order` (sidebar position), `effective`
-  (the date the document takes effect) and `superseded` (a legacy marker —
-  prefer `status`) are available. No other keys; never `id:` or `name:` — the
-  path is the identity.
+  governance ladder. `description`, `visibility` (below), `order` (sidebar
+  position), `effective` (the date the document takes effect) and `superseded`
+  (a legacy marker — prefer `status`) are available. No other keys; never
+  `id:` or `name:` — the path is the identity.
+- `visibility:` names the one audience a document belongs to — a single value
+  from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
+  (an approved document can be restricted, and a draft is not hidden). Leave
+  it off and the document takes `default_visibility`. The key does nothing
+  until `instance.md` declares `audiences:`; once it does, `pnpm check`
+  refuses any link or `superseded_by:` pointing from a wider audience at a
+  narrower one — the leak no single build can catch, because the build that
+  publishes the link has already dropped its target.
+
+  **Publication, not authorship: anyone who can clone the repository reads
+  every document regardless of frontmatter; if someone must not read a
+  document and can clone, the answer is a second repository.**
+
 - A replaced document is marked `status: superseded` with `superseded_by:`
   pointing at its successor — superseded documents are never deleted.
 - Images and assets live in `knowledge/` beside the document that uses them,
@@ -94,7 +112,7 @@ You own `system/site/` outright — these are the seams, cheapest first:
   and the home-page mark are the same file.
 - **Anything deeper** — edit the site like the Next.js app it is; the only
   rule that survives customization is critical rule 1. The whole shell is
-  replaceable behind a four-clause contract (a themed Docusaurus shell with
+  replaceable behind a five-clause contract (a themed Docusaurus shell with
   a swap recipe lives in the ksor repository under `workbench/shells/`).
 
 ## What this project owns

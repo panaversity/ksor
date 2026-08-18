@@ -2,7 +2,7 @@
 name: format-checker
 description: The record's format rules as a runnable check — frontmatter, filenames, links, structure. Use before handing off any change to knowledge/, when a check fails and you need to fix it, or when unsure whether a document is well-formed. Run with `pnpm check` (or node .agents/skills/format-checker/check.mjs).
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Format checker
@@ -25,6 +25,13 @@ enforces what AGENTS.md states in prose:
   blocks are code, not links, and are ignored.
 - `instance.md` exists, is `format: 1`, and carries only the keys the format
   defines — an unknown key is named, never ignored.
+- The audience model, when there is one: `audiences:` is ordered least- to
+  most-restricted with `public` first, no duplicates, and never without
+  `default_visibility:`; a document's `visibility:` names one of the declared
+  audiences; and no link or `superseded_by:` points from a wider audience at a
+  narrower one — the leak no single build can catch, since the build that
+  publishes the pointer has already dropped its target. A record that declares
+  no `audiences:` is checked exactly as it was before the key existed.
 - `CLAUDE.md` stays a one-line pointer; `.agents/skills/` and
   `.claude/skills/` hold the same files byte for byte **in both directions**
   (a file only one tree carries is a rule nobody reviewed); the site contains
