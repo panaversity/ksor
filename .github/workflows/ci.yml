@@ -113,6 +113,10 @@ jobs:
       # reference as emitted, and the workbench Docusaurus shell via its swap
       # recipe — one suite, identical assertions (surface contract clauses 1-4).
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/shell-conformance.integration.test.ts
+      # The visibility canary sweep (specs/ksor/visibility): a restricted
+      # document leaves no trace below its tier, with positive controls so
+      # "filtered" can never be confused with "broken".
+      - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/visibility-conformance.integration.test.ts
 
   init-windows:
     name: Init acceptance (Windows)
