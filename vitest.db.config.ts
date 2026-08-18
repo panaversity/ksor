@@ -10,6 +10,11 @@ export default defineConfig({
   test: {
     include: ["packages/*/src/**/*.db.test.ts"],
     testTimeout: 60_000,
-    hookTimeout: 120_000,
+    hookTimeout: 180_000,
+    // Suites get their own DATABASE, but Postgres ROLES are cluster-global:
+    // two suites applying schema.sql concurrently raced its idempotent
+    // CREATE ROLE into a pg_authid duplicate-key error (found live in CI,
+    // 2026-08-19). The tier runs files serially.
+    fileParallelism: false,
   },
 });

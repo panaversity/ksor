@@ -60,6 +60,10 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # Workspace packages resolve one another's types through their built
+      # dist (package.json exports), so build first (found live: the first
+      # multi-package push, 2026-08-19).
+      - run: pnpm build
       - run: pnpm typecheck
 
   test-unit:
@@ -70,6 +74,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # Unit tests import across workspace packages — same dist resolution.
+      - run: pnpm build
       - run: pnpm test:unit
 
   test-integration:

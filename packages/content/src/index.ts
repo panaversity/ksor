@@ -78,3 +78,16 @@ export {
 } from "./service.js";
 export { UnknownSlug, findDocument, outline, documentChunks } from "./lib/read.js";
 export { windowDocument, codePointLength, cleanCut, estTokens } from "./lib/windowing.js";
+export {
+  normalizeQueries,
+  parseQueriesFile,
+  runCalibration,
+  type CalibrationOptions,
+} from "./calibrate/run.js";
+export {
+  buildReport,
+  renderReport,
+  BUILT_IN_OOC,
+  type CalibrationReport,
+  type ScoredQuery,
+} from "./calibrate/math.js";

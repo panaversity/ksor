@@ -77,14 +77,14 @@ the deploy story — plus the CLI contract: `dev`,
 - **The content kernel and the MCP gateway** (decision 11, in progress on
   the kernel-conversion branch): four private workspace packages —
   platform (pool discipline), content (schema + ingest + hybrid retrieval
-  + calibrated abstention + read plane), gateway-kit (fail-closed serving
-  postures), gateway (the MCP door: search/outline/read over stdio and
-  stateless Streamable HTTP). Converted from the production oracle with
-  its suite as the fixture source; acceptance drives the BUILT binary
-  with a real MCP client against live Postgres (Neon, pgvector) — cited
-  passages, snapshot generation-pinning, byte-exact reads, and the typed
-  abstention. The published `ksor` CLI is untouched: `serve` still exits
-  `2` until the npm packaging question (decision 12) is resolved.
+  - calibrated abstention + read plane), gateway-kit (fail-closed serving
+    postures), gateway (the MCP door: search/outline/read over stdio and
+    stateless Streamable HTTP). Converted from the production oracle with
+    its suite as the fixture source; acceptance drives the BUILT binary
+    with a real MCP client against live Postgres (Neon, pgvector) — cited
+    passages, snapshot generation-pinning, byte-exact reads, and the typed
+    abstention. The published `ksor` CLI is untouched: `serve` still exits
+    `2` until the npm packaging question (decision 12) is resolved.
 
 ## Designed, not implemented
 
