@@ -1,0 +1,6 @@
+# The scaffold templates are the published bytes: a Windows checkout must
+# hold the same bytes the tarball ships, or `ksor init` from a checkout
+# emits a different scaffold than the one every test certified (review
+# finding, 2026-08-18 — the byte-equality suites all ran on LF platforms).
+packages/ksor/templates/** text eol=lf
+packages/ksor/templates/**/*.png binary

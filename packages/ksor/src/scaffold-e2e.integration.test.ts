@@ -145,7 +145,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // :3000 is already serving some other project, Next silently binds the
     // next free port and the poll below would green-light a stranger's site
     // (found live 2026-08-18 — the poll hit a long-running demo server).
-    const dev = spawn("pnpm", ["dev", "--port", "3217"], { cwd: project, stdio: "ignore" });
+    // detached: SIGTERM to the pnpm wrapper alone orphans `next dev`, which
+    // keeps the port and lets a re-run's poll green-light the stale server
+    // (review finding, 2026-08-18) — kill the whole process group instead.
+    const dev = spawn("pnpm", ["dev", "--port", "3217"], {
+      cwd: project,
+      stdio: "ignore",
+      detached: true,
+    });
     try {
       // Wait for the dev server, then confirm the page, then edit and poll.
       const url = "http://localhost:3217/docs/example/";
@@ -171,7 +178,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         .poll(async () => (await fetch(url)).text(), { timeout: 60_000, interval: 2_000 })
         .toContain(marker);
     } finally {
-      dev.kill("SIGTERM");
+      try {
+        if (dev.pid !== undefined) process.kill(-dev.pid, "SIGTERM");
+        else dev.kill("SIGTERM");
+      } catch {
+        dev.kill("SIGTERM");
+      }
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
   }, 240_000);

@@ -219,6 +219,40 @@ describe("scaffolded format-checker — torture", () => {
     expect(edges.output).toContain("frontmatter value needs quoting: title: Pay # policy");
   });
 
+  it("refuses a scalar provenance and accepts the list form", () => {
+    const scalar = probe({
+      "knowledge/prov.md": doc(
+        "Body.",
+        "title: Prov\nstatus: draft\nprovenance: internal interview with the CFO",
+      ),
+    });
+    expect(scalar.status, scalar.output).toBe(1);
+    expect(scalar.output).toContain("provenance is a list, not a value");
+
+    const list = probe({
+      "knowledge/prov-list.md": doc(
+        "Body.",
+        "title: Prov\nstatus: draft\nprovenance:\n  - internal interview with the CFO",
+      ),
+    });
+    expect(list.status, list.output).toBe(0);
+  });
+
+  it("refuses underscore-prefixed names — the record has no hidden documents", () => {
+    const result = probe({ "knowledge/_partial.md": doc("Body.") });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain("underscore-prefixed name");
+  });
+
+  it("holds instance.md's name to the init grammar for life", () => {
+    const original = readFileSync(path.join(project, "instance.md"), "utf8");
+    const renamed = probe({
+      "instance.md": original.replace(/^name: .*$/m, "name: My Project"),
+    });
+    expect(renamed.status, renamed.output).toBe(1);
+    expect(renamed.output).toContain('name "My Project" does not match');
+  });
+
   it("refuses non-ASCII filenames — the path is the address, the title is the name", () => {
     const result = probe({
       "knowledge/política.md": doc("Body."),

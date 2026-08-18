@@ -140,8 +140,13 @@ left `node_modules/.cache` in place, which makes "cold" and "warm" converge.
 ```sh
 rm -rf system/site
 cp -R <ksor-repo>/workbench/shells/docusaurus system/site
-rm system/site/README.md   # this file documents the workbench artifact; the
-                           # format checker rightly refuses .md inside the site
+rm -rf system/site/README.md system/site/node_modules \
+       system/site/.docusaurus system/site/.generated system/site/out
+                           # the README documents the workbench artifact (the
+                           # format checker rightly refuses .md inside the
+                           # site); the rest are generated dirs a locally-run
+                           # workbench shell may carry — the conformance suite
+                           # performs this same filtered copy
 printf '%s\n' 'system/site/.docusaurus/' 'system/site/.generated/' >> .gitignore
 pnpm install               # stops once on the build-scripts gate — see below
                            # (in CI, add --no-frozen-lockfile: the swap
@@ -223,11 +228,13 @@ creates).
   so a bare key used to jump a document to the top of its level here while the
   reference shell sorted it last — one record, two reading orders, silently.
   `lib/record.ts` checks the empty case before `Number()`.
-- **`KSOR_BASE_PATH` is normalized and validated at config load.** `/repo/` and
-  `/repo` both give `baseUrl: "/repo/"`; `/` and unset both mean root; a value
-  with no leading slash is refused with a message naming the variable and the
-  valid shape. Raw interpolation built green, unloadable sites for the first
-  three.
+- **`KSOR_BASE_PATH` accepts exactly the shapes the reference shell
+  accepts** — `/repo` (leading slash, no trailing one) or unset for root.
+  `/`, `repo`, and `/repo/` are refused with the fix in the error: the
+  reference shell's framework refuses them, and a value that builds on one
+  shell and fails on the other is a trap. _(Revised 2026-08-18: an earlier
+  note said these were normalized; the code now refuses them, and the code
+  wins.)_
 - **`.generated/` is removed before it is written.** `staticDirectories` copies
   the whole directory into the export, so a stray file left there once shipped
   into every build from then on. Verified with a planted `ghost.txt`: absent

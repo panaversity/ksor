@@ -310,6 +310,17 @@ if (!existsSync(knowledgeDir)) {
         );
       }
     }
+    if (base.startsWith("_")) {
+      // found live 2026-08-18: one shell's framework treats _files as hidden
+      // partials and skips them, the other publishes them — the same record,
+      // one document present on one surface and dead-linked on the other.
+      problem(
+        rel,
+        "underscore-prefixed name",
+        "site frameworks treat _files as hidden partials — the record has no hidden documents; every document is published or it is not in the record",
+        "rename without the leading underscore",
+      );
+    }
     if (/\(.*\)/.test(base)) {
       problem(
         rel,
@@ -397,6 +408,18 @@ if (!existsSync(knowledgeDir)) {
             `quote it: ${key}: "${value}"`,
           );
         }
+      }
+      // provenance is a LIST — the site's schema enforces it at build, so a
+      // scalar value passing here failed there with a schema error naming
+      // neither file nor rule (review finding, 2026-08-18).
+      const provenance = fm.keys.get("provenance");
+      if (provenance !== undefined && provenance !== "") {
+        problem(
+          rel,
+          `provenance is a list, not a value: ${provenance}`,
+          "each source is one entry so citations can point at exactly one of them",
+          `write it as list items:\n      provenance:\n        - ${provenance}`,
+        );
       }
       const status = fm.keys.get("status");
       if (status !== undefined && status !== "" && !STATUS_VALUES.has(status)) {
@@ -490,12 +513,24 @@ if (!existsSync(instanceMd)) {
         "set format: 1 (a newer format means you need a newer ksor)",
       );
     }
-    if (!fm.keys.has("name") || fm.keys.get("name") === "") {
+    const instanceName = fm.keys.get("name") ?? "";
+    if (instanceName === "") {
       problem(
         "instance.md",
         "missing frontmatter key: name",
         "the name identifies this SoR to agents — it is the authority in every future citation",
         "add name: <this-sor>",
+      );
+    } else if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(instanceName)) {
+      // The same grammar `ksor init` enforces at birth: round 3 made this
+      // file the single identity source for every surface, so the guard on
+      // it has to hold for life, not only at init (review finding,
+      // 2026-08-18: an edited name published exactly what init refuses).
+      problem(
+        "instance.md",
+        `name "${instanceName}" does not match ^[a-z0-9][a-z0-9-]{0,62}$`,
+        "the name is the future ksor://<name>/ authority and every surface's identity — the grammar that binds it at init binds it forever",
+        "use ascii lowercase letters, digits and hyphens",
       );
     }
     for (const key of fm.keys.keys()) {

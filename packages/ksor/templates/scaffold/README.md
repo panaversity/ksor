@@ -17,9 +17,8 @@ pnpm install
 pnpm dev        # browse the knowledge at http://localhost:3000
 ```
 
-No pnpm? Run `npm install -g pnpm`, or `corepack enable pnpm` on
-Node versions that bundle corepack, or
-`npm install -g pnpm`.
+No pnpm? Run `npm install -g pnpm` — or `corepack enable pnpm` on Node
+versions that bundle corepack.
 
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you
@@ -45,7 +44,7 @@ different coding agent's way of finding the same working contract.
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                     |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                             |
 | `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands, and the pnpm version this project pins.                                                                            |
-| `pnpm-workspace.yaml`            | where the workspace looks for code (`system/*`), plus the supply-chain policy for installs.                                                                               |
+| `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                  |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                              |
 
 `format-checker` deliberately contains a program, `check.mjs`, and not only
