@@ -11,4 +11,5 @@ __pycache__/
 workbench/shells/*/node_modules/
 workbench/shells/*/.docusaurus/
 workbench/shells/*/.generated/
+workbench/shells/*/.staged-knowledge/
 workbench/shells/*/out/

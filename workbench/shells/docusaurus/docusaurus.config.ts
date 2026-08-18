@@ -13,9 +13,11 @@
  * the record has not ratified would be a fork of the record, not a feature of
  * the shell. README.md records every rejection and its reason.
  *
- * Conformance-lean, never feature parity: it satisfies clauses 1–4 and
- * translates the governed `order` key. Everything it publishes it derives from
- * the record itself (lib/record.ts), with no framework in between.
+ * Conformance-lean, never feature parity: it satisfies clauses 1–5 — the fifth
+ * being that no build emits a document outside its audience, enforced by
+ * staging (lib/visibility.ts) — and translates the governed `order` key.
+ * Everything it publishes it derives from the record itself (lib/record.ts),
+ * with no framework in between.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -26,6 +28,7 @@ import type { Config } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
 
 import { instanceName, instanceTitle, llmsFull, llmsIndex, readRecord } from "./lib/record";
+import { planRecord } from "./lib/visibility";
 
 const shellDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(shellDir, "..", "..");
@@ -69,7 +72,20 @@ const baseUrl = `${ksorBasePath}/`;
 
 const name = instanceName(repoRoot);
 const title = instanceTitle(repoRoot);
-const record = readRecord(knowledgeDir);
+
+// Visibility, if this record declares audiences: ONE decision, made here, and
+// the directory it returns is what both readers below take — the docs plugin's
+// `path` and readRecord(). A record with no `audiences:` gets knowledge/ back
+// unchanged, which is today's behaviour exactly. lib/visibility.ts carries the
+// measurements; the short version is that a filter expressed twice drifts
+// silently, and a filter passed to the docs plugin ships the hidden filenames
+// to the browser.
+const { recordDir, label: audienceLabel } = planRecord({
+  repoRoot,
+  knowledgeDir,
+  stageDir: path.join(shellDir, ".staged-knowledge"),
+});
+const record = readRecord(recordDir);
 
 // llms.txt and llms-full.txt are generated at config load into a static dir:
 // `docusaurus start` serves them and `docusaurus build` copies them into the
@@ -154,7 +170,19 @@ const config: Config = {
       "classic",
       {
         docs: {
-          path: knowledgeDir,
+          // The staged record when audiences are declared, knowledge/ when
+          // they are not — decided once, above. Never `exclude:`: Docusaurus
+          // serializes plugin options into the client bundle, so an exclusion
+          // list ships every hidden filename to every visitor (found live,
+          // research/visibility.md §2).
+          //
+          // RELATIVE for the same reason the search theme uses a bare
+          // specifier: that serialization is verbatim, so an absolute path
+          // bakes the building machine's checkout path into every built site.
+          // Measured 2026-08-18 on a scaffolded project — the pre-staging
+          // shell shipped `path:"/Users/…/vis-doc/knowledge"` to every
+          // visitor; site-relative, it reads `"../../knowledge"`.
+          path: path.relative(shellDir, recordDir),
           routeBasePath: "docs",
           // Identity derives from file path (AGENTS.md, product principle 3),
           // and Docusaurus's default number-prefix parser breaks that: it
@@ -253,6 +281,13 @@ const config: Config = {
 
   customFields: {
     firstDocUrl: record[0]?.url ?? null,
+    // The watermark a non-public build wears, so a leaked screenshot names
+    // itself — and the ONLY audience vocabulary that reaches the client:
+    // never the audience list, never the name of anything excluded. The key
+    // is absent rather than null below the top tier, so a public build's
+    // serialized config is byte-identical to one from a record that declares
+    // no audiences at all.
+    ...(audienceLabel === null ? {} : { audienceLabel }),
   },
 
   themeConfig: {
