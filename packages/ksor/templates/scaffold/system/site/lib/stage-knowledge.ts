@@ -105,7 +105,11 @@ function assetTarget(recordDir: string, documentPath: string, target: string): s
   if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
   const resolved = path.resolve(path.dirname(documentPath), target.split("#")[0] as string);
   if (!resolved.startsWith(recordDir + path.sep)) return null;
-  if (resolved.toLowerCase().endsWith(".md")) return null;
+  // .md AND .mdx: both render as pages, so neither may ride in as an
+  // "asset" — a restricted plan.mdx staged that way published untiered
+  // (review finding, 2026-08-18). The record bans .mdx, but staging never
+  // depends on the checker having run.
+  if (/\.mdx?$/i.test(resolved)) return null;
   try {
     return statSync(resolved).isFile() ? resolved : null;
   } catch {
@@ -140,7 +144,11 @@ function planStage(recordDir: string): StagePlan {
     // what names the typo.
     if (!visibleInBuild(visibilityOf(text))) continue;
     documents.push(file);
-    for (const target of linkTargets(stripCode(text))) {
+    // Body only: frontmatter carries no links in the record grammar, and
+    // scanning it here while the other shell strips it staged different
+    // asset sets from one record (review finding, 2026-08-18).
+    const body = text.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
+    for (const target of linkTargets(stripCode(body))) {
       const asset = assetTarget(recordDir, file, target);
       if (asset !== null) assets.add(asset);
     }

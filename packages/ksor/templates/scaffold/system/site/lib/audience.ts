@@ -39,13 +39,20 @@ function readAudienceModel(): AudienceModel | null {
   // Top-level key only: `^` under /m cannot match an indented child.
   if (!/^audiences:/m.test(block)) return null;
 
-  const flow = /^audiences:[ \t]*\[(.*)\][ \t]*$/m.exec(block)?.[1];
-  const list = /^audiences:[ \t]*\r?\n((?:[ \t]+-[ \t]*.*\r?\n?)+)/m.exec(block)?.[1];
+  // The grammar mirrors the checker's exactly — CRLF-tolerant, list items at
+  // ANY indent (YAML allows unindented block sequences), and a ` #` comment
+  // ends an unquoted entry (all three found live 2026-08-18: records the
+  // checker blessed either failed this build or silently lost a tier).
+  const flow = /^audiences:[ \t]*\[(.*)\][ \t]*\r?$/m.exec(block)?.[1];
+  const list = /^audiences:[ \t]*\r?\n((?:[ \t]*-[ \t]+.*\r?\n?)+)/m.exec(block)?.[1];
+  const stripComment = (value: string): string =>
+    /^["']/.test(value.trim()) ? value : value.replace(/\s+#.*$/, "");
   const audiences = (
     flow !== undefined
       ? flow.split(",")
-      : (list ?? "").split(/\r?\n/).map((line) => /^[ \t]+-[ \t]*(.*)$/.exec(line)?.[1] ?? "")
+      : (list ?? "").split(/\r?\n/).map((line) => /^[ \t]*-[ \t]+(.*)$/.exec(line)?.[1] ?? "")
   )
+    .map(stripComment)
     .map(unquote)
     .filter((value) => value !== "");
 
@@ -60,7 +67,28 @@ function readAudienceModel(): AudienceModel | null {
     );
   }
 
-  const defaultVisibility = unquote(/^default_visibility:[ \t]*(.*)$/m.exec(block)?.[1] ?? "");
+  // The staging never depends on the checker having run: a
+  // most-restrictive-first model would make plain `pnpm build` publish
+  // every restricted document with no label (review finding, 2026-08-18).
+  if (audiences[0] !== "public") {
+    refuse(
+      "ksor-audiences-misordered",
+      `audiences: must start with public (it starts with "${audiences[0]}")`,
+      "the list is ordered least- to most-restricted, and an unset KSOR_AUDIENCE builds the FIRST entry — any other first entry makes the default build the leak",
+      "reorder audiences: with public first",
+    );
+  }
+  if (new Set(audiences).size !== audiences.length) {
+    refuse(
+      "ksor-audiences-duplicate",
+      `audiences: declares a tier twice (${audiences.join(", ")})`,
+      "a duplicated tier has two positions in the ordering, and which one a build honours is undefined",
+      "remove the duplicate entry",
+    );
+  }
+  const defaultVisibility = unquote(
+    stripComment(/^default_visibility:[ \t]*(.*)$/m.exec(block)?.[1] ?? ""),
+  );
   if (defaultVisibility === "") {
     refuse(
       "ksor-default-visibility-missing",

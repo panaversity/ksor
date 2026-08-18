@@ -138,8 +138,12 @@ describe.runIf(enabled).each(SHELLS)(
     let project: string;
     let outDir: string;
 
-    function build(audience?: string): SpawnSyncReturns<string> {
-      rmSync(outDir, { recursive: true, force: true });
+    function build(audience?: string, opts?: { keepOut?: boolean }): SpawnSyncReturns<string> {
+      // keepOut leaves the previous build in place — the stale-artifact case
+      // tests whether the SHELL cleans its own output (review finding,
+      // 2026-08-18: the suite's own pre-wipe made that structurally
+      // invisible).
+      if (!opts?.keepOut) rmSync(outDir, { recursive: true, force: true });
       return run(
         "pnpm",
         ["build"],
@@ -262,6 +266,46 @@ describe.runIf(enabled).each(SHELLS)(
       const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
       expect(output).toContain("bogus-tier");
       expect(output.toLowerCase()).toContain("audience");
+    }, 300_000);
+
+    it("no restricted artifact survives a rebuild to a lower tier", () => {
+      mustPass(build("restricted"), "restricted build");
+      expect(
+        filesContaining(outDir, RESTRICTED_BODY).length,
+        "control: restricted content present before the rebuild",
+      ).toBeGreaterThan(0);
+      // Rebuild public WITHOUT wiping: the shell's own output handling is
+      // what must not leave restricted bytes behind.
+      mustPass(build(undefined, { keepOut: true }), "public rebuild over restricted output");
+      for (const canary of [RESTRICTED_TITLE, RESTRICTED_DESC, RESTRICTED_BODY, INTERNAL_BODY]) {
+        const hits = filesContaining(outDir, canary);
+        expect(
+          hits,
+          `stale "${canary.slice(0, 24)}…" survived the rebuild in: ${hits.join(", ")}`,
+        ).toEqual([]);
+      }
+      expect(assetHits(outDir), "stale asset bytes survived the rebuild").toEqual([]);
+    }, 300_000);
+
+    it("a misordered audience model refuses at build time, checker or no checker", () => {
+      const instance = path.join(project, "instance.md");
+      const original = readFileSync(instance, "utf8");
+      try {
+        writeFileSync(
+          instance,
+          original.replace(
+            /audiences:\n  - public\n  - internal\n  - restricted/,
+            "audiences:\n  - restricted\n  - internal\n  - public",
+          ),
+        );
+        const result = build();
+        expect(result.status, "a restricted-first model must never default-build").not.toBe(0);
+        expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).toContain(
+          "ksor-audiences-misordered",
+        );
+      } finally {
+        writeFileSync(instance, original);
+      }
     }, 300_000);
 
     it("the filter never reaches the client bundle", () => {

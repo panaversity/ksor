@@ -53,7 +53,10 @@ export interface AudiencePlan {
   readonly label: string | null;
 }
 
-const LIST_ITEM = /^[ \t]+-[ \t]*(.*)$/;
+// Items at ANY indent: YAML allows an unindented block sequence, the
+// checker accepts it, and a record the checker blessed must never fail
+// this build (review finding, 2026-08-18).
+const LIST_ITEM = /^[ \t]*-[ \t]+(.*)$/;
 const FLOW_LIST = /^audiences:[ \t]*\[(.*)\][ \t\r]*$/m;
 
 /**
@@ -85,11 +88,19 @@ function unquote(raw: string): string {
  * reading it as "no model": reading an unparsed model as absence is the one
  * parse failure that publishes every restricted document in the record.
  */
+// A ` #` comment ends an unquoted YAML scalar; reading it as content lost
+// the tier or refused the build (review finding, 2026-08-18 — the checker
+// already parses this way, and the shells mirror the checker exactly).
+function stripComment(value: string): string {
+  return /^["']/.test(value.trim()) ? value : value.replace(/\s+#.*$/, "");
+}
+
 function readAudienceList(block: string): string[] {
   const flow = FLOW_LIST.exec(block)?.[1];
   if (flow !== undefined)
     return flow
       .split(",")
+      .map(stripComment)
       .map(unquote)
       .filter((value) => value !== "");
   const lines = block.split("\n");
@@ -99,7 +110,7 @@ function readAudienceList(block: string): string[] {
   for (const line of lines.slice(start + 1)) {
     const item = LIST_ITEM.exec(line);
     if (item === null) break;
-    const value = unquote(item[1] ?? "");
+    const value = unquote(stripComment(item[1] ?? ""));
     if (value !== "") values.push(value);
   }
   return values;
@@ -128,7 +139,25 @@ export function readAudienceModel(repoRoot: string): AudienceModel | null {
       "write the audiences as a list, least-restricted first:\n    audiences:\n      - public\n      - internal",
     );
   }
-  const fallback = (frontmatterValue(block, "default_visibility") ?? "").trim();
+  // Never dependent on the checker having run: a most-restrictive-first
+  // model would make the default build the leak (review finding, 2026-08-18).
+  if (audiences[0] !== "public") {
+    refuse(
+      "ksor-audiences-misordered",
+      `audiences: must start with public (it starts with "${audiences[0]}") (${file})`,
+      "the list is ordered least- to most-restricted, and an unset KSOR_AUDIENCE builds the FIRST entry — any other first entry makes the default build the leak",
+      "reorder audiences: with public first",
+    );
+  }
+  if (new Set(audiences).size !== audiences.length) {
+    refuse(
+      "ksor-audiences-duplicate",
+      `audiences: declares a tier twice (${audiences.join(", ")}) (${file})`,
+      "a duplicated tier has two positions in the ordering, and which one a build honours is undefined",
+      "remove the duplicate entry",
+    );
+  }
+  const fallback = stripComment(frontmatterValue(block, "default_visibility") ?? "").trim();
   if (fallback === "") {
     refuse(
       "ksor-default-visibility-missing",
@@ -319,7 +348,9 @@ function assetTarget(knowledgeDir: string, documentPath: string, target: string)
   if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
   const resolved = path.resolve(path.dirname(documentPath), target.split("#")[0] as string);
   if (!resolved.startsWith(knowledgeDir + path.sep)) return null;
-  if (resolved.toLowerCase().endsWith(".md")) return null;
+  // .md AND .mdx both render as pages; neither may ride in as an "asset"
+  // (review finding, 2026-08-18).
+  if (/\.mdx?$/i.test(resolved)) return null;
   try {
     return fs.statSync(resolved).isFile() ? path.relative(knowledgeDir, resolved) : null;
   } catch {
