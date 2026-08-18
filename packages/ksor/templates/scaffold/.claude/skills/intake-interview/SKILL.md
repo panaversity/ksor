@@ -2,7 +2,7 @@
 name: intake-interview
 description: The first conversation with the owner of this Knowledge System of Record — five questions that define what it is authoritative for, then write instance.md together. Use when the owner asks to set up, configure, or "get started with" this project, when instance.md still contains its scaffold placeholder text, or when the scope of the corpus is unclear.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Intake interview
@@ -33,9 +33,13 @@ act on:
 
 ## Then write
 
-- Rewrite `instance.md`'s body from the answers: the authority sentence
-  first, then boundary, audience, and strictness — plain prose, written for
-  a reader who must act on it. Do not touch the frontmatter keys.
+- Rewrite `instance.md`'s body from the answers: first the `# H1` — the
+  record's **display title**, the human name every page will lead with
+  ("Acme Operations Handbook", not the slug) — then the authority sentence,
+  boundary, audience, and strictness — plain prose, written for a reader
+  who must act on it. Do not touch the frontmatter keys.
+- Restart `pnpm dev` afterwards so the site picks the new title up, and
+  show the owner their name on the page.
 - Offer to capture the source list from question 4 as the first real
   documents (the add-sources skill takes it from there).
 - Read the result back to the owner and get an explicit yes before

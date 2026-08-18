@@ -5,11 +5,11 @@ here; every coding agent reads this file first.
 
 ## The two worlds
 
-| Path          | What it is                                                                                                                                                                                                                           |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                   |
-| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                     |
-| `instance.md` | what this SoR is authoritative for; its prose is the future agent surface's system prompt. Its `name:` is every surface's identity, read when the server or build STARTS — restart `pnpm dev` after renaming (found live 2026-08-18) |
+| Path          | What it is                                                                                                                                                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                                                                                                                          |
+| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                                                                                                                            |
+| `instance.md` | what this SoR is authoritative for; its prose is the future agent surface's system prompt. Its `name:` is the machine identity (llms.txt, future citations) and its body `# H1` is the DISPLAY TITLE every page leads with — both read when the server or build STARTS, so restart `pnpm dev` after changing either (found live 2026-08-18) |
 
 The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
@@ -81,6 +81,21 @@ pnpm check       # the format checker — run before handing off any knowledge c
   notes) into governed knowledge.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.
+
+## Customizing the site
+
+You own `system/site/` outright — these are the seams, cheapest first:
+
+- **Display title** — `instance.md`'s body `# H1` (the intake interview
+  writes it). Headline, navbar, and browser title follow on restart.
+- **Accent color** — the one brand pair in `system/site/app/global.css`
+  (`--color-fd-primary`, light and dark); every accented element follows.
+- **Logo and favicon** — replace `system/site/app/icon.png`; the tab icon
+  and the home-page mark are the same file.
+- **Anything deeper** — edit the site like the Next.js app it is; the only
+  rule that survives customization is critical rule 1. The whole shell is
+  replaceable behind a four-clause contract (a themed Docusaurus shell with
+  a swap recipe lives in the ksor repository under `workbench/shells/`).
 
 ## What this project owns
 
