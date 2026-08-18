@@ -37,6 +37,13 @@ export class EmbeddingSpaceMismatch extends Error {
 export interface SpaceCheck {
   readonly checked: boolean;
   readonly reason: string | null;
+  /**
+   * The TYPED half-applied-schema signal (oracle parity — review round 2,
+   * 2026-08-19: collapsing it into `reason` dropped the ingest CLI's
+   * pre-spend refusal, and a half-applied schema embedded the WHOLE
+   * corpus before dying in finalize — the full embed bill, paid twice).
+   */
+  readonly missingTables: readonly string[];
 }
 
 export async function checkEmbeddingSpace(
@@ -60,6 +67,7 @@ export async function checkEmbeddingSpace(
     return {
       checked: false,
       reason: `guard statement failed (${error instanceof Error ? error.name : "Error"})`,
+      missingTables: [],
     };
   }
   const byTable = new Map(columns.map((c) => [c.relname, c.atttypmod]));
@@ -67,6 +75,7 @@ export async function checkEmbeddingSpace(
     return {
       checked: false,
       reason: "chunks.embedding not found (schema not applied to this database?)",
+      missingTables: [],
     };
   }
   // Proven facts FIRST over present columns (an early skip once masked a
@@ -94,7 +103,8 @@ export async function checkEmbeddingSpace(
       checked: false,
       reason:
         "node_centroids.embedding not found (schema half-applied — apply the rest of the DDL)",
+      missingTables: ["node_centroids"],
     };
   }
-  return { checked: true, reason: null };
+  return { checked: true, reason: null, missingTables: [] };
 }

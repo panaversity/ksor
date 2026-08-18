@@ -56,6 +56,27 @@ async function readBody(req: IncomingMessage, preRead?: Buffer): Promise<unknown
   return JSON.parse(text);
 }
 
+export interface RebindSecurity {
+  readonly enableDnsRebindingProtection: true;
+  readonly allowedHosts: string[];
+}
+
+/**
+ * The DNS-rebind default for the loopback door. Every loopback SPELLING
+ * arms it — `localhost` was exactly the spelling that escaped a literal
+ * 127.0.0.1 check (review round 2, 2026-08-19, proven live: an evil Host
+ * header answered 200). A public bind returns null — that door is
+ * bearer-gated instead. An explicit KSOR_ALLOWED_HOSTS always wins upstream.
+ */
+export function loopbackSecurity(bind: { host: string; port: number }): RebindSecurity | null {
+  const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
+  if (!loopback) return null;
+  return {
+    enableDnsRebindingProtection: true,
+    allowedHosts: [`127.0.0.1:${bind.port}`, `localhost:${bind.port}`, `[::1]:${bind.port}`],
+  };
+}
+
 function bearerToken(req: IncomingMessage): string | null {
   const header = req.headers.authorization;
   if (header === undefined) return null;
@@ -72,14 +93,7 @@ export async function runHttp(composition: Composition): Promise<void> {
   // model (DNS rebinding reaches localhost), so unset env defaults to
   // protection pinned to the bind; an explicit KSOR_ALLOWED_HOSTS/ORIGINS
   // declaration always wins, and a non-loopback bind is bearer-gated.
-  const security =
-    transportSecurityFromEnv(process.env) ??
-    (bind.host === "127.0.0.1"
-      ? {
-          enableDnsRebindingProtection: true,
-          allowedHosts: [`127.0.0.1:${bind.port}`, `localhost:${bind.port}`],
-        }
-      : null);
+  const security = transportSecurityFromEnv(process.env) ?? loopbackSecurity(bind);
   const { ctx, instance, pool, spaceSkipReason } = composition;
 
   const handleMcp = async (

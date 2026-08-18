@@ -24,6 +24,7 @@ import { buildShippedProvider } from "../lib/providers/registry.js";
 import { FAKE_EMBED_MODEL } from "../lib/providers/fake.js";
 import { hybridSearch, VECTOR_TXN_GUCS, type SearchScope } from "../lib/search.js";
 import { buildGeneration } from "./build.js";
+import { checkEmbeddingSpace } from "../lib/space.js";
 import { runGc } from "./gc.js";
 import { GC_GRACE_MS, rollback } from "./generation.js";
 
@@ -187,6 +188,27 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     expect(topCosine, "the vector arm must report its top-1 cosine").not.toBeNull();
     expect(Number.isFinite(topCosine), `topCosine=${topCosine}`).toBe(true);
   }, 120_000);
+
+  it("(1b) a half-applied schema is a TYPED refusal before any embed spend (review round 2)", async () => {
+    // Drop a database, apply the schema, then remove node_centroids.embedding
+    // — the half-applied shape. The guard must NAME the missing table so the
+    // ingest CLI refuses BEFORE embedding the whole corpus (double spend).
+    const halfName = `ksor_half_${randomBytes(4).toString("hex")}`;
+    await admin.query(`CREATE DATABASE ${halfName}`);
+    const halfUrl = new URL(adminDsn);
+    halfUrl.pathname = `/${halfName}`;
+    const halfPool = contentPool(halfUrl.toString(), 2);
+    try {
+      await applySchema(halfPool, DIM);
+      await halfPool.query("ALTER TABLE node_centroids DROP COLUMN embedding");
+      const check = await checkEmbeddingSpace(halfPool, "demo", "fake-embed-001", DIM);
+      expect(check.missingTables, JSON.stringify(check)).toEqual(["node_centroids"]);
+      expect(check.checked).toBe(false);
+    } finally {
+      await halfPool.end();
+      await admin.query(`DROP DATABASE IF EXISTS ${halfName}`).catch(() => undefined);
+    }
+  });
 
   it("(2) re-ingest of the SAME tree: carry-forward copies every vector, zero new embeds, generation 2 active", async () => {
     const embedded: string[] = [];

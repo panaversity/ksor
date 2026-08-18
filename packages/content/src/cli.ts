@@ -42,7 +42,8 @@ Usage:
       --instance reads the dimension from instance.md; --apply (with
       --instance) applies the DDL to the instance's database instead.
   ksor-content ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
-  ksor-content calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH] [--generation N]
+  ksor-content calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
+                         [--generation N] [--per-node N] [--min-chars N]
       Build one generation from the knowledge tree: structure atomically,
       embed resumably, finalize behind the ready gate. --flip activates it
       (never implicit).
@@ -219,6 +220,17 @@ async function ingestCommand(args: string[]): Promise<number> {
       instance.embeddingModel,
       instance.embeddingDim,
     );
+    if (space.missingTables.length > 0) {
+      // The oracle's pre-spend refusal, restored (review round 2,
+      // 2026-08-19): without it a half-applied schema allocated, embedded
+      // the WHOLE corpus, and only then failed in finalize on the missing
+      // table — after the spend, unrecoverable by carry-forward.
+      throw new Error(
+        `the schema is half-applied (missing: ${space.missingTables.join(", ")}) — ` +
+          "ingesting now would embed the whole corpus and then fail in finalize, after the spend.\n" +
+          `  fix: finish applying the DDL (ksor-content schema --instance ... --apply), then ingest`,
+      );
+    }
     if (space.reason !== null) {
       process.stderr.write(`embedding-space check skipped: ${space.reason}\n`);
     }
@@ -255,6 +267,14 @@ async function ingestCommand(args: string[]): Promise<number> {
   // -> N"); only the withheld state still needs saying.
   if (!report.flipped) process.stdout.write("ready; flip withheld (pass --flip to activate)\n");
   return 0;
+}
+
+function parseGeneration(raw: string | undefined): number | null {
+  if (raw === undefined) return null;
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(`--generation must be a generation number, got ${JSON.stringify(raw)}`);
+  }
+  return Number(raw);
 }
 
 async function calibrateCommand(args: string[]): Promise<number> {
@@ -302,7 +322,7 @@ async function calibrateCommand(args: string[]): Promise<number> {
       tenantId: instance.tenantId,
       corpusId: instance.corpusId,
       provider,
-      generation: values.generation === undefined ? null : Number(values.generation),
+      generation: parseGeneration(values.generation),
       queries,
       textGenerator,
       oocProbes: ooc,
