@@ -23,7 +23,8 @@ minimumReleaseAge: 2880
 minimumReleaseAgeExclude:
   - "@panaversity/*"
 
-# Dependency install scripts are denied by default; this allowlist is the only
-# gate through. Every entry needs a why-comment naming what breaks without it.
-# (Empty on purpose — every current native dep ships prebuilt binaries.)
-onlyBuiltDependencies: []
+# Dependency install scripts are denied by default; decisions are recorded
+# here with a why-comment. (found live 2026-08-18: pnpm 11 ignores the v10
+# onlyBuiltDependencies key and hard-fails on undecided build scripts — no
+# current dep here has one, so this block documents the posture.)
+allowBuilds: {}
