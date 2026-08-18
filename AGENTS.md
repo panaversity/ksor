@@ -211,6 +211,23 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     the database-free-init clause is reversed only by an explicit owner
     decision recorded here.
 
+12. **The kernel's dependency set** (2026-08-19, with decision 11; each
+    entry individually reversible by a better tool winning a recorded
+    comparison). One Postgres driver: `pg`, with `drizzle-orm` for typed
+    queries — **`schema.sql` stays the DDL source of truth** (converted from
+    the oracle; a drift test asserts the Drizzle table objects match the
+    live information_schema — two truths, one test). `zod` from the catalog
+    pin (the reserved "first validated public API" arrived). `@google/genai`
+    as the default embedding provider behind the seam — the seam, not the
+    vendor, is the contract. `jose` for the gateway kit's public-door JWT
+    verification. `@modelcontextprotocol/sdk` for the MCP surface. Guard
+    rule 5 now scans every workspace package against this list; install
+    scripts stay denied (three denials recorded in `pnpm-workspace.yaml`
+    with verified why-comments). The kernel packages are `private: true`
+    until the publish/bundling question is decided with the serve verb's
+    npm wiring — the published `ksor` CLI keeps its zero-runtime-deps
+    guarantee meanwhile.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

@@ -136,24 +136,39 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
-// Rule 5 — the published package declares no runtime dependencies that are not
+// Rule 5 — no workspace package declares a runtime dependency that is not
 // listed here with a decision reference. Keeping the runtime thin is a product
-// guarantee (see AGENTS.md coding principle 3).
+// guarantee (see AGENTS.md coding principle 3). Extended from packages/ksor to
+// every package when the kernel packages arrived (decision 12).
 {
   const allowedRuntimeDeps = new Map([
     // "package-name": "AGENTS.md Decisions #N — one-line reason",
+    ["pg", "Decisions #12 — the one Postgres driver; Drizzle rides on it"],
+    ["drizzle-orm", "Decisions #12 — typed SQL over pg; schema.sql stays the DDL source of truth"],
+    ["zod", "Decisions #12 — the one validation schema source (primitives proposal §2)"],
+    ["@google/genai", "Decisions #12 — the default embedding provider behind the seam"],
+    ["jose", "Decisions #12 — JWT/JWKS verification for the gateway kit's public door"],
+    [
+      "@modelcontextprotocol/sdk",
+      "Decisions #12 — the MCP surface IS the product's second surface",
+    ],
+    ["@panaversity/ksor-platform", "workspace"],
+    ["@panaversity/ksor-content", "workspace"],
+    ["@panaversity/ksor-gateway-kit", "workspace"],
   ]);
-  const pkg = JSON.parse(
-    readFileSync(path.join(repoRoot, "packages", "ksor", "package.json"), "utf8"),
-  );
-  for (const dep of Object.keys(pkg.dependencies ?? {})) {
-    if (!allowedRuntimeDeps.has(dep)) {
-      violate(
-        5,
-        `packages/ksor depends on "${dep}" at runtime without a recorded decision`,
-        "every runtime dependency ships to every adopter; each one needs an ADR-level reason",
-        `record the decision in AGENTS.md → Decisions, then add "${dep}" to allowedRuntimeDeps in this guard with that reference`,
-      );
+  for (const dir of readdirSync(path.join(repoRoot, "packages"))) {
+    const manifest = path.join(repoRoot, "packages", dir, "package.json");
+    if (!existsSync(manifest)) continue;
+    const pkg = JSON.parse(readFileSync(manifest, "utf8"));
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      if (!allowedRuntimeDeps.has(dep)) {
+        violate(
+          5,
+          `packages/${dir} depends on "${dep}" at runtime without a recorded decision`,
+          "every runtime dependency ships to every adopter; each one needs an ADR-level reason",
+          `record the decision in AGENTS.md → Decisions, then add "${dep}" to allowedRuntimeDeps in this guard with that reference`,
+        );
+      }
     }
   }
 }

@@ -1,0 +1,35 @@
+{
+  "name": "@panaversity/ksor-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared contracts and database plumbing for the KSoR content kernel — converted from the production sor-platform trim.",
+  "license": "Apache-2.0",
+  "author": "Panaversity",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "pg": "^8.23.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.21.0",
+    "tsdown": "0.22.14",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

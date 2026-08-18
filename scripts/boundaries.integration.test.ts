@@ -19,6 +19,18 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.url
 // the package.
 const ALLOWED: Record<string, readonly string[]> = {
   "@panaversity/ksor": [],
+  // The kernel conversion's layering (decision 11): platform is the floor,
+  // content stands on it, the gateway composes content behind the kit. The
+  // CLI stays the top of the graph and gains kernel edges only when the
+  // serve verb wires in — a reviewed change here, in that PR.
+  "@panaversity/ksor-platform": [],
+  "@panaversity/ksor-content": ["@panaversity/ksor-platform"],
+  "@panaversity/ksor-gateway-kit": [],
+  "@panaversity/ksor-gateway": [
+    "@panaversity/ksor-content",
+    "@panaversity/ksor-gateway-kit",
+    "@panaversity/ksor-platform",
+  ],
 };
 
 interface SourceFile {

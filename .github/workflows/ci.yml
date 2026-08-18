@@ -118,6 +118,38 @@ jobs:
       # "filtered" can never be confused with "broken".
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/visibility-conformance.integration.test.ts
 
+  kernel-db:
+    name: Kernel acceptance (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ksor
+          POSTGRES_PASSWORD: ksor
+          POSTGRES_DB: ksor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ksor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      # The kernel's database tier (decision 11): ingest → retrieve round
+      # trips against real Postgres + pgvector. The Gemini-live suites gate
+      # separately on GEMINI_API_KEY and skip while the secret is pending
+      # (docs/status.md → Pending owner actions).
+      - run: pnpm test:db
+        env:
+          KSOR_DB_URL: postgresql://ksor:ksor@localhost:5432/ksor
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
   init-windows:
     name: Init acceptance (Windows)
     runs-on: windows-latest
