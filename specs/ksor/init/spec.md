@@ -84,8 +84,15 @@ swapping shells must require no change outside `system/site/`:
 
 Fumadocs is the reference implementation core ships; a Docusaurus shell, a
 bare Next.js app, or any registry-distributed alternative that satisfies
-1–4 is equally conformant — this is how "today Fumadocs, tomorrow anything"
-is designed in rather than promised.
+1–4 is equally conformant. **The contract proves itself with two
+implementations** (owner, 2026-08-18): alongside the shipped Fumadocs
+reference, a conformance-minimal Docusaurus fixture lives under
+`workbench/` — never feature parity, built from the predecessor's portable
+layer — and one shell-agnostic conformance suite runs clauses 1–4 against
+both in CI. Two implementations keep the seam honest the way two compilers
+keep a language spec honest; the measured comparison (effort, LOC, surface
+quality) is recorded as evidence under decision 9, and the suite is the
+bar any future registry shell must pass.
 
 ## Acceptance
 
