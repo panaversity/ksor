@@ -58,18 +58,34 @@ later arrival is `build.lock.json`, committed, written only by `ksor build`):
 **Record purity** (enforced by the scaffolded format-checker, later by
 `ksor build`): `knowledge/` holds CommonMark `.md` and assets only — no
 `.mdx`, no `meta.json`, no framework files; components are directives
-(`:::quiz`) that degrade to readable text; the closed frontmatter set is
-title, description, status, owner, provenance, effective, superseded,
-superseded_by, order; filenames are Windows-safe with no case-insensitive or
+(`:::quiz`) that degrade to readable text; the frontmatter key set is closed
+(title, description, status, owner, provenance, effective, superseded,
+superseded_by, order) but requiredness follows the governance ladder —
+**level 0 requires only `title` + `status`**; owner and provenance are
+encouraged keys at level 0 and become required from level 1 up (the level is
+derived, never declared — demanding level 4 of a level-0 project is a bug); filenames are Windows-safe with no case-insensitive or
 `foo.md`/`foo/index.md` collisions and no parenthesized directories; asset
 links never escape `knowledge/`. Identity: a doc's path is its route and its
 future MCP URI — `ksor://<instance-name>/<path>`.
 
-**The surface contract** (the shell is a slot — decision 9): the site renders
-`knowledge/`, serves `llms.txt`, exposes per-page markdown (build artifacts
-once `ksor build` exists; dev-mode rewrite as sugar), passes the browser
-smoke, and contains no authored content. Any shell satisfying this contract
-is valid; core ships exactly one.
+**The surface contract — the shell swap seam** (decision 9). The ONLY
+coupling between ksor (and the root scripts) and the site is this contract;
+swapping shells must require no change outside `system/site/`:
+
+1. the site is the workspace package at `system/site/` exposing `dev`
+   (hot-reload preview of `knowledge/`) and `build` (static output at
+   `system/site/out/`) scripts;
+2. it renders every published document in `knowledge/`, including the
+   governed directives (`:::quiz` etc.), and renders nothing authored inside
+   itself;
+3. it serves `llms.txt`, and per-page markdown once `ksor build` emits the
+   artifacts (dev-mode sugar allowed);
+4. it passes the browser smoke (below).
+
+Fumadocs is the reference implementation core ships; a Docusaurus shell, a
+bare Next.js app, or any registry-distributed alternative that satisfies
+1–4 is equally conformant — this is how "today Fumadocs, tomorrow anything"
+is designed in rather than promised.
 
 ## Acceptance
 
@@ -83,7 +99,42 @@ console errors, zero external requests; (5) editing `knowledge/example.md`
 hot-reloads; (6) the agent eval: an agent given only the scaffolded project
 completes the intake interview into `instance.md` and lands one governed
 document that passes the format rules (CI-gated once the harness exists;
-manual rubric until then).
+manual rubric until then). Acceptance (1)–(3) also run on `windows-latest` —
+the Windows-safety rules are tested, never asserted.
+
+## Live verification — the agent walks
+
+Automated acceptance proves clauses; these walks prove the product. Each
+runs on a fresh environment (never certify a cached one), each surprise is
+recorded as a `found live:` note beside the code, and implementation is not
+done until all six pass:
+
+1. **Cold-adopter walk, stopwatched** — pack the tarball, fresh temp dir,
+   follow only what the handoff text prints; open the served page **in real
+   Chrome** (driven by the agent, in addition to the Playwright smoke):
+   example doc renders, search works, both themes, zero console errors,
+   zero external requests, under five minutes end to end.
+2. **SME walk** — live-edit a doc (watch the reload), add a new doc (nav
+   updates), add a relatively-linked image (renders); then delete `system/`
+   entirely and confirm the record remains a readable document tree — the
+   walk-away promise performed, not asserted.
+3. **Agent cold-start walk** — a fresh zero-context agent session in the
+   scaffold, given only a realistic request ("add a policy about X"; "help
+   me set up this knowledge base"): it must find AGENTS.md, land content in
+   `knowledge/` (never the site), use the frontmatter, run the checker,
+   and complete the intake interview — judged against a written rubric.
+4. **Refusal walk** — trigger every error path and then obey each printed
+   remedy verbatim; a remedy that doesn't fix the situation is a lying
+   error.
+5. **Hostile-environment walks** — init inside a real parent monorepo
+   (warning fires, project still works), stray home-dir lockfile, Ctrl-C
+   mid-run (filesystem as found; stale stage reported), Windows CI logs
+   read, not glanced at.
+6. **Deploy walk** — a scaffold pushed to a throwaway repo and put on a
+   real host plus a locally-served static export (basePath case): verify
+   the shipped bytes — llms.txt reachable, page rendering at the deployed
+   URL. The predecessor's four costliest defects were all found on deployed
+   artifacts; ours get found here first.
 
 ## Out of scope
 
