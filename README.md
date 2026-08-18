@@ -17,31 +17,26 @@ Both come from the same source, so humans and agents operate from the same insti
 
 ---
 
-> ### ⚠️ `0.0.0` is a name reservation, not a release.
+> ### ⚠️ Early-stage software — [`docs/status.md`](docs/status.md) is the authority on what works.
 >
-> **Nothing described below is implemented in this package yet.** The commands in this README
-> describe the design being built; running them today prints a status notice and exits 2. This
-> version exists only to hold the name and state the intent in public.
->
-> Do not install it as a dependency, and do not infer any capability from this page. The first
-> working release will say so in its changelog and its version number.
+> **`ksor init` is implemented**: one command scaffolds a complete governed knowledge
+> project — the record, a working site, and the agent kit. The remaining verbs
+> (`dev`, `build`, `serve`) are designed, not implemented; running them prints an
+> honest notice and exits 2. Inside a scaffolded project, `pnpm dev` and
+> `pnpm build` work today without them.
 
 ---
 
 ```bash
-npm install -g @panaversity/ksor
-
-ksor init my-knowledge-sor
+npx @panaversity/ksor init my-knowledge-sor
 cd my-knowledge-sor
 
-ksor dev
+pnpm install
+pnpm dev
 ```
 
-Or run it without installing globally:
-
-```bash
-npx @panaversity/ksor init my-knowledge-sor
-```
+The site serves your governed record at `http://localhost:3000`, hot-reloading
+as you edit `knowledge/`.
 
 ---
 
@@ -429,19 +424,18 @@ If the capitalization policy does not address the situation, the system should n
 
 # Quick Start
 
-> **Status:** the verbs below are designed, not yet implemented — each prints
-> an honest notice and exits `2` today. [`docs/status.md`](docs/status.md) is
-> authoritative.
+> **Status:** `ksor init` works. The `dev`, `build`, and `serve` verbs are
+> designed, not yet implemented — each prints an honest notice and exits `2`
+> today; the scaffold's own `pnpm dev` / `pnpm build` cover local work until
+> they land. [`docs/status.md`](docs/status.md) is authoritative.
 
 ## Requirements
 
-Install Node.js 24 or newer with npm.
-
-Check your installation:
+Node.js 24 or newer, and pnpm (`corepack enable pnpm` — corepack ships with
+Node — or `npm install -g pnpm`).
 
 ```bash
 node --version
-npm --version
 ```
 
 ---
@@ -450,37 +444,38 @@ npm --version
 
 ```bash
 npx @panaversity/ksor init my-ksor
-```
-
-Then:
-
-```bash
 cd my-ksor
 ```
 
-The scaffold will give you a working KSoR project containing the knowledge source, site configuration, and agent instructions needed to work with it.
+One command emits a complete governed project: the knowledge record, a
+working documentation site, adopter CI, and the instructions and skills a
+coding agent needs to work in it. Nothing else is downloaded — the scaffold
+is deterministic, offline, and entirely yours.
 
 ---
 
 ## Start Development
 
 ```bash
-npx @panaversity/ksor dev
+pnpm install
+pnpm dev
 ```
 
-KSoR will start the local knowledge site and watch for changes while you work.
-
-Edit the Markdown source and the human-readable surface updates from the same corpus that will ultimately serve agents.
+The local knowledge site serves at `http://localhost:3000` and hot-reloads as
+you edit the Markdown source — the same corpus that will ultimately serve
+agents.
 
 ---
 
 ## Build
 
 ```bash
-npx @panaversity/ksor build
+pnpm build
 ```
 
-The build will produce the deployable human surface and record information needed to identify what knowledge went into that build.
+A fully static export of the human surface lands in `system/site/out/`,
+deployable to any static host. (`ksor build` — validation plus build
+provenance — is a future verb; see [`docs/status.md`](docs/status.md).)
 
 ---
 
@@ -490,11 +485,9 @@ The build will produce the deployable human surface and record information neede
 npx @panaversity/ksor serve
 ```
 
-The agent surface will expose the governed KSoR through MCP.
-
-> **Project status:** in the predecessor vsor implementation the human website surface is the more mature part; in this package neither surface has shipped yet. See [`docs/status.md`](docs/status.md) — it is the only authority on implemented functionality.
-
-See [`docs/status.md`](docs/status.md) for current implementation status.
+The agent surface will expose the governed KSoR through MCP. This verb is
+designed, not implemented — the prose you write in your scaffold's
+`instance.md` is reserved as its future system prompt.
 
 ---
 
@@ -502,27 +495,27 @@ See [`docs/status.md`](docs/status.md) for current implementation status.
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
-A typical project looks like:
+A scaffolded project looks like:
 
 ```text
 my-ksor/
 │
-├── knowledge/
-│   ├── about.md
-│   ├── principles.md
+├── knowledge/            ← the record: governed CommonMark, the product
+│   ├── example.md
 │   ├── policies/
 │   │   ├── policy-a.md
 │   │   └── policy-b.md
 │   └── procedures/
 │       └── procedure-a.md
 │
-├── site/
-│   └── docusaurus.config.ts
+├── system/
+│   └── site/             ← the reference site (Next.js + Fumadocs)
 │
 ├── .agents/
-│   └── skills/
+│   └── skills/           ← agent skills (+ byte-identical .claude/ copies)
 │
-├── instance.md
+├── AGENTS.md             ← the project constitution agents read first
+├── instance.md           ← what this KSoR is authoritative for
 │
 └── ...
 ```
@@ -561,11 +554,13 @@ used by Example Corporation.
 
 ---
 
-## `site/`
+## `system/site/`
 
-Configuration and customization for the human-readable surface.
-
-The website layer will remain ordinary source code rather than an opaque hosted service; the concrete site framework is an open decision (see `research/primitives-proposal.md` §4).
+The human-readable surface — a real Next.js + Fumadocs app that renders the
+record, shipped as ordinary source code you own outright rather than an
+opaque hosted service. It is replaceable behind a four-clause surface
+contract (`specs/ksor/init/spec.md`): any shell that renders the record,
+serves `llms.txt`, and passes the browser smoke is equally conformant.
 
 ---
 
@@ -973,13 +968,8 @@ Everything around it should be replaceable.
 
 # Deployment
 
-The human surface generated by:
-
-```bash
-npx @panaversity/ksor build
-```
-
-is deployable as a static site.
+The human surface generated by `pnpm build` in a scaffolded project (and by
+`ksor build` once that verb ships) is a fully static site.
 
 That makes it suitable for hosts such as:
 
@@ -1187,7 +1177,7 @@ ksor build
 ksor serve
 ```
 
-### `ksor init`
+### `ksor init` — implemented
 
 Create a new Knowledge System of Record.
 

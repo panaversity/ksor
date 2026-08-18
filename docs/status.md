@@ -6,18 +6,27 @@ updated: 2026-08-18.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.0** on npm — a name reservation, not a release. The
-published artifact is a single placeholder script: any invocation prints the
-reservation notice and exits `2`. It has no exports and bundles no docs.
+`@panaversity/ksor` **0.0.1** on npm (trusted publishing, provenance
+attached). It ships the rebuilt CLI shell: every designed verb (`init`,
+`dev`, `build`, `serve`) reports "designed but not implemented" and exits
+`2`; an unknown verb is refused with exit `1` and a stable
+`error: unknown-verb` stderr slug. The package root exports the CLI
+contract (`exitCodes`, `verbs`, `resolveCommand`), and docs ship inside
+the tarball under `docs/`.
 
-## Implemented in this repository (unreleased — ships as 0.0.1)
+## Implemented in this repository (unreleased — ships as 0.1.0)
 
-- **Rebuilt CLI**: compiled TypeScript (pure ESM, Node ≥ 24); every designed
-  verb (`init`, `dev`, `build`, `serve`) reports "designed but not
-  implemented" and exits `2`; an unknown verb is refused with exit `1` and a
-  stable `error: unknown-verb` stderr slug. The package root exports the CLI
-  contract (`exitCodes`, `verbs`, `resolveCommand`), and docs ship inside the
-  tarball under `docs/`. (Pending changeset: `.changeset/base-environment.md`.)
+- **`ksor init`** — the first working verb, implemented red-first against
+  the ratified spec (`specs/ksor/init/spec.md`). One command emits a
+  complete governed project: the record (`knowledge/`), the Fumadocs
+  reference site (`system/site/`, static export, hot reload, static
+  search, llms.txt), the agent kit (`AGENTS.md`, `CLAUDE.md` pointer,
+  `.agents/skills` + byte-identical `.claude/skills` copies, `.gemini`
+  pointer), adopter CI (`validate.yml`, SHA-pinned), and a dependency-free
+  format checker (`pnpm check`). Deterministic (every emitted byte ships
+  as template content, lockfile included), atomic, offline, refusals with
+  stable slugs and remedies. Acceptance runs on ubuntu and windows; a
+  gated browser e2e drives the built site in real Chromium.
 
 - **Base environment**: pnpm 11 workspace with catalog pins, TypeScript 7
   (native compiler), pure-ESM package build via tsdown, vitest unit +
@@ -34,16 +43,19 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
 
 ## Designed, not implemented
 
-- `ksor init` / `dev` / `build` / `serve` — the verbs themselves
-  (`specs/ksor/init/spec.md` is ratified; implementation is next).
-- The MCP agent surface and the human site surface.
+- `ksor dev` / `build` / `serve` — the remaining verbs (each still exits
+  `2` with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
+  work today without them).
+- The MCP agent surface (`instance.md` prose is its reserved system prompt).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
-- The agent-eval harness (contract in AGENTS.md → Testing).
+- Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
+  pass them through as readable text (spec, deferred 2026-08-18).
+- The Docusaurus conformance fixture + shell-agnostic conformance suite —
+  moved to the Docusaurus-support verb (spec, deferred 2026-08-18).
+- The agent-eval harness (contract in AGENTS.md → Testing); until it
+  exists, acceptance (6) runs as a manual rubric-scored walk.
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry
   import fences worth verifying.
-- The `ksor init` scaffold (generated constitution, rules, corpus skills) —
-  lands with `init`; the predecessor's templates convert under the decision-6
-  grant, adapted deliberately rather than copied blindly.
 
 Primitives design for the verbs: `research/primitives-proposal.md`.
 
