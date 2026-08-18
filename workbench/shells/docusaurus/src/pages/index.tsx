@@ -81,6 +81,15 @@ export default function Home(): ReactNode {
                 height={64}
               />
 
+              {/* The frame is KSoR's; the name is the record's. The eyebrow
+                  brands the framework so the headline stays the adopter's. */}
+              <p
+                className={`${styles.rise} m-0 mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground`}
+                style={step(1)}
+              >
+                KSoR — Knowledge System of Record
+              </p>
+
               {/* The authored case, restored for assistive technology: the
                   capitals are a CSS text-transform, but an accessible name is
                   computed from RENDERED text, so without this a screen reader
@@ -101,7 +110,14 @@ export default function Home(): ReactNode {
                 </span>
               </h1>
 
-              <div className={styles.rise} style={step(2)}>
+              <p
+                className={`${styles.rise} m-0 mb-8 max-w-xl text-base text-muted-foreground sm:text-lg`}
+                style={step(2)}
+              >
+                Knowledge you can govern. Answers you can trace. Boundaries agents can respect.
+              </p>
+
+              <div className={styles.rise} style={step(3)}>
                 {firstDocUrl ? (
                   <Link className={styles.action} to={firstDocUrl}>
                     Browse the knowledge

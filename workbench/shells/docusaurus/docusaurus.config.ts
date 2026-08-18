@@ -126,6 +126,7 @@ function sortItems(items: SidebarItem[]): SidebarItem[] {
 
 const config: Config = {
   title: name,
+  tagline: "The Knowledge System of Record for humans and AI agents.",
   // instance.md reserves site.url for the deployed address; until ksor build
   // wires it through, a placeholder keeps the static export host-relative.
   url: "https://example.com",

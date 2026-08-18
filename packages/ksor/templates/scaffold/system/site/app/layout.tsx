@@ -14,6 +14,7 @@ export const metadata: Metadata = {
     default: appName,
     template: `%s | ${appName}`,
   },
+  description: "The Knowledge System of Record for humans and AI agents.",
 };
 
 export default function Layout({ children }: LayoutProps<"/">) {

@@ -25,12 +25,16 @@ export default function HomePage() {
           className="mb-7 size-14 rounded-xl ring-1 ring-fd-border"
         />
 
-        {/* The record answers to its name — set as the identifier it is. */}
+        {/* The frame is KSoR's; the name is the record's. The eyebrow brands
+            the framework so the headline can stay the adopter's. */}
+        <p className="mb-2 text-xs font-medium uppercase tracking-widest text-fd-muted-foreground">
+          KSoR — Knowledge System of Record
+        </p>
         <h1 className="font-mono text-4xl font-medium tracking-tight break-words sm:text-5xl">
           {appName}
         </h1>
         <p className="mt-3 text-lg text-fd-muted-foreground">
-          Governed knowledge, for people and agents.
+          Knowledge you can govern. Answers you can trace. Boundaries agents can respect.
         </p>
 
         {first ? (

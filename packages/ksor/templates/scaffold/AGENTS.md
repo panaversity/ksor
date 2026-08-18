@@ -5,11 +5,11 @@ here; every coding agent reads this file first.
 
 ## The two worlds
 
-| Path          | What it is                                                                                |
-| ------------- | ----------------------------------------------------------------------------------------- |
-| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                        |
-| `system/`     | **the system** — all code that serves the record                                          |
-| `instance.md` | what this SoR is authoritative for; its prose is the future agent surface's system prompt |
+| Path          | What it is                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                   |
+| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                     |
+| `instance.md` | what this SoR is authoritative for; its prose is the future agent surface's system prompt. Its `name:` is every surface's identity, read when the server or build STARTS — restart `pnpm dev` after renaming (found live 2026-08-18) |
 
 The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
