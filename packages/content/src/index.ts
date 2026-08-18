@@ -68,3 +68,13 @@ export {
 } from "./lib/query-embed.js";
 export { checkEmbeddingSpace, EmbeddingSpaceMismatch, type SpaceCheck } from "./lib/space.js";
 export { aembedIntent, embedIntent, embedInput } from "./lib/embedding.js";
+export {
+  outlineDocuments,
+  readDocument,
+  DOCUMENT_BUDGET_CHARS,
+  type OutlineNodeWire,
+  type ReadOptions,
+  type ReadResult,
+} from "./service.js";
+export { UnknownSlug, findDocument, outline, documentChunks } from "./lib/read.js";
+export { windowDocument, codePointLength, cleanCut, estTokens } from "./lib/windowing.js";

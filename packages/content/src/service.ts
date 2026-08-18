@@ -16,8 +16,15 @@ import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type Hit } from "./lib/search.js";
-import { mint, type KeyRing, type SnapshotToken } from "./lib/snapshot.js";
+import {
+  mint,
+  validate as validateToken,
+  type KeyRing,
+  type SnapshotToken,
+} from "./lib/snapshot.js";
 import { logRead } from "./lib/rlog.js";
+import { documentChunks, findDocument, outline as outlineQuery } from "./lib/read.js";
+import { windowDocument } from "./lib/windowing.js";
 
 export const SEARCH_BUDGET_CHARS: number = 34_000 * CHARS_PER_TOKEN;
 export const MAX_SEARCH_K = 50;
@@ -296,5 +303,199 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     ...(advisory ? { content_advisory: CONTENT_ADVISORY } : {}),
     ...(kNote === undefined ? {} : { k_note: kNote }),
     ...(degradedReason === undefined ? {} : { degraded_reason: degradedReason }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// read — byte-exact document windows (oracle read_lesson, renamed)
+
+export const DOCUMENT_BUDGET_CHARS: number = 70_000 * CHARS_PER_TOKEN;
+
+export interface ReadResult {
+  readonly slug: string;
+  readonly title: string;
+  /** Chunks concatenated — byte-exact reconstruction (the invariant's serve side). */
+  readonly text: string;
+  readonly sections: string[];
+  readonly provenance: SearchHit["provenance"];
+  readonly window_from?: string;
+  readonly window_to?: string;
+  readonly next?: string | null;
+  readonly remaining_outline?: string[];
+  readonly est_tokens?: number;
+  readonly total_est_tokens?: number;
+  readonly note?: string;
+  readonly content_advisory?: string;
+  /** ONLY when an incoming snapshot token failed validation — serves active, says why. */
+  readonly snapshot?: string;
+}
+
+export interface ReadOptions {
+  readonly heading?: string | null;
+  readonly fromHeading?: string | null;
+  readonly snapshotToken?: string | null;
+  readonly tokenBudget?: number | null;
+}
+
+export async function readDocument(
+  ctx: ServiceContext,
+  slug: string,
+  options: ReadOptions = {},
+): Promise<ReadResult> {
+  const inst = ctx.instance;
+  const actor = ctx.actor?.() ?? "anonymous";
+  // An invalid or expired snapshot NEVER errors: serve active and say why.
+  let pinned: number | null = null;
+  let refreshed: string | undefined;
+  if (options.snapshotToken != null && options.snapshotToken !== "") {
+    const verdict = validateToken(ctx.ring, options.snapshotToken, {
+      corpusId: inst.corpusId,
+      tenantId: inst.tenantId,
+      instanceDigest: ctx.instanceDigest,
+    });
+    if (verdict.generation !== null) pinned = verdict.generation;
+    else refreshed = `refreshed (${verdict.reason ?? "invalid"})`;
+  }
+  const budget = Math.min(
+    (options.tokenBudget ?? 70_000) * CHARS_PER_TOKEN,
+    DOCUMENT_BUDGET_CHARS,
+    inst.maximumResponseCharacters,
+  );
+  const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
+
+  const { node, chunks } = await runRead(ctx.pool, inst.tenantId, async (client) => {
+    const found = await findDocument(client, scope, slug);
+    // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
+    // against active would find nothing (oracle rule, carried).
+    const pinnedScope = { ...scope, pinnedGeneration: found.generation };
+    return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
+  });
+  if (chunks.length === 0) {
+    throw new Error(`document ${JSON.stringify(slug)} has no readable content`);
+  }
+
+  // Subtree scoping: exact heading_path or prefix; then the leaf-anchor
+  // fallback (an anchor that is the LAST segment of a deeper path).
+  let scoped = chunks;
+  const heading = options.heading ?? null;
+  if (heading !== null && heading !== "") {
+    scoped = chunks.filter(
+      (c) => c.headingPath === heading || c.headingPath.startsWith(heading + "/"),
+    );
+    if (scoped.length === 0) {
+      const roots = new Set(
+        chunks.filter((c) => c.headingPath.split("/").at(-1) === heading).map((c) => c.headingPath),
+      );
+      if (roots.size > 1) {
+        throw new Error(
+          `section ${JSON.stringify(heading)} is ambiguous in ${node.slug} — qualify it: ${[...roots].join(", ")}`,
+        );
+      }
+      const root = [...roots][0];
+      if (root === undefined) {
+        const toc = [...new Set(chunks.map((c) => c.headingPath.split("/")[0]).filter(Boolean))];
+        throw new Error(
+          `no section ${JSON.stringify(heading)} in ${node.slug} — its sections: ${toc.join(", ")}`,
+        );
+      }
+      scoped = chunks.filter((c) => c.headingPath === root || c.headingPath.startsWith(root + "/"));
+    }
+  }
+
+  const window = windowDocument(scoped, budget, options.fromHeading ?? null);
+  const text = window.chunks.map((c) => c.content).join("");
+  const windowed = window.chunks.length < scoped.length;
+  const totalChars = scoped.reduce((n, c) => n + c.content.length, 0);
+  const sections = [
+    ...new Set(scoped.map((c) => c.headingPath.split("/")[0] ?? "").filter((s) => s !== "")),
+  ];
+
+  await logRead(ctx.pool, {
+    tenantId: inst.tenantId,
+    corpusId: inst.corpusId,
+    actor,
+    action: "content_served",
+    instanceDigest: ctx.instanceDigest,
+    generation: node.generation,
+    detail: { slug: node.slug, chars: text.length, windowed },
+  });
+
+  return {
+    slug: node.slug,
+    title: node.title,
+    text,
+    sections,
+    provenance: {
+      corpus_id: inst.corpusId,
+      stable_id: node.stableId,
+      slug: node.slug,
+      generation: node.generation,
+      retrieved_at: isoSeconds(),
+    },
+    ...(windowed
+      ? {
+          window_from: window.windowFrom ?? "",
+          window_to: window.windowTo ?? "",
+          next: window.nextHeading,
+          remaining_outline: [...window.remainingSections],
+          est_tokens: Math.ceil(text.length / CHARS_PER_TOKEN),
+          total_est_tokens: Math.ceil(totalChars / CHARS_PER_TOKEN),
+          note:
+            window.nextHeading === null
+              ? "windowed — this is the last window (next is null)"
+              : "windowed — continue with from_heading=next",
+        }
+      : {}),
+    ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
+    ...(refreshed === undefined ? {} : { snapshot: refreshed }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// outline — the record's structure, root-absolute
+
+export interface OutlineNodeWire {
+  readonly slug: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly heading_path: string;
+  readonly position: number;
+  readonly depth: number;
+  readonly child_count: number;
+  readonly has_content: boolean;
+}
+
+export async function outlineDocuments(
+  ctx: ServiceContext,
+  options: { node?: string | null; depth?: number | null; limit?: number } = {},
+): Promise<{ nodes: OutlineNodeWire[] }> {
+  const inst = ctx.instance;
+  const actor = ctx.actor?.() ?? "anonymous";
+  const root = options.node ?? null;
+  // Drill-down default: a named node with no explicit depth gets depth=1.
+  const depth = options.depth ?? (root === null ? 0 : 1);
+  const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: null };
+  const rows = await runRead(ctx.pool, inst.tenantId, (client) =>
+    outlineQuery(client, scope, { root, depth, limit: options.limit ?? 200 }),
+  );
+  await logRead(ctx.pool, {
+    tenantId: inst.tenantId,
+    corpusId: inst.corpusId,
+    actor,
+    action: "outline_served",
+    instanceDigest: ctx.instanceDigest,
+    detail: { node: root, returned: rows.length },
+  });
+  return {
+    nodes: rows.map((r) => ({
+      slug: r.slug,
+      kind: r.kind,
+      title: r.title,
+      heading_path: r.headingPath,
+      position: r.position,
+      depth: r.depth,
+      child_count: r.childCount,
+      has_content: r.hasContent,
+    })),
   };
 }

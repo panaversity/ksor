@@ -222,6 +222,30 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(body.snapshot.token.length).toBeGreaterThan(20);
   });
 
+  it("outline lists the record; read reconstructs a document byte-exact with provenance", async () => {
+    const outline = await client.callTool({ name: "outline", arguments: {} });
+    const nodes = (outline.structuredContent as { nodes: { slug: string }[] }).nodes;
+    expect(nodes.map((n) => n.slug).sort(), JSON.stringify(nodes)).toEqual([
+      "compensation",
+      "onboarding",
+    ]);
+
+    const read = await client.callTool({ name: "read", arguments: { slug: "compensation" } });
+    const doc = read.structuredContent as {
+      text: string;
+      title: string;
+      provenance: { generation: number; stable_id: string };
+    };
+    expect(doc.text, "byte-exact reconstruction").toBe(DOCS[0].content);
+    expect(doc.title).toBe("Compensation bands");
+    expect(doc.provenance.stable_id).toBe("policies/compensation");
+    expect(doc.provenance.generation).toBe(1);
+
+    const missing = await client.callTool({ name: "read", arguments: { slug: "nonexistent" } });
+    expect(missing.isError, JSON.stringify(missing)).toBe(true);
+    expect(JSON.stringify(missing.content)).toContain("outline");
+  });
+
   it("abstains on the out-of-corpus question — the only passing answer", async () => {
     const result = await client.callTool({
       name: "search",
