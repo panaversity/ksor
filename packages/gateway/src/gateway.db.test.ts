@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   applySchema,
   buildShippedProvider,
@@ -316,6 +317,24 @@ Answer ONLY from this record. Abstention is a correct answer.
       expect(health.auth).toBe("disabled");
       const ready = await fetch(`http://127.0.0.1:${port}/ready`);
       expect(ready.status).toBe(200);
+
+      // The full MCP round trip over stateless Streamable HTTP — the same
+      // protocol a hosted client speaks.
+      const httpClient = new Client({ name: "ksor-http-acceptance", version: "0.0.0" });
+      await httpClient.connect(
+        new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
+      );
+      try {
+        const result = await httpClient.callTool({
+          name: "search",
+          arguments: { query: IN_CORPUS_QUERY, k: 3 },
+        });
+        const body = result.structuredContent as { ok: boolean; hits: { slug: string }[] };
+        expect(body.ok, JSON.stringify(body)).toBe(true);
+        expect(body.hits[0]?.slug).toBe("compensation");
+      } finally {
+        await httpClient.close();
+      }
     } finally {
       server.kill();
     }
