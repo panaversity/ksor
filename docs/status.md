@@ -14,7 +14,7 @@ attached). It ships the rebuilt CLI shell: every designed verb (`init`,
 contract (`exitCodes`, `verbs`, `resolveCommand`), and docs ship inside
 the tarball under `docs/`.
 
-## Implemented in this repository (unreleased — ships as 0.1.0)
+## Implemented in this repository (unreleased — ships as 0.0.2, patch per the constitution; the owner may elect 0.1.0)
 
 - **`ksor init`** — the first working verb, implemented red-first against
   the ratified spec (`specs/ksor/init/spec.md`). One command emits a
@@ -79,9 +79,13 @@ tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 ## Pending owner actions
 
-- Configure the **npm Trusted Publisher** for `@panaversity/ksor`
-  (npm package settings → GitHub Actions) so `release.yml` can publish with
-  provenance and no stored token.
+- Flip the org setting **"Allow GitHub Actions to create and approve pull
+  requests"** — until then every release's Version-PR needs the manual
+  rescue documented in the `$release` skill. (The npm Trusted Publisher is
+  configured — 0.0.1 published through it.)
+- Decide the version signal for the init release: the changeset is `patch`
+  (0.0.2) per the constitution's pre-1.0 rule; flip to `minor` (0.1.0) if
+  the milestone should read in the version.
 - Repoint the **`vsor` PyPI Trusted Publisher** — it still names
   `panaversity/zia-vertical-system-of-record`, which no longer resolves; a
   release tag today passes every gate and fails at upload.

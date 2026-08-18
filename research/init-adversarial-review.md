@@ -173,6 +173,23 @@ branding truth, swap lifecycle), all confirmed-live-only.
   suite trusted incidence (titles satisfiable from any page's nav, fixed
   ports, no asset probe, no divergence probes — all hardened).
 
+**The review loop, rounds three through seven** (an iterating headless
+reviewer, fix-everything-then-review-again, per the owner's instruction):
+round 3 read the theme port line by line — the shipped shell fetched its
+typeface from Google at build time (offline builds impossible, exports not
+byte-reproducible), the ~1,900 ported lines were typechecked by nothing,
+and the shells still diverged on index-less folder ties; round 4 found the
+guards that only ran at birth (instance.md's name grammar, provenance's
+list shape), the `_partial.md` divergence, the missing repo .gitattributes
+(a Windows checkout would scaffold different bytes than every suite
+certified), and the orphaned dev-server process group; rounds 5 and 6
+attacked the checker itself — duplicate keys, malformed quoting, tight
+colons, tab indentation, flow-list types, a stray backtick that silently
+exempted links, process.exit() truncating piped reports, and a dangling
+symlink crashing the run. Every finding fixed same-round, with a torture
+case pinning its class; the conformance suite typechecks the shell where
+its dependencies exist.
+
 **The standing lesson this round adds:** two implementations of one
 contract disagree wherever the contract is silent — reading-order
 tie-breaks, route encodings, empty-value semantics, identity sources. The

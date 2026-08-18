@@ -76,21 +76,30 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       res.writeHead(404);
       res.end("not found");
     });
-    await new Promise<void>((resolve) => server.listen(4173, resolve));
+    // Ephemeral port: a fixed one raced other local servers (same class the
+    // conformance suite fixed; review finding, 2026-08-18).
+    const port = await new Promise<number>((resolve) =>
+      server.listen(0, () => {
+        const address = server.address();
+        if (address === null || typeof address === "string") throw new Error("no port assigned");
+        resolve(address.port);
+      }),
+    );
+    const base = `http://localhost:${port}`;
 
     const { chromium } = await import("playwright");
     const browser = await chromium.launch();
     try {
       // The agent-facing index: headed by THIS instance's name (not a generic
       // "# Docs"), and every link it advertises must actually resolve.
-      const llms = await (await fetch("http://localhost:4173/llms.txt")).text();
+      const llms = await (await fetch(`${base}/llms.txt`)).text();
       expect(
         llms.split("\n")[0],
         `llms.txt first line: ${JSON.stringify(llms.slice(0, 120))}`,
       ).toBe("# walkthrough");
       const firstLink = /^- \[[^\]]*]\((?<url>[^)]+)\)/m.exec(llms)?.groups?.url;
       expect(firstLink, `llms.txt body: ${JSON.stringify(llms.slice(0, 300))}`).toBeDefined();
-      const linked = await fetch(`http://localhost:4173${firstLink}`);
+      const linked = await fetch(`${base}${firstLink}`);
       expect(linked.status, `GET ${firstLink} from the static export`).toBe(200);
 
       const backgrounds: Record<string, string> = {};
@@ -106,10 +115,10 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         // worker or module fails silently without this (found live).
         page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
         page.on("request", (req) => {
-          if (!req.url().startsWith("http://localhost:4173")) externalRequests.push(req.url());
+          if (!req.url().startsWith(base)) externalRequests.push(req.url());
         });
 
-        await page.goto("http://localhost:4173/docs/example/", { waitUntil: "networkidle" });
+        await page.goto(`${base}/docs/example/`, { waitUntil: "networkidle" });
         await expect
           .poll(() => page.locator("h1").first().textContent(), { timeout: 10_000 })
           .toContain("Your first governed document");

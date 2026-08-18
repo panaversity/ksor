@@ -129,7 +129,7 @@ function parseFrontmatter(text) {
       // (review finding, 2026-08-18: green check, red build).
       if (keys.has(current)) duplicates.push(current);
       const rawValue = top[2].trim();
-      if (/^"(?:[^"\\]|\\.)*"$/.test(rawValue) || /^'[^']*'$/.test(rawValue)) {
+      if (/^"(?:[^"\\]|\\.)*"$/.test(rawValue) || /^'(?:[^']|'')*'$/.test(rawValue)) {
         quoted.add(current);
       } else if (/^["']/.test(rawValue)) {
         // Starts like a quote but is not one clean quoted string — YAML
@@ -190,10 +190,16 @@ function stripCode(text) {
     blank = line.trim() === "";
     kept.push(line);
   }
-  // Spans bounded to one line: a stray unpaired backtick once paired with
-  // the next backtick pages later and silently exempted every link between
-  // them from the dead-link rules (review finding, 2026-08-18).
-  return kept.join("\n").replace(/(`+)[^`\n]*?\1/g, " ");
+  // Spans stripped per PARAGRAPH: CommonMark code spans may cross lines, so
+  // a line bound flagged links inside real multi-line spans — while a
+  // document-wide strip let one stray backtick pair with another pages
+  // later and silently exempt every link between them. A paragraph bounds
+  // both failure modes (review findings, 2026-08-18, both rounds).
+  return kept
+    .join("\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/(`+)[^`]*?\1/g, " "))
+    .join("\n\n");
 }
 
 // Every shape CommonMark gives a link destination: inline (bare or
@@ -488,7 +494,7 @@ if (!existsSync(knowledgeDir)) {
       // scalar value passing here failed there with a schema error naming
       // neither file nor rule (review finding, 2026-08-18).
       for (const [key, value] of fm.keys) {
-        if (key !== "provenance" && /^\[.*\]$/.test(value)) {
+        if (key !== "provenance" && !fm.quoted.has(key) && /^\[.*\]$/.test(value)) {
           problem(
             rel,
             `${key} is one value, not a list: ${value}`,
@@ -498,7 +504,11 @@ if (!existsSync(knowledgeDir)) {
         }
       }
       const provenance = fm.keys.get("provenance");
-      if (provenance !== undefined && provenance !== "" && !/^\[.*\]$/.test(provenance)) {
+      if (
+        provenance !== undefined &&
+        provenance !== "" &&
+        (fm.quoted.has("provenance") || !/^\[.*\]$/.test(provenance))
+      ) {
         problem(
           rel,
           `provenance is a list, not a value: ${provenance}`,
@@ -582,6 +592,41 @@ if (!existsSync(instanceMd)) {
       "close the block with --- on its own line; every line inside it is `key: value` — the identity prose belongs below it",
     );
   } else {
+    // The same YAML-shape rules the record's documents get: a duplicated
+    // name: here passed while the shells published the OTHER occurrence
+    // (review finding, 2026-08-18).
+    for (const line of fm.tightColons) {
+      problem(
+        "instance.md",
+        `missing space after the colon: ${line}`,
+        "YAML needs `key: value` — without the space the build fails after this check passed",
+        "add a space after the colon",
+      );
+    }
+    for (const line of fm.tabIndents) {
+      problem(
+        "instance.md",
+        `tab-indented frontmatter: ${JSON.stringify(line)}`,
+        "YAML refuses tabs as indentation — the build fails after this check passed",
+        "indent with spaces",
+      );
+    }
+    for (const dup of fm.duplicates) {
+      problem(
+        "instance.md",
+        `duplicate frontmatter key: ${dup}`,
+        "YAML refuses a repeated key — and the surfaces publish one occurrence while this check validated the other",
+        `keep one ${dup}: line`,
+      );
+    }
+    for (const [key, raw] of fm.malformedQuote) {
+      problem(
+        "instance.md",
+        `frontmatter quoting is malformed: ${key}: ${raw}`,
+        "the value starts like a quoted string but is not one clean quoted string — YAML refuses it",
+        `quote the whole value exactly once: ${key}: "..."`,
+      );
+    }
     const format = fm.keys.get("format");
     if (format === undefined) {
       problem(

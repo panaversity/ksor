@@ -241,6 +241,38 @@ describe("scaffolded format-checker — torture", () => {
     expect(flow.status, flow.output).toBe(0);
   });
 
+  it("round-7 edges: quoting beats shape rules, and YAML's own escapes parse", () => {
+    // Quoted values are strings whatever they look like: "[Draft]" is a
+    // fine title, and a QUOTED provenance is a scalar the schema refuses.
+    const fine = probe({
+      "knowledge/qtitle.md": '---\ntitle: "[Draft]"\nstatus: draft\n---\n\nBody.\n',
+      "knowledge/obrien.md": "---\ntitle: Irish\nstatus: draft\nowner: 'O''Brien'\n---\n\nBody.\n",
+    });
+    expect(fine.status, fine.output).toBe(0);
+
+    const quotedProv = probe({
+      "knowledge/qprov.md": '---\ntitle: P\nstatus: draft\nprovenance: "[a, b]"\n---\n\nBody.\n',
+    });
+    expect(quotedProv.status, quotedProv.output).toBe(1);
+    expect(quotedProv.output).toContain("provenance is a list, not a value");
+
+    // A multi-line code span inside one paragraph is real code; the checker
+    // must not flag the link-shaped text inside it.
+    const span = probe({
+      "knowledge/mlspan.md": doc("Use `a\n[not a link](./nope.md)\nb` as one span."),
+    });
+    expect(span.status, span.output).toBe(0);
+  });
+
+  it("holds instance.md to the same YAML-shape rules as the record", () => {
+    const original = readFileSync(path.join(project, "instance.md"), "utf8");
+    const duplicated = probe({
+      "instance.md": original.replace(/^name: (.*)$/m, "name: $1\nname: other-name"),
+    });
+    expect(duplicated.status, duplicated.output).toBe(1);
+    expect(duplicated.output).toContain("duplicate frontmatter key: name");
+  });
+
   it("reports symlinks in the record instead of crashing on a dangling one", () => {
     const target = path.join(project, "knowledge", "dangling.md");
     symlinkSync(path.join(project, "knowledge", "no-such-file.md"), target);

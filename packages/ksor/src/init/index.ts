@@ -226,15 +226,10 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
     return refuseExists(io, word);
   }
 
-  // Warnings come after every refusal: a run that wrote nothing must not
-  // leave advice about a project it never created.
+  // Deferred until the project exists: a run that fails LATER (a rename
+  // race, a full disk) must still put its slug on stderr line 1 (review
+  // finding, 2026-08-18 — the warning beat `error: environment` to it).
   const ancestorWorkspace = findAncestorWorkspace(targetDir);
-  if (ancestorWorkspace !== null) {
-    io.err(
-      `warning: parent pnpm workspace at ${ancestorWorkspace} — its globs may enroll this\n` +
-        "project's packages into the parent install. Exclude it there if builds misbehave.\n",
-    );
-  }
 
   // --- materialize (atomic for the named form) -----------------------------
   if (isDot) {
@@ -275,6 +270,12 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
   // The mode fix, the courtesy note and git are best-effort; only the
   // handoff must print.
   try {
+    if (ancestorWorkspace !== null) {
+      io.err(
+        `warning: parent pnpm workspace at ${ancestorWorkspace} — its globs may enroll this\n` +
+          "project's packages into the parent install. Exclude it there if builds misbehave.\n",
+      );
+    }
     if (!isDot) {
       // mkdtempSync creates the stage 0700 for temp-dir privacy and rename
       // carries that onto the project root. Copy the mode materialize's own
