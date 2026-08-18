@@ -121,7 +121,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     await pool?.end();
     if (admin !== undefined) {
       if (dbName !== undefined)
-        await admin.query(`DROP DATABASE IF EXISTS ${dbName}`).catch(() => undefined);
+        await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => undefined);
       await admin.end();
     }
     if (tmp !== undefined) await rm(tmp, { recursive: true, force: true });

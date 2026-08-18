@@ -128,7 +128,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     await pool?.end();
     if (admin !== undefined) {
       if (dbName !== undefined)
-        await admin.query(`DROP DATABASE IF EXISTS ${dbName}`).catch(() => undefined);
+        await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => undefined);
       await admin.end();
     }
   }, 60_000);
