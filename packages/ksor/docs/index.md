@@ -40,8 +40,12 @@ Read the scaffold's own `AGENTS.md` first — it is the working contract.
 Knowledge lives in `knowledge/` and never inside the site; frontmatter uses
 a closed key set (`title` + `status` required); `pnpm check` explains any
 violation and how to fix it. Sidebar order is the governed `order:`
-frontmatter key — never `meta.json` or `sidebar_position`. The site shell
-at `system/site/` is replaceable behind a four-clause surface contract; a
+frontmatter key — never `meta.json` or `sidebar_position`. If the
+instance declares an `audiences:` model, documents may carry a
+`visibility:` key and per-audience builds (`KSOR_AUDIENCE=<tier> pnpm
+build`) stage only what that tier may see — publication, not authorship:
+anyone who can clone reads everything. The site shell
+at `system/site/` is replaceable behind a five-clause surface contract; a
 Docusaurus conformance shell lives in the ksor repository under
 `workbench/shells/docusaurus/` with its swap recipe.
 

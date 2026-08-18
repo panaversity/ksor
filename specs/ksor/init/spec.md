@@ -94,7 +94,10 @@ swapping shells must require no change outside `system/site/`:
    would put ungoverned behavior behind a governed-looking fence);
 3. it serves `llms.txt`, and per-page markdown once `ksor build` emits the
    artifacts (dev-mode sugar allowed);
-4. it passes the browser smoke (below).
+4. it passes the browser smoke (below);
+5. it never emits a document outside the audience it was built for, and
+   never serializes the filter to the client — the visibility clause,
+   specified and conformance-tested in `specs/ksor/visibility/spec.md`.
 
 Fumadocs is the reference implementation core ships; a Docusaurus shell, a
 bare Next.js app, or any registry-distributed alternative that satisfies

@@ -32,10 +32,21 @@ working `ksor init` described below, plus the CLI contract: `dev`,
 - **The shell swap seam, proven with two implementations** — a Docusaurus
   conformance shell at `workbench/shells/docusaurus/` (predecessor-based,
   decision 6) swaps into any scaffolded project by its README recipe, and
-  one shell-agnostic suite runs the surface contract's four clauses, the
+  one shell-agnostic suite runs the surface contract's five clauses, the
   `order:` translation, and the base-path build against both shells in CI.
   `ksor init` still emits Fumadocs, always — the second shell is the
   option and the vendor-neutrality proof, not a selector.
+
+- **Visibility** (`specs/ksor/visibility/spec.md`, evidence in
+  `research/visibility.md` and issue #10) — the record declares its
+  audience: a `visibility:` key against an `audiences:` model in
+  instance.md; per-audience **staged** builds on both shells carry no
+  trace of a document below its tier (page, search, llms, sidebar, asset
+  name or bytes — raw or base64); the filter itself never reaches the
+  client bundle; non-public builds label themselves; seven checker rules
+  including the cross-audience link no single build can catch. Absent
+  `audiences:`, nothing changes. Conformance-tested with canary sweeps
+  and positive controls in CI.
 
 - **Base environment**: pnpm 11 workspace with catalog pins, TypeScript 7
   (native compiler), pure-ESM package build via tsdown, vitest unit +

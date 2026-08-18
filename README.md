@@ -558,7 +558,7 @@ used by Example Corporation.
 
 The human-readable surface — a real Next.js + Fumadocs app that renders the
 record, shipped as ordinary source code you own outright rather than an
-opaque hosted service. It is replaceable behind a four-clause surface
+opaque hosted service. It is replaceable behind a five-clause surface
 contract (`specs/ksor/init/spec.md`): any shell that renders the record,
 serves `llms.txt`, and passes the browser smoke is equally conformant.
 

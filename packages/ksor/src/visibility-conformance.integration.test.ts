@@ -39,9 +39,23 @@ const ASSET_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kABAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEAAAAEoAMABAAAAAEAAAAEAAAAAMVs/gIAAAHJaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6Q29sb3JTcGFjZT4xPC9leGlmOkNvbG9yU3BhY2U+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj4zMjwvZXhpZjpQaXhlbFhEaW1lbnNpb24+CiAgICAgICAgIDxleGlmOlBpeGVsWURpbWVuc2lvbj4zMjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgqWsr5jAAAAP0lEQVQIHQE0AMv/Af////b7/f0B+wsDBgT2+PzL2urzAOk2Jh8CCQcE7ejq1sjrC/8MAP///+bs9dbg8Pz9/kfmIaM5XLTrAAAAAElFTkSuQmCC",
   "base64",
 );
-// A distinctive slice of the asset's compressed payload — long enough to
-// never occur by chance, deep enough to survive being embedded verbatim.
-const ASSET_BYTES_PROBE = ASSET_PNG.subarray(ASSET_PNG.length - 48, ASSET_PNG.length - 12);
+// The asset can ship two ways: raw bytes (a copied file) or base64 (an
+// inlined data: URI — found live: Docusaurus inlines small images, so a
+// bytes-only probe was blind to that shape in BOTH directions). Probe both:
+// a 3-byte-aligned raw slice, and a substring of the full base64 string
+// (alignment makes the standalone encoding a substring of any embedding).
+const ASSET_RAW_PROBE = ASSET_PNG.subarray(ASSET_PNG.length - 48, ASSET_PNG.length - 12);
+const ASSET_B64 = ASSET_PNG.toString("base64");
+const ASSET_B64_PROBE = ASSET_B64.slice(ASSET_B64.length - 64, ASSET_B64.length - 16);
+
+function assetHits(root: string): string[] {
+  return [
+    ...new Set([
+      ...filesContaining(root, ASSET_RAW_PROBE),
+      ...filesContaining(root, ASSET_B64_PROBE),
+    ]),
+  ];
+}
 
 interface Shell {
   readonly shellName: string;
@@ -181,7 +195,7 @@ describe.runIf(enabled).each(SHELLS)(
 
     afterAll(() => {
       if (work) rmSync(work, { recursive: true, force: true });
-    });
+    }, 180_000);
 
     it("public build (unset audience): zero restricted traces, with live controls", () => {
       mustPass(build(), "public build");
@@ -201,7 +215,7 @@ describe.runIf(enabled).each(SHELLS)(
       }
       // The asset: name and bytes.
       expect(filesContaining(outDir, "comp-chart"), "asset name leaked").toEqual([]);
-      expect(filesContaining(outDir, ASSET_BYTES_PROBE), "asset bytes leaked").toEqual([]);
+      expect(assetHits(outDir), "asset bytes leaked (raw or base64)").toEqual([]);
       // The route is absent, and llms.txt lists only the public tier.
       expect(existsSync(path.join(outDir, "docs", "compensation"))).toBe(false);
       const llms = readFileSync(path.join(outDir, "llms.txt"), "utf8");
@@ -221,9 +235,7 @@ describe.runIf(enabled).each(SHELLS)(
       for (const canary of [RESTRICTED_TITLE, RESTRICTED_DESC, RESTRICTED_BODY]) {
         expect(filesContaining(outDir, canary), `restricted canary in internal build`).toEqual([]);
       }
-      expect(filesContaining(outDir, ASSET_BYTES_PROBE), "asset bytes in internal build").toEqual(
-        [],
-      );
+      expect(assetHits(outDir), "asset bytes in internal build (raw or base64)").toEqual([]);
       expect(
         filesContaining(outDir, "not for publication").length,
         "the internal build must name itself",
@@ -239,8 +251,8 @@ describe.runIf(enabled).each(SHELLS)(
         ).toBeGreaterThan(0);
       }
       expect(
-        filesContaining(outDir, ASSET_BYTES_PROBE).length,
-        "control: asset bytes at its own tier",
+        assetHits(outDir).length,
+        "control: asset bytes (raw or base64) at its own tier",
       ).toBeGreaterThan(0);
     }, 300_000);
 
