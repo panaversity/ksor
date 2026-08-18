@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+// The page.evaluate callback runs in the browser; only this file needs DOM types.
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
@@ -34,13 +36,13 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     if (work) rmSync(work, { recursive: true, force: true });
   });
 
-  it("static build renders in chromium: content, both themes, no console errors, no external requests", async () => {
+  it("static build serves the record: llms.txt index, distinct themes, no console errors, no external requests", async () => {
     const build = spawnSync("pnpm", ["build"], { cwd: project, encoding: "utf8" });
     expect(build.status, build.stderr.slice(-2000)).toBe(0);
 
     const outDir = path.join(project, "system", "site", "out");
     const server = createServer((req, res) => {
-      const url = (req.url ?? "/").split("?")[0];
+      const url = (req.url ?? "/").split("?")[0] ?? "/";
       const candidates = [url, `${url}/index.html`, `${url}index.html`, `${url}.html`];
       for (const candidate of candidates) {
         try {
@@ -60,6 +62,19 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const { chromium } = await import("playwright");
     const browser = await chromium.launch();
     try {
+      // The agent-facing index: headed by THIS instance's name (not a generic
+      // "# Docs"), and every link it advertises must actually resolve.
+      const llms = await (await fetch("http://localhost:4173/llms.txt")).text();
+      expect(
+        llms.split("\n")[0],
+        `llms.txt first line: ${JSON.stringify(llms.slice(0, 120))}`,
+      ).toBe("# walkthrough");
+      const firstLink = /^- \[[^\]]*]\((?<url>[^)]+)\)/m.exec(llms)?.groups?.url;
+      expect(firstLink, `llms.txt body: ${JSON.stringify(llms.slice(0, 300))}`).toBeDefined();
+      const linked = await fetch(`http://localhost:4173${firstLink}`);
+      expect(linked.status, `GET ${firstLink} from the static export`).toBe(200);
+
+      const backgrounds: Record<string, string> = {};
       for (const colorScheme of ["light", "dark"] as const) {
         const context = await browser.newContext({ colorScheme });
         const page = await context.newPage();
@@ -81,6 +96,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         );
         // The four-defects rule: assert computed style, and print what we saw.
         expect(background, `computed body background in ${colorScheme}`).toMatch(/^rgb/);
+        backgrounds[colorScheme] = background;
         expect(
           consoleErrors,
           `console errors in ${colorScheme}: ${consoleErrors.join(" | ")}`,
@@ -91,6 +107,11 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         ).toEqual([]);
         await context.close();
       }
+      // A theme that "works" by painting the same colour twice is no theme.
+      expect(
+        backgrounds.dark,
+        `body background light=${backgrounds.light} dark=${backgrounds.dark}`,
+      ).not.toBe(backgrounds.light);
     } finally {
       await browser.close();
       server.close();
