@@ -429,9 +429,13 @@ If the capitalization policy does not address the situation, the system should n
 
 # Quick Start
 
+> **Status:** the verbs below are designed, not yet implemented — each prints
+> an honest notice and exits `2` today. [`docs/status.md`](docs/status.md) is
+> authoritative.
+
 ## Requirements
 
-Install a current Node.js LTS release with npm.
+Install Node.js 24 or newer with npm.
 
 Check your installation:
 
@@ -454,7 +458,7 @@ Then:
 cd my-ksor
 ```
 
-The scaffold gives you a working KSoR project containing the knowledge source, site configuration, and agent instructions needed to work with it.
+The scaffold will give you a working KSoR project containing the knowledge source, site configuration, and agent instructions needed to work with it.
 
 ---
 
@@ -464,7 +468,7 @@ The scaffold gives you a working KSoR project containing the knowledge source, s
 npx @panaversity/ksor dev
 ```
 
-KSoR starts the local knowledge site and watches for changes while you work.
+KSoR will start the local knowledge site and watch for changes while you work.
 
 Edit the Markdown source and the human-readable surface updates from the same corpus that will ultimately serve agents.
 
@@ -476,7 +480,7 @@ Edit the Markdown source and the human-readable surface updates from the same co
 npx @panaversity/ksor build
 ```
 
-The build produces the deployable human surface and records information needed to identify what knowledge went into that build.
+The build will produce the deployable human surface and record information needed to identify what knowledge went into that build.
 
 ---
 
@@ -486,7 +490,7 @@ The build produces the deployable human surface and records information needed t
 npx @panaversity/ksor serve
 ```
 
-The agent surface exposes the governed KSoR through MCP.
+The agent surface will expose the governed KSoR through MCP.
 
 > **Project status:** in the predecessor vsor implementation the human website surface is the more mature part; in this package neither surface has shipped yet. See [`docs/status.md`](docs/status.md) — it is the only authority on implemented functionality.
 

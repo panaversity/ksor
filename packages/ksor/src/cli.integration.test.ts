@@ -41,4 +41,19 @@ describe("ksor CLI (built artifact)", () => {
     expect(result.stderr.split("\n")[0]).toBe("error: unknown-verb");
     expect(result.stderr).toContain("init, dev, build, serve");
   });
+
+  it("answers --help and -h with usage and exit 0 — help is not an unimplemented verb", () => {
+    for (const flag of ["--help", "-h"]) {
+      const result = runCli([flag]);
+      expect(result.status, `${flag} exit code`).toBe(0);
+      expect(result.stdout).toContain("Usage: ksor <verb>");
+      expect(result.stdout).toContain("designed; none implemented");
+    }
+  });
+
+  it("answers --version with the version and exit 0", () => {
+    const result = runCli(["--version"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/^\d+\.\d+\.\d+\n$/);
+  });
 });

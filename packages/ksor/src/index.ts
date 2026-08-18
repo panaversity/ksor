@@ -27,16 +27,15 @@ export const verbs = ["init", "dev", "build", "serve"] as const;
 export type Verb = (typeof verbs)[number];
 
 export interface ResolvedCommand {
-  /** The recognized verb, or null when the first argument is not one. */
+  /** The first non-flag token, or null when only flags (or nothing) appear. */
+  readonly word: string | null;
+  /** `word` when it is in the vocabulary, otherwise null. */
   readonly verb: Verb | null;
-  /** Always false until a verb ships; the CLI reports honestly and exits 2. */
-  readonly implemented: false;
 }
 
-/** Resolve the verb from CLI arguments (flags are skipped, never verbs). */
+/** Resolve the command word from CLI arguments (flags are skipped). */
 export function resolveCommand(argv: readonly string[]): ResolvedCommand {
-  const first = argv.find((arg) => !arg.startsWith("-")) ?? null;
-  const verb =
-    first !== null && (verbs as readonly string[]).includes(first) ? (first as Verb) : null;
-  return { verb, implemented: false };
+  const word = argv.find((arg) => !arg.startsWith("-")) ?? null;
+  const verb = word !== null && (verbs as readonly string[]).includes(word) ? (word as Verb) : null;
+  return { word, verb };
 }

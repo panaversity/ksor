@@ -9,6 +9,8 @@ import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseFrontmatter } from "./lib/frontmatter.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const violations = [];
 
@@ -17,19 +19,6 @@ function violate(rule, key, message, why, fix) {
     key: `${rule}:${key}`,
     text: `rule ${rule} — ${message}\n    why: ${why}\n    fix: ${fix}`,
   });
-}
-
-function frontmatterKeys(file) {
-  // CRLF-normalized so a Windows-authored file is not misread as frontmatter-less.
-  const text = readFileSync(file, "utf8").replaceAll("\r\n", "\n");
-  const match = /^---\n([\s\S]*?)\n---/.exec(text);
-  if (!match) return null;
-  const keys = {};
-  for (const line of match[1].split("\n")) {
-    const kv = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
-    if (kv) keys[kv[1]] = kv[2];
-  }
-  return keys;
 }
 
 function isSymlinkTo(linkPath, expectedTarget) {
@@ -52,7 +41,9 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   );
 }
 
-// Rule 2 — every entry in .claude/skills/ must be a symlink into .agents/skills/.
+// Rule 2 — .claude/skills/ and .agents/skills/ must mirror each other: every
+// entry in .claude/skills/ is a symlink into .agents/skills/, and every skill
+// in .agents/skills/ has that projection.
 {
   const claudeSkills = path.join(repoRoot, ".claude", "skills");
   if (existsSync(claudeSkills)) {
@@ -67,6 +58,22 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
           `.claude/skills/${entry} is not a symlink to ${target}`,
           ".agents/skills/ is the canonical skill tree; tool-specific trees are projections",
           `run: rm -rf .claude/skills/${entry} && ln -s ${target} .claude/skills/${entry}`,
+        );
+      }
+    }
+  }
+  const agentSkills = path.join(repoRoot, ".agents", "skills");
+  if (existsSync(agentSkills)) {
+    for (const entry of readdirSync(agentSkills, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)) {
+      if (!isSymlinkTo(path.join(claudeSkills, entry), `../../.agents/skills/${entry}`)) {
+        violate(
+          2,
+          `missing-projection:${entry}`,
+          `.agents/skills/${entry} has no .claude/skills projection`,
+          "a skill without its .claude/skills symlink is invisible to Claude Code",
+          `run: ln -s ../../.agents/skills/${entry} .claude/skills/${entry}`,
         );
       }
     }
@@ -92,7 +99,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         );
         continue;
       }
-      const fm = frontmatterKeys(skillMd);
+      const fm = parseFrontmatter(readFileSync(skillMd, "utf8"));
       if (!fm || fm["name"] !== dir) {
         violate(
           3,
@@ -120,7 +127,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
       );
     for (const abs of walkMd(researchRoot)) {
       const file = path.relative(researchRoot, abs);
-      const fm = frontmatterKeys(abs);
+      const fm = parseFrontmatter(readFileSync(abs, "utf8"));
       const missing = ["issue", "status", "last_updated"].filter(
         (k) => !fm || !(k in fm) || fm[k] === "",
       );

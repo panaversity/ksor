@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Committed hook, activated by `pnpm prepare` via `git config core.hooksPath
+# .githooks` — repo-local config, so it can never touch a contributor's global
+# hooks. Checks formatting of staged source paths only (worktree copies;
+# check-only, so partial staging is never destroyed — CI's fmt:ci is the
+# authority). Paths staged as deleted are skipped: there is nothing to format.
+set -u
+
+files=()
+while IFS= read -r -d '' f; do
+  case "$f" in
+    *.ts | *.mts | *.js | *.mjs) [ -f "$f" ] && files+=("$f") ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+[ "${#files[@]}" -eq 0 ] && exit 0
+
+if ! pnpm exec oxfmt --check -- "${files[@]}" > /dev/null 2>&1; then
+  echo "pre-commit: staged files fail the format check — run: pnpm fmt, restage, retry" >&2
+  exit 1
+fi

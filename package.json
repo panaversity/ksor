@@ -24,7 +24,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "publint": "turbo run publint",
     "changeset": "changeset",
-    "prepare": "node scripts/install-git-hooks.mjs"
+    "prepare": "git config core.hooksPath .githooks || echo hooks-skipped"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.0",

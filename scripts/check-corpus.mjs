@@ -11,6 +11,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseFrontmatter } from "./lib/frontmatter.mjs";
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // Frontmatter requirements per corpus profile.
@@ -41,18 +43,9 @@ function walkMarkdown(dir) {
   });
 }
 
-function frontmatterBlock(rawText) {
-  // Normalize CRLF first: a Windows-authored document has valid frontmatter,
-  // and "no frontmatter block" would be a lying diagnosis.
-  const text = rawText.replaceAll("\r\n", "\n");
-  const match = /^---\n([\s\S]*?)\n---/.exec(text);
-  return match ? match[1] : null;
-}
-
 function checkFrontmatter(file, rel, profile) {
-  const text = readFileSync(file, "utf8");
-  const block = frontmatterBlock(text);
-  if (block === null) {
+  const fm = parseFrontmatter(readFileSync(file, "utf8"));
+  if (fm === null) {
     problem(
       rel,
       "no frontmatter block",
@@ -61,13 +54,7 @@ function checkFrontmatter(file, rel, profile) {
     );
     return;
   }
-  const keys = new Set(
-    block
-      .split("\n")
-      .map((line) => /^([A-Za-z_][\w-]*)\s*:/.exec(line)?.[1])
-      .filter(Boolean),
-  );
-  const missing = PROFILES[profile].required.filter((k) => !keys.has(k));
+  const missing = PROFILES[profile].required.filter((k) => !(k in fm));
   if (missing.length > 0) {
     problem(
       rel,
@@ -78,7 +65,7 @@ function checkFrontmatter(file, rel, profile) {
       `add the missing key(s) to the frontmatter`,
     );
   }
-  for (const key of [...keys].filter((k) => FORBIDDEN_KEYS.has(k))) {
+  for (const key of Object.keys(fm).filter((k) => FORBIDDEN_KEYS.has(k))) {
     problem(
       rel,
       `authored "${key}:" frontmatter key`,
@@ -86,12 +73,8 @@ function checkFrontmatter(file, rel, profile) {
       `remove the "${key}:" key; the document's path is its identity, its route, and its resource URI`,
     );
   }
-  // [ \t]* only — \s* would cross the newline and read the next line's key as
-  // the status value.
-  const statusLine = /^status\s*:[ \t]*(.*)$/m.exec(block);
-  if (statusLine !== null) {
-    // Strip matching YAML quotes so `status: "approved"` reads as approved.
-    const status = statusLine[1].trim().replace(/^(["'])(.*)\1$/, "$2");
+  if ("status" in fm) {
+    const status = fm["status"];
     if (status === "") {
       problem(
         rel,

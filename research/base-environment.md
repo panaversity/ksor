@@ -15,7 +15,10 @@ last_updated: 2026-08-18
 > the `evals/` placeholder was removed (evals land with `ksor serve`; contract
 > in AGENTS.md → Testing); the changelog lives at `packages/ksor/CHANGELOG.md`
 > (no root file); and `check-snippets` is deferred until the docs carry import
-> fences worth verifying.
+> fences worth verifying. Later the same day: lint/format run zero-config
+> (oxlint/oxfmt honor .gitignore, so the ~4-line configs were deleted) and the
+> hook installer became a committed `.githooks/pre-commit` + repo-local
+> `core.hooksPath`.
 
 Plan for the base environment of ksor: the AGENTS.md constitution, the agent-skills
 roster, and the TypeScript toolchain. Derived from studying fresh clones of

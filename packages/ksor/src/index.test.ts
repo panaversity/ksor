@@ -17,21 +17,20 @@ describe("exitCodes", () => {
 describe("resolveCommand", () => {
   it("recognizes every designed verb", () => {
     for (const verb of verbs) {
-      expect(resolveCommand([verb])).toEqual({ verb, implemented: false });
+      expect(resolveCommand([verb])).toEqual({ word: verb, verb });
     }
   });
 
-  it("returns null for unknown words and empty argv", () => {
-    expect(resolveCommand(["frobnicate"]).verb).toBeNull();
-    expect(resolveCommand([]).verb).toBeNull();
+  it("returns the raw word for unknown commands, so the CLI can refuse by name", () => {
+    expect(resolveCommand(["frobnicate"])).toEqual({ word: "frobnicate", verb: null });
   });
 
-  it("skips flags when looking for the verb", () => {
+  it("returns nulls for empty argv and flags-only argv", () => {
+    expect(resolveCommand([])).toEqual({ word: null, verb: null });
+    expect(resolveCommand(["--help"])).toEqual({ word: null, verb: null });
+  });
+
+  it("skips flags when looking for the command word", () => {
     expect(resolveCommand(["--verbose", "build"]).verb).toBe("build");
-    expect(resolveCommand(["--help"]).verb).toBeNull();
-  });
-
-  it("never reports a verb as implemented in this build", () => {
-    expect(resolveCommand(["init"]).implemented).toBe(false);
   });
 });

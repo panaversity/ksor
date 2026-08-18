@@ -88,6 +88,7 @@ Used precisely; do not repurpose.
 | `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)  |
 | `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest |
 | `tsconfig.base.json`        | the shared strict base — extend, don't fork               |
+| `.githooks/`                | committed pre-commit hook (`pnpm prepare` sets hooksPath) |
 
 ## Commands
 

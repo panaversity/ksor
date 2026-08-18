@@ -21,7 +21,7 @@ pnpm install   # Node >= 24; pnpm is pinned via the packageManager field
 ## The gate
 
 ```sh
-pnpm lint && pnpm fmt:ci && pnpm typecheck && pnpm guard && pnpm check:corpus \
+pnpm lint:ci && pnpm fmt:ci && pnpm typecheck && pnpm guard && pnpm check:corpus \
   && pnpm test:unit && pnpm build && pnpm test:integration && pnpm publint
 ```
 
