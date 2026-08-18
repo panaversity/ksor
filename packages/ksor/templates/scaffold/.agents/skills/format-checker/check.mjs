@@ -116,10 +116,11 @@ function stripCode(text) {
     }
     // Indented code blocks: a 4-space/tab-indented run opened after a blank
     // line is treated as code (review finding 2026-08-18 — links inside
-    // code samples were checked as real). Known tradeoff: a loose list's
-    // indented continuation matches too, so links there go unchecked — a
-    // false negative, preferred over failing the gate on real code samples.
-    if (/^(?: {4}|\t)/.test(line)) {
+    // code samples were checked as real). An indented line that STARTS a
+    // list item stays content: nested lists sit at exactly this indent and
+    // carry real links (second review finding, same day) — code that
+    // happens to open with a markdown bullet is the rarer beast.
+    if (/^(?: {4}|\t)/.test(line) && !/^[ \t]+(?:[-*+]|\d+[.)])\s/.test(line)) {
       if (blank || indented) {
         indented = true;
         continue;

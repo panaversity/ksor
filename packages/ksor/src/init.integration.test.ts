@@ -147,7 +147,11 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
       const dotMode = statSync(dotTarget).mode & 0o777;
 
       expect(namedMode.toString(8), "named-form root mode").toBe(dotMode.toString(8));
-      expect(namedMode & 0o055, "root must be world-traversable, not 0700").not.toBe(0);
+      // Whatever the umask grants, the root must match the tree it holds —
+      // 0700-root-over-0755-children and its umask-077 inverse both shipped
+      // once (review findings, 2026-08-18).
+      const childMode = statSync(path.join(named, "mode-check", "knowledge")).mode & 0o777;
+      expect(namedMode.toString(8), "root vs child mode").toBe(childMode.toString(8));
     },
   );
 

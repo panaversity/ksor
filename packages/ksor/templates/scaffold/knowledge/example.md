@@ -4,8 +4,6 @@ status: draft
 order: 1
 ---
 
-# Your first governed document
-
 This file exists so the record is never empty: browse it with `pnpm dev`,
 then replace it with real knowledge.
 

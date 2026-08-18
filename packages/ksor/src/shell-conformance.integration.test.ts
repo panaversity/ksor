@@ -69,7 +69,9 @@ const SHELLS: readonly Shell[] = [
 
 function run(command: string, args: readonly string[], cwd: string): void {
   const result = spawnSync(command, [...args], { cwd, encoding: "utf8" });
-  expect(result.status, `${command} ${args.join(" ")}: ${result.stderr.slice(-2000)}`).toBe(0);
+  // stderr is null when the spawn itself failed (command missing).
+  const detail = result.stderr ?? String(result.error ?? "spawn failed");
+  expect(result.status, `${command} ${args.join(" ")}: ${detail.slice(-2000)}`).toBe(0);
 }
 
 /** knowledge-relative .md path → site slug under /docs (no trailing slash). */
@@ -135,12 +137,16 @@ describe.runIf(enabled).each(SHELLS)(
       run(process.execPath, [distCli, "init", `conform-${shellName}`], work);
       project = path.join(work, `conform-${shellName}`);
 
-      // A record with explicit order, a folder, and a description — enough to
-      // tell "renders the record" from "renders the example".
+      // A record with explicit order, folders, unordered documents whose
+      // names interleave with a folder's, and a description — enough to tell
+      // "renders the record" from "renders the example", and to pin the
+      // canonical reading order both shells must share: ordered first
+      // (ascending; example.md ships with order 1), then plain name order
+      // with folders interleaved.
       const knowledge = path.join(project, "knowledge");
       writeFileSync(
         path.join(knowledge, "beta.md"),
-        "---\ntitle: Beta policy\nstatus: draft\ndescription: first by order\norder: 1\n---\n\nBeta body.\n",
+        "---\ntitle: Beta policy\nstatus: draft\ndescription: first by order\norder: 0\n---\n\nBeta body.\n",
       );
       mkdirSync(path.join(knowledge, "hr"));
       writeFileSync(
@@ -151,9 +157,29 @@ describe.runIf(enabled).each(SHELLS)(
         path.join(knowledge, "hr", "pay.md"),
         "---\ntitle: Pay\nstatus: draft\n---\n\nPay body.\n",
       );
+      writeFileSync(
+        path.join(knowledge, "hr", "leave.md"),
+        "---\ntitle: Leave\nstatus: draft\norder: 1\n---\n\nLeave body.\n",
+      );
+      writeFileSync(
+        path.join(knowledge, "hr-notes.md"),
+        "---\ntitle: HR notes\nstatus: draft\n---\n\nNotes body.\n",
+      );
+      mkdirSync(path.join(knowledge, "aaa"));
+      writeFileSync(
+        path.join(knowledge, "aaa", "index.md"),
+        "---\ntitle: AAA folder\nstatus: draft\n---\n\nAAA body.\n",
+      );
+      writeFileSync(
+        path.join(knowledge, "mmm.md"),
+        "---\ntitle: MMM loose\nstatus: draft\n---\n\nMMM body.\n",
+      );
 
       swap?.(project);
-      run("pnpm", ["install"], project);
+      // The swap changes the dependency set, so the shipped lockfile is
+      // legitimately outdated — and CI environments default frozen-lockfile
+      // on (found live 2026-08-18: ERR_PNPM_OUTDATED_LOCKFILE under CI=true).
+      run("pnpm", ["install", ...(swap ? ["--no-frozen-lockfile"] : [])], project);
       run("pnpm", ["build"], project);
       outDir = path.join(project, "system", "site", "out");
     }, 600_000);
@@ -182,18 +208,32 @@ describe.runIf(enabled).each(SHELLS)(
       run("node", [path.join(".agents", "skills", "format-checker", "check.mjs")], project);
     });
 
-    it("clause 3: llms.txt names the instance and lists the record in reading order", () => {
+    it("clause 3: llms.txt names the instance and lists the record in the canonical order", () => {
       const llms = readFileSync(path.join(outDir, "llms.txt"), "utf8");
       const lines = llms.split("\n");
       expect(lines[0]).toBe(`# conform-${shellName}`);
-      const betaAt = llms.indexOf("[Beta policy](/docs/beta): first by order");
-      const exampleAt = llms.indexOf("(/docs/example)");
-      expect(betaAt, `llms.txt:\n${llms}`).toBeGreaterThanOrEqual(0);
-      expect(exampleAt).toBeGreaterThanOrEqual(0);
-      // order: 1 beats the order-less example document.
-      expect(betaAt).toBeLessThan(exampleAt);
-      for (const match of llms.matchAll(/\]\((\/docs\/[^)]+)\)/g)) {
-        const target = match[1] ?? "";
+      expect(llms, `llms.txt:\n${llms}`).toContain("[Beta policy](/docs/beta): first by order");
+      // The reading order is one truth across shells: at every level declared
+      // orders first (a folder takes its index page's order), ties broken on
+      // the url — folders interleaved with files (aaa/ then hr-notes then
+      // mmm), nested orders honored (hr/leave order 1 before orderless
+      // hr/pay). Found live 2026-08-18 twice: the loader tie order and then a
+      // flat sort approximation each silently diverged between shells on
+      // exactly these probes.
+      const sequence = lines
+        .map((line) => /\]\((\/docs\/[^)]+)\)/.exec(line)?.[1])
+        .filter((url): url is string => url !== undefined);
+      expect(sequence, `llms.txt:\n${llms}`).toEqual([
+        "/docs/beta",
+        "/docs/example",
+        "/docs/hr",
+        "/docs/hr/leave",
+        "/docs/hr/pay",
+        "/docs/aaa",
+        "/docs/hr-notes",
+        "/docs/mmm",
+      ]);
+      for (const target of sequence) {
         expect(
           existsSync(path.join(outDir, target, "index.html")),
           `llms.txt link ${target} does not resolve in the export`,
@@ -222,6 +262,13 @@ describe.runIf(enabled).each(SHELLS)(
           page.on("request", (req) => {
             if (!req.url().startsWith(`http://localhost:${port}`)) external.push(req.url());
           });
+          // The home page is part of the surface: the branding assets, the
+          // derived CTA, and the llms.txt anchor all live there, and no other
+          // suite opens it in a browser (review finding, 2026-08-18).
+          await page.goto(`http://localhost:${port}/`, { waitUntil: "networkidle" });
+          await expect
+            .poll(() => page.locator("body").textContent(), { timeout: 10_000 })
+            .toContain("Built with KSoR");
           await page.goto(`http://localhost:${port}/docs/example/`, { waitUntil: "networkidle" });
           await expect
             .poll(() => page.locator("h1").first().textContent(), { timeout: 10_000 })
@@ -234,7 +281,7 @@ describe.runIf(enabled).each(SHELLS)(
               ? html
               : getComputedStyle(document.body).backgroundColor;
           });
-          expect(consoleErrors, `console errors in ${colorScheme}`).toEqual([]);
+          expect(consoleErrors, `console and page errors in ${colorScheme}`).toEqual([]);
           expect(external, `external requests in ${colorScheme}`).toEqual([]);
           await context.close();
         }
@@ -254,7 +301,10 @@ describe.runIf(enabled).each(SHELLS)(
         encoding: "utf8",
         env: { ...process.env, KSOR_BASE_PATH: "/repo" },
       });
-      expect(result.status, result.stderr.slice(-2000)).toBe(0);
+      expect(
+        result.status,
+        (result.stderr ?? String(result.error ?? "spawn failed")).slice(-2000),
+      ).toBe(0);
       const llms = readFileSync(path.join(outDir, "llms.txt"), "utf8");
       expect(llms, "llms.txt links must carry the base path").toContain("(/repo/docs/");
       expect(llms).not.toContain("](/docs/");

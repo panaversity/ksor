@@ -196,6 +196,14 @@ describe("scaffolded format-checker — torture", () => {
     });
     expect(broken.status, broken.output).toBe(1);
     expect(broken.output, "checker output").toContain("dead link: ./really-missing.md");
+
+    // A nested list's continuation sits at code indent but is content — its
+    // dead links must still be caught (review finding, 2026-08-18).
+    const nested = probe({
+      "knowledge/nested-list.md": doc("1. Policies\n\n    - [Leave](./missing-leave.md)"),
+    });
+    expect(nested.status, nested.output).toBe(1);
+    expect(nested.output, "checker output").toContain("dead link: ./missing-leave.md");
   });
 
   it("treats tilde fences and multi-backtick spans as code, not links", () => {

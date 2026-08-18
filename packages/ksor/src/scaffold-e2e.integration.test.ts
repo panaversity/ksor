@@ -29,7 +29,10 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(init.status, init.stderr).toBe(0);
     project = path.join(work, "walkthrough");
     const install = spawnSync("pnpm", ["install"], { cwd: project, encoding: "utf8" });
-    expect(install.status, install.stderr.slice(-2000)).toBe(0);
+    expect(
+      install.status,
+      (install.stderr ?? String(install.error ?? "spawn failed")).slice(-2000),
+    ).toBe(0);
   }, 300_000);
 
   afterAll(() => {
@@ -38,7 +41,9 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
 
   it("static build serves the record: llms.txt index, distinct themes, no console errors, no external requests", async () => {
     const build = spawnSync("pnpm", ["build"], { cwd: project, encoding: "utf8" });
-    expect(build.status, build.stderr.slice(-2000)).toBe(0);
+    expect(build.status, (build.stderr ?? String(build.error ?? "spawn failed")).slice(-2000)).toBe(
+      0,
+    );
 
     const outDir = path.join(project, "system", "site", "out");
     // Real content types: a classic worker's importScripts refuses

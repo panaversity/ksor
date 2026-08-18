@@ -69,32 +69,68 @@ export function readRecord(knowledgeDir: string): RecordDoc[] {
       body: text.replace(FRONTMATTER, "").trim(),
     };
   });
-  // Directory groups stay together (sort by the path segments), explicit
-  // orders first within each group, ties keeping path order — the same
-  // semantics the reference shell's sorted page tree applies.
+  // The canonical reading order, recursively per folder — the same semantics
+  // as the reference shell's sorted page tree, so both surfaces read one
+  // truth: at every level, declared orders first (a folder takes its index
+  // page's order), ties broken on the url by codepoint; a folder flattens as
+  // its index page, then its sorted children (found live 2026-08-18: a flat
+  // approximation diverged from the reference shell on same-prefix names and
+  // on nested orders).
   return sortDocs(docs);
 }
 
-function sortDocs(docs: readonly RecordDoc[]): RecordDoc[] {
-  const groupOrder = new Map<string, number>();
-  for (const doc of docs) {
-    const dir = doc.file.includes("/") ? doc.file.slice(0, doc.file.indexOf("/")) : "";
-    const indexLike =
-      dir === "" ? doc.order : doc.file === `${dir}/index.md` ? doc.order : undefined;
-    if (indexLike !== undefined && !groupOrder.has(dir)) groupOrder.set(dir, indexLike);
+interface Level {
+  readonly files: RecordDoc[];
+  readonly dirs: Map<string, Level>;
+}
+
+function insert(level: Level, doc: RecordDoc, rest: string): void {
+  const slash = rest.indexOf("/");
+  if (slash === -1) {
+    level.files.push(doc);
+    return;
   }
-  const key = (doc: RecordDoc): [number, number, string] => {
-    const dir = doc.file.includes("/") ? doc.file.slice(0, doc.file.indexOf("/")) : "";
-    const group = dir === "" ? doc.order : (groupOrder.get(dir) ?? Number.POSITIVE_INFINITY);
-    return [group, doc.order, doc.file];
-  };
-  return [...docs].sort((a, b) => {
-    const [ga, oa, fa] = key(a);
-    const [gb, ob, fb] = key(b);
-    if (ga !== gb) return ga < gb ? -1 : 1;
-    if (oa !== ob) return oa < ob ? -1 : 1;
-    return fa < fb ? -1 : fa > fb ? 1 : 0;
+  const dir = rest.slice(0, slash);
+  let child = level.dirs.get(dir);
+  if (!child) {
+    child = { files: [], dirs: new Map() };
+    level.dirs.set(dir, child);
+  }
+  insert(child, doc, rest.slice(slash + 1));
+}
+
+function flatten(level: Level, prefix: string): RecordDoc[] {
+  type Item = { order: number; url: string; docs: () => RecordDoc[] };
+  const items: Item[] = [];
+  for (const doc of level.files) {
+    items.push({ order: doc.order, url: doc.url, docs: () => [doc] });
+  }
+  for (const [dir, child] of level.dirs) {
+    const url = `${prefix}/${dir}`;
+    const index = child.files.find((doc) => doc.file.endsWith("/index.md"));
+    items.push({
+      order: index?.order ?? Number.POSITIVE_INFINITY,
+      url,
+      docs: () => {
+        const rest: Level = {
+          files: child.files.filter((doc) => doc !== index),
+          dirs: child.dirs,
+        };
+        return [...(index ? [index] : []), ...flatten(rest, url)];
+      },
+    });
+  }
+  items.sort((a, b) => {
+    if (a.order !== b.order) return a.order < b.order ? -1 : 1;
+    return a.url < b.url ? -1 : a.url > b.url ? 1 : 0;
   });
+  return items.flatMap((item) => item.docs());
+}
+
+function sortDocs(docs: readonly RecordDoc[]): RecordDoc[] {
+  const root: Level = { files: [], dirs: new Map() };
+  for (const doc of docs) insert(root, doc, doc.file);
+  return flatten(root, "/docs");
 }
 
 /** The instance name from instance.md — the identity every surface leads with. */

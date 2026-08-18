@@ -34,6 +34,23 @@ function nodeOrder(node: Node, orders: ReadonlyMap<string, number>): number {
   return Number.POSITIVE_INFINITY;
 }
 
+// The tie-break key: a page's url, a folder's index url or first page's url.
+// Ties break on it so unordered documents read in plain name order, folders
+// interleaved — the canonical reading order both shells implement (found
+// live 2026-08-18: the loader's own tie order grouped folders after loose
+// files, silently diverging from the Docusaurus shell on the same record).
+function nodeName(node: Node): string {
+  if (node.type === "page") return node.url;
+  if (node.type === "folder") {
+    if (node.index) return node.index.url;
+    for (const child of node.children) {
+      const name = nodeName(child);
+      if (name !== "") return name;
+    }
+  }
+  return "";
+}
+
 function sortNodes(nodes: readonly Node[], orders: ReadonlyMap<string, number>): Node[] {
   return nodes
     .map((node) =>
@@ -42,8 +59,12 @@ function sortNodes(nodes: readonly Node[], orders: ReadonlyMap<string, number>):
     .sort((a, b) => {
       const left = nodeOrder(a, orders);
       const right = nodeOrder(b, orders);
-      // Array#sort is stable, so equal keys keep the loader's own ordering.
-      return left === right ? 0 : left < right ? -1 : 1;
+      if (left !== right) return left < right ? -1 : 1;
+      const leftName = nodeName(a);
+      const rightName = nodeName(b);
+      // Codepoint comparison, not locale: reading order must be one bytewise
+      // truth on every machine.
+      return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
     });
 }
 

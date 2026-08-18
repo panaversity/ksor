@@ -74,6 +74,9 @@ rm system/site/README.md   # this file documents the workbench artifact; the
                            # format checker rightly refuses .md inside the site
 printf '%s\n' 'system/site/.docusaurus/' 'system/site/.generated/' >> .gitignore
 pnpm install               # stops once on the build-scripts gate — see below
+                           # (in CI, add --no-frozen-lockfile: the swap
+                           # changes the dependency set, and CI defaults the
+                           # frozen check on — found live 2026-08-18)
 pnpm dev      # or: pnpm build → system/site/out/
 ```
 

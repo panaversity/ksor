@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 
 import { type ExitCode, exitCodes } from "../index.js";
@@ -261,16 +269,21 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
       }
       throw error;
     }
-    // mkdtempSync creates the stage 0700 for temp-dir privacy and rename
-    // carries that onto the project root; normalize to match `init .` and
-    // every child directory (review finding, 2026-08-18).
-    chmodSync(targetDir, 0o755);
   }
 
   // From here the project exists: nothing below may surface as a failed init.
-  // The courtesy note and git are best-effort; only the handoff must print.
+  // The mode fix, the courtesy note and git are best-effort; only the
+  // handoff must print.
   try {
-    if (!isDot) noteStaleStages(path.dirname(targetDir), io);
+    if (!isDot) {
+      // mkdtempSync creates the stage 0700 for temp-dir privacy and rename
+      // carries that onto the project root. Copy the mode materialize's own
+      // mkdir got, so both init forms end with the umask's answer — a
+      // hardcoded 0755 inverted the mismatch under umask 077 (review
+      // findings, 2026-08-18).
+      chmodSync(targetDir, statSync(path.join(targetDir, "knowledge")).mode & 0o777);
+      noteStaleStages(path.dirname(targetDir), io);
+    }
     gitInit(targetDir, io);
   } catch (error) {
     if (!isEnvironmentError(error)) throw error;
