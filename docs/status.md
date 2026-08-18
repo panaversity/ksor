@@ -25,9 +25,10 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
   trusted publishing, CI with SHA-pinned actions.
 - **Governance machinery**: AGENTS.md constitution (CLAUDE.md symlinks to it)
   carrying the decision record, guard invariants (`pnpm guard`), corpus integrity checks (`pnpm check:corpus`),
-  package-boundary tests at baseline zero, and two repo-maintenance skills
+  package-boundary tests at baseline zero, and four repo-maintenance skills
   under `.agents/skills/` (`implement-spec`, plus vendored `find-skills`,
-  `skill-creator`, `mcp-builder` — hash-pinned in `skills-lock.json`).
+  `skill-creator`, `mcp-builder` — the vendored three hash-pinned in
+  `skills-lock.json`).
 - **Fixture**: `workbench/example-corpus/` — a tiny governed corpus exercising
   the same rules adopters will live under.
 

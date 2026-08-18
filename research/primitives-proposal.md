@@ -164,8 +164,8 @@ is the recorded upgrade path.
 Added 2026-08-18: the owner's Expert Twin Architecture (Zia Developer AI —
 four records, two engines) sits directly on top of ksor as its Knowledge
 Record. Its first rule — _governed at the gates, fails closed_ — is only as
-strong as this surface makes it, which pins three requirements on `serve` and
-one on the scaffold before either is designed:
+strong as this surface makes it, which pins two requirements on `serve` and
+two on the scaffold before either is designed:
 
 1. **Abstention is a type, not a phrasing.** The answer envelope is a
    discriminated union —

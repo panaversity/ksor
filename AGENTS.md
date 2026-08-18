@@ -338,7 +338,7 @@ queues.
 
 ## Skills
 
-Baseline policy lives in this file; deep workflows live in skills and never
+Always-on policy lives in this file; deep workflows live in skills and never
 duplicate this file — they go deeper.
 
 - $implement-spec — the implementation discipline: red-first, live
