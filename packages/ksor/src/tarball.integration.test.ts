@@ -20,6 +20,14 @@ const REQUIRED_IN_TARBALL = [
   "dist/index.mjs",
   "dist/index.d.mts",
   "docs/index.md",
+  "templates/LICENSE",
+  "templates/scaffold/package.json",
+  "templates/scaffold/pnpm-lock.yaml",
+  "templates/scaffold/instance.md",
+  "templates/scaffold/system/site/package.json",
+  "templates/scaffold/.agents/skills/format-checker/check.mjs",
+  "templates/scaffold/.claude/skills/format-checker/check.mjs",
+  "templates/scaffold/.github/workflows/validate.yml",
 ];
 
 describe("published tarball", () => {
