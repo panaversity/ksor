@@ -1,12 +1,12 @@
 ---
 format: 1
-name: __KSOR_NAME__
+name: KSOR-STAMP-NAME
 ksor:
-  requires: ">=__KSOR_VERSION__"
-  scaffolded: "__KSOR_VERSION__"
+  requires: ">=KSOR-STAMP-VERSION"
+  scaffolded: "KSOR-STAMP-VERSION"
 ---
 
-# **KSOR_NAME**
+# KSOR-STAMP-NAME
 
 This Knowledge System of Record is authoritative for — _fill this in; it is
 the single most important sentence in the project._

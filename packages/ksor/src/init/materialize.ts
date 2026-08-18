@@ -42,8 +42,8 @@ export function materialize(templateDir: string, targetDir: string, stamps: Stam
       materialize(from, to, stamps);
     } else if (isTextFile(from)) {
       const text = readFileSync(from, "utf8")
-        .replaceAll("__KSOR_NAME__", stamps.name)
-        .replaceAll("__KSOR_VERSION__", stamps.version);
+        .replaceAll("KSOR-STAMP-NAME", stamps.name)
+        .replaceAll("KSOR-STAMP-VERSION", stamps.version);
       writeFileSync(to, text);
     } else {
       copyFileSync(from, to);

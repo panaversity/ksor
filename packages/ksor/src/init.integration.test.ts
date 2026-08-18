@@ -79,8 +79,8 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     for (const rel of templated) {
       const template = readFileSync(path.join(templatesDir, rel), "utf8");
       const stamped = template
-        .replaceAll("__KSOR_NAME__", "my-sor")
-        .replaceAll("__KSOR_VERSION__", pkg.version);
+        .replaceAll("KSOR-STAMP-NAME", "my-sor")
+        .replaceAll("KSOR-STAMP-VERSION", pkg.version);
       const actual = readFileSync(path.join(dir, "my-sor", rel), "utf8");
       expect(actual, `stamping mismatch in ${rel}`).toBe(stamped);
     }
