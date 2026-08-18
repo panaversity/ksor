@@ -124,7 +124,7 @@ function handoff(io: InitIo, name: string, targetWasDot: boolean): void {
       "  pnpm install\n" +
       "  pnpm dev        # the site, live at http://localhost:3000\n" +
       "\n" +
-      "no pnpm? run: corepack enable pnpm   (corepack ships with Node) — or: npm install -g pnpm\n" +
+      "no pnpm? run: npm install -g pnpm — or `corepack enable pnpm` on Nodes that bundle corepack\n" +
       "\n" +
       "Start in knowledge/ — AGENTS.md carries the working rules.\n",
   );

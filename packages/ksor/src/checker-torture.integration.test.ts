@@ -129,6 +129,22 @@ describe("scaffolded format-checker — torture", () => {
     }
   }
 
+  /** Like probe, for binary fixtures that never pre-exist in the scaffold. */
+  function probeBytes(files: Record<string, Buffer>): Probe {
+    for (const [rel, bytes] of Object.entries(files)) {
+      const target = path.join(project, rel);
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, bytes);
+    }
+    try {
+      return runChecker();
+    } finally {
+      for (const rel of Object.keys(files)) {
+        rmSync(path.join(project, rel), { force: true });
+      }
+    }
+  }
+
   it("passes on the pristine scaffold", () => {
     const result = runChecker();
     expect(result.status, result.output).toBe(0);
@@ -174,6 +190,49 @@ describe("scaffolded format-checker — torture", () => {
     expect(broken.output, "the brackets are syntax, not part of the path").not.toContain(
       "dead link: <./missing.md>",
     );
+  });
+
+  it("refuses frontmatter values YAML would reject, and accepts them quoted", () => {
+    // found live: an unquoted colon in a title passed the check and killed
+    // both site builds with a raw YAMLException from node_modules.
+    const broken = probe({
+      "knowledge/colon.md": "---\ntitle: Note: colons happen\nstatus: draft\n---\n\nBody.\n",
+      "knowledge/bracket.md": "---\ntitle: [draft] policy\nstatus: draft\n---\n\nBody.\n",
+    });
+    expect(broken.status, broken.output).toBe(1);
+    expect(broken.output).toContain("frontmatter value needs quoting: title: Note: colons happen");
+    expect(broken.output).toContain("frontmatter value needs quoting: title: [draft] policy");
+
+    const quotedDoc = probe({
+      "knowledge/quoted.md": '---\ntitle: "Note: colons happen"\nstatus: draft\n---\n\nBody.\n',
+    });
+    expect(quotedDoc.status, quotedDoc.output).toBe(0);
+  });
+
+  it("refuses non-ASCII filenames — the path is the address, the title is the name", () => {
+    const result = probe({
+      "knowledge/política.md": doc("Body."),
+    });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain("contains non-ASCII characters");
+  });
+
+  it("names a corrupt PNG at check time instead of letting the build 500", () => {
+    // A real 4x4 PNG (sips-exported from the KSoR mark), then the same bytes
+    // with one bit flipped in the IDAT payload so its CRC no longer matches.
+    const valid = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kABAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEAAAAEoAMABAAAAAEAAAAEAAAAAMVs/gIAAAHJaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6Q29sb3JTcGFjZT4xPC9leGlmOkNvbG9yU3BhY2U+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj4zMjwvZXhpZjpQaXhlbFhEaW1lbnNpb24+CiAgICAgICAgIDxleGlmOlBpeGVsWURpbWVuc2lvbj4zMjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgqWsr5jAAAAP0lEQVQIHQE0AMv/Af////b7/f0B+wsDBgT2+PzL2urzAOk2Jh8CCQcE7ejq1sjrC/8MAP///+bs9dbg8Pz9/kfmIaM5XLTrAAAAAElFTkSuQmCC",
+      "base64",
+    );
+    const corrupt = Buffer.from(valid);
+    corrupt[valid.length - 20] = (corrupt[valid.length - 20] ?? 0) ^ 0xff;
+
+    const good = probeBytes({ "knowledge/diagram.png": valid });
+    expect(good.status, good.output).toBe(0);
+
+    const bad = probeBytes({ "knowledge/diagram.png": corrupt });
+    expect(bad.status, bad.output).toBe(1);
+    expect(bad.output).toContain("corrupt PNG");
   });
 
   it("leaves URI schemes and protocol-relative links alone", () => {

@@ -431,8 +431,8 @@ If the capitalization policy does not address the situation, the system should n
 
 ## Requirements
 
-Node.js 24 or newer, and pnpm (`corepack enable pnpm` — corepack ships with
-Node — or `npm install -g pnpm`).
+Node.js 24 or newer, and pnpm (`npm install -g pnpm`, or `corepack enable
+pnpm` on Node versions that bundle corepack).
 
 ```bash
 node --version

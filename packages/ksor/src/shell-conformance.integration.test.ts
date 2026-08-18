@@ -32,17 +32,21 @@ const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
 const docusaurusShell = path.join(repoRoot, "workbench", "shells", "docusaurus");
 
+// A real 4x4 PNG (sips-exported from the KSoR mark) for the asset probe.
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kABAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEAAAAEoAMABAAAAAEAAAAEAAAAAMVs/gIAAAHJaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6Q29sb3JTcGFjZT4xPC9leGlmOkNvbG9yU3BhY2U+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj4zMjwvZXhpZjpQaXhlbFhEaW1lbnNpb24+CiAgICAgICAgIDxleGlmOlBpeGVsWURpbWVuc2lvbj4zMjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgqWsr5jAAAAP0lEQVQIHQE0AMv/Af////b7/f0B+wsDBgT2+PzL2urzAOk2Jh8CCQcE7ejq1sjrC/8MAP///+bs9dbg8Pz9/kfmIaM5XLTrAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 interface Shell {
   readonly shellName: string;
-  readonly port: number;
   readonly swap: ((project: string) => void) | null;
 }
 
 const SHELLS: readonly Shell[] = [
-  { shellName: "fumadocs", port: 4181, swap: null },
+  { shellName: "fumadocs", swap: null },
   {
     shellName: "docusaurus",
-    port: 4182,
     swap: (project) => {
       // The swap recipe from workbench/shells/docusaurus/README.md, verbatim.
       rmSync(path.join(project, "system", "site"), { recursive: true });
@@ -104,7 +108,9 @@ const MIME: Readonly<Record<string, string>> = {
   ".txt": "text/plain",
 };
 
-function serveStatic(outDir: string, port: number): Promise<Server> {
+// An ephemeral port per serve: fixed ports leaked EADDRINUSE flakes on a
+// busy machine (review finding, 2026-08-18).
+function serveStatic(outDir: string): Promise<{ server: Server; port: number }> {
   const server = createServer((req, res) => {
     const url = (req.url ?? "/").split("?")[0] ?? "/";
     for (const candidate of [url, `${url}/index.html`, `${url}index.html`, `${url}.html`]) {
@@ -122,12 +128,18 @@ function serveStatic(outDir: string, port: number): Promise<Server> {
     res.writeHead(404);
     res.end("not found");
   });
-  return new Promise((resolve) => server.listen(port, () => resolve(server)));
+  return new Promise((resolve) =>
+    server.listen(0, () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("no port assigned");
+      resolve({ server, port: address.port });
+    }),
+  );
 }
 
 describe.runIf(enabled).each(SHELLS)(
   "surface contract — $shellName shell",
-  ({ shellName, port, swap }) => {
+  ({ shellName, swap }) => {
     let work: string;
     let project: string;
     let outDir: string;
@@ -151,8 +163,12 @@ describe.runIf(enabled).each(SHELLS)(
       mkdirSync(path.join(knowledge, "hr"));
       writeFileSync(
         path.join(knowledge, "hr", "index.md"),
-        "---\ntitle: HR overview\nstatus: draft\norder: 2\n---\n\nHR body.\n",
+        "---\ntitle: HR overview\nstatus: draft\norder: 2\n---\n\nHR body.\n\n![chart](./chart.png)\n",
       );
+      // A real image beside a document — the SME walk's "add an image"
+      // promise, pinned cross-shell (found live: neither suite exercised an
+      // asset, and a damaged one behaved differently per shell).
+      writeFileSync(path.join(knowledge, "hr", "chart.png"), TINY_PNG);
       writeFileSync(
         path.join(knowledge, "hr", "pay.md"),
         "---\ntitle: Pay\nstatus: draft\n---\n\nPay body.\n",
@@ -173,6 +189,17 @@ describe.runIf(enabled).each(SHELLS)(
       writeFileSync(
         path.join(knowledge, "mmm.md"),
         "---\ntitle: MMM loose\nstatus: draft\n---\n\nMMM body.\n",
+      );
+      // Divergence probes, each found live 2026-08-18: a digit prefix that
+      // Docusaurus's default numberPrefixParser strips from the route, and a
+      // bare `order:` one shell read as 0 and the other as unordered.
+      writeFileSync(
+        path.join(knowledge, "01-intro.md"),
+        "---\ntitle: Numbered intro\nstatus: draft\n---\n\nNumbered intro body.\n",
+      );
+      writeFileSync(
+        path.join(knowledge, "empty-order.md"),
+        "---\ntitle: Empty order\nstatus: draft\norder:\n---\n\nEmpty order body.\n",
       );
 
       swap?.(project);
@@ -200,7 +227,17 @@ describe.runIf(enabled).each(SHELLS)(
         expect(existsSync(page), `${file} → ${page}`).toBe(true);
         const text = readFileSync(path.join(knowledge, file), "utf8");
         const title = /^title:[ \t]*(.*)$/m.exec(text)?.[1]?.trim() ?? "";
-        expect(readFileSync(page, "utf8"), `${file}: title not rendered`).toContain(title);
+        const html = readFileSync(page, "utf8");
+        expect(html, `${file}: title not rendered`).toContain(title);
+        // Titles alone are vacuous — every page's nav embeds every title, so
+        // a shell that garbles bodies passed (review finding, 2026-08-18).
+        // Assert the body's first plain-text run appears in the page.
+        const body = text.replace(/^---[\s\S]*?\n---[ \t]*\n/, "");
+        const firstLine = body.split("\n").find((line) => line.trim() !== "") ?? "";
+        const plain = (firstLine.split("`")[0] ?? "").trim();
+        if (plain.length >= 12 && !plain.startsWith("!") && !plain.startsWith("#")) {
+          expect(html, `${file}: body not rendered`).toContain(plain);
+        }
       }
     });
 
@@ -229,7 +266,9 @@ describe.runIf(enabled).each(SHELLS)(
         "/docs/hr",
         "/docs/hr/leave",
         "/docs/hr/pay",
+        "/docs/01-intro",
         "/docs/aaa",
+        "/docs/empty-order",
         "/docs/hr-notes",
         "/docs/mmm",
       ]);
@@ -243,11 +282,14 @@ describe.runIf(enabled).each(SHELLS)(
     });
 
     it("clause 4: browser smoke — both themes, no console errors, no external requests", async () => {
-      const server = await serveStatic(outDir, port);
-      const { chromium } = await import("playwright");
-      const browser = await chromium.launch();
+      const { server, port } = await serveStatic(outDir);
+      let browser: Awaited<ReturnType<typeof chromiumLaunch>> | null = null;
+      const chromiumLaunch = async () => (await import("playwright")).chromium.launch();
       const backgrounds: Record<string, string> = {};
       try {
+        // Inside the try: a launch failure must still close the server
+        // (review finding, 2026-08-18 — the fixed-port leak).
+        browser = await chromiumLaunch();
         for (const colorScheme of ["light", "dark"] as const) {
           const context = await browser.newContext({ colorScheme });
           const page = await context.newPage();
@@ -260,7 +302,9 @@ describe.runIf(enabled).each(SHELLS)(
           // worker or module fails silently without this (found live).
           page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
           page.on("request", (req) => {
-            if (!req.url().startsWith(`http://localhost:${port}`)) external.push(req.url());
+            // data: URIs are inlined assets, not network egress.
+            if (!req.url().startsWith(`http://localhost:${port}`) && !req.url().startsWith("data:"))
+              external.push(req.url());
           });
           // The home page is part of the surface: the branding assets, the
           // derived CTA, and the llms.txt anchor all live there, and no other
@@ -273,6 +317,14 @@ describe.runIf(enabled).each(SHELLS)(
           await expect
             .poll(() => page.locator("h1").first().textContent(), { timeout: 10_000 })
             .toContain("Your first governed document");
+          // The SME walk's promise, pinned: an image beside a document
+          // renders — actually decoded, not merely requested.
+          await page.goto(`http://localhost:${port}/docs/hr/`, { waitUntil: "networkidle" });
+          const imageWidth = await page.evaluate(() => {
+            const img = document.querySelector<HTMLImageElement>("main img, article img");
+            return img?.naturalWidth ?? 0;
+          });
+          expect(imageWidth, `chart.png decoded width in ${colorScheme}`).toBeGreaterThan(0);
           backgrounds[colorScheme] = await page.evaluate(() => {
             // Docusaurus paints the theme on <html>, Fumadocs on <body>
             // (found live 2026-08-18) — take whichever is painted.
@@ -290,7 +342,7 @@ describe.runIf(enabled).each(SHELLS)(
           `backgrounds light=${backgrounds.light} dark=${backgrounds.dark}`,
         ).not.toBe(backgrounds.light);
       } finally {
-        await browser.close();
+        await browser?.close();
         server.close();
       }
     }, 240_000);

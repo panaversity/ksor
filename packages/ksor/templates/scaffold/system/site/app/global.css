@@ -2,6 +2,20 @@
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 
+/* The KSoR default accent, drawn from the mark — the one brand value here.
+   Re-brand by changing this pair; every accented element follows. */
+:root {
+  --color-fd-primary: #1d4ed8;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: #1d4ed8;
+}
+
+.dark {
+  --color-fd-primary: #7fb0f9;
+  --color-fd-primary-foreground: #081226;
+  --color-fd-ring: #7fb0f9;
+}
+
 html {
   scrollbar-gutter: stable;
 }

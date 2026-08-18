@@ -41,8 +41,13 @@ pnpm check       # the format checker — run before handing off any knowledge c
 ## Writing knowledge
 
 - One document per file under `knowledge/`; the path is the document's
-  identity and its URL — lowercase, hyphens, no spaces or special characters,
-  no two files differing only in case, never both `foo.md` and `foo/index.md`.
+  identity and its URL — ascii lowercase, digits, hyphens; no spaces or
+  special characters; no two files differing only in case; never both
+  `foo.md` and `foo/index.md`. The `title:` carries the document's real
+  name in any language — the filename is the address, not the name.
+- The frontmatter `title` IS the rendered page heading — never repeat it as
+  an `# h1` in the body, and quote any value containing a colon
+  (`title: "Note: quoting"`).
 - Frontmatter: `title` and `status` (`draft | review | approved | superseded`)
   are required. `owner` and `provenance` (a list naming real sources) are
   strongly encouraged — they become required as this project climbs the

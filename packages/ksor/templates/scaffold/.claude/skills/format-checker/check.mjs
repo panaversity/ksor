@@ -33,6 +33,44 @@ const ALLOWED_KEYS = new Set([
 const REQUIRED_KEYS = ["title", "status"]; // level 0 — the ladder, not a gate
 const STATUS_VALUES = new Set(["draft", "review", "approved", "superseded"]);
 const ASSET_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]);
+
+// PNG integrity, dependency-free: signature + per-chunk CRC-32. A damaged
+// image beside a document is a check-time problem with the file named, never
+// a build-time 500 with no filename in it.
+const CRC_TABLE = new Uint32Array(256).map((_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function crc32(bytes, start, end) {
+  let c = 0xffffffff;
+  for (let i = start; i < end; i += 1) {
+    c = (CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)) >>> 0;
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** The first defect in a PNG file, or null when every chunk checks out. */
+function firstBrokenPngChunk(file) {
+  const bytes = readFileSync(file);
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 8 || signature.some((b, i) => bytes[i] !== b)) {
+    return "bad signature";
+  }
+  let offset = 8;
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const name = bytes.toString("latin1", offset + 4, offset + 8);
+    const dataEnd = offset + 8 + length;
+    if (dataEnd + 4 > bytes.length) return `truncated ${name} chunk`;
+    const stored = bytes.readUInt32BE(dataEnd);
+    if (crc32(bytes, offset + 4, dataEnd) !== stored) return `CRC error in ${name} chunk`;
+    if (name === "IEND") return null;
+    offset = dataEnd + 4;
+  }
+  return "missing IEND chunk";
+}
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 // Files the operating system writes behind the author's back. Ignored, never
 // reported: the .gitignore already keeps them out of git.
@@ -70,6 +108,7 @@ function parseFrontmatter(text) {
   if (!match) return null;
   const keys = new Map();
   const children = new Map();
+  const quoted = new Set();
   const malformed = [];
   let current = null;
   for (const raw of match[1].split("\n")) {
@@ -78,6 +117,7 @@ function parseFrontmatter(text) {
     const top = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
     if (top) {
       current = top[1];
+      if (/^(["']).*\1$/.test(top[2].trim())) quoted.add(current);
       keys.set(current, unquote(top[2]));
       children.set(current, new Map());
       continue;
@@ -90,7 +130,7 @@ function parseFrontmatter(text) {
     if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
     malformed.push(line.trim());
   }
-  return { keys, children, malformed };
+  return { keys, children, quoted, malformed };
 }
 
 /**
@@ -232,6 +272,15 @@ if (!existsSync(knowledgeDir)) {
         "rename to lowercase",
       );
     }
+    // eslint-disable-next-line no-control-regex -- the point is the range
+    if (/[^\x20-\x7E]/.test(base)) {
+      problem(
+        rel,
+        `"${base}" contains non-ASCII characters`,
+        "the path is the document's URL, and site frameworks disagree on how to encode non-ASCII routes — the same document gets a different address on each surface (found live: política.md exported two incompatible routes)",
+        "use ascii lowercase letters, digits and hyphens; the title: key carries the document's real name in any language",
+      );
+    }
     const lower = path.relative(root, p).toLowerCase();
     if (seenLower.has(lower) && seenLower.get(lower) !== rel) {
       problem(
@@ -249,6 +298,17 @@ if (!existsSync(knowledgeDir)) {
         "the record holds markdown and images; other formats cannot be governed or rendered",
         "convert it to markdown (the add-sources skill does this) or move it out of knowledge/",
       );
+    }
+    if (files.includes(p) && path.extname(p) === ".png") {
+      const brokenChunk = firstBrokenPngChunk(p);
+      if (brokenChunk !== null) {
+        problem(
+          rel,
+          `corrupt PNG (${brokenChunk})`,
+          "a corrupt image can take the whole site down at build time with an error that never names this file (found live: one bad CRC 500'd every page)",
+          "re-export or re-download the image; the bytes on disk are damaged",
+        );
+      }
     }
     if (/\(.*\)/.test(base)) {
       problem(
@@ -314,6 +374,21 @@ if (!existsSync(knowledgeDir)) {
               ? "identity derives from the file path — an authored id gives one document two identities"
               : "the frontmatter key set is closed so every key means one thing everywhere",
             `remove "${key}:" (allowed: ${[...ALLOWED_KEYS].join(", ")})`,
+          );
+        }
+      }
+      for (const [key, value] of fm.keys) {
+        // The site parses this block with a real YAML parser; values it
+        // rejects must be refused HERE with a remedy, not later as a raw
+        // YAMLException from inside node_modules (found live 2026-08-18:
+        // an unquoted colon in a title killed both site builds after a
+        // green check).
+        if (!fm.quoted.has(key) && (value.includes(": ") || /^[[{>|&*!%@`]/.test(value))) {
+          problem(
+            rel,
+            `frontmatter value needs quoting: ${key}: ${value}`,
+            "the site reads this block as YAML, and YAML refuses unquoted colons and leading [ { > | & * ! % @ ` — the build would fail after this check passed",
+            `quote it: ${key}: "${value}"`,
           );
         }
       }

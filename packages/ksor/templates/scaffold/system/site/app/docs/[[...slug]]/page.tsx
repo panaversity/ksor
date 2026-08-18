@@ -30,7 +30,15 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
 }
 
 export async function generateStaticParams() {
-  return source.generateParams();
+  const params = source.generateParams();
+  if (params.length === 0) {
+    // Without this, Next fails the empty-record build with an error that
+    // names neither the record nor the rule (found live, 2026-08-18).
+    throw new Error(
+      "the record has no documents — a KSoR is never empty; add one to knowledge/ or restore one from git history (pnpm check says the same).",
+    );
+  }
+  return params;
 }
 
 export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): Promise<Metadata> {
