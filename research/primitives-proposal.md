@@ -105,6 +105,16 @@ JSON on any host; `shadcn build`'s inline-the-content model is exactly
 
 ## 4 · The shell
 
+> **Revision 2026-08-18 (supersession visible):** ratified the OTHER way —
+> AGENTS.md decision 9: Next.js + Fumadocs + shadcn as the single core shell,
+> behind a pinned surface contract, replacing Docusaurus before v1 traffic.
+> This section's stay-Docusaurus recommendation was optimizing cheapest
+> crossing; the owner's extensibility/ecosystem arguments plus one new fact —
+> all 10 predecessor lib packages verified framework-neutral (zero Docusaurus
+> imports), so the "free crossing" was mostly illusion — reversed it. The
+> section's own closing line named Fumadocs the rewrite target; kept below as
+> the evidence trail.
+
 **Moved.** The shell question outgrew a section: the evidence, the argument,
 the unanswered structural question, and the candidate decision texts now live
 in [`research/site-shell.md`](./site-shell.md) — one fact, one file.
