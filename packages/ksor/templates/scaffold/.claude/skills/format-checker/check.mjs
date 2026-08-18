@@ -4,7 +4,7 @@
 // and how to fix it, so anyone (human or agent) self-corrects without a
 // reviewer. Run as `pnpm check` or directly: node .agents/skills/format-checker/check.mjs
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -112,10 +112,16 @@ function parseFrontmatter(text) {
   const malformedQuote = new Map();
   const malformed = [];
   const duplicates = [];
+  const tightColons = [];
+  const tabIndents = [];
   let current = null;
   for (const raw of match[1].split("\n")) {
     const line = raw.replace(/[ \t]+$/, "");
     if (line === "") continue;
+    // YAML requires a space after the colon and refuses tab indentation —
+    // both parsed here fine and failed the build (review findings, 2026-08-18).
+    if (/^[A-Za-z_][\w-]*:\S/.test(line)) tightColons.push(line);
+    if (line.startsWith("	")) tabIndents.push(line);
     const top = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
     if (top) {
       current = top[1];
@@ -143,7 +149,7 @@ function parseFrontmatter(text) {
     if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
     malformed.push(line.trim());
   }
-  return { keys, children, quoted, malformedQuote, duplicates, malformed };
+  return { keys, children, quoted, malformedQuote, duplicates, malformed, tightColons, tabIndents };
 }
 
 /**
@@ -239,7 +245,23 @@ if (!existsSync(knowledgeDir)) {
     "restore knowledge/ from git history",
   );
 } else {
-  const files = walkFiles(knowledgeDir).filter((p) => !OS_JUNK.has(path.basename(p)));
+  const allEntries = walkFiles(knowledgeDir).filter((p) => !OS_JUNK.has(path.basename(p)));
+  const files = [];
+  for (const p of allEntries) {
+    // The record is plain files: a symlink breaks the walk-away copy, and a
+    // dangling one crashed the checker with a raw ENOENT before any other
+    // problem was reported (review finding, 2026-08-18).
+    if (lstatSync(p).isSymbolicLink()) {
+      problem(
+        path.relative(root, p),
+        "symlink in the record",
+        "the record must survive being copied anywhere — a symlink carries a machine-local path, and a dangling one is unreadable",
+        "replace the link with the file it points at",
+      );
+      continue;
+    }
+    files.push(p);
+  }
   const dirs = walkDirs(knowledgeDir);
   const all = [...files, ...dirs];
   const mdFiles = files.filter((p) => p.endsWith(".md"));
@@ -382,6 +404,22 @@ if (!existsSync(knowledgeDir)) {
         "close the block with --- on its own line; every line inside it is `key: value` or a `- list item` — no prose, no comments",
       );
     } else {
+      for (const line of fm.tightColons) {
+        problem(
+          rel,
+          `missing space after the colon: ${line}`,
+          "YAML needs `key: value` — without the space the build fails after this check passed",
+          "add a space after the colon",
+        );
+      }
+      for (const line of fm.tabIndents) {
+        problem(
+          rel,
+          `tab-indented frontmatter: ${JSON.stringify(line)}`,
+          "YAML refuses tabs as indentation — the build fails after this check passed",
+          "indent with spaces",
+        );
+      }
       for (const dup of fm.duplicates) {
         problem(
           rel,
@@ -430,7 +468,12 @@ if (!existsSync(knowledgeDir)) {
           (value.includes(": ") ||
             value.endsWith(":") ||
             value.includes(" #") ||
-            /^[[{>|&*!%@`'"]/.test(value) ||
+            // A complete [flow, list] is valid YAML; only a value that STARTS
+            // like one without finishing it is broken (review finding,
+            // 2026-08-18: a valid flow provenance was refused with a remedy
+            // that was itself malformed).
+            (value.startsWith("[") && !/^\[.*\]$/.test(value)) ||
+            /^[{>|&*!%@`'"]/.test(value) ||
             /^-(\s|$)/.test(value))
         ) {
           problem(
@@ -444,8 +487,18 @@ if (!existsSync(knowledgeDir)) {
       // provenance is a LIST — the site's schema enforces it at build, so a
       // scalar value passing here failed there with a schema error naming
       // neither file nor rule (review finding, 2026-08-18).
+      for (const [key, value] of fm.keys) {
+        if (key !== "provenance" && /^\[.*\]$/.test(value)) {
+          problem(
+            rel,
+            `${key} is one value, not a list: ${value}`,
+            "YAML reads [..] as a list, and the site's schema wants a single value here — the build would fail after this check passed",
+            `write it plain (or quoted): ${key}: "${value}"`,
+          );
+        }
+      }
       const provenance = fm.keys.get("provenance");
-      if (provenance !== undefined && provenance !== "") {
+      if (provenance !== undefined && provenance !== "" && !/^\[.*\]$/.test(provenance)) {
         problem(
           rel,
           `provenance is a list, not a value: ${provenance}`,
@@ -675,6 +728,10 @@ if (existsSync(siteDir)) {
 if (problems.length > 0) {
   console.error(`format-checker: ${problems.length} problem(s):\n`);
   for (const p of problems) console.error(`  ${p}\n`);
-  process.exit(1);
+  // exitCode, never exit(): exit() drops queued pipe writes, truncating the
+  // report mid-word for any reader slower than a file (review finding,
+  // 2026-08-18 — 800 problems arrived as 309 through a pipe).
+  process.exitCode = 1;
+} else {
+  console.log("format-checker: ok — the record is well-formed");
 }
-console.log("format-checker: ok — the record is well-formed");

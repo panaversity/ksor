@@ -7,6 +7,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -217,6 +218,40 @@ describe("scaffolded format-checker — torture", () => {
     expect(edges.status, edges.output).toBe(1);
     expect(edges.output).toContain("frontmatter value needs quoting: title: Q4:");
     expect(edges.output).toContain("frontmatter value needs quoting: title: Pay # policy");
+  });
+
+  it("refuses YAML shapes the parser tolerated: tight colons, tabs, misplaced lists", () => {
+    const result = probe({
+      "knowledge/tight.md": "---\ntitle:Quarterly policy\nstatus: draft\n---\n\nBody.\n",
+      "knowledge/tabbed.md":
+        "---\ntitle: Tabbed\nstatus: draft\nprovenance:\n\t- cfo interview\n---\n\nBody.\n",
+      "knowledge/listtitle.md": "---\ntitle: [complete list]\nstatus: draft\n---\n\nBody.\n",
+    });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain("missing space after the colon: title:Quarterly policy");
+    expect(result.output).toContain("tab-indented frontmatter");
+    expect(result.output).toContain("title is one value, not a list");
+
+    // A complete flow list is valid YAML and valid for provenance — the rule
+    // must not refuse a correct document (its printed remedy once looped).
+    const flow = probe({
+      "knowledge/flow.md":
+        '---\ntitle: Flow\nstatus: draft\nprovenance: ["a", "b"]\n---\n\nBody.\n',
+    });
+    expect(flow.status, flow.output).toBe(0);
+  });
+
+  it("reports symlinks in the record instead of crashing on a dangling one", () => {
+    const target = path.join(project, "knowledge", "dangling.md");
+    symlinkSync(path.join(project, "knowledge", "no-such-file.md"), target);
+    try {
+      const result = runChecker();
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain("symlink in the record");
+      expect(result.output, "no raw stack").not.toContain("ENOENT");
+    } finally {
+      rmSync(target, { force: true });
+    }
   });
 
   it("refuses duplicate frontmatter keys — YAML would, after a green check", () => {

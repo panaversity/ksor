@@ -1,5 +1,5 @@
 ---
-"@panaversity/ksor": minor
+"@panaversity/ksor": patch
 ---
 
 `ksor init` is implemented — the first working verb. One command emits a
