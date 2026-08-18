@@ -1,0 +1,14 @@
+# The scaffold's own ignore rules are shipped content now: they travel as
+# `scaffold/gitignore` and are emitted as .gitignore, because npm pack drops
+# every file with that name from a tarball. So they no longer govern this
+# tree, and the transient output of working inside the template is listed
+# here — one directory up, where the scaffold never copies it (found live:
+# npm pack --dry-run listed scaffold/system/site/out/, 2026-08-18).
+scaffold/.ksor/
+scaffold/**/node_modules/
+scaffold/system/site/.next/
+scaffold/system/site/.source/
+scaffold/system/site/out/
+scaffold/**/*.tsbuildinfo
+scaffold/.env*
+scaffold/**/.DS_Store

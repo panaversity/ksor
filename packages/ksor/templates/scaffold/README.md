@@ -17,6 +17,9 @@ pnpm install
 pnpm dev        # browse the knowledge at http://localhost:3000
 ```
 
+No pnpm? Run `corepack enable pnpm` (corepack ships with Node), or
+`npm install -g pnpm`.
+
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you
 (`intake-interview`), convert your source material (`add-sources`), and keep

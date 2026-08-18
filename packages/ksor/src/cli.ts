@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { exitCodes, resolveCommand, verbs } from "./index.js";
 import { runInit } from "./init/index.js";
+import { unsupportedPlatform } from "./init/platform.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   name: string;
@@ -52,6 +53,14 @@ function main(args: readonly string[]): number {
   const { word, verb } = resolveCommand(args);
 
   if (verb === "init") {
+    // Checked before anything is written: the scaffold's own toolchain needs
+    // this Node, so a scaffold made by an older one would fail later, in the
+    // adopter's repo, where the cause is no longer visible.
+    const remedy = unsupportedPlatform(process.versions.node);
+    if (remedy !== null) {
+      process.stderr.write(`error: unsupported-platform\n${remedy}\n`);
+      return exitCodes.environment;
+    }
     return runInit(
       args.slice(args.indexOf("init") + 1),
       process.cwd(),
