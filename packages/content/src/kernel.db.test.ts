@@ -15,6 +15,9 @@ import { contentPool, runIngest, runRead } from "./db.js";
 import { applySchema } from "./schema.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type SearchScope } from "./lib/search.js";
 import { vectorAbstains } from "./lib/abstain.js";
+import { keyRingFromEnv, validate } from "./lib/snapshot.js";
+import { search, type ServiceContext } from "./service.js";
+import type { ContentInstance } from "./instance.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -202,6 +205,75 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       keywordSearch(c, scope, "onboarding checklist", 10),
     );
     expect(hits[0]?.slug, JSON.stringify(hits)).toBe("yak");
+  });
+
+  it("the service composes it into the typed envelope: served, abstained, audited", async () => {
+    const ring = keyRingFromEnv("k1=test-secret");
+    const instance: ContentInstance = {
+      name: CORPUS,
+      corpusId: CORPUS,
+      tenantId: TENANT,
+      dsnEnv: "KSOR_DB_URL",
+      abstain: { vectorFloor: 0.9, keywordFloor: null },
+      maximumResponseCharacters: 120_000,
+      instructions: "Answer only from the record.",
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: DIM,
+    };
+    const ctx: ServiceContext = {
+      pool,
+      instance,
+      ring,
+      instanceDigest: "digest-1",
+      embedQuery: async () => unit(0),
+    };
+
+    const served = await search(ctx, "zebra compensation bands", 5);
+    expect(served.ok, JSON.stringify(served)).toBe(true);
+    if (served.ok) {
+      expect(served.hits[0]?.slug).toBe("zebra");
+      expect(served.hits[0]?.provenance.generation, "citation carries the generation").toBe(1);
+      const verdict = validate(ring, served.snapshot.token, {
+        corpusId: CORPUS,
+        tenantId: TENANT,
+        instanceDigest: "digest-1",
+      });
+      expect(verdict, "the snapshot must validate and pin the generation").toEqual({
+        generation: 1,
+        reason: null,
+      });
+    }
+
+    const far: ServiceContext = { ...ctx, embedQuery: async () => unit(6) };
+    const abstainedResult = await search(far, "quantum blockchain weather", 5);
+    expect(abstainedResult.ok).toBe(false);
+    if (!abstainedResult.ok) {
+      expect(abstainedResult.reason).toBe("abstained");
+      expect(abstainedResult.hits).toEqual([]);
+      expect("snapshot" in abstainedResult, "snapshot key is UNIFORM on abstention").toBe(true);
+    }
+
+    const degraded: ServiceContext = {
+      ...ctx,
+      embedQuery: async () => {
+        throw new Error("provider down");
+      },
+    };
+    const kwServed = await search(degraded, "onboarding checklist", 5);
+    expect(kwServed.ok, "embed outage degrades to keyword-only, never a 500").toBe(true);
+    if (kwServed.ok) {
+      expect(kwServed.degraded_reason).toBe("embed_unavailable_keyword_only");
+      expect(kwServed.hits[0]?.slug).toBe("yak");
+    }
+
+    // The §7 rows exist for every act above (admin read bypasses RLS).
+    const rows = await pool.query(
+      "SELECT action, count(*)::int AS n FROM retrieval_log GROUP BY action",
+    );
+    const byAction = Object.fromEntries(rows.rows.map((r) => [r.action, r.n]));
+    expect(byAction["similarity_searched"], JSON.stringify(byAction)).toBeGreaterThanOrEqual(2);
+    expect(byAction["search_abstained"], JSON.stringify(byAction)).toBeGreaterThanOrEqual(1);
   });
 
   it("ingest without a grant row is refused by the database, not by convention", async () => {
