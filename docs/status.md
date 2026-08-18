@@ -72,14 +72,26 @@ the deploy story — plus the CLI contract: `dev`,
 - **Fixture**: `workbench/example-corpus/` — a tiny governed corpus exercising
   the same rules adopters will live under.
 
+## In this repository, not yet released
+
+- **The content kernel and the MCP gateway** (decision 11, in progress on
+  the kernel-conversion branch): four private workspace packages —
+  platform (pool discipline), content (schema + ingest + hybrid retrieval
+  + calibrated abstention + read plane), gateway-kit (fail-closed serving
+  postures), gateway (the MCP door: search/outline/read over stdio and
+  stateless Streamable HTTP). Converted from the production oracle with
+  its suite as the fixture source; acceptance drives the BUILT binary
+  with a real MCP client against live Postgres (Neon, pgvector) — cited
+  passages, snapshot generation-pinning, byte-exact reads, and the typed
+  abstention. The published `ksor` CLI is untouched: `serve` still exits
+  `2` until the npm packaging question (decision 12) is resolved.
+
 ## Designed, not implemented
 
-- `ksor dev` / `build` / `serve` — the remaining verbs (each still exits
-  `2` with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
-  work today without them). Serve's path is now decided and specced:
-  the production kernel converts whole (decision 11,
-  `research/kernel-conversion.md`, `specs/ksor/serve/spec.md` — draft).
-- The MCP agent surface (`instance.md` prose is its reserved system prompt).
+- `ksor dev` / `build` / `serve` — the CLI verbs (each still exits `2`
+  with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
+  work today without them, and the kernel's `ksor-content` /
+  `ksor-gateway` workspace binaries carry the serve slice in-repo).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).

@@ -81,6 +81,7 @@ Used precisely; do not repurpose.
 | Path                        | What it is                                                 |
 | --------------------------- | ---------------------------------------------------------- |
 | `packages/ksor/`            | the published package: CLI + SDK (MCP surface lands here)  |
+| `packages/{platform,content,gateway-kit,gateway}/` | the kernel (decision 11): pool discipline, corpus store + retrieval + abstention, serving postures, the MCP door — private until decision 12's packaging call |
 | `packages/ksor/docs/`       | user docs, shipped inside the npm tarball                  |
 | `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface       |
 | `workbench/shells/`         | alternative site shells proving the swap seam (decision 9) |

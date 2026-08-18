@@ -139,3 +139,40 @@ Small PRs, red first; each conversion PR names what its mechanisms are for:
 6. `ksor serve` verb wiring, scaffold rung, ops skills conversion, and the
    behavioural eval gate (AGENTS.md → Testing: the abstention question that
    must pass by abstaining).
+
+## Outcome ledger (2026-08-19, same-day)
+
+What landed on the kernel-conversion branch, each slice oracle-anchored:
+
+- **Spine** (coordinator): schema.sql verbatim + renderSchema; the pool
+  discipline (one set_config bind; Neon cold-wake retry shape; ingest
+  one-attempt); hybrid RRF SQL with the riding abstention signal +
+  splitHits drift guard; abstention gates; instance.md adaptation (the
+  checker's grammar, fail-closed kernel groups); snapshot HMAC; rlog;
+  the service read plane (search/read/outline envelopes); the space
+  guard; the gateway (three tools, stdio + stateless HTTP, kit posture).
+- **Workers**, fixtures-first with the oracle as judge: chunker (33
+  cases/79 chunks, 5-mutation battery, policy string unbumped);
+  plain-tree adapter + manifest (golden manifest byte-for-byte);
+  embedding seam (contract layer, retry asymmetry, single-flight cache,
+  breaker; token-bag fake provider added so floors are real in tests);
+  calibrate math (92 oracle assertions, CPython compensated-sum parity
+  reproduced to the ULP); gateway-kit (55 tests, fail-closed postures
+  mutation-verified); read libs (68 tests, SQL live-proven).
+- **Acceptance**: a real MCP client spawns the built binary — search
+  with citations + snapshot, outline, byte-exact read, the abstention as
+  the only passing answer, HTTP fail-closed boot. 424 unit + 114
+  integration + the gated db tier, green.
+
+Decision-6 drops, recorded: bundle transport + snapshot key ring as
+deployment machinery (ephemeral default kept honest), Redis L2s, rate
+limiting, search result cache, Sentry, centroid routing (its title-boost
+negative result carried in comments), rerank (retired upstream), book
+vocabulary. Divergences that matter, all commented in source: JS/Python
+float rounding (half-even reproduced), code-point counting everywhere,
+BSD-sed `\b` no-op (perl), pg NUMERIC-as-string coercion, promises
+cannot cancel (timeout abandons, never rejects unhandled).
+
+Open at this ledger's write: the ingest pipeline worker (build/carry-
+forward/worker/gc + `ksor-content` CLI) and the live-Gemini walk; the
+calibrate CLI's doors; visibility-staged serve; behavioural evals in CI.

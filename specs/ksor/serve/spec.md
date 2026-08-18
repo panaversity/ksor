@@ -22,11 +22,17 @@ order), `read` (one document, byte-faithful; the predecessor's
 serve never runs a generation-side model. The query embed is the one
 provider call at read time.
 
-**The envelope is a discriminated union.** `{ ok: true, results, citations,
-generation } | { ok: false, reason: "abstained" }` — abstention is a type a
-caller branches on at compile time, never a phrasing. Every citation carries
-the generation; a surface refuses content whose generation is not published
-(the generation is the authorization).
+**The envelope is a discriminated union** (code wins; corrected to the
+implemented shape 2026-08-19): `{ ok: true, abstained: false, hits,
+snapshot } | { ok: false, abstained: true, reason: "abstained", hits: [],
+snapshot }` — abstention is a type a caller branches on at compile time,
+never a phrasing. Each hit carries `provenance` (corpus_id, stable_id,
+slug, generation, retrieved_at); the `snapshot` token pins the generation
+a search answered from and the read tool honors it — an invalid or expired
+token never errors, it serves active and says why (`snapshot:
+"refreshed (<reason>)"`). Only served generations are queryable (the
+generation CTE resolves `COALESCE(pinned, active_generation)` inside every
+statement — the generation is the authorization).
 
 **Abstention is the retrieval gate.** A declared floor below which serve
 answers "not in this corpus" — a correct answer, never an error, never a
@@ -48,9 +54,11 @@ for — the same seam and five guarantees as the site shells
 (`specs/ksor/visibility/spec.md`). Nothing outside the tier is on disk for
 any tool to return.
 
-**Errors are documentation.** Refusals exit 1 with a stable first-line slug
-and a remedy; environment failures exit 3; until implemented, `ksor serve`
-keeps exiting 2 honestly.
+**Errors are documentation.** Refusals exit 1 with a remedied message;
+environment failures exit 3. The door today is the workspace `ksor-gateway`
+binary (stdio default; `--http`/`PORT` for the hosted door); the published
+`ksor serve` verb keeps exiting 2 honestly until the packaging decision in
+decision 12 resolves how the kernel ships to npm.
 
 ## Acceptance
 
@@ -67,6 +75,21 @@ keeps exiting 2 honestly.
    deliberate opt-out flag boots and says what it did.
 5. A serve built for audience X returns zero traces of any narrower tier
    (canary method, positive controls).
+
+## Status against acceptance (2026-08-19 — the draft's honest ledger)
+
+Proven live: the three tools through a real MCP client over stdio against
+Postgres; the typed abstention under a calibrated floor (including the
+question whose only passing answer is the abstention); snapshot pinning +
+the refresh path; byte-exact read; the HTTP door's fail-closed boot and
+probes; oracle-fixture parity for chunking, calibration math, windowing,
+manifest. Not yet wired: the visibility-staged tier as serve's source
+(clause above is contract, not behavior), the calibrate CLI's synthesized
+door, behavioural evals as a CI gate, and the `.mcp.json` scaffold rung.
+The "declared-but-uncalibrated refuses" invariant currently has no
+representable state in the instance grammar (a floor is a number or null;
+null = gate off, surfaced) — resolving that wording is part of
+ratification.
 
 ## Out of scope
 
