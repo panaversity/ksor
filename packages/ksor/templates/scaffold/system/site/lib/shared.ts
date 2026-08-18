@@ -22,7 +22,10 @@ function findInstance(start: string): string {
 
 function readInstanceName(): string {
   const text = readFileSync(findInstance(process.cwd()), "utf8");
-  const raw = /^name:[ \t]*(.*)$/m.exec(text)?.[1]?.trim() ?? "";
+  // Only the frontmatter block: body prose mentioning `name:` must never
+  // become the site's identity (review finding, 2026-08-18).
+  const block = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
+  const raw = /^name:[ \t]*(.*)$/m.exec(block)?.[1]?.trim() ?? "";
   const unquoted = /^(['"])(.*)\1$/.exec(raw);
   const name = unquoted?.[2] ?? raw;
   if (name === "") {

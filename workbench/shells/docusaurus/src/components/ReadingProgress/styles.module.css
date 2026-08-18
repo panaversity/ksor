@@ -16,7 +16,9 @@
   width: 100%;
   height: 4px;
   background: transparent;
-  z-index: 9999;
+  /* Below the navbar (z-40) and the mobile sheet (z-50): at 9999 the stripe
+     painted over the open sheet (review finding, 2026-08-18). */
+  z-index: 30;
   pointer-events: none;
 }
 

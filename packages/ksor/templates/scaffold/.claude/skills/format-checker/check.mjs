@@ -383,11 +383,17 @@ if (!existsSync(knowledgeDir)) {
         // YAMLException from inside node_modules (found live 2026-08-18:
         // an unquoted colon in a title killed both site builds after a
         // green check).
-        if (!fm.quoted.has(key) && (value.includes(": ") || /^[[{>|&*!%@`]/.test(value))) {
+        if (
+          !fm.quoted.has(key) &&
+          (value.includes(": ") ||
+            value.endsWith(":") ||
+            value.includes(" #") ||
+            /^[[{>|&*!%@`]/.test(value))
+        ) {
           problem(
             rel,
             `frontmatter value needs quoting: ${key}: ${value}`,
-            "the site reads this block as YAML, and YAML refuses unquoted colons and leading [ { > | & * ! % @ ` — the build would fail after this check passed",
+            "the site reads this block as YAML: unquoted colons and leading [ { > | & * ! % @ ` fail the build after this check passed, and ` #` starts a YAML comment — the page would carry a silently truncated value",
             `quote it: ${key}: "${value}"`,
           );
         }

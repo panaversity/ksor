@@ -106,31 +106,34 @@ function insert(level: Level, doc: RecordDoc, rest: string): void {
 }
 
 function flatten(level: Level, prefix: string): RecordDoc[] {
-  type Item = { order: number; url: string; docs: () => RecordDoc[] };
+  type Item = { order: number; url: string; docs: RecordDoc[] };
   const items: Item[] = [];
   for (const doc of level.files) {
-    items.push({ order: doc.order, url: doc.url, docs: () => [doc] });
+    items.push({ order: doc.order, url: doc.url, docs: [doc] });
   }
   for (const [dir, child] of level.dirs) {
     const url = `${prefix}/${dir}`;
     const index = child.files.find((doc) => doc.file.endsWith("/index.md"));
+    const rest: Level = {
+      files: child.files.filter((doc) => doc !== index),
+      dirs: child.dirs,
+    };
+    const docs = [...(index ? [index] : []), ...flatten(rest, url)];
     items.push({
       order: index?.order ?? Number.POSITIVE_INFINITY,
-      url,
-      docs: () => {
-        const rest: Level = {
-          files: child.files.filter((doc) => doc !== index),
-          dirs: child.dirs,
-        };
-        return [...(index ? [index] : []), ...flatten(rest, url)];
-      },
+      // An index-less folder ties on its first document's url, exactly as
+      // the reference shell's tree does — tying on the folder path put
+      // `hr/` and `hr-notes.md` in different orders per shell (review
+      // finding, 2026-08-18).
+      url: index?.url ?? docs[0]?.url ?? url,
+      docs,
     });
   }
   items.sort((a, b) => {
     if (a.order !== b.order) return a.order < b.order ? -1 : 1;
     return a.url < b.url ? -1 : a.url > b.url ? 1 : 0;
   });
-  return items.flatMap((item) => item.docs());
+  return items.flatMap((item) => item.docs);
 }
 
 function sortDocs(docs: readonly RecordDoc[]): RecordDoc[] {

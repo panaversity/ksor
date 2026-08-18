@@ -65,11 +65,13 @@ export function materialize(
       const text = readFileSync(from, "utf8")
         .replaceAll("KSOR-STAMP-NAME", stamps.name)
         .replaceAll("KSOR-STAMP-VERSION", stamps.version);
+      // Tracked before the write: a mid-write ENOSPC leaves a partial file
+      // the rollback must still remove (review finding, 2026-08-18).
+      created.push(to);
       writeFileSync(to, text);
-      created.push(to);
     } else {
-      copyFileSync(from, to);
       created.push(to);
+      copyFileSync(from, to);
     }
   }
   return created;

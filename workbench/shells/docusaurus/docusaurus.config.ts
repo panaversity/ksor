@@ -47,22 +47,21 @@ const knowledgeDir = path.join(repoRoot, "knowledge");
  */
 function readBasePath(): string {
   const raw = (process.env.KSOR_BASE_PATH ?? "").trim();
-  // "" and "/" both mean root hosting. Anything else must be an absolute path.
-  if (raw === "" || raw === "/") return "";
-  if (!raw.startsWith("/")) {
+  if (raw === "") return "";
+  // One env var, one meaning, BOTH shells: the reference shell's framework
+  // refuses "/" and a trailing slash outright, so this shell refuses the
+  // same shapes instead of normalizing them — a value that builds here and
+  // fails there is a trap (review finding, 2026-08-18).
+  if (raw === "/" || !raw.startsWith("/") || raw.endsWith("/")) {
     throw new Error(
-      `KSOR_BASE_PATH must start with "/" — got ${JSON.stringify(raw)}.\n` +
-        "It is the sub-path the site is hosted under, and it is prefixed onto " +
-        "every route, asset and llms.txt link; a value without a leading slash " +
-        "produces a relative baseUrl and a site whose links resolve differently " +
-        "on every page.\n" +
-        'Fix: use the shape "/repo" — a leading slash, no trailing one. ' +
-        'Unset it (or set it to "/") to host at the root.',
+      `KSOR_BASE_PATH must look like "/repo" — got ${JSON.stringify(raw)}.\n` +
+        "It is the sub-path the site is hosted under, prefixed onto every " +
+        "route, asset and llms.txt link, and both shells accept exactly the " +
+        "same shapes: a leading slash, no trailing one.\n" +
+        "Fix: drop the trailing slash, or unset it to host at the root.",
     );
   }
-  // A trailing slash is the same intent written differently, so it is accepted
-  // and normalized rather than refused.
-  return raw.replace(/\/+$/, "");
+  return raw;
 }
 
 const ksorBasePath = readBasePath();
@@ -88,21 +87,29 @@ fs.mkdirSync(generatedDir, { recursive: true });
 fs.writeFileSync(path.join(generatedDir, "llms.txt"), llmsIndex(name, record, ksorBasePath));
 fs.writeFileSync(path.join(generatedDir, "llms-full.txt"), llmsFull(record, ksorBasePath));
 
-// The `order:` governed key, translated: sort every generated sidebar level by
-// the linked document's order (missing/non-numeric last), ties keeping the
-// generator's own order. meta.json stays banned from the record.
+// The `order:` governed key, translated: sort every generated sidebar level
+// by the linked document's order (missing/non-numeric last), ties on the
+// document's url — the same tie-break llms.txt uses, so the sidebar and the
+// agent index never disagree (review finding, 2026-08-18: the generator's
+// own tie order sorts by source filename WITH extension, which diverges from
+// url order on prefix-related names). meta.json stays banned from the record.
 type SidebarItem = { type?: string; id?: string; items?: SidebarItem[]; link?: { id?: string } };
 const orderByDocId = new Map(
   record.map((doc) => [doc.file.replace(/\.md$/, ""), doc.order] as const),
 );
+const urlByDocId = new Map(record.map((doc) => [doc.file.replace(/\.md$/, ""), doc.url] as const));
+function itemDocId(item: SidebarItem): string | undefined {
+  if (item.type === "doc" || item.type === undefined) return item.id;
+  if (item.type === "category") return item.link?.id ?? item.items?.map(itemDocId).find(Boolean);
+  return undefined;
+}
 function itemOrder(item: SidebarItem): number {
-  const id =
-    item.type === "doc" || item.type === undefined
-      ? item.id
-      : item.type === "category"
-        ? item.link?.id
-        : undefined;
+  const id = itemDocId(item);
   return (id !== undefined ? orderByDocId.get(id) : undefined) ?? Number.POSITIVE_INFINITY;
+}
+function itemUrl(item: SidebarItem): string {
+  const id = itemDocId(item);
+  return (id !== undefined ? urlByDocId.get(id) : undefined) ?? "";
 }
 function sortItems(items: SidebarItem[]): SidebarItem[] {
   return items
@@ -110,7 +117,10 @@ function sortItems(items: SidebarItem[]): SidebarItem[] {
     .sort((a, b) => {
       const left = itemOrder(a);
       const right = itemOrder(b);
-      return left === right ? 0 : left < right ? -1 : 1;
+      if (left !== right) return left < right ? -1 : 1;
+      const leftUrl = itemUrl(a);
+      const rightUrl = itemUrl(b);
+      return leftUrl < rightUrl ? -1 : leftUrl > rightUrl ? 1 : 0;
     });
 }
 

@@ -48,9 +48,15 @@ const SHELLS: readonly Shell[] = [
   {
     shellName: "docusaurus",
     swap: (project) => {
-      // The swap recipe from workbench/shells/docusaurus/README.md, verbatim.
+      // The swap recipe from workbench/shells/docusaurus/README.md, verbatim
+      // — filtered so a locally-run workbench shell's generated dirs never
+      // ride along (review finding, 2026-08-18).
+      const GENERATED = new Set(["node_modules", ".docusaurus", ".generated", "out"]);
       rmSync(path.join(project, "system", "site"), { recursive: true });
-      cpSync(docusaurusShell, path.join(project, "system", "site"), { recursive: true });
+      cpSync(docusaurusShell, path.join(project, "system", "site"), {
+        recursive: true,
+        filter: (src) => !GENERATED.has(path.basename(src)),
+      });
       rmSync(path.join(project, "system", "site", "README.md"));
       appendFileSync(
         path.join(project, ".gitignore"),
@@ -73,8 +79,11 @@ const SHELLS: readonly Shell[] = [
 
 function run(command: string, args: readonly string[], cwd: string): void {
   const result = spawnSync(command, [...args], { cwd, encoding: "utf8" });
-  // stderr is null when the spawn itself failed (command missing).
-  const detail = result.stderr ?? String(result.error ?? "spawn failed");
+  // Both streams: tsc reports on stdout; stderr is null when the spawn
+  // itself failed (command missing).
+  const detail =
+    `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim() ||
+    String(result.error ?? "spawn failed");
   expect(result.status, `${command} ${args.join(" ")}: ${detail.slice(-2000)}`).toBe(0);
 }
 
@@ -207,6 +216,12 @@ describe.runIf(enabled).each(SHELLS)(
       // legitimately outdated — and CI environments default frozen-lockfile
       // on (found live 2026-08-18: ERR_PNPM_OUTDATED_LOCKFILE under CI=true).
       run("pnpm", ["install", ...(swap ? ["--no-frozen-lockfile"] : [])], project);
+      if (swap) {
+        // The workbench shell is not a repo workspace member, so nothing else
+        // ever typechecks its ~1,900 TS/TSX lines; here its dependencies
+        // exist, so it typechecks here (review finding, 2026-08-18).
+        run("pnpm", ["--dir", path.join("system", "site"), "exec", "tsc", "--noEmit"], project);
+      }
       run("pnpm", ["build"], project);
       outDir = path.join(project, "system", "site", "out");
     }, 600_000);

@@ -1,12 +1,13 @@
 import { RootProvider } from "fumadocs-ui/provider/next";
 import "./global.css";
-import { Inter } from "next/font/google";
 import type { Metadata } from "next";
 import { appName } from "@/lib/shared";
 
-const inter = Inter({
-  subsets: ["latin"],
-});
+// No next/font/google: it fetches the face from Google at BUILD time, so a
+// scaffolded project could not build offline and two builds of one commit
+// could differ byte-wise (review finding, 2026-08-18). The system UI stack
+// costs zero bytes and zero network; replace it with a self-hosted @font-face
+// if the project wants a specific face.
 
 export const metadata: Metadata = {
   title: {
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
         <RootProvider
           search={{

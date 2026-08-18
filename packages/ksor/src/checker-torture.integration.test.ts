@@ -207,6 +207,16 @@ describe("scaffolded format-checker — torture", () => {
       "knowledge/quoted.md": '---\ntitle: "Note: colons happen"\nstatus: draft\n---\n\nBody.\n',
     });
     expect(quotedDoc.status, quotedDoc.output).toBe(0);
+
+    // Round-3 findings: a TRAILING colon fails YAML the same way, and a
+    // bare ` #` starts a YAML comment — the page would silently truncate.
+    const edges = probe({
+      "knowledge/trailing.md": "---\ntitle: Q4:\nstatus: draft\n---\n\nBody.\n",
+      "knowledge/comment.md": "---\ntitle: Pay # policy\nstatus: draft\n---\n\nBody.\n",
+    });
+    expect(edges.status, edges.output).toBe(1);
+    expect(edges.output).toContain("frontmatter value needs quoting: title: Q4:");
+    expect(edges.output).toContain("frontmatter value needs quoting: title: Pay # policy");
   });
 
   it("refuses non-ASCII filenames — the path is the address, the title is the name", () => {
