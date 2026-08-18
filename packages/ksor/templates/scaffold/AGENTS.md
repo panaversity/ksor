@@ -15,6 +15,10 @@ The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
 record; the record never references the system.
 
+`instance.md` carries a closed key set — `format`, `name`, `ksor`, `site` —
+and everything that matters about it is the prose below that frontmatter;
+`pnpm check` names any other key rather than ignoring it.
+
 ## Critical rules
 
 1. **The site never contains authored content.** Knowledge goes in
@@ -42,12 +46,14 @@ pnpm check       # the format checker — run before handing off any knowledge c
 - Frontmatter: `title` and `status` (`draft | review | approved | superseded`)
   are required. `owner` and `provenance` (a list naming real sources) are
   strongly encouraged — they become required as this project climbs the
-  governance ladder. `description` and `order` (sidebar position) are
-  available. No other keys; never `id:` or `name:` — the path is the identity.
+  governance ladder. `description`, `order` (sidebar position), `effective`
+  (the date the document takes effect) and `superseded` (a legacy marker —
+  prefer `status`) are available. No other keys; never `id:` or `name:` — the
+  path is the identity.
 - A replaced document is marked `status: superseded` with `superseded_by:`
   pointing at its successor — superseded documents are never deleted.
 - Images and assets live in `knowledge/` beside the document that uses them,
-  referenced by relative links. A link must never point into `system/`.
+  referenced by relative links. A relative link must never leave `knowledge/`.
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.
 
