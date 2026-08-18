@@ -178,9 +178,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
           { timeout: 120_000, interval: 1_000 },
         )
         .toBe(200);
-      expect(await (await fetch(url)).text(), "the dev server must be this project's").toContain(
-        "walkthrough",
-      );
+      // The slug lives in llms.txt (pages now show the display title), and
+      // the slug is the identity this guard exists to check.
+      expect(
+        (await (await fetch("http://localhost:3217/llms.txt")).text()).split("\n")[0],
+        "the dev server must be this project's",
+      ).toBe("# walkthrough");
       const marker = "hot-reload-proof-4173";
       appendFileSync(path.join(project, "knowledge", "example.md"), `\n${marker}\n`);
       await expect

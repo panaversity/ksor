@@ -35,3 +35,17 @@ function readInstanceName(): string {
 }
 
 export const appName: string = readInstanceName();
+
+/**
+ * The record's DISPLAY TITLE: instance.md's first body heading. The slug in
+ * `name:` is the machine identity (llms.txt, future citations); the H1 is
+ * the human name every page leads with. A fresh scaffold reads "Knowledge
+ * System of Record" until the intake interview writes the real one.
+ */
+function readInstanceTitle(): string {
+  const text = readFileSync(findInstance(process.cwd()), "utf8");
+  const body = text.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
+  return /^#[ \t]+(.+)$/m.exec(body)?.[1]?.trim() ?? appName;
+}
+
+export const appTitle: string = readInstanceTitle();

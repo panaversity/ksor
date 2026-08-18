@@ -6,7 +6,12 @@ ksor:
   scaffolded: "KSOR-STAMP-VERSION"
 ---
 
-# KSOR-STAMP-NAME
+# Knowledge System of Record
+
+The heading above is this record's **display title** — the human name every
+page leads with. The intake interview replaces it with the real one
+("Acme Operations Handbook"); the machine identity stays `KSOR-STAMP-NAME`
+in the frontmatter, and that is what agents and citations use.
 
 This Knowledge System of Record is authoritative for — _fill this in; it is
 the single most important sentence in the project._

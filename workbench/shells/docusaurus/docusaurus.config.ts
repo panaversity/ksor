@@ -25,7 +25,7 @@ import type * as Preset from "@docusaurus/preset-classic";
 import type { Config } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
 
-import { instanceName, llmsFull, llmsIndex, readRecord } from "./lib/record";
+import { instanceName, instanceTitle, llmsFull, llmsIndex, readRecord } from "./lib/record";
 
 const shellDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(shellDir, "..", "..");
@@ -68,6 +68,7 @@ const ksorBasePath = readBasePath();
 const baseUrl = `${ksorBasePath}/`;
 
 const name = instanceName(repoRoot);
+const title = instanceTitle(repoRoot);
 const record = readRecord(knowledgeDir);
 
 // llms.txt and llms-full.txt are generated at config load into a static dir:
@@ -125,7 +126,7 @@ function sortItems(items: SidebarItem[]): SidebarItem[] {
 }
 
 const config: Config = {
-  title: name,
+  title: title,
   tagline: "The Knowledge System of Record for humans and AI agents.",
   // instance.md reserves site.url for the deployed address; until ksor build
   // wires it through, a placeholder keeps the static export host-relative.
@@ -258,7 +259,7 @@ const config: Config = {
     colorMode: { respectPrefersColorScheme: true },
     docs: { sidebar: { hideable: true } },
     navbar: {
-      title: name,
+      title: title,
       logo: { alt: "KSoR", src: "img/ksor-mark.png" },
       items: [
         { type: "docSidebar", sidebarId: "defaultSidebar", label: "Knowledge", position: "left" },

@@ -87,7 +87,7 @@ export default function Home(): ReactNode {
                 className={`${styles.rise} m-0 mb-3 text-xs font-medium uppercase tracking-widest text-muted-foreground`}
                 style={step(1)}
               >
-                KSoR — Knowledge System of Record
+                KSoR
               </p>
 
               {/* The authored case, restored for assistive technology: the

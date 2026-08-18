@@ -180,6 +180,18 @@ export function instanceName(repoRoot: string): string {
   return name;
 }
 
+/**
+ * The record's DISPLAY TITLE: instance.md's first body heading. The slug in
+ * `name:` stays the machine identity (llms.txt, future citations); the H1 is
+ * the human name every page leads with — "Knowledge System of Record" on a
+ * fresh scaffold, the intake interview's answer after.
+ */
+export function instanceTitle(repoRoot: string): string {
+  const text = fs.readFileSync(path.join(repoRoot, "instance.md"), "utf8");
+  const body = text.replace(FRONTMATTER, "");
+  return /^#[ \t]+(.+)$/m.exec(body)?.[1]?.trim() ?? instanceName(repoRoot);
+}
+
 /** llms.txt: `# <name>`, then one link per document in reading order. */
 export function llmsIndex(name: string, docs: readonly RecordDoc[], base: string): string {
   const lines = docs.map((doc) => {

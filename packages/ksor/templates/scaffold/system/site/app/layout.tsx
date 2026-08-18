@@ -1,7 +1,7 @@
 import { RootProvider } from "fumadocs-ui/provider/next";
 import "./global.css";
 import type { Metadata } from "next";
-import { appName } from "@/lib/shared";
+import { appTitle } from "@/lib/shared";
 
 // No next/font/google: it fetches the face from Google at BUILD time, so a
 // scaffolded project could not build offline and two builds of one commit
@@ -11,8 +11,8 @@ import { appName } from "@/lib/shared";
 
 export const metadata: Metadata = {
   title: {
-    default: appName,
-    template: `%s | ${appName}`,
+    default: appTitle,
+    template: `%s | ${appTitle}`,
   },
   description: "The Knowledge System of Record for humans and AI agents.",
 };

@@ -4,7 +4,7 @@ import Link from "next/link";
 // asset. Replace it with your own and the tab icon changes with the page.
 import mark from "@/app/icon.png";
 import { BuiltWith } from "@/components/built-with";
-import { appName } from "@/lib/shared";
+import { appName, appTitle } from "@/lib/shared";
 import { basePath, getSortedPages } from "@/lib/source";
 
 export default function HomePage() {
@@ -25,13 +25,15 @@ export default function HomePage() {
           className="mb-7 size-14 rounded-xl ring-1 ring-fd-border"
         />
 
-        {/* The frame is KSoR's; the name is the record's. The eyebrow brands
-            the framework so the headline can stay the adopter's. */}
+        {/* The frame is KSoR's; the title is the record's. The headline is
+            instance.md's own H1 — a human name, not the machine slug — so a
+            fresh scaffold reads "Knowledge System of Record" until the
+            intake interview writes the real one. */}
         <p className="mb-2 text-xs font-medium uppercase tracking-widest text-fd-muted-foreground">
-          KSoR — Knowledge System of Record
+          KSoR
         </p>
-        <h1 className="font-mono text-4xl font-medium tracking-tight break-words sm:text-5xl">
-          {appName}
+        <h1 className="text-4xl font-semibold tracking-tight text-balance break-words sm:text-5xl">
+          {appTitle}
         </h1>
         <p className="mt-3 text-lg text-fd-muted-foreground">
           Knowledge you can govern. Answers you can trace. Boundaries agents can respect.
@@ -51,9 +53,11 @@ export default function HomePage() {
                 &rarr;
               </span>
             </Link>
-            {/* The same record, the way an agent reads it. */}
+            {/* The machine identity and the agent door — the slug is what
+                citations will carry, so it stays visible where agents look. */}
             <p className="text-xs text-fd-muted-foreground">
-              {pages.length} document{pages.length === 1 ? "" : "s"} &middot; agents read{" "}
+              <span className="font-mono">{appName}</span> &middot; {pages.length} document
+              {pages.length === 1 ? "" : "s"} &middot; agents read{" "}
               <a
                 href={`${basePath}/llms.txt`}
                 className="underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
