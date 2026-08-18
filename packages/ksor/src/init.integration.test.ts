@@ -228,7 +228,11 @@ describe("ksor init — refusals (spec clause 2)", () => {
   });
 
   it("refuses init . when the directory name is not a legal project name", () => {
-    for (const dirName of ["My Project", 'quote"name']) {
+    // A `"` directory is uncreatable on Windows (mkdir EINVAL), so the
+    // JSON-corruption case only exists — and is only testable — on POSIX.
+    const badNames =
+      process.platform === "win32" ? ["My Project", "UPPER"] : ["My Project", 'quote"name'];
+    for (const dirName of badNames) {
       const parent = workDir();
       const target = path.join(parent, dirName);
       mkdirSync(target);
