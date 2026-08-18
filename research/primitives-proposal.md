@@ -159,6 +159,45 @@ The scan is deliberately not built on the TypeScript compiler API (forbidden
 until TS 7.1, guard rule 6); if it ever needs real AST fidelity, oxc-parser
 is the recorded upgrade path.
 
+## 6 · The serve envelope — requirements from the Expert Twin Architecture
+
+Added 2026-08-18: the owner's Expert Twin Architecture (Zia Developer AI —
+four records, two engines) sits directly on top of ksor as its Knowledge
+Record. Its first rule — _governed at the gates, fails closed_ — is only as
+strong as this surface makes it, which pins three requirements on `serve` and
+one on the scaffold before either is designed:
+
+1. **Abstention is a type, not a phrasing.** The answer envelope is a
+   discriminated union —
+   `{ ok: true, answer, citations, generation } | { ok: false, reason: "abstained" }`
+   — so a praxis fails closed on a compile-time branch, never on interpreting
+   prose. (This is also product principle 5 made mechanical, and the
+   discriminated-union guidance from the typing review applied where it is
+   load-bearing.)
+2. **Provenance labels are derived, never asserted.** The twin's
+   Governed / External / Inference / Unknown labels must be computable from
+   the envelope: citation present **and** generation published ⇒ Governed;
+   the abstention branch ⇒ Unknown. A model may only supply the
+   External-vs-Inference distinction. If the surface cannot support that
+   derivation, the labels degrade to confident guesses wearing badges.
+3. **An engagement lock, not scattered prose.** `build.lock.json` (format 2)
+   already pins what a _build_ rested on; the scaffold's decision log must do
+   the same for _judgment_ — each recorded gate names the corpus generation
+   (and, for twins, the praxis/scaffold versions) in force when it closed.
+   Same pattern, second application: reproducibility of judgment becomes
+   testable the way reproducibility of builds is.
+4. **The scaffold is the Work Record — build it once.** The twin
+   architecture's Project Record (constitution above specs, decision log with
+   citations, gate log, the continuation pointer, "holds only what nothing
+   else records") is clause-for-clause what `ksor init` should emit, as
+   governed markdown — so a twin's Work Record is itself servable and
+   auditable by ksor tooling. Likewise its Scaffold Engine ("versioned
+   against the SoR, ships complete, selection cited") is this proposal's §3
+   registry items, not a parallel mechanism; and its Eval Engine inherits
+   AGENTS.md → Testing's gating rules verbatim — decision evals externally
+   authored (gold generated from the judgment under test would bless its own
+   errors) and ratcheting.
+
 ## What this unblocks
 
 Implementation order stays the plan's: `init` first (scaffold + templates

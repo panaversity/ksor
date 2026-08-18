@@ -136,7 +136,10 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    oxlint+oxfmt, changesets with npm trusted publishing. Reversed per-pin when
    a recorded caveat fires. _Revision 2026-08-18: turbo removed — a task
    runner for one package earned nothing; plain `pnpm -r` is the whole of it.
-   Re-judge at the second package._
+   It (or a then-current alternative) returns with the first inter-package
+   dependency edge — the site/lib conversion PR — judged against the real
+   task graph, not package count. The `pnpm build` vocabulary is the stable
+   contract either way; the runner behind it is replaceable machinery._
 6. **Predecessor conversion is granted** (owner, 2026-08-18): Apache-2.0
    covers the predecessor work end to end, and the owner has granted taking it
    — Python included — and converting it to TypeScript. This retires the
