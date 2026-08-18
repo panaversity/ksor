@@ -31,7 +31,13 @@ function frontmatterValue(block: string, key: string): string | null {
 }
 
 function toOrder(raw: string | null): number {
-  if (raw === null) return Number.POSITIVE_INFINITY;
+  // The empty case is checked before Number(), not after: `Number("")` is 0, so
+  // a bare `order:` with nothing after it declared position ZERO and jumped the
+  // document to the top of its level — while the reference shell read the same
+  // frontmatter as "no order declared" and sorted it last. Two shells, one
+  // record, two reading orders, and nothing said so (confirmed live
+  // 2026-08-18). An absent value is an absent declaration.
+  if (raw === null || raw.trim() === "") return Number.POSITIVE_INFINITY;
   const value = Number(raw);
   return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
 }
@@ -133,11 +139,42 @@ function sortDocs(docs: readonly RecordDoc[]): RecordDoc[] {
   return flatten(root, "/docs");
 }
 
-/** The instance name from instance.md — the identity every surface leads with. */
+/**
+ * The instance name from instance.md — the identity every surface leads with:
+ * the site title, the navbar brand, the home page's headline, the first line of
+ * llms.txt.
+ *
+ * Both failures refuse rather than improvise. A missing file used to throw a
+ * raw ENOENT out of config load — a stack trace naming `readFileSync`, which
+ * tells an adopter nothing about what the file is for; a missing `name:` used
+ * to fall back to the literal "knowledge", which is worse, because the site
+ * builds green and publishes somebody else's identity. Identity is not a thing
+ * to guess at (confirmed live 2026-08-18).
+ */
 export function instanceName(repoRoot: string): string {
-  const text = fs.readFileSync(path.join(repoRoot, "instance.md"), "utf8");
+  const file = path.join(repoRoot, "instance.md");
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    throw new Error(
+      `instance.md not found at ${file}.\n` +
+        "It is the project's identity — its name is the site title, the navbar " +
+        "brand and the first line of llms.txt, and the shell will not invent one.\n" +
+        "Fix: run `pnpm check` at the repo root, which reports what the record is missing.",
+    );
+  }
   const block = FRONTMATTER.exec(text)?.[1] ?? "";
-  return frontmatterValue(block, "name") ?? "knowledge";
+  const name = frontmatterValue(block, "name");
+  if (name === null || name === "") {
+    throw new Error(
+      `instance.md has no \`name:\` in its frontmatter (${file}).\n` +
+        "It is the project's identity — its name is the site title, the navbar " +
+        "brand and the first line of llms.txt, and the shell will not invent one.\n" +
+        "Fix: add `name: <your project>` to the frontmatter, then `pnpm check`.",
+    );
+  }
+  return name;
 }
 
 /** llms.txt: `# <name>`, then one link per document in reading order. */

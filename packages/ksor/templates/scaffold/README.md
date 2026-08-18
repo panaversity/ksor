@@ -41,7 +41,7 @@ different coding agent's way of finding the same working contract.
 | `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `format-checker` (the rules, as a program). |
 | `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                      |
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                          |
-| `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                            |
+| `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                    |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                     |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                             |
 | `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands, and the pnpm version this project pins.                                                                            |

@@ -3,12 +3,15 @@
  * surface contract honest (specs/ksor/init/spec.md → the shell swap seam).
  *
  * Rebased on the predecessor's de-branded shell (`sor-site`, decision 6). What
- * crossed is machinery: the `future.v4` + `faster` build flags, the offline
- * search theme, and the config hygiene that keeps a built site free of
- * off-origin requests. What did not cross is product — the eight remark/lib
- * packages, mermaid, i18n, the blog, the og-image machinery — because a
- * directive grammar the record does not have would be a fork of the record,
- * not a feature of the shell. README.md records every rejection and its reason.
+ * crossed is machinery and design: the `future.v4` + `faster` build flags, the
+ * offline search theme, the config hygiene that keeps a built site free of
+ * off-origin requests, and — under `src/` — that shell's whole four-file design
+ * system, its self-hosted typefaces and the chrome swizzles that finish it.
+ * What did not cross is product: the eight remark/lib packages, mermaid, i18n,
+ * the blog, the og-image machinery, and every component that reads a
+ * frontmatter key or plugin datum the record does not have. A directive grammar
+ * the record has not ratified would be a fork of the record, not a feature of
+ * the shell. README.md records every rejection and its reason.
  *
  * Conformance-lean, never feature parity: it satisfies clauses 1–4 and
  * translates the governed `order` key. Everything it publishes it derives from
@@ -28,11 +31,41 @@ const shellDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(shellDir, "..", "..");
 const knowledgeDir = path.join(repoRoot, "knowledge");
 
-// Sub-path hosting knob — the same env var, with the same meaning, as the
-// reference shell. Docusaurus wants a leading and trailing slash on baseUrl;
-// text surfaces (llms.txt) get the bare prefix so links match the reference
-// shell's byte-for-byte.
-const ksorBasePath = process.env.KSOR_BASE_PATH ?? "";
+/**
+ * Sub-path hosting knob — the same env var, with the same meaning, as the
+ * reference shell. Docusaurus wants a leading AND trailing slash on `baseUrl`;
+ * the text surfaces (llms.txt) take the bare prefix so their links match the
+ * reference shell's byte-for-byte.
+ *
+ * Normalized and validated, because raw interpolation built a garbage site
+ * where the reference shell refuses (confirmed live 2026-08-18): `/repo/`
+ * became `baseUrl: "/repo//"`, `/` became `"//"` — a protocol-relative URL, so
+ * every asset pointed at a host that does not exist — and `repo` became
+ * `"repo/"`, a relative baseUrl. All three built successfully and published a
+ * site nobody could load. A refusal costs one message; a green build of a dead
+ * site costs a deploy.
+ */
+function readBasePath(): string {
+  const raw = (process.env.KSOR_BASE_PATH ?? "").trim();
+  // "" and "/" both mean root hosting. Anything else must be an absolute path.
+  if (raw === "" || raw === "/") return "";
+  if (!raw.startsWith("/")) {
+    throw new Error(
+      `KSOR_BASE_PATH must start with "/" — got ${JSON.stringify(raw)}.\n` +
+        "It is the sub-path the site is hosted under, and it is prefixed onto " +
+        "every route, asset and llms.txt link; a value without a leading slash " +
+        "produces a relative baseUrl and a site whose links resolve differently " +
+        "on every page.\n" +
+        'Fix: use the shape "/repo" — a leading slash, no trailing one. ' +
+        'Unset it (or set it to "/") to host at the root.',
+    );
+  }
+  // A trailing slash is the same intent written differently, so it is accepted
+  // and normalized rather than refused.
+  return raw.replace(/\/+$/, "");
+}
+
+const ksorBasePath = readBasePath();
 const baseUrl = `${ksorBasePath}/`;
 
 const name = instanceName(repoRoot);
@@ -42,7 +75,15 @@ const record = readRecord(knowledgeDir);
 // `docusaurus start` serves them and `docusaurus build` copies them into the
 // export — one generation covers both surfaces. Regenerated per invocation,
 // not per edit; the build is the surface of record.
+//
+// The directory is REPLACED, never written into. It is a derived surface, so
+// anything in it that this config did not just write is not derived from the
+// record — and `staticDirectories` copies the whole directory, so a stray file
+// left there once ships into every export from then on (confirmed live
+// 2026-08-18 with a planted file). Removing the directory first makes the
+// generation total.
 const generatedDir = path.join(shellDir, ".generated");
+fs.rmSync(generatedDir, { recursive: true, force: true });
 fs.mkdirSync(generatedDir, { recursive: true });
 fs.writeFileSync(path.join(generatedDir, "llms.txt"), llmsIndex(name, record, ksorBasePath));
 fs.writeFileSync(path.join(generatedDir, "llms-full.txt"), llmsFull(record, ksorBasePath));
@@ -103,6 +144,15 @@ const config: Config = {
         docs: {
           path: knowledgeDir,
           routeBasePath: "docs",
+          // Identity derives from file path (AGENTS.md, product principle 3),
+          // and Docusaurus's default number-prefix parser breaks that: it
+          // strips a leading `01-` from the slug AND from the sidebar label, so
+          // `knowledge/01-intro.md` published at `/docs/intro/` while the
+          // record calls it `01-intro`. Every llms.txt link 404s, and a record
+          // that also holds `intro.md` gets two documents fighting for one
+          // route (confirmed live 2026-08-18). Ordering is the governed
+          // `order:` key's job; a filename is a name.
+          numberPrefixParser: false,
           sidebarItemsGenerator: async ({ defaultSidebarItemsGenerator, ...args }) => {
             const items = await defaultSidebarItemsGenerator(args);
             return sortItems(items as SidebarItem[]) as typeof items;
@@ -140,6 +190,48 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    /* The one plugin this shell registers, and the reason the ported design
+     * system survives the build at all.
+     *
+     * Docusaurus applies postcss-preset-env with an empty options object, which
+     * leaves preset-env's `cascade-layers` polyfill ON: every `@layer` is
+     * rewritten into `:not(#\#)` specificity hacks. Tailwind's preflight —
+     * `*,::before,::after { margin: 0; padding: 0; border: 0 solid }` — then
+     * reaches the browser at specificity (2,0,0), while CSS modules are not
+     * boosted by that rewrite at all and stay at (0,1,0). Every padding, margin
+     * and border a module declares loses, silently and everywhere.
+     *
+     * Found live by the predecessor on its deployed demo, then traced through
+     * the shipped stylesheet to this plugin. Cascade layers are baseline across
+     * every browser this site targets, so the polyfill buys nothing and costs
+     * the entire design system. Turning it off restores the ordinary cascade:
+     * preflight stays inside `@layer base` — where its `!important` rules are
+     * also what beat Infima's rounding — and unlayered module rules win.
+     */
+    function noCascadeLayerPolyfill() {
+      return {
+        name: "ksor-no-cascade-layer-polyfill",
+        configurePostCss(postCssOptions: { plugins: unknown[] }) {
+          postCssOptions.plugins = postCssOptions.plugins.map((plugin) =>
+            Array.isArray(plugin) &&
+            typeof plugin[0] === "string" &&
+            plugin[0].includes("postcss-preset-env")
+              ? [
+                  plugin[0],
+                  {
+                    ...(plugin[1] as Record<string, unknown>),
+                    features: { "cascade-layers": false },
+                  },
+                ]
+              : plugin,
+          );
+          return postCssOptions;
+        },
+      };
+    },
+  ],
+
   // First writer wins: Docusaurus turns this array into copy-webpack-plugin
   // patterns in order and that plugin defaults to `force: false`, so an
   // earlier directory's file is not overwritten by a later one (measured by
@@ -162,7 +254,9 @@ const config: Config = {
       ],
     },
     footer: {
-      style: "dark",
+      // No `style` key: the swizzled footer paints from the design system's own
+      // surface tokens, and Infima's permanently-dark band under a light page
+      // is the seam a pasted-on theme shows first.
       // One link, and no copyright line: the record is the adopter's, and this
       // shell has no standing to assert a claim over it on their behalf.
       links: [{ label: "Built with KSoR", href: "https://github.com/panaversity/ksor" }],

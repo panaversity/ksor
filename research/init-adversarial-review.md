@@ -137,3 +137,43 @@ atomicity (not testable on this machine).
    basePath mount; llms.txt reachable; a real external host is deferred to
    the first dogfood deployment (recorded deviation — the shipped bytes
    are what the local serve exercises).
+
+## Round two: the second shell, the branding, and the review loop
+
+After the owner re-activated the two-shell proof and the scaffold gained
+its branding, the same discipline ran again over the new work — an
+iterating headless review loop (fix everything, review again) plus a
+five-lens delta attack (record parser, shell config, suite rigor,
+branding truth, swap lifecycle), all confirmed-live-only.
+
+**What the loop caught, round by round (all fixed same-day):**
+
+- _Review 1:_ the named form shipped a 0700 project root; `tel:` links
+  reported as dead files; raw control bytes made the torture suite diff as
+  binary; indented code samples failed the gate; post-success errors
+  masqueraded as failed inits; a stale suite path in the shell README.
+- _Review 2:_ the two shells silently disagreed on unordered reading
+  order (twice — loader tie order, then a flat sort approximation); the
+  swap install died under `CI=true` frozen-lockfile; the umask-077 inverse
+  of the mode fix; nested-list dead links passed; the branding surface
+  shipped with no browser ever opening the home page; null-stderr spawn
+  failures reported TypeErrors.
+- _Delta attack:_ **identity split** — one shell's name was a stamped
+  constant, the other's read from instance.md, so renaming the instance
+  updated one surface and a template-restore shipped the literal
+  placeholder with every gate green (both shells now read instance.md);
+  checker-legal frontmatter that YAML rejects killed both builds after a
+  green check (unquoted colons — now refused with the quoting remedy);
+  Docusaurus's default numberPrefixParser broke path identity for
+  digit-prefixed files; non-ASCII filenames exported two incompatible
+  routes (now refused — the title carries the real name); one
+  CRC-corrupt PNG 500'd every page of one shell and silently shipped on
+  the other (the checker now verifies PNG chunk CRCs); the conformance
+  suite trusted incidence (titles satisfiable from any page's nav, fixed
+  ports, no asset probe, no divergence probes — all hardened).
+
+**The standing lesson this round adds:** two implementations of one
+contract disagree wherever the contract is silent — reading-order
+tie-breaks, route encodings, empty-value semantics, identity sources. The
+conformance suite now pins the canonical answer for each discovered
+silence, which is exactly the work the two-shell decision exists to force.

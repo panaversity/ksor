@@ -1,0 +1,59 @@
+/**
+ * ModeToggle styles, ported with the component: a ghost icon button and a
+ * sun/moon swap on [data-theme]. No raw colour literals; --ifm-* only.
+ */
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ifm-font-color-base);
+  cursor: pointer;
+  transition: background 150ms ease-out;
+}
+
+.toggle:hover {
+  background: var(--ifm-color-emphasis-200);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.sun,
+.moon {
+  transition:
+    transform 200ms ease-out,
+    opacity 200ms ease-out;
+}
+
+.moon {
+  position: absolute;
+  opacity: 0;
+  transform: rotate(90deg) scale(0);
+}
+
+:global([data-theme="dark"]) .sun {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0);
+}
+
+:global([data-theme="dark"]) .moon {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .sun,
+  .moon {
+    transition: none;
+  }
+}
