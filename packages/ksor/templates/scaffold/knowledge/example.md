@@ -1,6 +1,7 @@
 ---
 title: Your first governed document
 status: draft
+order: 1
 ---
 
 # Your first governed document
@@ -13,6 +14,11 @@ one carries the two required keys — `title` and `status: draft`. As the
 knowledge matures, documents gain `owner` and `provenance` (who stands behind
 this, and which sources it came from), move to `status: approved`, and — when
 replaced — are marked `superseded`, never deleted.
+
+It also carries `order: 1`, which is how the record decides reading order: a
+document that declares `order` sorts ahead of every document that does not, so
+this one stays first in the sidebar, first in `llms.txt`, and the document the
+home page opens.
 
 Ask your coding agent to run the **intake interview** to define what this
 Knowledge System of Record is authoritative for, then start adding documents

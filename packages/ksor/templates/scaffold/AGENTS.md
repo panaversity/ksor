@@ -57,6 +57,17 @@ pnpm check       # the format checker — run before handing off any knowledge c
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.
 
+### Structuring the record
+
+- A folder per topic; its front page is `<folder>/index.md`, and the folder
+  takes the position that page declares.
+- Sidebar position is the governed `order:` key: documents that declare it come
+  first, ascending; the rest follow in name order.
+- One order drives the sidebar, `llms.txt`, and the home page's first-document
+  link — set it once and every surface agrees.
+- Never `meta.json` or `sidebar_position`: the checker refuses framework files
+  in the record, which has to read the same without the site.
+
 ## Skills
 
 - `.agents/skills/intake-interview/` — first run: interview the owner and

@@ -2,7 +2,7 @@
 name: add-sources
 description: Turn source material — documents, pages, pasted text, notes — into governed knowledge in knowledge/. Use when the owner shares material to add, says "add this to the knowledge base", or asks how to get existing content in. Not for editing the site.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Add sources
@@ -16,6 +16,9 @@ The rules that make it _governed_ rather than merely stored:
   hyphens, a folder per natural grouping. Plain CommonMark `.md` — if the
   source is rich (tables, images), tables become markdown tables and images
   land _beside the document_ with relative links.
+- A folder's front page is `<folder>/index.md`; reading order is the
+  `order:` frontmatter key (ordered documents first, ascending; the rest
+  follow alphabetically) — never `meta.json` or `sidebar_position`.
 - Frontmatter: `title` and `status: draft` always; add `owner` (who stands
   behind this content) and `provenance` (a list naming the actual sources —
   file names, systems, people, dates) whenever the owner can tell you.
