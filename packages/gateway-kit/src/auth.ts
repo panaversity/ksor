@@ -2,9 +2,9 @@
 // sor-gateway-kit auth.py + sor-platform auth.py (decision 6). Three boot
 // postures, decided by `buildAuth`, and only three:
 //
-// - public:   SOR_SSO_URL + SOR_MCP_RESOURCE_URL set AND SOR_JWT_ALLOWED_AUDIENCES
+// - public:   KSOR_SSO_URL + KSOR_MCP_RESOURCE_URL set AND KSOR_JWT_ALLOWED_AUDIENCES
 //             non-empty — the OAuth Resource-Server door; the bearer is the gate.
-// - disabled: SOR_AUTH_DISABLED=1 — the ONLY unauthenticated path, a deliberate
+// - disabled: KSOR_AUTH_DISABLED=1 — the ONLY unauthenticated path, a deliberate
 //             operator act, never an accident of a missing var.
 // - anything else THROWS AuthConfigError — refuse to boot, never serve the
 //   public door open ("disabled by default" must never silently become an open
@@ -12,7 +12,7 @@
 //
 // Bearer verification is offline RS256/JWKS: signature + exp enforced, `aud`
 // allow-listed here (the MCP spec puts audience validation on the resource
-// server), issuer enforced only when SOR_SSO_ISSUER is explicitly set. M-2:
+// server), issuer enforced only when KSOR_SSO_ISSUER is explicitly set. M-2:
 // actor/client/tenant are server-injected from the verified bearer, never tool
 // arguments.
 
@@ -30,7 +30,7 @@ export type AuthConfig = {
   resourceUrl: string;
   allowedAudiences: readonly string[];
   /**
-   * Enforced ONLY when SOR_SSO_ISSUER is explicitly set — never defaulted to
+   * Enforced ONLY when KSOR_SSO_ISSUER is explicitly set — never defaulted to
    * ssoUrl: the JWKS signature (key fetched from THIS SSO's /api/auth/jwks)
    * already binds every accepted token to our SSO; an exact-string `iss` check
    * on top is redundant and brittle (the AS may stamp a base that is not its
@@ -115,14 +115,14 @@ function configFromEnv(env: Env): AuthConfig | null {
   // rstrip the SSO URL: a trailing slash makes the derived issuer
   // `https://sso/` mismatch the token's `iss` (`https://sso`) → total, silent
   // token rejection (predecessor review: sso-issuer-normalization).
-  const ssoUrl = (env.SOR_SSO_URL ?? "").trim().replace(/\/+$/, "");
-  const resourceUrl = (env.SOR_MCP_RESOURCE_URL ?? "").trim();
+  const ssoUrl = (env.KSOR_SSO_URL ?? "").trim().replace(/\/+$/, "");
+  const resourceUrl = (env.KSOR_MCP_RESOURCE_URL ?? "").trim();
   if (ssoUrl === "" || resourceUrl === "") return null;
-  const allowedAudiences = (env.SOR_JWT_ALLOWED_AUDIENCES ?? "")
+  const allowedAudiences = (env.KSOR_JWT_ALLOWED_AUDIENCES ?? "")
     .split(",")
     .map((a) => a.trim())
     .filter((a) => a !== "");
-  const issuer = (env.SOR_SSO_ISSUER ?? "").trim() || null;
+  const issuer = (env.KSOR_SSO_ISSUER ?? "").trim() || null;
   return { ssoUrl, resourceUrl, allowedAudiences, issuer, jwksCacheTtlS: 3600 };
 }
 
@@ -130,24 +130,24 @@ function configFromEnv(env: Env): AuthConfig | null {
  * Decide the boot posture from env. Fail-closed: an incomplete SSO env (a
  * deploy edit that drops one var — `--set-env-vars` REPLACES the whole map)
  * must never silently boot the PUBLIC door unauthenticated, unmetered, and
- * audit-anonymous. Explicit SOR_AUTH_DISABLED=1 is the only unauthenticated
+ * audit-anonymous. Explicit KSOR_AUTH_DISABLED=1 is the only unauthenticated
  * path.
  */
 export function buildAuth(env: Env = process.env, deps: VerifierDeps = {}): Auth {
   const warn = deps.warn ?? defaultWarn;
-  const disabled = env.SOR_AUTH_DISABLED === "1";
+  const disabled = env.KSOR_AUTH_DISABLED === "1";
   const config = configFromEnv(env);
   if (disabled) {
     if (config !== null) {
-      warn("auth DISABLED via SOR_AUTH_DISABLED despite SSO config — UNAUTHENTICATED (dev)");
+      warn("auth DISABLED via KSOR_AUTH_DISABLED despite SSO config — UNAUTHENTICATED (dev)");
     }
     return { mode: "disabled" };
   }
   if (config === null) {
     throw new AuthConfigError(
-      "auth is not configured (SOR_SSO_URL / SOR_MCP_RESOURCE_URL unset) and SOR_AUTH_DISABLED " +
+      "auth is not configured (KSOR_SSO_URL / KSOR_MCP_RESOURCE_URL unset) and KSOR_AUTH_DISABLED " +
         "is not '1' — refusing to boot unauthenticated. Set both SSO env vars, or set " +
-        "SOR_AUTH_DISABLED=1 for a deliberate dev/unauthenticated run.",
+        "KSOR_AUTH_DISABLED=1 for a deliberate dev/unauthenticated run.",
     );
   }
   if (config.allowedAudiences.length === 0) {
@@ -155,7 +155,7 @@ export function buildAuth(env: Env = process.env, deps: VerifierDeps = {}): Auth
     // jwtVerify), so an empty allowlist would accept ANY token our SSO signed —
     // a token minted for another app reads this record (confused deputy).
     throw new AuthConfigError(
-      "auth is ON but SOR_JWT_ALLOWED_AUDIENCES is empty — set it to this server's MCP URL " +
+      "auth is ON but KSOR_JWT_ALLOWED_AUDIENCES is empty — set it to this server's MCP URL " +
         "(fail-closed: an unset audience allowlist would accept any SSO-signed token).",
     );
   }

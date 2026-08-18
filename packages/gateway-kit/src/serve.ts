@@ -27,26 +27,26 @@ export function requireEnv(env: Env, name: string): string {
 }
 
 /**
- * Host: SOR_MCP_HOST, else 0.0.0.0 only when $PORT is set, else loopback.
- * Port: SOR_MCP_PORT, else $PORT, else 8080.
+ * Host: KSOR_MCP_HOST, else 0.0.0.0 only when $PORT is set, else loopback.
+ * Port: KSOR_MCP_PORT, else $PORT, else 8080.
  *
  * Bind ALL interfaces only in a container ($PORT is the platform's contract —
  * Cloud Run and friends set it and route traffic there, possibly non-8080, so
  * honoring it explicitly keeps a non-default containerPort from blackholing
  * the service). A local/dev run binds loopback so an auth-off dev run cannot
  * expose the server on the LAN: a PUBLIC bind must be a DELIBERATE act —
- * SOR_MCP_HOST set by the operator, or the container platform's $PORT
+ * KSOR_MCP_HOST set by the operator, or the container platform's $PORT
  * (predecessor review: bind-all-interfaces-dev, where a recomposition
  * regressed this to unconditional 0.0.0.0).
  */
 export function resolveBind(env: Env = process.env): Bind {
-  const host = env.SOR_MCP_HOST || (env.PORT ? "0.0.0.0" : "127.0.0.1");
-  const source = env.SOR_MCP_PORT ? "SOR_MCP_PORT" : "PORT";
-  const raw = (env.SOR_MCP_PORT || env.PORT || "8080").trim();
+  const host = env.KSOR_MCP_HOST || (env.PORT ? "0.0.0.0" : "127.0.0.1");
+  const source = env.KSOR_MCP_PORT ? "KSOR_MCP_PORT" : "PORT";
+  const raw = (env.KSOR_MCP_PORT || env.PORT || "8080").trim();
   if (!/^\d+$/.test(raw) || Number(raw) > 65535) {
     throw new Error(
       `${source}=${JSON.stringify(raw)} is not a valid port — set an integer 0..65535 ` +
-        "(the container platform's contract is $PORT; SOR_MCP_PORT overrides for local/dev)",
+        "(the container platform's contract is $PORT; KSOR_MCP_PORT overrides for local/dev)",
     );
   }
   return { host, port: Number(raw) };

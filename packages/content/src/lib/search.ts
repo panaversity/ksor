@@ -178,7 +178,7 @@ export interface SearchScope {
 export async function hybridSearch(
   client: pg.PoolClient,
   scope: SearchScope,
-  queryVector: readonly number[],
+  queryVector: readonly number[] | string,
   query: string,
   limit: number,
   poolPerArm = 30,
@@ -189,7 +189,7 @@ export async function hybridSearch(
     values: [
       scope.tenantId,
       scope.corpusId,
-      vectorLiteral(queryVector),
+      typeof queryVector === "string" ? queryVector : vectorLiteral(queryVector),
       query,
       scope.kinds,
       poolPerArm,
@@ -219,7 +219,7 @@ export async function keywordSearch(
 export async function topOneScore(
   client: pg.PoolClient,
   scope: SearchScope,
-  queryVector: readonly number[],
+  queryVector: readonly number[] | string,
 ): Promise<number | null> {
   const result = await client.query({
     text: TOP_ONE_SQL,
@@ -227,7 +227,7 @@ export async function topOneScore(
     values: [
       scope.tenantId,
       scope.corpusId,
-      vectorLiteral(queryVector),
+      typeof queryVector === "string" ? queryVector : vectorLiteral(queryVector),
       scope.kinds,
       scope.pinnedGeneration,
     ],

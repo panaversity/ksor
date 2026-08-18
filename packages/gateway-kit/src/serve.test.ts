@@ -1,5 +1,5 @@
 // The bind contract from serve.py: loopback unless the bind is a deliberate
-// public act ($PORT from a container platform, or an explicit SOR_MCP_HOST).
+// public act ($PORT from a container platform, or an explicit KSOR_MCP_HOST).
 
 import { describe, expect, it } from "vitest";
 
@@ -14,16 +14,16 @@ describe("resolveBind — the loopback auto-gate", () => {
     expect(resolveBind({ PORT: "9090" })).toEqual({ host: "0.0.0.0", port: 9090 });
   });
 
-  it("SOR_MCP_HOST overrides explicitly, in both postures", () => {
-    expect(resolveBind({ SOR_MCP_HOST: "10.0.0.5" })).toEqual({ host: "10.0.0.5", port: 8080 });
-    expect(resolveBind({ SOR_MCP_HOST: "127.0.0.1", PORT: "9090" })).toEqual({
+  it("KSOR_MCP_HOST overrides explicitly, in both postures", () => {
+    expect(resolveBind({ KSOR_MCP_HOST: "10.0.0.5" })).toEqual({ host: "10.0.0.5", port: 8080 });
+    expect(resolveBind({ KSOR_MCP_HOST: "127.0.0.1", PORT: "9090" })).toEqual({
       host: "127.0.0.1",
       port: 9090,
     });
   });
 
-  it("SOR_MCP_PORT beats $PORT (local/dev override)", () => {
-    const bind = resolveBind({ SOR_MCP_PORT: "8123", PORT: "9090" });
+  it("KSOR_MCP_PORT beats $PORT (local/dev override)", () => {
+    const bind = resolveBind({ KSOR_MCP_PORT: "8123", PORT: "9090" });
     expect(bind.port, `bind: ${JSON.stringify(bind)}`).toBe(8123);
     expect(bind.host, "the $PORT container signal still decides the host").toBe("0.0.0.0");
   });
@@ -33,19 +33,19 @@ describe("resolveBind — the loopback auto-gate", () => {
   });
 
   it("a malformed port fails loud, naming the variable", () => {
-    expect(() => resolveBind({ SOR_MCP_PORT: "eight" })).toThrowError(/SOR_MCP_PORT/);
+    expect(() => resolveBind({ KSOR_MCP_PORT: "eight" })).toThrowError(/KSOR_MCP_PORT/);
     expect(() => resolveBind({ PORT: "70000" })).toThrowError(/PORT/);
   });
 });
 
 describe("requireEnv — fail loud, never half-boot", () => {
   it("returns the trimmed value when present", () => {
-    expect(requireEnv({ SOR_X: "  value  " }, "SOR_X")).toBe("value");
+    expect(requireEnv({ KSOR_X: "  value  " }, "KSOR_X")).toBe("value");
   });
 
   it("throws the operator message when missing or blank", () => {
-    expect(() => requireEnv({}, "SOR_INSTANCE_URI")).toThrowError(RequiredEnvError);
-    expect(() => requireEnv({}, "SOR_INSTANCE_URI")).toThrowError("SOR_INSTANCE_URI is required");
-    expect(() => requireEnv({ SOR_X: "   " }, "SOR_X")).toThrowError("SOR_X is required");
+    expect(() => requireEnv({}, "KSOR_INSTANCE_URI")).toThrowError(RequiredEnvError);
+    expect(() => requireEnv({}, "KSOR_INSTANCE_URI")).toThrowError("KSOR_INSTANCE_URI is required");
+    expect(() => requireEnv({ KSOR_X: "   " }, "KSOR_X")).toThrowError("KSOR_X is required");
   });
 });

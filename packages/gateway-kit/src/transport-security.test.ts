@@ -6,12 +6,12 @@ describe("transportSecurityFromEnv — the opt-in DNS-rebind gate", () => {
   it("is null when both vars are unset or empty (no gate; the edge fronts the service)", () => {
     expect(transportSecurityFromEnv({})).toBeNull();
     expect(
-      transportSecurityFromEnv({ SOR_ALLOWED_HOSTS: "", SOR_ALLOWED_ORIGINS: " , ," }),
+      transportSecurityFromEnv({ KSOR_ALLOWED_HOSTS: "", KSOR_ALLOWED_ORIGINS: " , ," }),
     ).toBeNull();
   });
 
   it("arms the gate when hosts are set", () => {
-    expect(transportSecurityFromEnv({ SOR_ALLOWED_HOSTS: "content.example.org" })).toEqual({
+    expect(transportSecurityFromEnv({ KSOR_ALLOWED_HOSTS: "content.example.org" })).toEqual({
       enableDnsRebindingProtection: true,
       allowedHosts: ["content.example.org"],
       allowedOrigins: [],
@@ -19,7 +19,7 @@ describe("transportSecurityFromEnv — the opt-in DNS-rebind gate", () => {
   });
 
   it("arms the gate when only origins are set", () => {
-    expect(transportSecurityFromEnv({ SOR_ALLOWED_ORIGINS: "https://claude.ai" })).toEqual({
+    expect(transportSecurityFromEnv({ KSOR_ALLOWED_ORIGINS: "https://claude.ai" })).toEqual({
       enableDnsRebindingProtection: true,
       allowedHosts: [],
       allowedOrigins: ["https://claude.ai"],
@@ -28,8 +28,8 @@ describe("transportSecurityFromEnv — the opt-in DNS-rebind gate", () => {
 
   it("comma-splits, trims, and drops empties", () => {
     const settings = transportSecurityFromEnv({
-      SOR_ALLOWED_HOSTS: " a.example , b.example ,,",
-      SOR_ALLOWED_ORIGINS: "https://a.example,  https://b.example",
+      KSOR_ALLOWED_HOSTS: " a.example , b.example ,,",
+      KSOR_ALLOWED_ORIGINS: "https://a.example,  https://b.example",
     });
     expect(settings, `settings: ${JSON.stringify(settings)}`).toEqual({
       enableDnsRebindingProtection: true,

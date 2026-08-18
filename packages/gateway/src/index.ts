@@ -1,3 +1,5 @@
-// Placeholder until the conversion lands (decision 11); replaced by the
-// real module in this same PR.
-export const KERNEL_PACKAGE: string = "@panaversity/ksor-gateway";
+export { buildServer, SERVER_NAME } from "./server.js";
+export { compose, type Composition } from "./compose.js";
+export { main, GATEWAY_VERSION } from "./main.js";
+export { runHttp } from "./http.js";
+export { runStdio } from "./stdio.js";

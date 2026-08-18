@@ -5,6 +5,9 @@
   "description": "The KSoR MCP gateway: search, outline, read over a governed record — stdio and stateless Streamable HTTP.",
   "license": "Apache-2.0",
   "author": "Panaversity",
+  "bin": {
+    "ksor-gateway": "./dist/cli.mjs"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -23,10 +26,12 @@
     "@panaversity/ksor-content": "workspace:*",
     "@panaversity/ksor-gateway-kit": "workspace:*",
     "@panaversity/ksor-platform": "workspace:*",
+    "pg": "^8.23.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.21.0",
     "tsdown": "0.22.14",
     "typescript": "catalog:",
     "vitest": "catalog:"

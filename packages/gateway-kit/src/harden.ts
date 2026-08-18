@@ -38,15 +38,15 @@ export type HardenOptions = {
    * bare-PRM redirect points at it. Default "/mcp".
    */
   resourcePath?: string;
-  /** Explicit cap; overrides SOR_MAX_BODY_BYTES. */
+  /** Explicit cap; overrides KSOR_MAX_BODY_BYTES. */
   maxBodyBytes?: number;
-  /** Read for SOR_MAX_BODY_BYTES when `maxBodyBytes` is not given. */
+  /** Read for KSOR_MAX_BODY_BYTES when `maxBodyBytes` is not given. */
   env?: Env;
   warn?: WarnLog;
 };
 
 // 1 MB default — MCP JSON-RPC tool calls are tiny; this only sheds abusive
-// bodies. Env-tunable (SOR_MAX_BODY_BYTES), floor 1024. Values copied exactly
+// bodies. Env-tunable (KSOR_MAX_BODY_BYTES), floor 1024. Values copied exactly
 // from harden.py.
 const DEFAULT_MAX_BODY_BYTES = 1_000_000;
 const BARE_PRM = "/.well-known/oauth-protected-resource";
@@ -113,7 +113,7 @@ export function harden(app: HttpHandler, options: HardenOptions = {}): HttpHandl
   const resourcePath = options.resourcePath ?? "/mcp";
   const maxBodyBytes =
     options.maxBodyBytes ??
-    envInt(options.env ?? process.env, "SOR_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES, {
+    envInt(options.env ?? process.env, "KSOR_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES, {
       minimum: 1024,
       warn: options.warn ?? defaultWarn,
     });

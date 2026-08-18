@@ -67,8 +67,8 @@ export interface ServiceContext {
   readonly ring: KeyRing;
   /** sha256 of instance.md — the deployment binding snapshots carry. */
   readonly instanceDigest: string;
-  /** The query-embed pipeline (cache + breaker + timeout live behind it). */
-  readonly embedQuery: (query: string) => Promise<number[]>;
+  /** The query-embed pipeline (cache + breaker + timeout live behind it); returns a pgvector literal or a raw vector. */
+  readonly embedQuery: (query: string) => Promise<readonly number[] | string>;
   /** The verified caller, or null → audited as "anonymous". */
   readonly actor?: () => string | null;
 }
@@ -169,7 +169,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   // Query embed BEFORE any DB connection; any failure except an empty
   // query DEGRADES to keyword-only — never a 500 (embed outage is the
   // provider's incident, not the record's).
-  let queryVector: number[] | null = null;
+  let queryVector: readonly number[] | string | null = null;
   let degradedReason: string | undefined;
   try {
     queryVector = await ctx.embedQuery(query);

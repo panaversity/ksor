@@ -90,6 +90,9 @@ importers:
       '@panaversity/ksor-platform':
         specifier: workspace:*
         version: link:../platform
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -97,6 +100,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      '@types/pg':
+        specifier: ^8.21.0
+        version: 8.21.0
       tsdown:
         specifier: 0.22.14
         version: 0.22.14(publint@0.3.23)(tsx@4.23.12)(typescript@7.0.2)

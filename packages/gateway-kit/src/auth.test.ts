@@ -21,9 +21,9 @@ import {
 } from "./auth.js";
 
 const SSO_ENV = {
-  SOR_SSO_URL: "https://auth.example.org",
-  SOR_MCP_RESOURCE_URL: "https://content.example.org/mcp",
-  SOR_JWT_ALLOWED_AUDIENCES: "https://content.example.org/mcp, https://alt.example.org/mcp",
+  KSOR_SSO_URL: "https://auth.example.org",
+  KSOR_MCP_RESOURCE_URL: "https://content.example.org/mcp",
+  KSOR_JWT_ALLOWED_AUDIENCES: "https://content.example.org/mcp, https://alt.example.org/mcp",
 };
 
 function publicAuth(
@@ -48,25 +48,25 @@ describe("buildAuth postures (the smoke-test list)", () => {
     expect(auth.config.issuer).toBeNull();
   });
 
-  it("strips trailing slashes from SOR_SSO_URL (issuer derivation)", () => {
-    const auth = publicAuth({}, { ...SSO_ENV, SOR_SSO_URL: "https://auth.example.org///" });
+  it("strips trailing slashes from KSOR_SSO_URL (issuer derivation)", () => {
+    const auth = publicAuth({}, { ...SSO_ENV, KSOR_SSO_URL: "https://auth.example.org///" });
     expect(auth.config.ssoUrl).toBe("https://auth.example.org");
   });
 
   it("runs unauthenticated ONLY with the explicit opt-out", () => {
-    expect(buildAuth({ SOR_AUTH_DISABLED: "1" })).toEqual({ mode: "disabled" });
+    expect(buildAuth({ KSOR_AUTH_DISABLED: "1" })).toEqual({ mode: "disabled" });
   });
 
   it("the explicit opt-out beats SSO config, and warns", () => {
     const warn = vi.fn();
-    expect(buildAuth({ ...SSO_ENV, SOR_AUTH_DISABLED: "1" }, { warn })).toEqual({
+    expect(buildAuth({ ...SSO_ENV, KSOR_AUTH_DISABLED: "1" }, { warn })).toEqual({
       mode: "disabled",
     });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("UNAUTHENTICATED"));
   });
 
   it("partial SSO env fails closed, never serves open", () => {
-    const partial = { SOR_SSO_URL: "https://auth.example.org" }; // resource URL dropped
+    const partial = { KSOR_SSO_URL: "https://auth.example.org" }; // resource URL dropped
     expect(() => buildAuth(partial)).toThrowError(AuthConfigError);
     expect(() => buildAuth(partial)).toThrowError(/refusing to boot unauthenticated/);
   });
@@ -76,15 +76,15 @@ describe("buildAuth postures (the smoke-test list)", () => {
   });
 
   it("an empty audience allowlist refuses to boot (confused deputy)", () => {
-    const env = { ...SSO_ENV, SOR_JWT_ALLOWED_AUDIENCES: " , ," };
+    const env = { ...SSO_ENV, KSOR_JWT_ALLOWED_AUDIENCES: " , ," };
     expect(() => buildAuth(env)).toThrowError(AuthConfigError);
-    expect(() => buildAuth(env)).toThrowError(/SOR_JWT_ALLOWED_AUDIENCES/);
+    expect(() => buildAuth(env)).toThrowError(/KSOR_JWT_ALLOWED_AUDIENCES/);
   });
 
   it("only the literal '1' disables auth", () => {
-    expect(() => buildAuth({ SOR_AUTH_DISABLED: "true" })).toThrowError(AuthConfigError);
+    expect(() => buildAuth({ KSOR_AUTH_DISABLED: "true" })).toThrowError(AuthConfigError);
     expect(() =>
-      buildAuth({ ...SSO_ENV, SOR_AUTH_DISABLED: "0", SOR_JWT_ALLOWED_AUDIENCES: "" }),
+      buildAuth({ ...SSO_ENV, KSOR_AUTH_DISABLED: "0", KSOR_JWT_ALLOWED_AUDIENCES: "" }),
     ).toThrowError(AuthConfigError);
   });
 });

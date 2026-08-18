@@ -202,10 +202,10 @@ describe("request-body cap — chunked (no declared length)", () => {
 });
 
 describe("cap configuration", () => {
-  it("reads SOR_MAX_BODY_BYTES from the provided env", async () => {
+  it("reads KSOR_MAX_BODY_BYTES from the provided env", async () => {
     const { app } = appSpy();
     const { raw, res } = fakeRes();
-    await harden(app, { env: { SOR_MAX_BODY_BYTES: "2048" } })(
+    await harden(app, { env: { KSOR_MAX_BODY_BYTES: "2048" } })(
       fakeReq({ chunks: [Buffer.alloc(2049)] }),
       res,
     );
@@ -216,11 +216,11 @@ describe("cap configuration", () => {
     const warn = vi.fn();
     const { app, calls } = appSpy();
     const { raw, res } = fakeRes();
-    const hardened = harden(app, { env: { SOR_MAX_BODY_BYTES: "10" }, warn });
+    const hardened = harden(app, { env: { KSOR_MAX_BODY_BYTES: "10" }, warn });
     await hardened(fakeReq({ chunks: [Buffer.alloc(500)] }), res); // under the clamped 1024 floor
     expect(raw.statusCode).toBe(200);
     expect(calls).toHaveLength(1);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("SOR_MAX_BODY_BYTES"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("KSOR_MAX_BODY_BYTES"));
 
     const over = fakeRes();
     await hardened(fakeReq({ chunks: [Buffer.alloc(1025)] }), over.res);
@@ -230,7 +230,7 @@ describe("cap configuration", () => {
   it("an explicit maxBodyBytes option wins over env", async () => {
     const { app } = appSpy();
     const { raw, res } = fakeRes();
-    await harden(app, { maxBodyBytes: 2048, env: { SOR_MAX_BODY_BYTES: "1000000" } })(
+    await harden(app, { maxBodyBytes: 2048, env: { KSOR_MAX_BODY_BYTES: "1000000" } })(
       fakeReq({ headers: { "content-length": "4096" } }),
       res,
     );

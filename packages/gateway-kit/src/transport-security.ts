@@ -17,7 +17,7 @@ export type TransportSecuritySettings = {
 };
 
 /**
- * SOR_ALLOWED_HOSTS / SOR_ALLOWED_ORIGINS (comma-separated) → settings, or
+ * KSOR_ALLOWED_HOSTS / KSOR_ALLOWED_ORIGINS (comma-separated) → settings, or
  * null when both are unset (no gate; the deployment edge fronts the service).
  */
 export function transportSecurityFromEnv(env: Env = process.env): TransportSecuritySettings | null {
@@ -26,8 +26,8 @@ export function transportSecurityFromEnv(env: Env = process.env): TransportSecur
       .split(",")
       .map((item) => item.trim())
       .filter((item) => item !== "");
-  const allowedHosts = split(env.SOR_ALLOWED_HOSTS);
-  const allowedOrigins = split(env.SOR_ALLOWED_ORIGINS);
+  const allowedHosts = split(env.KSOR_ALLOWED_HOSTS);
+  const allowedOrigins = split(env.KSOR_ALLOWED_ORIGINS);
   if (allowedHosts.length === 0 && allowedOrigins.length === 0) return null;
   return { enableDnsRebindingProtection: true, allowedHosts, allowedOrigins };
 }
