@@ -40,8 +40,8 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry
   import fences worth verifying.
 - The `ksor init` scaffold (generated constitution, rules, corpus skills) —
-  designed fresh when `init` lands; the predecessor's templates are one input,
-  not the blueprint.
+  lands with `init`; the predecessor's templates convert under the decision-6
+  grant, adapted deliberately rather than copied blindly.
 
 Primitives design for the verbs: `research/primitives-proposal.md`.
 
@@ -50,12 +50,12 @@ Primitives design for the verbs: `research/primitives-proposal.md`.
 The Python-era SDK at
 [panaversity/zia-vsor-sdk](https://github.com/panaversity/zia-vsor-sdk)
 ships a working product (`vsor` 0.1.4 on PyPI, live demo at
-vsor-demo.vercel.app). **It is reference material, not authority**: this repo
-reads it for ideas and for its failure record
-(`research/handover-vsor-to-ksor.md`) and decides independently — no code,
-Python or TypeScript, is ported without an independent case — and its Python
-packages additionally may not be ported at all while their copy grant remains
-unwritten (the predecessor's own extraction rule).
+vsor-demo.vercel.app). **It is a source to mine, not an authority to
+follow**: the owner granted taking its work — Python included — and
+converting it to TypeScript (AGENTS.md decision 6, 2026-08-18, retiring the
+handover's copy-grant blocker). Conversion is engineering-gated: nothing
+crosses without asking what it was for, and converted code lands with its own
+tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 ## Pending owner actions
 

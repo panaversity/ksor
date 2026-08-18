@@ -1,5 +1,11 @@
 # AGENTS.md
 
+The durable contract for working in this repository: what ksor is, the
+vocabulary, the decisions, the invariants, and how it is built and tested.
+Loaded every session, so it holds **only what stays true** — what is true this
+week lives in [`docs/status.md`](docs/status.md); the product pitch lives in
+[`README.md`](README.md), its only home.
+
 > CLAUDE.md is a symlink to this file. They are the same file: one contract for
 > every agent — human-readable and agent-readable, like everything else here.
 
@@ -12,17 +18,63 @@
    package (`packages/ksor/docs/`), and — once the site ships — its `llms.txt`
    and `/.well-known/mcp/server.json`. Agents finding ksor is how ksor gets used.
 
-## What this is
+## What this is, in one line
 
-ksor (`@panaversity/ksor`, CLI `ksor`) turns one governed markdown corpus into
-two synchronized surfaces: a static site for humans and an MCP surface for AI
-agents. Write "KSoR" in prose, `ksor` for the package and CLI.
+A CLI (`ksor` — the npm package is `@panaversity/ksor`) that compiles a folder
+of governed markdown into two surfaces — a static website for people and an MCP
+server for AI agents — with cited answers and honest abstention. It is not an
+agent framework; it is the knowledge layer agent frameworks read from.
 
-A Python-era predecessor (vsor) exists. It is **reference material, not
-authority**: read it for ideas and for the record of what failed
-(`research/handover-vsor-to-ksor.md`), then decide independently. Nothing is
-adopted here because the predecessor did it; nothing inherited is exempt from
-being rethought.
+**Which verbs are implemented is not recorded here.** This file describes what
+ksor _is_; `docs/status.md` holds what is built this week. One rule keeps the
+CLI itself the current answer: an unimplemented verb says so and exits `2`, an
+unknown word is refused with exit `1` — so no document has to be kept in step
+with the binary.
+
+A Python-era predecessor (vsor, `panaversity/zia-vsor-sdk`) proved much of the
+design. Its work may be taken and converted to TypeScript (decision 6), but it
+is a source to mine, not an authority to follow: nothing crosses without asking
+what it was for, and converted code re-earns its place with tests here.
+
+## What we claim, and to whom
+
+Positioning, recorded because a session that re-derives it tends to describe
+the machinery instead of the value:
+
+- **A system of record is where the official version lives.** When the ledger
+  and a spreadsheet disagree, the ledger wins. Businesses have had them for
+  decades; **AI never did** — it answers from everything it has ever read,
+  which is exactly why it cannot tell you which of its sentences were checked.
+  KSoR is that record, for institutional knowledge.
+- **Vendor-free is the ownership argument.** The agent surface speaks MCP, an
+  open standard: one corpus will answer in any assistant, agent framework, or
+  worker the owner writes. What a customer owns is the source; runtimes are
+  interchangeable. Never position ksor as an integration with one assistant.
+- **The interesting problem is not retrieval.** Chunking, embedding, and
+  hybrid search are commodity. Whether an agent can be _trusted_ is decided by
+  the governance of what it reads — provenance, something citable, and a
+  measured floor under which it declines. Lead with that, not the pipeline.
+- **Agents are the operator, not the audience for a manual.** The owner tells
+  the coding agent they already use; scaffolded projects will therefore ship
+  skills and rules as a product surface, not documentation.
+- **Out of the box the owner is meant to touch knowledge only** — plain
+  markdown, in any language they write in.
+
+## Vocabulary
+
+Used precisely; do not repurpose.
+
+| Term                | Means                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| **corpus**          | the governed markdown under `knowledge/` — the source of truth                               |
+| **instance**        | one deployment configured (`instance.md`): corpus, floors, budgets. **Not governance**       |
+| **build**           | one execution of `ksor build`, identified by a `build_id`                                    |
+| **generation**      | the monotonic version of published content — what a citation pins                            |
+| **build.lock.json** | the committed record of a build: what was published, from which commit, with which toolchain |
+| **surface**         | something that serves the corpus — the website and the MCP server                            |
+| **scaffold**        | what `ksor init` writes into an adopter's repo — owned by the adopter (decision 4)           |
+| **level**           | how much governance a project has climbed to, 0–4 — a ladder, not a gate                     |
+| **abstain**         | the corpus does not cover this — a correct answer, never an error                            |
 
 ## Repository layout
 
@@ -59,7 +111,8 @@ handing off.
 ## Decisions
 
 Recorded here, in the same change that acts on them; each names what would
-reverse it. **Work that contradicts one stops and goes back to a human.**
+reverse it, and a reversed decision keeps its entry with a revision note.
+**Work that contradicts one stops and goes back to a human.**
 
 1. **TypeScript and npm are the front door.** The site toolchain must execute
    on the adopter's machine, so Node is a prerequisite no other runtime can
@@ -79,16 +132,34 @@ reverse it. **Work that contradicts one stops and goes back to a human.**
    (never depend on its compiler API before 7.1 — guard rule 6), Node ≥24,
    pnpm exact-pinned, pure ESM, tsdown, vitest tiers, oxlint+oxfmt, changesets
    with npm trusted publishing. Reversed per-pin when a recorded caveat fires.
+6. **Predecessor conversion is granted** (owner, 2026-08-18): Apache-2.0
+   covers the predecessor work end to end, and the owner has granted taking it
+   — Python included — and converting it to TypeScript. This retires the
+   copy-grant blocker the handover carried. Conversion is engineering-gated,
+   not licence-gated: ask what a mechanism was for before carrying it, and
+   converted code lands with its own tests. Not reversible (a recorded grant).
+7. **Product design decisions adopted from the predecessor** under decision 6
+   — each individually reversible with new evidence, recorded here:
+   **conversation is the interface** (the human runs `ksor init <name>` once,
+   then talks to the coding agent they already use; CLI verbs are for the
+   agent); **serving fails safe** (local serve binds loopback with auth off; a
+   public bind fails closed unless auth is configured or unauthenticated
+   serving is explicitly flagged — "disabled by default" must never silently
+   become an open server); **the governance level is derived, never declared**
+   (tools report the level the governance artifacts achieve; no `governance:`
+   key in `instance.md`); **no empty scaffolded directories** (an empty
+   directory is an unanswered question in the adopter's repo — directories
+   appear when the ladder or the work demands them); **the site is preview and
+   review, not an editor** (the agent writes; the human checks).
 
 **Open questions — decide independently when the work arrives:** how retrieval
-and abstention are implemented for `serve` (reimplement in TS is the default
-posture; the predecessor's Python kernel is reference only — revision note:
-this was recorded as settled "stays Python" on 2026-08-17 and reversed on
-2026-08-18 when the predecessor was demoted to reference), and the site shell
-(Docusaurus vs Fumadocs — evidence in `research/primitives-proposal.md` §4,
-decide before the site slice). PyPI `ksor` is left unclaimed on purpose (a
-PyPI pending publisher reserves nothing — only an upload claims a name);
-revisit only if the exposure changes.
+and abstention are implemented for `serve` — reimplement in TS or convert the
+predecessor kernel's logic (decision 6 permits either; revision note: this was
+recorded as settled "stays Python" on 2026-08-17, reversed 2026-08-18) — and
+the site shell (Docusaurus vs Fumadocs — evidence in
+`research/primitives-proposal.md` §4, decide before the site slice). PyPI
+`ksor` is left unclaimed on purpose (a PyPI pending publisher reserves nothing
+— only an upload claims a name); revisit only if the exposure changes.
 
 ## Product principles
 
@@ -96,7 +167,8 @@ revisit only if the exposure changes.
    product; for a knowledge system of record, the docs are the product twice
    over.
 2. **One source, two surfaces.** The site and the MCP surface must render the
-   same corpus build — never let them read different truths.
+   same corpus build — never let them read different truths. Adding a surface
+   must never require editing a corpus.
 3. **Identity derives from file path.** A doc's path is its ID, its site route,
    and its MCP resource URI. No authored `id:`/`name:` fields — the corpus
    check rejects them.
@@ -109,9 +181,32 @@ revisit only if the exposure changes.
 6. **Provenance is load-bearing — and provenance is not correctness.** Every
    build must record the exact corpus that produced it (`build.lock.json`,
    lands with `ksor build`); every answer must trace to a governed source.
-   Never sell a who-said-when mechanism as a rightness one.
-7. **Discoverability determines whether agents find you at all**: bundled docs,
+   Provenance proves who-said-when; the expert judgment of whether a source is
+   right is a separate mechanism — never sell one as the other.
+7. **Governance is a ladder, not a gate.** Level 0 works immediately; projects
+   climb only as far as their domain needs. Demanding level 4 of a level-0
+   project is a bug, not rigour.
+8. **Discoverability determines whether agents find you at all**: bundled docs,
    `llms.txt`, an MCP registry entry, a typed SDK.
+
+## Product invariants
+
+Bought with measurements in the predecessor; they bind each slice of code as
+it lands here, and tests assert them from day one of that slice:
+
+- **The generation is the authorization.** Every citation carries it; a
+  surface refuses content whose generation is not published.
+- **Fail closed — once a floor is declared.** A declared-but-uncalibrated
+  floor refuses. A corpus that declares no floor has the gate off, and the
+  surface says so honestly (uncalibrated — will not refuse out-of-corpus
+  questions). Honest absence, never silent weakness.
+- **Never copy a calibrated constant between corpora.** Recalibrate; record
+  the measurement and its date beside the number — and record negative results
+  beside the constant they explain.
+- **Zero chunk overlap.** Concatenating a node's chunks in order reproduces
+  the body byte-exact.
+- **Reproducibility is a testable claim.** Same corpus tree + same toolchain
+  ⇒ same `build_id`. Test by building twice and diffing `build.lock.json`.
 
 ## How we work
 
@@ -125,17 +220,33 @@ revisit only if the exposure changes.
    library functions (the boundary suite enforces that nothing imports it).
    Prefer composing what exists — net-new code states why composition failed.
 3. **Never write the present tense about behaviour that does not run.** If it
-   is not built, say "will".
+   is not built, say "will". This is the rule that protects all the others.
 4. **One fact, one file** — everywhere else is a pointer.
 5. **Cite `file:line` against pinned SHAs, or say you do not know.**
 6. **Supersession is visible.** A reversed decision keeps its entry and gains a
    revision note; superseded documents live in git history, not the working
    tree.
 7. **Smallest change that proves the next assumption.**
-8. **One obvious way.** A golden path is a compatibility guarantee for
-   sampling agents.
+8. **One obvious way.** Agents sample across options; a golden path is a
+   compatibility guarantee.
 9. **Never carry a mechanism across without asking what it was for** — from
    the predecessor or anywhere else.
+10. **Governs acts, not artifacts.** Ask of every mechanism: which act does it
+    constrain, who performs it, and what row exists afterwards proving they
+    did — never merely what field it adds to a register. Rights checked at
+    ingest but not at serving, approval attached to a corpus but not to an
+    answer — those fail this test.
+11. **Every change names its business claim** — the promise in "What we claim"
+    it serves. Work that cannot name which claim it serves does not get built.
+
+**Specs — where they count, never for small things.** A change gets a spec at
+`specs/<area>/<feature>/spec.md` only when it alters a public surface (CLI
+verbs, scaffold contents, MCP tools, `build.lock.json`, response envelopes),
+crosses a package boundary, is expensive to reverse, or will be built
+unattended by an agent. A spec is one page: status, the business claim it
+serves, the observable contract, acceptance, out-of-scope. Where spec and code
+disagree, the code wins and the spec is corrected in the same commit. `specs/`
+appears with the first spec, never before.
 
 ## Coding principles
 
@@ -165,10 +276,17 @@ assertion.
   fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
   tmp dirs (<15s)
-- Agent evals land with `ksor serve`: fixture corpus + prompt + assertions,
-  run baseline vs with-MCP; pass = the correct answer **with a citation**, and
-  every suite includes an out-of-corpus question whose only passing answer is
-  the abstention. CI-only — they spend model tokens.
+
+Agent evals land with `ksor serve` (CI-only — they spend model tokens), in
+three classes, and being explicit about which class gates is the design:
+**behavioural** evals gate (abstains out-of-corpus, citations resolve,
+unpublished generations never served); **relevance** evals are reported, never
+gating — their gold is generated from the corpus under test, so a wrong rule
+would generate a gold question that blesses the wrong rule; **correctness**
+evals are externally authored and ratchet — the baseline may only grow.
+Out-of-corpus probes must include scope-adjacent near-misses, not only
+far-domain questions. Every suite includes at least one question whose only
+passing answer is the abstention.
 
 Three rules paid for with shipped defects (post-mortems in
 `research/handover-vsor-to-ksor.md`):
@@ -180,8 +298,7 @@ Three rules paid for with shipped defects (post-mortems in
 ## Documentation
 
 Update docs in the same PR as the behavior change; run `pnpm check:corpus`
-before handing off. `docs/status.md` is the only authority on implemented
-functionality — never let the README outrun it.
+before handing off.
 
 Do not rely on training data for claims about ksor. In order: 1 source, types,
 and tests · 2 real CLI output · 3 existing docs · 4 merged PRs and the
@@ -228,11 +345,18 @@ Imperative, concise commit subjects. PRs describe problem → solution →
 behavior for a reviewer, not a file list. Leave PRs in draft; a human marks
 ready.
 
-## Definition of done
+## Authority, and definition of done
 
-Red tests written first are green; acceptance passes on a clean machine; any
-document the change made false was corrected in the same commit; review
-findings were fixed or recorded, never quietly dropped.
+1. **The code beats every document.** Where they disagree, correct the
+   document in the same commit.
+2. **This file** is authoritative on vocabulary, decisions, invariants, and
+   process.
+3. **`docs/status.md`** is the only authority on what is actually built.
+4. **Superseded documents live in git history, not the working tree.**
+
+Done means: red tests written first are green; acceptance passes on a clean
+machine; any document the change made false was corrected in the same commit;
+review findings were fixed or recorded, never quietly dropped.
 
 ## Do not
 
@@ -242,9 +366,11 @@ findings were fixed or recorded, never quietly dropped.
 - Do not author `id:`/`name:` fields where the path is the identity.
 - Do not edit guard baselines upward, or ALLOWED graphs without review.
 - Do not commit `.only` or skipped tests (guard rule 7 rejects them).
-- Do not port predecessor code without an independent case for it — and never
-  its Python code while that code's copy grant remains unwritten
-  (`research/handover-vsor-to-ksor.md`). Ideas cross freely; code must re-earn
-  its place.
+- Do not carry a predecessor mechanism across without asking what it was for,
+  and never without tests here — conversion is granted (decision 6), blind
+  copying is not.
+- Do not create `knowledge/`, `governance/`, or `instance.md` at this repo's
+  root — those belong to scaffolded projects (the fixture lives under
+  `workbench/`).
 - Do not create GitHub issues/comments or publish packages on your own
   initiative.

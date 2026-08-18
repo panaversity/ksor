@@ -60,6 +60,9 @@ commands.
   (its `docs/extraction.md:11-22`): "Python side (`sor-agentfactory/packages/*`)
   — still not granted. Read and cite freely; do not move code until it is."
   The JS half was granted 2026-08-13 and shipped.
+  _Resolved 2026-08-18: the owner granted the whole body of predecessor work
+  for conversion to TypeScript — recorded as AGENTS.md decision 6. This item
+  is kept for the record; it no longer blocks anything._
 - **Part A, upstream — tell them today.** Five PRs in flight in
   sor-agentfactory make sor-content embedding-provider-agnostic so it could
   cross into a _Python_ framework. The destination changed; their value drops
