@@ -2,7 +2,6 @@
 # look for shared dependency versions (see AGENTS.md).
 packages:
   - packages/*
-  - tools/*
 
 catalog:
   # TypeScript 7 = the native (Go) compiler. It has no stable programmatic API

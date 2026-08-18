@@ -23,11 +23,11 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
   (native compiler), pure-ESM package build via tsdown, vitest unit +
   integration tiers, oxlint + oxfmt, minimal turbo, changesets with npm
   trusted publishing, CI with SHA-pinned actions.
-- **Governance machinery**: AGENTS.md constitution (CLAUDE.md symlinks to it),
-  `docs/decisions.md` settled-decision ledger, guard invariants with a
-  shrink-only baseline (`pnpm guard`), corpus integrity checks
-  (`pnpm check:corpus`), package-boundary tests at baseline zero, and five
-  repo-maintenance skills under `.agents/skills/`.
+- **Governance machinery**: AGENTS.md constitution (CLAUDE.md symlinks to it)
+  carrying the decision record, guard invariants with a shrink-only baseline
+  (`pnpm guard`), corpus integrity checks (`pnpm check:corpus`),
+  package-boundary tests at baseline zero, and two repo-maintenance skills
+  under `.agents/skills/` (`implement-spec`, `find-skills`).
 - **Fixture**: `workbench/example-corpus/` — a tiny governed corpus exercising
   the same rules adopters will live under.
 
@@ -35,11 +35,11 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
 
 - `ksor init` / `dev` / `build` / `serve` — the verbs themselves.
 - The MCP agent surface and the human site surface.
-- `build.lock.json` provenance records (format 2 crosses from the
-  predecessor when `ksor build` lands).
-- The agent-eval harness (`evals/README.md` holds the contract).
-- The `ksor init` scaffold: constitution, rules, and ~14 corpus skills cross
-  from the predecessor's templates at implementation time.
+- Build provenance records (`build.lock.json`) — designed with `ksor build`.
+- The agent-eval harness (contract in AGENTS.md → Testing).
+- The `ksor init` scaffold (generated constitution, rules, corpus skills) —
+  designed fresh when `init` lands; the predecessor's templates are one input,
+  not the blueprint.
 
 Primitives design for the verbs: `research/primitives-proposal.md`.
 
@@ -47,18 +47,13 @@ Primitives design for the verbs: `research/primitives-proposal.md`.
 
 The Python-era SDK at
 [panaversity/zia-vsor-sdk](https://github.com/panaversity/zia-vsor-sdk)
-ships a working product — `vsor` **0.1.4** on PyPI, CI green (330 unit + 28
-boundary + 42 browser + 25 hosting checks), live demo at
-vsor-demo.vercel.app. Its assets cross per
-`research/handover-vsor-to-ksor.md`.
-
-## Blocked
-
-- **Python copy grant** — the predecessor's own rule
-  (its `docs/extraction.md`): the Python packages
-  (`sor-agentfactory/packages/*`) are **read and cite freely; do not move code
-  until the grant is written**. The JS half was granted 2026-08-13. Until the
-  Python grant exists in writing, no kernel file crosses.
+ships a working product (`vsor` 0.1.4 on PyPI, live demo at
+vsor-demo.vercel.app). **It is reference material, not authority**: this repo
+reads it for ideas and for its failure record
+(`research/handover-vsor-to-ksor.md`) and decides independently — no code,
+Python or TypeScript, is ported without an independent case. For
+completeness: its Python packages also carry an unwritten copy grant, which
+is moot under this posture.
 
 ## Pending owner actions
 

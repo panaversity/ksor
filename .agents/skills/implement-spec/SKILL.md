@@ -11,7 +11,7 @@ metadata:
 The spec is the contract; this skill is how the contract becomes code without losing anything on
 the way. It exists because prose discipline drifts and checklists don't — follow it in order.
 (Until `specs/` exists here, "the spec" is the plan or decision the change implements —
-`research/` plans and `docs/decisions.md` entries count.)
+`research/` plans and AGENTS.md → Decisions entries count.)
 
 ## 1 · Breakdown before code
 

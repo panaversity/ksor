@@ -6,6 +6,13 @@ last_updated: 2026-08-18
 
 # ksor base environment — the plan
 
+> **Revision note (2026-08-18):** implemented with owner-directed changes: the
+> decision record lives in AGENTS.md → Decisions (no separate docs/decisions.md);
+> the Tier-1 skills roster was cut to `implement-spec` + `find-skills`, with the
+> always-on rules folded into AGENTS.md; the shared tsconfig base moved to the
+> repo root (no `tools/` package); and the predecessor is treated as reference
+> material, not authority — inherited decisions are re-validated independently.
+
 Plan for the base environment of ksor: the AGENTS.md constitution, the agent-skills
 roster, and the TypeScript toolchain. Derived from studying fresh clones of
 vercel/eve, vercel/workflow, vercel/ai, and vercel/next.js (2026-08-17), plus a

@@ -16,30 +16,33 @@
 
 ksor (`@panaversity/ksor`, CLI `ksor`) turns one governed markdown corpus into
 two synchronized surfaces: a static site for humans and an MCP surface for AI
-agents. Write "KSoR" in prose, `ksor` for the package and CLI. It supersedes
-the Python-era `vsor` SDK (see `research/handover-vsor-to-ksor.md`); settled
-decisions and their reversal conditions live in `docs/decisions.md`.
+agents. Write "KSoR" in prose, `ksor` for the package and CLI.
+
+A Python-era predecessor (vsor) exists. It is **reference material, not
+authority**: read it for ideas and for the record of what failed
+(`research/handover-vsor-to-ksor.md`), then decide independently. Nothing is
+adopted here because the predecessor did it; nothing inherited is exempt from
+being rethought.
 
 ## Repository layout
 
-| Path                        | What it is                                                 |
-| --------------------------- | ---------------------------------------------------------- |
-| `packages/ksor/`            | the published package: CLI + SDK (MCP surface lands here)  |
-| `packages/ksor/docs/`       | user docs, shipped inside the npm tarball                  |
-| `tools/tsconfig/`           | shared strict tsconfig base — extend, don't fork           |
-| `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface       |
-| `evals/`                    | agent evals (contract in its README; harness not yet live) |
-| `docs/`                     | decisions.md (settled decisions) + status.md (what works)  |
-| `research/`                 | issue-backed plans; frontmatter is guard-enforced          |
-| `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)   |
-| `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest  |
+| Path                        | What it is                                                |
+| --------------------------- | --------------------------------------------------------- |
+| `packages/ksor/`            | the published package: CLI + SDK (MCP surface lands here) |
+| `packages/ksor/docs/`       | user docs, shipped inside the npm tarball                 |
+| `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface      |
+| `docs/status.md`            | the only authority on what is implemented (npm links it)  |
+| `research/`                 | plans and records; frontmatter is guard-enforced          |
+| `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)  |
+| `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest |
+| `tsconfig.base.json`        | the shared strict base — extend, don't fork               |
 
 ## Commands
 
 ```sh
 pnpm install              # respects the packageManager pin (pnpm 11)
 pnpm build                # tsdown via turbo (<10s)
-pnpm typecheck            # tsc --noEmit per package (<5s)
+pnpm typecheck            # tsc --noEmit, packages + scripts (<5s)
 pnpm lint                 # oxlint --fix (<1s)
 pnpm fmt                  # oxfmt (<1s)
 pnpm guard                # guard-invariants.mjs (<1s)
@@ -48,9 +51,39 @@ pnpm test:unit            # *.test.ts, colocated, pure (<3s)
 pnpm build && pnpm test:integration   # built artifacts + repo-tree suites (<15s)
 ```
 
-Run fmt/lint/typecheck freely — they are cheap. Run unit tests after material
-behavior changes. Treat local checks as advisory: CI is the source of truth —
-don't burn cycles making advisory gates pass before handing off.
+Run fmt/lint/typecheck freely — they are cheap. Treat local checks as advisory:
+CI is the source of truth — don't burn cycles making advisory gates pass before
+handing off.
+
+## Decisions
+
+Recorded here, in the same change that acts on them; each names what would
+reverse it. **Work that contradicts one stops and goes back to a human.**
+
+1. **TypeScript and npm are the front door.** The site toolchain must execute
+   on the adopter's machine, so Node is a prerequisite no other runtime can
+   hide; a second mandatory runtime buys the adopter nothing. Reversed if the
+   end user ever stops needing a local Node build.
+2. **Package `@panaversity/ksor`, command `ksor`.** Unscoped `ksor` is blocked
+   by npm's publish-time similarity gate (verified by a real `E403`; a registry
+   404 is not evidence of publishability). Not reversible.
+3. **Apache-2.0, whole repository.**
+4. **Corpus scaffolds are copy-into-repo** (the shadcn model, validated by our
+   own study of its mechanics): the adopter owns what `ksor init` emits;
+   updates are offered as diffs and applied only by explicit overwrite.
+   Reversed per-file if a scaffold file must stay framework-owned to preserve
+   a product guarantee.
+5. **Toolchain** per the `research/base-environment.md` §2 ledger: TS 7 native
+   (never depend on its compiler API before 7.1 — guard rule 6), Node ≥24,
+   pnpm exact-pinned, pure ESM, tsdown, vitest tiers, oxlint+oxfmt, changesets
+   with npm trusted publishing. Reversed per-pin when a recorded caveat fires.
+
+**Open questions — deliberately not settled, decide independently when the
+work arrives:** how retrieval and abstention are implemented for `serve`
+(reimplement in TS is the default posture; the predecessor's Python kernel is
+reference only), and the site shell (Docusaurus vs Fumadocs — evidence in
+`research/primitives-proposal.md` §4, decide before the site slice). PyPI
+`ksor` is left unclaimed on purpose; revisit only if the exposure changes.
 
 ## Product principles
 
@@ -67,8 +100,7 @@ don't burn cycles making advisory gates pass before handing off.
    (1 refused, 2 not implemented, 3 environment), and when refusals gain
    detail, the first stderr line is a stable machine-readable slug.
 5. **Abstention is a feature.** "Not in this corpus" is a correct answer, never
-   an error, never a licence to fall back on model knowledge. Every eval suite
-   asserts at least one abstention.
+   an error, never a licence to fall back on model knowledge.
 6. **Provenance is load-bearing — and provenance is not correctness.** Every
    build must record the exact corpus that produced it (`build.lock.json`,
    lands with `ksor build`); every answer must trace to a governed source.
@@ -78,30 +110,36 @@ don't burn cycles making advisory gates pass before handing off.
 
 ## How we work
 
-1. **Never write the present tense about behaviour that does not run.** If it
-   is not built, say "will" — this is the rule that protects all the others.
-2. **One fact, one file** — everywhere else is a pointer. (The predecessor once
-   carried one fact in four files; two had diverged.)
-3. **Cite `file:line` against pinned SHAs, or say you do not know.**
-4. **Supersession is visible.** A reversed decision keeps its entry and gains a
+1. **Test-driven, red first.** Acceptance and tests are written before the
+   implementation and watched failing for the right reason; the
+   implementation's job is to turn exactly those red lights green. Load
+   $implement-spec before writing the first line. An aspect with no test
+   planned is a hole in the plan, not a TODO.
+2. **Small, composable units.** One responsibility per module; behavior lives
+   in small pure functions composed upward; the CLI stays a thin caller of
+   library functions (the boundary suite enforces that nothing imports it).
+   Prefer composing what exists — net-new code states why composition failed.
+3. **Never write the present tense about behaviour that does not run.** If it
+   is not built, say "will".
+4. **One fact, one file** — everywhere else is a pointer.
+5. **Cite `file:line` against pinned SHAs, or say you do not know.**
+6. **Supersession is visible.** A reversed decision keeps its entry and gains a
    revision note; superseded documents live in git history, not the working
    tree.
-5. **Decisions are recorded in the same change that acts on them** — in
-   `docs/decisions.md`, with evidence and the condition that would reverse them.
-6. **One obvious way.** A golden path is a compatibility guarantee for
+7. **Smallest change that proves the next assumption.**
+8. **One obvious way.** A golden path is a compatibility guarantee for
    sampling agents.
-7. **Never carry a mechanism across without asking what it was for.** (An
-   inherited deployment tarball once taught two cold readers a false product.)
-8. **Compose before you write.** Net-new code states why composition failed.
-9. **Smallest change that proves the next assumption.**
-10. **Every change names its business claim** — the product promise it serves —
-    or it does not get built.
+9. **Never carry a mechanism across without asking what it was for** — from
+   the predecessor or anywhere else.
 
 ## Coding principles
 
-1. **Code is liability.** Every net-new snippet earns its right to exist.
-2. TypeScript strict, pure ESM, no `require()`. Never depend on the TypeScript
-   compiler API — TS 7 has no stable one until 7.1 (guard rule 6).
+1. **Code is liability — and so is context.** Every net-new snippet, file, and
+   skill earns its right to exist; cut what stops earning it.
+2. TypeScript strict, pure ESM, no `require()`, no `any`. Types derive from
+   values (schemas, `as const`, inference) rather than being declared beside
+   them. Never depend on the TypeScript compiler API — TS 7 has no stable one
+   until 7.1 (guard rule 6).
 3. Runtime dependencies need a recorded decision (guard rule 5). Wrap
    third-party libraries at a boundary module so they stay replaceable.
 4. Pre-1.0: prefer breaking changes. Correctness and simplicity over backwards
@@ -111,10 +149,7 @@ don't burn cycles making advisory gates pass before handing off.
    only shrink.
 7. Package boundaries are enrolled, never implied: every workspace package
    appears in `ALLOWED` in `scripts/boundaries.integration.test.ts`, declaring
-   what it may import. Established at baseline zero because guards added late
-   carry debt forever.
-8. Public API boundaries accept Standard Schema validators; zod is an internal
-   choice, not a contract.
+   what it may import.
 
 ## Testing
 
@@ -124,54 +159,44 @@ assertion.
 - `src/**/*.test.ts` — unit: pure, no fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
   tmp dirs (<15s)
-- `evals/` — agent evals; contract in `evals/README.md`, harness lands with
-  `ksor serve`
+- Agent evals land with `ksor serve`: fixture corpus + prompt + assertions,
+  run baseline vs with-MCP; pass = the correct answer **with a citation**, and
+  every suite includes an out-of-corpus question whose only passing answer is
+  the abstention. CI-only — they spend model tokens.
 
-Before declaring implementation work done, load the $implement-spec skill —
-red-first, live verification, the detail pass, and the truth sweep are its
-territory. Hard-won rules from the predecessor's four shipped defects (each
-found on a deployed artifact after green CI — post-mortems in
+Three rules paid for with shipped defects (post-mortems in
 `research/handover-vsor-to-ksor.md`):
 
-- **Assert on shipped bytes and computed values, not behavior alone.** A tier
-  that copies the app directory inherits config the artifact won't have.
-- **The test tier must install the same tree the artifact installs.** 65
-  packages differed between fixture and shipped lockfile — including the
-  compiler.
-- **A failing assertion must print the value it actually saw.** The fix that
-  finally worked came from a diagnostic printing the raw string.
+- **Assert on shipped bytes and computed values, not behavior alone.**
+- **The test tier must install the same tree the artifact installs.**
+- **A failing assertion must print the value it actually saw.**
 
 ## Documentation
 
 Update docs in the same PR as the behavior change; run `pnpm check:corpus`
 before handing off. `docs/status.md` is the only authority on implemented
-functionality — never let the README outrun it. Any tree, count, or list
-rendered into a doc must be generated from source with a drift test, or not
-rendered at all (the predecessor's hand-maintained tree drifted four ways at
-once).
+functionality — never let the README outrun it.
 
-## Governance
+Do not rely on training data for claims about ksor. In order: 1 source, types,
+and tests · 2 real CLI output · 3 existing docs · 4 merged PRs and the
+changelog. `research/` plans are intent, not behavior — cite as "planned".
+For third-party systems, fetch current official docs; don't recall them.
+Corpus documents name their sources precisely and copy load-bearing values
+exactly; superseded documents are marked, never deleted. Any tree, count, or
+list rendered into a doc is generated from source with a drift test, or not
+rendered at all.
 
-- Settled decisions live in `docs/decisions.md` with their evidence and the
-  condition that would reverse each. **If your work contradicts a settled
-  decision: stop and discuss with a human first.**
-- Plans live in `research/` with `issue`, `status`, `last_updated` frontmatter
-  (guard rule 4).
-- Specs are for changes that alter a public surface, cross a package boundary,
-  are expensive to reverse, or will be built unattended by an agent — one page:
-  status, business claim, observable contract, acceptance, out-of-scope. Where
-  spec and code disagree, the code wins and the spec is corrected in the same
-  commit. `specs/` appears with the first spec, never before.
-- The predecessor's Python packages are read-and-cite only until the copy
-  grant is written (`docs/status.md` tracks this blocker). Do not move Python
-  code across.
-
-## Changesets
+## Changesets and releases
 
 Every PR touching `packages/ksor` needs a changeset. Patch by default pre-1.0;
 minor only for public-API breaks; docs-only and repo-tooling changes are
 exempt. Write the body for release-notes readers.
 Check: `pnpm changeset status --since=origin/main`.
+
+Releases publish only from CI (`release.yml`: changesets action + npm trusted
+publishing, full gate runs in the same job). Never run `changeset publish` or
+`npm publish` locally; never cancel a running release — the concurrency group
+queues.
 
 ## Skills
 
@@ -180,10 +205,14 @@ duplicate this file — they go deeper.
 
 - $implement-spec — the implementation discipline: red-first, live
   verification, detail pass, truth sweep
-- $authoring-skills — writing/maintaining SKILL.md files (frontmatter, triggers)
-- $technical-writing — corpus and docs authoring; source-of-truth hierarchy
-- $release — changesets deep workflow and publish path
 - $find-skills — discover/install ecosystem skills (hash-pinned in skills-lock.json)
+
+The contract for authoring one: frontmatter `name` equals the directory name
+(guard rule 3), the `description` is the trigger — name the tasks and phrases,
+bump `metadata.version` on every edit, and a new skill must beat its absence
+in a with/without comparison recorded in the PR — a skill nobody can show
+winning is deleted. Vendored skills (hash-pinned in `skills-lock.json`) keep
+their upstream frontmatter untouched.
 
 ## Commit and PR style
 
@@ -193,9 +222,9 @@ ready.
 
 ## Definition of done
 
-Acceptance passes on a clean machine; any document the change made false was
-corrected in the same commit; review findings were fixed or recorded, never
-quietly dropped.
+Red tests written first are green; acceptance passes on a clean machine; any
+document the change made false was corrected in the same commit; review
+findings were fixed or recorded, never quietly dropped.
 
 ## Do not
 
@@ -205,6 +234,7 @@ quietly dropped.
 - Do not author `id:`/`name:` fields where the path is the identity.
 - Do not edit guard baselines upward, or ALLOWED graphs without review.
 - Do not commit `.only` or skipped tests.
-- Do not move Python code from the predecessor until the copy grant is written.
+- Do not port predecessor code — TypeScript or Python — without an independent
+  case for it; ideas cross freely, code must re-earn its place.
 - Do not create GitHub issues/comments or publish packages on your own
   initiative.

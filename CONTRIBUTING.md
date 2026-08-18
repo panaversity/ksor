@@ -6,8 +6,7 @@ Thank you for your interest in KSoR.
 
 Read [`AGENTS.md`](AGENTS.md) — it is the working contract for humans and
 coding agents alike, and this repo assumes coding agents perform much of the
-mechanical work. Settled decisions live in
-[`docs/decisions.md`](docs/decisions.md); implementation status in
+mechanical work. Decisions live in [`AGENTS.md`](AGENTS.md) → Decisions; implementation status in
 [`docs/status.md`](docs/status.md). Work that contradicts a settled decision
 needs a conversation first, not a PR.
 

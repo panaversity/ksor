@@ -134,7 +134,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
 // guarantee (see AGENTS.md coding principle 3).
 {
   const allowedRuntimeDeps = new Map([
-    // "package-name": "docs/decisions.md #N — one-line reason",
+    // "package-name": "AGENTS.md Decisions #N — one-line reason",
   ]);
   const pkg = JSON.parse(
     readFileSync(path.join(repoRoot, "packages", "ksor", "package.json"), "utf8"),
@@ -146,7 +146,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         `runtime-dep:${dep}`,
         `packages/ksor depends on "${dep}" at runtime without a recorded decision`,
         "every runtime dependency ships to every adopter; each one needs an ADR-level reason",
-        `record the decision in docs/decisions.md, then add "${dep}" to allowedRuntimeDeps in this guard with that reference`,
+        `record the decision in AGENTS.md → Decisions, then add "${dep}" to allowedRuntimeDeps in this guard with that reference`,
       );
     }
   }

@@ -1163,7 +1163,7 @@ The MCP-based agent surface remains an active area of implementation.
 
 See:
 
-- [`CHANGELOG.md`](CHANGELOG.md) — what has shipped
+- [`CHANGELOG.md`](packages/ksor/CHANGELOG.md) — what has shipped
 - [`docs/status.md`](docs/status.md) — current implementation status
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributing
 - [`SECURITY.md`](SECURITY.md) — security policy

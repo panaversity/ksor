@@ -15,7 +15,7 @@ clones and primary sources; file-level evidence in the study transcripts).
 
 Each section names the primitive, the design, and the evidence it derives
 from. §4 (the shell) ends in a recommendation that needs owner ratification
-into `docs/decisions.md`; everything else is implementable as written.
+into AGENTS.md → Decisions; everything else is implementable as written.
 
 ## 1 · The verb
 
@@ -55,7 +55,7 @@ byte-preserved. Parsing is strict and fail-closed.**
   **named error with migration guidance**, never a silent pass-through;
   reserved forward keys (retrieval floors, budgets) are accepted and inert;
   a null floor means UNCALIBRATED → the abstention gate is off and surfaced
-  on /health (decision 2 in `docs/decisions.md`).
+  on /health (an inherited assumption — see AGENTS.md → Decisions, open questions).
 - The TypeScript shape, from better-auth's core lesson: **types derive from
   the config value; the schema is the single source of truth.** The SDK owns
   one zod schema for the frontmatter; `parseInstance()` returns the inferred
@@ -92,7 +92,7 @@ Plus the declarative channel every plugin carries: its options schema
 (validated at instance parse, §2) and its metadata. One registration point,
 uniform discovery, and the boundary test keeps plugins out of the CLI.
 
-The scaffold/distribution story is shadcn's, already settled as decision 5:
+The scaffold/distribution story is shadcn's, already settled as AGENTS.md decision 4:
 corpus items as typed registry entries (`ksor:*` kinds, `files[]` with
 required-`target` kinds mirroring `registry:file`/`registry:page`),
 recursive `registryDependencies` with visited-set + topo-sort and
@@ -107,7 +107,7 @@ JSON on any host; `shadcn build`'s inline-the-content model is exactly
 
 **Recommendation: stay on Docusaurus for the crossing; treat the agent
 surface as a tested output contract, not a framework feature; name the
-reversal condition now.** (Needs owner ratification into `docs/decisions.md`.)
+reversal condition now.** (Needs owner ratification into AGENTS.md → Decisions.)
 
 Verified 2026-08-18 against primary sources:
 

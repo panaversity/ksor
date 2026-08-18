@@ -1,5 +1,5 @@
 {
-  "extends": "../tools/tsconfig/tsconfig.base.json",
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node"],
     "noEmit": true

@@ -19,7 +19,7 @@ marked thin. **Where this document and the code disagree, the code wins.**
 
 - npm `@panaversity/ksor` 0.0.0 — published, public, Apache-2.0.
 - PyPI `ksor` — unclaimed, freely claimable by anyone (deliberately; see
-  decision 6 in `docs/decisions.md`).
+  AGENTS.md → Decisions, open questions).
 - PyPI `vsor` 0.1.4 — live, CI green. npm `vsor` — not ours (unrelated
   serialization package).
 - Predecessor CI green ×3 (gate · surface · hosting); working product: `init`,
@@ -29,9 +29,10 @@ marked thin. **Where this document and the code disagree, the code wins.**
 
 ## Settled decisions
 
-Recorded — with evidence and reversal conditions — in `docs/decisions.md`
-(decisions 1–6). That file exists because this handover demanded it be written
-"before doing anything else."
+The independently-endorsed ones are recorded in AGENTS.md → Decisions;
+inherited items this repo has not re-validated (the Python kernel split, the
+PyPI stance) are held there as open questions — this repository treats the
+predecessor as reference material, not authority.
 
 ## What crosses
 
@@ -64,7 +65,7 @@ commands.
   cross into a _Python_ framework. The destination changed; their value drops
   to "good hygiene upstream", and PR 2's blast radius includes the nightly
   eval-before-flip gate. They should hear this before they finish.
-- **PyPI name deliberately not claimed** — decision 6 in `docs/decisions.md`.
+- **PyPI name deliberately not claimed** — AGENTS.md → Decisions, open questions.
 
 ## Four defects that cost days
 
@@ -86,7 +87,7 @@ message print the value it actually saw.
 
 ## Two mistakes from the handover session
 
-Recorded in `docs/decisions.md` → Recorded lessons: a registry 404 does not
+Recorded in AGENTS.md → Decisions (decision 2) and here: a registry 404 does not
 mean a name is publishable (`ksor` was rejected with E403 by npm's
 publish-time similarity gate), and a PyPI pending publisher reserves nothing.
 
@@ -96,9 +97,9 @@ publish-time similarity gate), and a PyPI pending publisher reserves nothing.
    `research/primitives-proposal.md` (eve and next.js studied in
    `research/base-environment.md`; better-auth, shadcn/ui, the predecessor
    scaffold, and the docs-framework risk studied for the proposal).
-2. `docs/decisions.md` — **done**.
+2. Decision record — **done** (consolidated into AGENTS.md → Decisions).
 3. `docs/status.md` — **done**.
-4. `CHANGELOG.md` with a 0.0.0 entry — **done**.
+4. Changelog with a 0.0.0 entry — **done** (`packages/ksor/CHANGELOG.md`, the changesets-owned location).
 5. Make panaversity/ksor public — **already public** (verified 2026-08-18).
 6. Configure the npm Trusted Publisher — **owner action, pending**
    (`docs/status.md`).
