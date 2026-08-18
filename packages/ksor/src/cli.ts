@@ -6,8 +6,10 @@
 // process.exitCode (never process.exit) so buffered stdout always flushes.
 
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { exitCodes, resolveCommand, verbs } from "./index.js";
+import { runInit } from "./init/index.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   name: string;
@@ -28,8 +30,8 @@ const usage =
   "\n" +
   "Usage: ksor <verb>\n" +
   "\n" +
-  `Verbs (designed; none implemented in ${pkg.version} — each exits 2 until it ships):\n` +
-  "  init    create a new KSoR project\n" +
+  `Verbs (init is implemented; the rest exit 2 until they ship):\n` +
+  "  init    create a new KSoR project (implemented)\n" +
   "  dev     run the human surface locally, watching\n" +
   "  build   validate and build both surfaces\n" +
   "  serve   expose the MCP agent surface\n" +
@@ -48,6 +50,22 @@ function main(args: readonly string[]): number {
   }
 
   const { word, verb } = resolveCommand(args);
+
+  if (verb === "init") {
+    return runInit(
+      args.slice(args.indexOf("init") + 1),
+      process.cwd(),
+      {
+        out: (text) => process.stdout.write(text),
+        err: (text) => process.stderr.write(text),
+      },
+      {
+        version: pkg.version,
+        // Resolved from the built cli.mjs location: dist/ -> package root.
+        templatesDir: fileURLToPath(new URL("../templates/scaffold", import.meta.url)),
+      },
+    );
+  }
 
   // A word that is not in the design is refused (exit 1), never conflated with
   // "designed but unimplemented" (exit 2). First stderr line is a stable slug.
