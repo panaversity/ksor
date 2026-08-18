@@ -97,7 +97,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm build
-      - run: pnpm exec playwright install chromium --with-deps
+      # playwright is a devDependency of packages/ksor, so its binary is not
+      # visible to `pnpm exec` at the workspace root (found live: first CI run,
+      # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, 2026-08-18).
+      - run: pnpm --dir packages/ksor exec playwright install chromium --with-deps
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts
 
   init-windows:
