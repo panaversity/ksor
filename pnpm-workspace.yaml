@@ -1,0 +1,29 @@
+# Workspace layout and shared version pins. The catalog is the one place agents
+# look for shared dependency versions (see AGENTS.md).
+packages:
+  - packages/*
+
+catalog:
+  # TypeScript 7 = the native (Go) compiler. It has no stable programmatic API
+  # until 7.1, so nothing in this repo may import the "typescript" package —
+  # guard-invariants rule 6 enforces that.
+  typescript: 7.0.2
+  vitest: ^4.1.10
+  # Reserved pins, not yet consumed by any package: zod and Standard Schema
+  # land with the first validated public API (research/primitives-proposal.md §2).
+  zod: ^4.4.3
+  "@standard-schema/spec": ^1.1.0
+  "@types/node": ^24.13.3
+
+# Supply-chain hygiene (research/base-environment.md §2):
+# 48-hour quarantine on newly published dependency versions. npm supply-chain
+# attacks are usually detected within hours of publish; the cooldown means a
+# routine `pnpm install` here never picks up a day-zero compromised release.
+minimumReleaseAge: 2880
+minimumReleaseAgeExclude:
+  - "@panaversity/*"
+
+# Dependency install scripts are denied by default; this allowlist is the only
+# gate through. Every entry needs a why-comment naming what breaks without it.
+# (Empty on purpose — every current native dep ships prebuilt binaries.)
+onlyBuiltDependencies: []

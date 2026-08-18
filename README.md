@@ -10,8 +10,8 @@ KSoR turns governed knowledge into a single authoritative source that both peopl
 
 Write and govern your knowledge once. KSoR publishes it through two synchronized surfaces:
 
-* a **human-readable knowledge site**, and
-* an **agent-readable interface** through MCP.
+- a **human-readable knowledge site**, and
+- an **agent-readable interface** through MCP.
 
 Both come from the same source, so humans and agents operate from the same institutional truth.
 
@@ -63,30 +63,30 @@ AI agents introduce a second problem.
 
 Agents also need to know:
 
-* What policies apply?
-* What rules govern this decision?
-* Which procedure should be followed?
-* What does this organization mean by this term?
-* Which thresholds are approved?
-* Which methodology should be used?
-* What exceptions exist?
-* What sources support this answer?
-* What should the agent do when the answer is not known?
+- What policies apply?
+- What rules govern this decision?
+- Which procedure should be followed?
+- What does this organization mean by this term?
+- Which thresholds are approved?
+- Which methodology should be used?
+- What exceptions exist?
+- What sources support this answer?
+- What should the agent do when the answer is not known?
 
 That knowledge is usually fragmented across:
 
-* documents,
-* wikis,
-* PDFs,
-* slide decks,
-* websites,
-* policies,
-* manuals,
-* repositories,
-* employee experience,
-* prompts,
-* RAG indexes,
-* and model context.
+- documents,
+- wikis,
+- PDFs,
+- slide decks,
+- websites,
+- policies,
+- manuals,
+- repositories,
+- employee experience,
+- prompts,
+- RAG indexes,
+- and model context.
 
 There is often no authoritative answer to:
 
@@ -102,22 +102,22 @@ A **Knowledge System of Record — KSoR — is the authoritative, governed sourc
 
 It can contain:
 
-* domain knowledge,
-* policies,
-* procedures,
-* rules,
-* standards,
-* methods,
-* definitions,
-* decision criteria,
-* thresholds,
-* specifications,
-* controls,
-* examples,
-* exceptions,
-* workflows,
-* provenance,
-* and supporting source material.
+- domain knowledge,
+- policies,
+- procedures,
+- rules,
+- standards,
+- methods,
+- definitions,
+- decision criteria,
+- thresholds,
+- specifications,
+- controls,
+- examples,
+- exceptions,
+- workflows,
+- provenance,
+- and supporting source material.
 
 The goal is not merely to make information searchable.
 
@@ -176,24 +176,24 @@ That distinction matters.
 
 A conventional knowledge base may optimize for:
 
-* storage,
-* search,
-* retrieval,
-* similarity,
-* document discovery,
-* or question answering.
+- storage,
+- search,
+- retrieval,
+- similarity,
+- document discovery,
+- or question answering.
 
 A Knowledge System of Record must additionally answer:
 
-* Who owns this knowledge?
-* Where did it come from?
-* Which version is authoritative?
-* Has it been reviewed?
-* What is its scope?
-* What happens when sources conflict?
-* Can an AI distinguish evidence from inference?
-* Can an answer be traced back to its source?
-* What should happen when the KSoR does not contain the answer?
+- Who owns this knowledge?
+- Where did it come from?
+- Which version is authoritative?
+- Has it been reviewed?
+- What is its scope?
+- What happens when sources conflict?
+- Can an AI distinguish evidence from inference?
+- Can an answer be traced back to its source?
+- What should happen when the KSoR does not contain the answer?
 
 KSoR therefore treats **governance, provenance, citations, versioning, and abstention** as architectural concerns rather than optional features.
 
@@ -255,11 +255,11 @@ Knowledge architecture can no longer assume that only people will read documenta
 
 Every important piece of institutional knowledge should be usable by:
 
-* humans,
-* AI assistants,
-* autonomous agents,
-* agent workflows,
-* and applications.
+- humans,
+- AI assistants,
+- autonomous agents,
+- agent workflows,
+- and applications.
 
 ---
 
@@ -267,10 +267,10 @@ Every important piece of institutional knowledge should be usable by:
 
 An answer is much more useful when you can determine:
 
-* what document it came from,
-* which version was used,
-* when it was built,
-* and what source supported the claim.
+- what document it came from,
+- which version was used,
+- when it was built,
+- and what source supported the claim.
 
 KSoR preserves the chain from source knowledge to generated surface.
 
@@ -306,13 +306,13 @@ A perfectly optimized search system over ungoverned knowledge simply retrieves u
 
 The more important questions are:
 
-* What belongs in the KSoR?
-* Who can change it?
-* What constitutes an authoritative source?
-* How are conflicts resolved?
-* How are changes reviewed?
-* What is obsolete?
-* What requires human judgment?
+- What belongs in the KSoR?
+- Who can change it?
+- What constitutes an authoritative source?
+- How are conflicts resolved?
+- How are changes reviewed?
+- What is obsolete?
+- What requires human judgment?
 
 KSoR treats those questions as fundamental.
 
@@ -326,13 +326,13 @@ KSoR keeps the knowledge layer independent from the model layer.
 
 The same governed knowledge should be usable from:
 
-* ChatGPT,
-* Claude,
-* coding agents,
-* agent frameworks,
-* custom applications,
-* Digital FTEs,
-* and future AI runtimes.
+- ChatGPT,
+- Claude,
+- coding agents,
+- agent frameworks,
+- custom applications,
+- Digital FTEs,
+- and future AI runtimes.
 
 Models can change.
 
@@ -429,9 +429,13 @@ If the capitalization policy does not address the situation, the system should n
 
 # Quick Start
 
+> **Status:** the verbs below are designed, not yet implemented — each prints
+> an honest notice and exits `2` today. [`docs/status.md`](docs/status.md) is
+> authoritative.
+
 ## Requirements
 
-Install a current Node.js LTS release with npm.
+Install Node.js 24 or newer with npm.
 
 Check your installation:
 
@@ -454,7 +458,7 @@ Then:
 cd my-ksor
 ```
 
-The scaffold gives you a working KSoR project containing the knowledge source, site configuration, and agent instructions needed to work with it.
+The scaffold will give you a working KSoR project containing the knowledge source, site configuration, and agent instructions needed to work with it.
 
 ---
 
@@ -464,7 +468,7 @@ The scaffold gives you a working KSoR project containing the knowledge source, s
 npx @panaversity/ksor dev
 ```
 
-KSoR starts the local knowledge site and watches for changes while you work.
+KSoR will start the local knowledge site and watch for changes while you work.
 
 Edit the Markdown source and the human-readable surface updates from the same corpus that will ultimately serve agents.
 
@@ -476,7 +480,7 @@ Edit the Markdown source and the human-readable surface updates from the same co
 npx @panaversity/ksor build
 ```
 
-The build produces the deployable human surface and records information needed to identify what knowledge went into that build.
+The build will produce the deployable human surface and record information needed to identify what knowledge went into that build.
 
 ---
 
@@ -486,9 +490,9 @@ The build produces the deployable human surface and records information needed t
 npx @panaversity/ksor serve
 ```
 
-The agent surface exposes the governed KSoR through MCP.
+The agent surface will expose the governed KSoR through MCP.
 
-> **Project status:** the human website surface is currently the more mature part of the implementation. The MCP agent surface is being completed and should not be represented as production-ready until its implementation and acceptance tests are complete.
+> **Project status:** in the predecessor vsor implementation the human website surface is the more mature part; in this package neither surface has shipped yet. See [`docs/status.md`](docs/status.md) — it is the only authority on implemented functionality.
 
 See [`docs/status.md`](docs/status.md) for current implementation status.
 
@@ -529,13 +533,13 @@ The authoritative knowledge corpus.
 
 Documents are plain Markdown so they are:
 
-* portable,
-* diffable,
-* reviewable,
-* version-controlled,
-* readable by humans,
-* readable by AI coding agents,
-* and independent of a proprietary database.
+- portable,
+- diffable,
+- reviewable,
+- version-controlled,
+- readable by humans,
+- readable by AI coding agents,
+- and independent of a proprietary database.
 
 Subdirectories naturally organize the knowledge hierarchy.
 
@@ -561,7 +565,7 @@ used by Example Corporation.
 
 Configuration and customization for the human-readable surface.
 
-The website layer is based on Docusaurus and remains ordinary source code rather than an opaque hosted service.
+The website layer will remain ordinary source code rather than an opaque hosted service; the concrete site framework is an open decision (see `research/primitives-proposal.md` §4).
 
 ---
 
@@ -573,14 +577,14 @@ KSoR is designed to be **agent-first**.
 
 Instead of forcing users to manually perform repetitive repository operations, the project can carry the instructions an AI coding agent needs for recurring tasks such as:
 
-* adding knowledge,
-* importing source material,
-* validating structure,
-* creating learning material,
-* checking provenance,
-* building,
-* testing,
-* and deployment.
+- adding knowledge,
+- importing source material,
+- validating structure,
+- creating learning material,
+- checking provenance,
+- building,
+- testing,
+- and deployment.
 
 ---
 
@@ -612,15 +616,15 @@ Git becomes more than storage.
 
 It provides useful primitives for knowledge governance:
 
-* history,
-* authorship,
-* diffs,
-* branches,
-* pull requests,
-* approvals,
-* releases,
-* rollback,
-* and reproducible builds.
+- history,
+- authorship,
+- diffs,
+- branches,
+- pull requests,
+- approvals,
+- releases,
+- rollback,
+- and reproducible builds.
 
 This makes an important shift possible:
 
@@ -642,12 +646,12 @@ build.lock.json
 
 can capture information such as:
 
-* included documents,
-* document hashes,
-* source commit,
-* KSoR version,
-* build version,
-* and other reproducibility metadata.
+- included documents,
+- document hashes,
+- source commit,
+- KSoR version,
+- build version,
+- and other reproducibility metadata.
 
 This creates a chain:
 
@@ -711,12 +715,12 @@ Those mechanisms are implementation details.
 
 KSoR is not fundamentally:
 
-* a vector database,
-* an embedding service,
-* a RAG framework,
-* a chatbot,
-* a document search engine,
-* or an MCP wrapper.
+- a vector database,
+- an embedding service,
+- a RAG framework,
+- a chatbot,
+- a document search engine,
+- or an MCP wrapper.
 
 Those technologies can help deliver a KSoR.
 
@@ -814,15 +818,15 @@ Organizations can impose additional controls appropriate to their domain.
 
 For regulated or high-risk knowledge, those controls may include:
 
-* named knowledge owners,
-* approval requirements,
-* effective dates,
-* source citations,
-* mandatory review periods,
-* change records,
-* conflict resolution,
-* separation of duties,
-* and audit history.
+- named knowledge owners,
+- approval requirements,
+- effective dates,
+- source citations,
+- mandatory review periods,
+- change records,
+- conflict resolution,
+- separation of duties,
+- and audit history.
 
 KSoR provides the architectural foundation; governance policy remains the responsibility of the organization operating the KSoR.
 
@@ -937,13 +941,13 @@ The canonical source remains inspectable.
 
 A person should be able to:
 
-* open it,
-* read it,
-* diff it,
-* review it,
-* copy it,
-* migrate it,
-* and understand what the AI is being allowed to use.
+- open it,
+- read it,
+- diff it,
+- review it,
+- copy it,
+- migrate it,
+- and understand what the AI is being allowed to use.
 
 This is an intentional architectural property.
 
@@ -953,13 +957,13 @@ This is an intentional architectural property.
 
 Your KSoR should survive changes in:
 
-* LLM providers,
-* embedding models,
-* vector stores,
-* agent frameworks,
-* cloud providers,
-* AI applications,
-* and user interfaces.
+- LLM providers,
+- embedding models,
+- vector stores,
+- agent frameworks,
+- cloud providers,
+- AI applications,
+- and user interfaces.
 
 The durable asset is the governed knowledge.
 
@@ -979,13 +983,13 @@ is deployable as a static site.
 
 That makes it suitable for hosts such as:
 
-* Vercel,
-* Netlify,
-* GitHub Pages,
-* static object storage,
-* internal web servers,
-* nginx,
-* and private infrastructure.
+- Vercel,
+- Netlify,
+- GitHub Pages,
+- static object storage,
+- internal web servers,
+- nginx,
+- and private infrastructure.
 
 Before production deployment, configure the canonical site URL in the site configuration.
 
@@ -999,10 +1003,10 @@ A Knowledge System of Record frequently contains internal organizational knowled
 
 KSoR therefore aims to support architectures in which:
 
-* the knowledge remains under organizational control,
-* the website can be self-hosted,
-* external runtime dependencies are minimized,
-* and the agent interface can be deployed inside the organization's security boundary.
+- the knowledge remains under organizational control,
+- the website can be self-hosted,
+- external runtime dependencies are minimized,
+- and the agent interface can be deployed inside the organization's security boundary.
 
 A KSoR should not require an organization to publish its institutional knowledge to a third-party SaaS platform simply to make it usable by AI.
 
@@ -1075,15 +1079,15 @@ KSoR is complementary to existing enterprise systems.
 
 It does **not** replace:
 
-* your CRM,
-* ERP,
-* accounting system,
-* HRIS,
-* transactional database,
-* data warehouse,
-* lakehouse,
-* document source systems,
-* or operational APIs.
+- your CRM,
+- ERP,
+- accounting system,
+- HRIS,
+- transactional database,
+- data warehouse,
+- lakehouse,
+- document source systems,
+- or operational APIs.
 
 Those systems remain authoritative for their respective operational state.
 
@@ -1147,26 +1151,26 @@ KSoR is under active development.
 
 The project is evolving from the original VSOR implementation into the more general **Knowledge System of Record** architecture.
 
-The current implementation already establishes several important foundations, including:
+The predecessor (vsor) implementation — reference material for this rebuild, not its authority — already proved out several foundations that inform this package's design, including:
 
-* Markdown-based authoritative source content,
-* generated human-readable documentation sites,
-* project scaffolding,
-* local development,
-* static builds,
-* build provenance,
-* agent-oriented repository instructions,
-* automated testing,
-* and deployment workflows.
+- Markdown-based authoritative source content,
+- generated human-readable documentation sites,
+- project scaffolding,
+- local development,
+- static builds,
+- build provenance,
+- agent-oriented repository instructions,
+- automated testing,
+- and deployment workflows.
 
-The MCP-based agent surface remains an active area of implementation.
+The MCP-based agent surface is designed, not implemented — see [`docs/status.md`](docs/status.md).
 
 See:
 
-* [`CHANGELOG.md`](CHANGELOG.md) — what has shipped
-* [`docs/status.md`](docs/status.md) — current implementation status
-* [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributing
-* [`SECURITY.md`](SECURITY.md) — security policy
+- [`CHANGELOG.md`](packages/ksor/CHANGELOG.md) — what has shipped
+- [`docs/status.md`](docs/status.md) — current implementation status
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contributing
+- [`SECURITY.md`](SECURITY.md) — security policy
 
 Do not infer production readiness of a capability from this conceptual README alone. The status document and released package version are authoritative for implemented functionality.
 
@@ -1215,7 +1219,7 @@ Expose the agent-readable KSoR interface.
 ksor serve
 ```
 
-Refer to the CLI help for the commands supported by the installed release:
+The installed release's help will list the commands it supports:
 
 ```bash
 ksor --help
@@ -1268,15 +1272,10 @@ CONTRIBUTING.md
 
 The project is intentionally agent-friendly, so coding agents should also read `AGENTS.md` before making changes.
 
-Typical development checks include:
-
-* linting,
-* type checking,
-* unit tests,
-* boundary tests,
-* build acceptance,
-* browser acceptance,
-* and deployment acceptance.
+The development gate is defined in [`CONTRIBUTING.md`](CONTRIBUTING.md):
+lint, format check, typecheck, guard invariants, corpus checks, unit and
+integration tests, build, and publint. Browser and deployment acceptance will
+join it when a site surface exists.
 
 Do not weaken provenance, abstention, governance, or reproducibility guarantees merely to simplify an implementation.
 
@@ -1290,15 +1289,15 @@ Knowledge Systems of Record can contain sensitive institutional information and 
 
 Treat security issues involving the following as particularly important:
 
-* unauthorized corpus access,
-* provenance bypass,
-* malicious source ingestion,
-* prompt injection through knowledge content,
-* privilege escalation,
-* unsafe MCP exposure,
-* build tampering,
-* dependency compromise,
-* and the ability to make ungoverned knowledge appear authoritative.
+- unauthorized corpus access,
+- provenance bypass,
+- malicious source ingestion,
+- prompt injection through knowledge content,
+- privilege escalation,
+- unsafe MCP exposure,
+- build tampering,
+- dependency compromise,
+- and the ability to make ungoverned knowledge appear authoritative.
 
 See [`SECURITY.md`](SECURITY.md) for reporting instructions.
 
