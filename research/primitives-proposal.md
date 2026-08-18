@@ -105,41 +105,26 @@ JSON on any host; `shadcn build`'s inline-the-content model is exactly
 
 ## 4 · The shell
 
-**Recommendation: stay on Docusaurus for the crossing; treat the agent
-surface as a tested output contract, not a framework feature; name the
-reversal condition now.** (Needs owner ratification into AGENTS.md → Decisions.)
+> **Revision 2026-08-18 (supersession visible):** ratified the OTHER way —
+> AGENTS.md decision 9: Next.js + Fumadocs + shadcn as the single core shell,
+> behind a pinned surface contract, replacing Docusaurus before v1 traffic.
+> This section's stay-Docusaurus recommendation was optimizing cheapest
+> crossing; the owner's extensibility/ecosystem arguments plus one new fact —
+> all 10 predecessor lib packages verified framework-neutral (zero Docusaurus
+> imports), so the "free crossing" was mostly illusion — reversed it. The
+> section's own closing line named Fumadocs the rewrite target; kept below as
+> the evidence trail.
 
-Verified 2026-08-18 against primary sources:
+**Moved.** The shell question outgrew a section: the evidence, the argument,
+the unanswered structural question, and the candidate decision texts now live
+in [`research/site-shell.md`](./site-shell.md) — one fact, one file.
 
-- Docusaurus (3.10.2) has **no official llms.txt/MCP surface and no accepted
-  roadmap item** — facebook/docusaurus#10899 is 18 months open, unassigned;
-  the v4 milestone is Rspack + MDX v3 only. The laggard clause is true.
-- But ksor's MCP server ships **in the CLI, not the site** — the only
-  site-side delta at stake is llms.txt + markdown-per-page, and mature
-  community plugins deliver both today (@signalwire ~120K downloads/month,
-  rachfop ~92K incl. per-page .md).
-- Fumadocs is the strongest agent-surface fit (first-party llms.txt,
-  per-page .md routes, Accept negotiation, TS-native, official static
-  export; vercel/eve's docs run it; measured growth ~79× over 24 months —
-  the handover's "105×" overstated a clean window, direction confirmed).
-  Starlight: 23× growth confirmed; maintainer-authored llms-txt plugin;
-  `.astro` component model discards the React shell entirely.
-- The 6,644-line forked shell **crosses for free**; moving to either
-  alternative is a rewrite, not a port — the fork's value goes to zero.
-
-So the honest trade is "free inherited shell + unofficial-plugin risk" vs
-"rewrite cost + first-party agent surface." The risk is made loud instead of
-avoided: per the four-defects rule, `ksor build`'s acceptance asserts the
-**shipped bytes** — `llms.txt` exists and lists every published page,
-per-page markdown exists — so a plugin stranded by the Docusaurus v4
-breaking cycle fails CI the day it breaks, never silently. The site surface
-sits behind ksor's own build contract, so a later shell swap changes an
-implementation, not the product promise.
-
-**Reversal condition:** revisit if the pinned llms.txt plugin breaks under
-the v4 cycle without a maintained replacement, or when the shell needs its
-first major rework anyway. If a rewrite is ever on the table, Fumadocs is
-the target (Starlight only if dropping React is acceptable).
+> **Revision note (2026-08-18):** this section recommended **Docusaurus**.
+> That recommendation is preserved in the new file and is now **challenged,
+> not withdrawn**: it did not weigh the fork's carrying cost, the fact that
+> the migration is paid either way and only gets dearer, or decision 4
+> (scaffolds are adopter-owned). Still undecided; it turns on a question only
+> the owner can answer.
 
 ## 5 · The boundary, and its enforcement
 

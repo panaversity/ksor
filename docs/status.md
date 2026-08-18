@@ -34,7 +34,8 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
 
 ## Designed, not implemented
 
-- `ksor init` / `dev` / `build` / `serve` — the verbs themselves.
+- `ksor init` / `dev` / `build` / `serve` — the verbs themselves
+  (`specs/ksor/init/spec.md` is ratified; implementation is next).
 - The MCP agent surface and the human site surface.
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - The agent-eval harness (contract in AGENTS.md → Testing).

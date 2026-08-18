@@ -161,12 +161,36 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    appear when the ladder or the work demands them); **the site is preview and
    review, not an editor** (the agent writes; the human checks).
 
+8. **Scaffold structure: root workspace + system roof** (owner, 2026-08-18).
+   `ksor init` emits the workspace manifests at the repo root (defaults beat
+   hiding them behind new algorithms), `knowledge/` at root as the record —
+   CommonMark only, framework-free forever — and ALL code under `system/`
+   (site now; gateways/packages as earned; growth inside, never beside). The
+   root set is closed at birth; full lock record and the closed set:
+   `research/scaffold-structure.md` + `specs/ksor/init/spec.md`. Reversed
+   per-clause with evidence, recorded there.
+9. **Site shell: one in core — Next.js + Fumadocs + shadcn** (owner,
+   2026-08-18), replacing Docusaurus natively before v1 traffic. No shell
+   selector at init (one obvious way; a flag forks every skill, test, and
+   recipe). Choice lives in three existing layers: the pinned **surface
+   contract** (render the record, llms.txt, per-page md artifacts, browser
+   smoke, no authored content — the shell is a slot), adopter ownership of
+   `system/site`, and future registry-distributed alternative shells.
+   _Revision note: supersedes the site-shell open question and the
+   primitives proposal §4 stay-Docusaurus lean (proposed, never ratified) —
+   the extensibility ceiling (auth, features), agent-ecosystem alignment,
+   and the verified portability of the predecessor's remark layer decided
+   it._ Reversed if Fumadocs's static export or llms surface regresses
+   before the site slice ships.
+10. **Scaffold templates are MIT-0** (owner, 2026-08-18): init's output
+    lands in the adopter's proprietary repo free of attribution
+    obligations, and init never emits a LICENSE file into a repo whose
+    knowledge is theirs. The grant sentence lives in the scaffolded README.
+
 **Open questions — decide independently when the work arrives:** how retrieval
 and abstention are implemented for `serve` — reimplement in TS or convert the
 predecessor kernel's logic (decision 6 permits either; revision note: this was
-recorded as settled "stays Python" on 2026-08-17, reversed 2026-08-18) — and
-the site shell (Docusaurus vs Fumadocs — evidence in
-`research/primitives-proposal.md` §4, decide before the site slice). PyPI
+recorded as settled "stays Python" on 2026-08-17, reversed 2026-08-18). PyPI
 `ksor` is left unclaimed on purpose (a PyPI pending publisher reserves nothing
 — only an upload claims a name); revisit only if the exposure changes.
 
