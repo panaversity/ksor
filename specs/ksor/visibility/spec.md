@@ -51,8 +51,11 @@ still reads the filtered corpus — where per-request filtering leaked on
 the fifth and sixth consumers its own author had not enumerated; a
 filtered directory cannot be bypassed by future code; and asset staging
 closes the bytes-leak that per-surface filters miss. The audience is
-selected by `KSOR_AUDIENCE` (the `KSOR_BASE_PATH` convention); an
-undeclared or unrecognized value **fails the build** — never widens it.
+selected by `KSOR_AUDIENCE` (the `KSOR_BASE_PATH` convention). Unset,
+with audiences declared, it builds the **least-restricted tier** —
+`public` — the only default that cannot leak, so `pnpm build` keeps
+working out of the box; an unrecognized value **fails the build** —
+never widens it.
 Restricted-tier builds render a quiet audience label in the site chrome
 ("internal build — not for publication"), so a leaked screenshot names
 itself.
