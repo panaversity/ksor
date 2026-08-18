@@ -6,15 +6,16 @@ updated: 2026-08-18.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.1** on npm (trusted publishing, provenance
-attached). It ships the rebuilt CLI shell: every designed verb (`init`,
-`dev`, `build`, `serve`) reports "designed but not implemented" and exits
+`@panaversity/ksor` **0.0.2** on npm (trusted publishing, provenance
+attached — published by the release merging this page). It ships the
+working `ksor init` described below, plus the CLI contract: `dev`,
+`build` and `serve` still report "designed but not implemented" and exit
 `2`; an unknown verb is refused with exit `1` and a stable
-`error: unknown-verb` stderr slug. The package root exports the CLI
-contract (`exitCodes`, `verbs`, `resolveCommand`), and docs ship inside
-the tarball under `docs/`.
+`error: unknown-verb` stderr slug. The package root exports `exitCodes`,
+`verbs`, and `resolveCommand`, and docs ship inside the tarball under
+`docs/`.
 
-## Implemented in this repository (unreleased — ships as 0.0.2, patch per the constitution; the owner may elect 0.1.0)
+## Implemented (released in 0.0.2)
 
 - **`ksor init`** — the first working verb, implemented red-first against
   the ratified spec (`specs/ksor/init/spec.md`). One command emits a
