@@ -76,7 +76,9 @@ the deploy story — plus the CLI contract: `dev`,
 
 - `ksor dev` / `build` / `serve` — the remaining verbs (each still exits
   `2` with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
-  work today without them).
+  work today without them). Serve's path is now decided and specced:
+  the production kernel converts whole (decision 11,
+  `research/kernel-conversion.md`, `specs/ksor/serve/spec.md` — draft).
 - The MCP agent surface (`instance.md` prose is its reserved system prompt).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
@@ -102,6 +104,9 @@ tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 ## Pending owner actions
 
+- Add **`GEMINI_API_KEY`** as a repository Actions secret — the kernel
+  conversion's gated live tiers (retrieval + calibration evals) embed for
+  real (decision 11); until the secret exists those tiers skip.
 - Flip the org setting **"Allow GitHub Actions to create and approve pull
   requests"** — until then every release's Version-PR needs the manual
   rescue documented in the `$release` skill. (The npm Trusted Publisher is

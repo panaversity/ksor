@@ -191,11 +191,30 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     lands in the adopter's proprietary repo free of attribution
     obligations, and init never emits a LICENSE file into a repo whose
     knowledge is theirs. The grant sentence lives in the scaffolded README.
+11. **The content kernel converts whole; serve is the graduated rung**
+    (owner, 2026-08-19). The predecessor kernel's content SoR
+    (`sor-agentfactory @ b554f91`: sor-content, the sor-platform trim, the
+    gateway-kit auth/serve/harden slice, and the content gateway) converts
+    to TypeScript in this workspace — retrieval, generations, the calibrated
+    abstention method with its measurement history, and the fail-closed
+    dual-mode serving posture — with the Python suite as conversion oracle:
+    gold sets, schema contract, and calibration data extract as conformance
+    fixtures first, red before any port. The MCP door speaks the MCP
+    TypeScript SDK, stdio + stateless Streamable HTTP. Placement is the
+    ladder: `ksor init` stays database-free (`pnpm dev` unchanged — the
+    out-of-the-box claim holds); the kernel lands as framework-owned
+    workspace packages behind `ksor serve`, and adopters climb to it.
+    Retrieval runs in a real embedding space through the merged provider
+    seam; CI carries a Gemini key for the gated live tiers. Record:
+    `research/kernel-conversion.md`; contract: `specs/ksor/serve/spec.md`.
+    Each crossing mechanism still answers decision 6's gate individually;
+    the database-free-init clause is reversed only by an explicit owner
+    decision recorded here.
 
-**Open questions — decide independently when the work arrives:** how retrieval
-and abstention are implemented for `serve` — reimplement in TS or convert the
-predecessor kernel's logic (decision 6 permits either; revision note: this was
-recorded as settled "stays Python" on 2026-08-17, reversed 2026-08-18). PyPI
+**Open questions — decide independently when the work arrives:** ~~how
+retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
+decision 11: the predecessor kernel converts (revision trail: recorded as
+settled "stays Python" 2026-08-17, reversed to "either" 2026-08-18). PyPI
 `ksor` is left unclaimed on purpose (a PyPI pending publisher reserves nothing
 — only an upload claims a name); revisit only if the exposure changes.
 
