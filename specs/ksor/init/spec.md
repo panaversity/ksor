@@ -17,16 +17,27 @@ code wins and this page is corrected in the same commit.
 ## Observable contract
 
 **Invocation.** `ksor init <name>` with `<name>` matching
-`^[a-z0-9][a-z0-9-]{0,62}$`; `ksor init .` scaffolds into an empty-enough
-current directory (the company-monorepo path); bare `ksor init` prints one
-instructional screen and exits `0` — an unattended agent must never scaffold
-into an unknown cwd by accident.
+`^[a-z0-9][a-z0-9-]{0,62}$` and never a Windows-reserved device name
+(`con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9` — such a directory
+is unusable on the `windows-latest` leg this spec itself runs on); extra
+arguments are refused as `bad-name` with the hyphenated join suggested,
+never silently dropped. `ksor init .` scaffolds into an empty-enough current
+directory (the company-monorepo path) — the name derived from the directory
+basename passes the same grammar or is refused (found live 2026-08-18: an
+unvalidated basename containing `"` stamps corrupt JSON into package.json);
+bare `ksor init` prints one instructional screen and exits `0` — an
+unattended agent must never scaffold into an unknown cwd by accident.
 
 **Refusals** exit `1`, first stderr line a stable slug: `error: bad-name`,
 `error: exists`, `error: blocked` (target dir has unrelated content),
-`error: nested` (an ancestor directory contains `instance.md`);
-`error: unsupported-platform` exits `3`. A parent pnpm workspace whose globs
-would swallow the project produces a warning, not a refusal.
+`error: nested` (an ancestor directory contains `instance.md`). Environment
+failures exit `3` with the same slug discipline: `error: unsupported-platform`
+(Node below 24 — `engines` is advisory, so the gate is enforced at run time),
+`error: broken-install` (the package is missing its templates), and
+`error: environment` (the filesystem refused — full disk, permissions);
+an environment failure is never presented as a refusal or a raw stack trace.
+A parent pnpm workspace whose globs would swallow the project produces a
+warning, not a refusal.
 
 **Negative contract.** No network I/O. Never runs a package manager (the
 handoff text carries `pnpm install && pnpm dev`). Deterministic: the same
@@ -41,19 +52,19 @@ symlinks anywhere in the output.
 **The emitted tree** (the closed root set — frozen at birth; its one named
 later arrival is `build.lock.json`, committed, written only by `ksor build`):
 
-| Path                                                      | Contract                                                                                                                                                                                                           |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `package.json` · `pnpm-workspace.yaml` · `pnpm-lock.yaml` | workspace at root; scripts proxy so `pnpm dev` works at root; exact pins + `packageManager`; `ksor` as devDependency; `minimumReleaseAge`; empty build-scripts allowlist                                           |
-| `AGENTS.md`                                               | the project constitution: the two worlds, command conventions, record-purity rules; critical rule 1 = the site never contains authored content                                                                     |
-| `CLAUDE.md`                                               | one line, `@AGENTS.md` — a file, never a symlink; must never grow content                                                                                                                                          |
-| `README.md`                                               | one page: record vs system, and the grant sentence (templates are MIT-0 — decision 10; no LICENSE file is ever emitted)                                                                                            |
-| `instance.md`                                             | format 1 frontmatter: `format`, `name`, `ksor.requires`, `ksor.scaffolded` (the upgrade stamp); `site.url` reserved. Body = prose identity (the future MCP system prompt). Unknown top-level keys are named errors |
-| `knowledge/example.md`                                    | one real governed document — never an empty directory                                                                                                                                                              |
-| `system/site/`                                            | the reference shell: Next.js + Fumadocs + shadcn. next.config pins `turbopack.root`/`outputFileTracingRoot` to the repo root and sets `images.unoptimized`; a `basePath` knob is documented                        |
-| `.agents/skills/`                                         | intake-interview · add-sources · format-checker; `.claude/skills/` = real copies, byte-identity checked by the format-checker; `.gemini/settings.json` points Gemini at AGENTS.md                                  |
-| `.github/workflows/validate.yml`                          | adopter-owned CI running the format checks; SHA-pinned actions                                                                                                                                                     |
-| `.gitattributes`                                          | `*.md text eol=lf` (instance.md included) — checkout bytes are provenance bytes                                                                                                                                    |
-| `.gitignore`                                              | `.ksor/`, `node_modules/`, `system/site/.next/`, `system/site/out/`, `*.tsbuildinfo`, `.env*`, `.DS_Store`                                                                                                         |
+| Path                                                      | Contract                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json` · `pnpm-workspace.yaml` · `pnpm-lock.yaml` | workspace at root; scripts proxy so `pnpm dev` works at root; exact pins + `packageManager`; `minimumReleaseAge`; build scripts denied by default (pnpm 11 `allowBuilds`, each denial commented). No `ksor` dependency — the scaffold runs without the CLI (corrected 2026-08-18: a dep on an unpublished version breaks offline install; code wins) |
+| `AGENTS.md`                                               | the project constitution: the two worlds, command conventions, record-purity rules; critical rule 1 = the site never contains authored content                                                                                                                                                                                                       |
+| `CLAUDE.md`                                               | one line, `@AGENTS.md` — a file, never a symlink; must never grow content                                                                                                                                                                                                                                                                            |
+| `README.md`                                               | one page: record vs system, and the grant sentence (templates are MIT-0 — decision 10; no LICENSE file is ever emitted)                                                                                                                                                                                                                              |
+| `instance.md`                                             | format 1 frontmatter: `format`, `name`, `ksor.requires`, `ksor.scaffolded` (the upgrade stamp); `site.url` reserved. Body = prose identity (the future MCP system prompt). Unknown top-level keys are named errors                                                                                                                                   |
+| `knowledge/example.md`                                    | one real governed document — never an empty directory                                                                                                                                                                                                                                                                                                |
+| `system/site/`                                            | the reference shell: Next.js + Fumadocs (shadcn dropped 2026-08-18 — nothing in the shell needed it; code wins). Static export (`output: 'export'`, `trailingSlash`); next.config pins `turbopack.root`/`outputFileTracingRoot` to the repo root and sets `images.unoptimized`; the `basePath` knob is `KSOR_BASE_PATH`                              |
+| `.agents/skills/`                                         | intake-interview · add-sources · format-checker; `.claude/skills/` = real copies, byte-identity checked by the format-checker; `.gemini/settings.json` points Gemini at AGENTS.md                                                                                                                                                                    |
+| `.github/workflows/validate.yml`                          | adopter-owned CI running the format checks; SHA-pinned actions                                                                                                                                                                                                                                                                                       |
+| `.gitattributes`                                          | `*.md text eol=lf` (instance.md included) — checkout bytes are provenance bytes                                                                                                                                                                                                                                                                      |
+| `.gitignore`                                              | `.ksor/`, `node_modules/`, `system/site/.next/`, `system/site/.source/`, `system/site/out/`, `*.tsbuildinfo`, `.env*`, `.DS_Store` — ships inside the package as `gitignore` and is renamed on emit (found live 2026-08-18: npm pack always drops files named `.gitignore`, so the published tarball would silently scaffold without one)            |
 
 **Record purity** (enforced by the scaffolded format-checker, later by
 `ksor build`): `knowledge/` holds CommonMark `.md` and assets only — no
@@ -75,9 +86,12 @@ swapping shells must require no change outside `system/site/`:
 1. the site is the workspace package at `system/site/` exposing `dev`
    (hot-reload preview of `knowledge/`) and `build` (static output at
    `system/site/out/`) scripts;
-2. it renders every published document in `knowledge/`, including the
-   governed directives (`:::quiz` etc.), and renders nothing authored inside
-   itself;
+2. it renders every published document in `knowledge/` and renders nothing
+   authored inside itself; the governed directives (`:::quiz` etc.) bind
+   here the day their grammar is ratified — no directive spec exists yet,
+   so a shell today must only pass directives through as the readable text
+   they degrade to (deferred 2026-08-18: inventing quiz semantics ad hoc
+   would put ungoverned behavior behind a governed-looking fence);
 3. it serves `llms.txt`, and per-page markdown once `ksor build` emits the
    artifacts (dev-mode sugar allowed);
 4. it passes the browser smoke (below).
@@ -85,14 +99,19 @@ swapping shells must require no change outside `system/site/`:
 Fumadocs is the reference implementation core ships; a Docusaurus shell, a
 bare Next.js app, or any registry-distributed alternative that satisfies
 1–4 is equally conformant. **The contract proves itself with two
-implementations** (owner, 2026-08-18): alongside the shipped Fumadocs
-reference, a conformance-minimal Docusaurus fixture lives under
-`workbench/` — never feature parity, built from the predecessor's portable
-layer — and one shell-agnostic conformance suite runs clauses 1–4 against
-both in CI. Two implementations keep the seam honest the way two compilers
-keep a language spec honest; the measured comparison (effort, LOC, surface
-quality) is recorded as evidence under decision 9, and the suite is the
-bar any future registry shell must pass.
+implementations**: the conformance shell at `workbench/shells/docusaurus/`
+(based on the predecessor's de-branded shell under decision 6, never
+feature parity) swaps into any scaffolded project by the recipe in its
+README, and one shell-agnostic suite —
+`packages/ksor/src/shell-conformance.integration.test.ts` — runs clauses
+1–4, the `order:` translation, and the base-path build against both shells
+in CI. The default is not a choice the adopter makes at init: `ksor init`
+emits Fumadocs, always; the swap is an act their coding agent performs.
+_Revision note: this clause was briefly deferred to a Docusaurus-support
+verb earlier on 2026-08-18; the owner re-activated it the same day — the
+team keeps the option, and a working second shell is what "vendor
+neutral" means in practice._ The suite is the bar any future registry
+shell must pass.
 
 ## Acceptance
 

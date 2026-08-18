@@ -1,0 +1,1061 @@
+/**
+ * ============================================================================
+ * DOC PAGES — the reading surface.
+ *
+ * Ported from the predecessor's sor-site shell (decision 6). It restyles
+ * Docusaurus's own class names — `.markdown`, `.breadcrumbs`,
+ * `.table-of-contents`, `.pagination-nav` — so it needs no components of its
+ * own and no vocabulary the record does not have. It names no colour: every
+ * tone is a token from ./tokens.css.
+ * ============================================================================
+ */
+
+/* ============================================================================
+   1. TYPOGRAPHY & READING EXPERIENCE
+   ============================================================================ */
+
+/* Main article container - optimal reading width */
+article {
+  max-width: 100%;
+  margin: 0 auto;
+  padding-top: 2rem;
+  position: relative;
+}
+
+/* Mobile: Ensure article has clear spacing from navbar */
+@media screen and (max-width: 996px) {
+  article {
+    padding-top: 1.5rem;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  article {
+    padding-top: 1.25rem;
+  }
+}
+
+@media screen and (max-width: 375px) {
+  article {
+    padding-top: 1rem;
+  }
+}
+
+/* ============================================================================
+   DOC LAYOUT — Constrained to 1800px to match navbar
+   ============================================================================ */
+
+/* Override Docusaurus sidebar width calculation at root level */
+:root {
+  --doc-sidebar-width: 272px !important;
+  --ifm-container-width-xl: 1800px !important;
+  --ifm-container-width: 1800px !important;
+}
+
+/* Main wrapper - centered with max-width matching navbar */
+.main-wrapper {
+  max-width: 1800px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+}
+
+/* Doc main container */
+[class*="docMainContainer"] {
+  max-width: 100% !important;
+  width: 100% !important;
+  flex: 1 !important;
+}
+
+/* Container inside main */
+[class*="docMainContainer"] > .container,
+[class*="docMainContainer"] .container {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding-right: 0 !important;
+}
+
+/* Row should fill container */
+[class*="docMainContainer"] .row {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin-right: 0 !important;
+}
+
+/* Doc item column - main content area with horizontal padding */
+[class*="docItemCol"] {
+  max-width: 100% !important;
+  flex: 1 !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+}
+
+/* Doc item container inside column */
+[class*="docItemContainer"] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* hide_table_of_contents pages (e.g. What's New): Docusaurus renders the
+   content in a plain `.col` (no `docItemCol` modifier) with no TOC sibling,
+   so the column has no horizontal gutter and the 800px article gets
+   margin:auto-centered — floating away from the sidebar on wide screens and
+   touching the edges on mobile. Give it the same left gutter as normal doc
+   pages and anchor the article left so it matches the rest of the book.
+   `:only-child` targets only no-TOC pages (TOC pages have two `.col`s). */
+[class*="docMainContainer"] .row > .col:only-child {
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+}
+[class*="docMainContainer"] .row > .col:only-child article,
+[class*="docMainContainer"] .row > .col:only-child .theme-doc-markdown {
+  margin-left: 0 !important;
+  margin-right: auto !important;
+}
+
+/* Article content max-width for optimal text readability (65-75 chars per line) */
+[class*="docItemContainer"] article,
+[class*="docItemContainer"] .theme-doc-markdown {
+  max-width: 800px !important;
+}
+
+/* Doc page row */
+[class*="docRoot"],
+[class*="docPage"] {
+  max-width: 100% !important;
+}
+
+/* ============================================================================
+   DOC ITEM CONTAINER — positioning context
+   ============================================================================ */
+
+/* Make doc item container relative for absolute positioning */
+[class*="docItemContainer"] {
+  position: relative !important;
+}
+
+/* ============================================================================
+   BREADCRUMBS — Clean, minimalist design using design system
+   ============================================================================ */
+
+/* Breadcrumbs container */
+.theme-doc-breadcrumbs {
+  margin-bottom: 1.5rem !important;
+  padding: 0 !important;
+}
+
+/* Breadcrumbs list */
+.breadcrumbs {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  list-style: none !important;
+  font-size: 0.8125rem !important;
+}
+
+/* Breadcrumb item */
+.breadcrumbs__item {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Breadcrumb link - muted color, uses design system */
+.breadcrumbs__link {
+  color: var(--vsor-neutral-l56) !important;
+  text-decoration: none !important;
+  transition: color 150ms ease-out !important;
+  padding: 0.25rem 0 !important;
+}
+
+/* Home icon styling */
+.breadcrumbs__link svg,
+[class*="breadcrumbHomeIcon"] {
+  width: 14px !important;
+  height: 14px !important;
+  color: var(--vsor-neutral-l56) !important;
+}
+
+/* Hover state - the site's primary */
+.breadcrumbs__link:hover {
+  color: var(--primary) !important;
+}
+
+.breadcrumbs__link:hover svg {
+  color: var(--primary) !important;
+}
+
+/* Active/current breadcrumb - the site's primary, no background */
+.breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--primary) !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+}
+
+/* Separator - use "/" instead of ">" */
+.breadcrumbs__item:not(:last-child)::after {
+  content: "/" !important;
+  margin: 0 0.5rem !important;
+  color: var(--vsor-neutral-l70) !important;
+  font-weight: 300 !important;
+}
+
+/* Dark mode breadcrumbs */
+[data-theme="dark"] .breadcrumbs__link {
+  color: var(--vsor-neutral-l65) !important;
+}
+
+[data-theme="dark"] .breadcrumbs__link svg,
+[data-theme="dark"] [class*="breadcrumbHomeIcon"] {
+  color: var(--vsor-neutral-l65) !important;
+}
+
+[data-theme="dark"] .breadcrumbs__link:hover,
+[data-theme="dark"] .breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .breadcrumbs__item:not(:last-child)::after {
+  color: var(--vsor-neutral-l45) !important;
+}
+
+/* Hide mobile TOC button that overlaps with content */
+@media screen and (max-width: 996px) {
+  .theme-doc-toc-desktop {
+    display: none !important;
+  }
+
+  /* Ported as two hashed CSS-module class names (`tocMobile_ITEo`,
+     `tocCollapsible_ETCw`) — a hash is a build artifact of one Docusaurus
+     release, so those selectors are a bet on a filename. The prefix match is
+     the same target stated in a way a minor upgrade cannot silently break. */
+  [class*="tocCollapsible"],
+  [class*="tocMobile"] {
+    display: none !important;
+  }
+
+  /* Comfortable horizontal gutter on mobile (was 1rem — felt cramped) */
+  [class*="docItemCol"],
+  [class*="docMainContainer"] .row > .col:only-child {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+}
+
+/* Hide Docusaurus's built-in back-to-top button (the shell exposes no custom
+   scroll affordance, and upstream hides this one too). */
+.theme-back-to-top-button,
+[class*="backToTopButton"] {
+  display: none !important;
+}
+
+/* Hide Docusaurus's built-in "Edit this page" link. The shell sets no editUrl,
+   but a project that sets one in its own docusaurus.config.ts would otherwise
+   get an affordance the shell never intended to expose. */
+.theme-edit-this-page,
+[class*="editThisPage"],
+.theme-doc-footer-edit-meta-row a[href*="/edit/"] {
+  display: none !important;
+}
+
+/* ============================================================================
+   BASE DOC TYPOGRAPHY — the reading rhythm every doc body inherits.
+   Paragraph spacing, 1.75 leading and the 75ch measure live here; without
+   them doc prose runs together with no separation.
+   ============================================================================ */
+
+.markdown {
+  line-height: 1.75;
+  font-size: 1rem;
+  font-family: var(--ifm-font-family-base);
+  color: var(--foreground);
+  letter-spacing: 0;
+}
+
+[data-theme="dark"] .markdown {
+  color: var(--foreground);
+}
+
+/* Optimal reading width for paragraphs */
+.markdown > p,
+.markdown > ul,
+.markdown > ol,
+.markdown > blockquote {
+  max-width: 75ch;
+}
+
+/* Better paragraph spacing */
+.markdown p {
+  margin-bottom: 1.25rem;
+  line-height: 1.75;
+}
+
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+
+/* Headings share the base family */
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-family: var(--ifm-font-family-base);
+}
+
+/* ============================================================================
+   2. SHARP HEADING STYLES (Content-First Design)
+   ============================================================================ */
+
+/* H1 - Solid foreground color */
+.markdown h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: var(--foreground);
+  position: relative;
+  letter-spacing: -0.02em;
+}
+
+[data-theme="dark"] .markdown h1 {
+  color: var(--foreground);
+}
+
+/* H2 - Bottom border (sharp) */
+.markdown h2 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+  color: var(--foreground);
+  position: relative;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.02em;
+}
+
+[data-theme="dark"] .markdown h2 {
+  color: var(--foreground);
+  border-bottom-color: var(--border);
+}
+
+/* H2 decorative element */
+.markdown h2::before {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--vsor-accent-strong) 100%);
+}
+
+/* H3 - Simple left border */
+.markdown h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  color: var(--foreground);
+  position: relative;
+  padding-left: 1rem;
+  border-left: 4px solid var(--primary);
+}
+
+[data-theme="dark"] .markdown h3 {
+  color: var(--foreground);
+}
+
+/* H4, H5, H6 - Consistent styling */
+.markdown h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--foreground);
+}
+
+[data-theme="dark"] .markdown h4 {
+  color: var(--foreground);
+}
+
+.markdown h5 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--foreground);
+}
+
+[data-theme="dark"] .markdown h5 {
+  color: var(--foreground);
+}
+
+.markdown h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="dark"] .markdown h6 {
+  color: var(--muted-foreground);
+}
+
+/* Anchor links hover effect */
+.markdown h1 .header-anchor,
+.markdown h2 .header-anchor,
+.markdown h3 .header-anchor,
+.markdown h4 .header-anchor,
+.markdown h5 .header-anchor,
+.markdown h6 .header-anchor {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+  color: var(--primary);
+}
+
+[data-theme="dark"] .markdown h1 .header-anchor,
+[data-theme="dark"] .markdown h2 .header-anchor,
+[data-theme="dark"] .markdown h3 .header-anchor,
+[data-theme="dark"] .markdown h4 .header-anchor,
+[data-theme="dark"] .markdown h5 .header-anchor,
+[data-theme="dark"] .markdown h6 .header-anchor {
+  color: var(--primary);
+}
+
+.markdown h1:hover .header-anchor,
+.markdown h2:hover .header-anchor,
+.markdown h3:hover .header-anchor,
+.markdown h4:hover .header-anchor,
+.markdown h5:hover .header-anchor,
+.markdown h6:hover .header-anchor {
+  opacity: 1;
+}
+
+/* ============================================================================
+   3. ENHANCED LINKS
+   ============================================================================ */
+
+.markdown a {
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px solid var(--vsor-ink-a030);
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+/* The predecessor painted dark-mode links from its neutral ramp. Measured on
+   the built site 2026-08-18: a link and a `<strong>` then rendered in the same
+   grey, and nothing on a dark page said which words were clickable. Links carry
+   the brand colour in both themes here; `<strong>` below moves off it, so the
+   two stay distinguishable. Same reason the list markers and the H2 rule keep
+   one colour across themes. */
+[data-theme="dark"] .markdown a {
+  color: var(--primary);
+  border-bottom-color: var(--vsor-neutral-dark-a040);
+}
+
+.markdown a:hover {
+  color: var(--vsor-accent-strong);
+  border-bottom-color: var(--primary);
+  background: var(--vsor-ink-a005);
+}
+
+[data-theme="dark"] .markdown a:hover {
+  color: var(--vsor-accent-text-dark);
+  border-bottom-color: var(--primary);
+  background: var(--vsor-neutral-dark-a010);
+}
+
+/* ============================================================================
+   4. ENHANCED LISTS
+   ============================================================================ */
+
+.markdown ul,
+.markdown ol {
+  margin-bottom: 1.5rem;
+  padding-left: 2rem;
+  line-height: 1.8;
+}
+
+.markdown li {
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+
+.markdown li:last-child {
+  margin-bottom: 0;
+}
+
+/* Custom bullets for unordered lists */
+.markdown ul > li {
+  list-style: none;
+  padding-left: 0.5rem;
+}
+
+.markdown ul > li::before {
+  content: "▸";
+  position: absolute;
+  left: -1.5rem;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+/* Enhanced ordered lists.
+   Numbers use the built-in `list-item` counter so the HTML `start` attribute is
+   honored: a section list that begins at `7.` renders 7, not 1. A custom
+   counter-reset/counter-increment on the <ol> silently cancels `start`, which
+   was restarting every section's numbering at 1 (measured on a document whose
+   one long list is split into separate <ol>s by its own subheadings). */
+.markdown ol > li {
+  list-style: none;
+}
+
+.markdown ol > li::before {
+  content: counter(list-item) ".";
+  position: absolute;
+  left: -2rem;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.95em;
+  width: 1.5rem;
+  text-align: right;
+  /* Keep the number on one line. The box is sized for one digit; two-digit
+     numbers (now common since lists honor `start`) would otherwise wrap the
+     trailing "." onto the next line, where it reads as a stray bullet. With
+     nowrap the number stays right-aligned and simply extends left into the
+     gutter. */
+  white-space: nowrap;
+}
+
+/* Nested lists */
+.markdown li > ul,
+.markdown li > ol {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* ============================================================================
+   5. BLOCKQUOTES - CLEAN STYLING
+   ============================================================================ */
+
+.markdown blockquote {
+  margin: 1.75rem 0;
+  padding: 1.125rem 3.25rem 1.125rem 1.5rem;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--primary);
+  position: relative;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--foreground);
+  font-style: normal;
+}
+
+html[dir="rtl"] .markdown blockquote {
+  padding: 1.125rem 1.5rem 1.125rem 3.25rem;
+}
+
+[data-theme="dark"] .markdown blockquote {
+  border-inline-start-color: var(--primary);
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+}
+
+.markdown blockquote p {
+  margin-bottom: 1rem;
+}
+
+.markdown blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================================
+   6. CODE BLOCKS - SHARP STYLING
+   ============================================================================ */
+
+/* Inline code */
+.markdown code {
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 2px 6px;
+  font-size: 0.875rem;
+  font-family: var(--ifm-font-family-monospace);
+  border: 1px solid var(--border);
+}
+
+[data-theme="dark"] .markdown code {
+  background: var(--muted);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+/* Code blocks */
+.markdown pre {
+  margin: 2rem 0;
+  background-color: var(--muted) !important;
+  /* Override Prism theme */
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px var(--vsor-shadow-a008);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-theme="dark"] .markdown pre {
+  box-shadow: 0 4px 16px var(--vsor-shadow-a040);
+  border-color: var(--border);
+}
+
+.markdown pre code {
+  background: transparent !important;
+  /* Ensure inner code doesn't have bg */
+  border: none;
+  padding: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* Code block wrapper */
+.prism-code {
+  padding: 1.5rem !important;
+}
+
+/* ============================================================================
+   7. TABLES - PROFESSIONAL STYLING WITH HORIZONTAL SCROLL
+   ============================================================================ */
+
+/* Horizontal scrolling for a table too wide for the measure.
+   `width: max-content` + `max-width: 100%`, where the predecessor set
+   `width: 100%`: a `display: block` table lays its rows out in an anonymous
+   table box that shrinks to its content, so a 100%-wide BLOCK around a
+   content-wide table painted its shadow and its ground 120px past the last
+   column (seen live 2026-08-18). Sizing the block to the content and capping it
+   at the column keeps the scroll behaviour and puts the edge where the table
+   ends. */
+.markdown table {
+  width: max-content;
+  max-width: 100%;
+  margin: 2rem 0;
+  border-collapse: collapse;
+  box-shadow: 0 2px 8px var(--vsor-shadow-a008);
+  font-size: 0.95rem;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-theme="dark"] .markdown table {
+  box-shadow: 0 2px 12px var(--vsor-shadow-a030);
+}
+
+.markdown thead {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--vsor-accent-deep) 100%);
+  /* Ported as the literal `white`; re-bound to the token that already names
+     "text on a primary surface", so a re-brand cannot strand it. */
+  color: var(--primary-foreground);
+}
+
+[data-theme="dark"] .markdown thead {
+  background: linear-gradient(
+    135deg,
+    var(--vsor-surface-dark-hi) 0%,
+    var(--vsor-surface-dark-solid) 100%
+  );
+  color: var(--vsor-neutral-dark-hi);
+}
+
+.markdown th {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid var(--vsor-highlight-a020);
+}
+
+.markdown td {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--vsor-ink-a010);
+}
+
+[data-theme="dark"] .markdown td {
+  border-bottom-color: var(--vsor-neutral-dark-a010);
+}
+
+/* Zebra striping */
+.markdown tbody tr:nth-child(even) {
+  background: var(--vsor-ink-a003);
+}
+
+[data-theme="dark"] .markdown tbody tr:nth-child(even) {
+  background: var(--vsor-neutral-dark-a003);
+}
+
+/* Hover effect */
+.markdown tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.markdown tbody tr:hover {
+  background: var(--vsor-ink-a006);
+}
+
+[data-theme="dark"] .markdown tbody tr:hover {
+  background: var(--vsor-neutral-dark-a008);
+}
+
+/* ============================================================================
+   8. HORIZONTAL RULES
+   ============================================================================ */
+
+.markdown hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vsor-ink-a030) 10%,
+    var(--vsor-ink-a050) 50%,
+    var(--vsor-ink-a030) 90%,
+    transparent 100%
+  );
+  margin: 3rem 0;
+}
+
+[data-theme="dark"] .markdown hr {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vsor-neutral-dark-a020) 10%,
+    var(--vsor-neutral-dark-a030) 50%,
+    var(--vsor-neutral-dark-a020) 90%,
+    transparent 100%
+  );
+}
+
+/* Sections 9 (admonitions) did not cross: the shell rejects `admonitions: true`
+   because `knowledge/` is CommonMark only (decision 8), so `:::tip` is literal
+   text in both shells. Rules for markup no build can emit are dead weight in
+   every adopter's stylesheet. README.md records it. */
+
+/* ============================================================================
+   10. IMAGES & MEDIA
+   ============================================================================ */
+
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  margin: 2rem 0;
+}
+
+[data-theme="dark"] .markdown img {
+  border-color: var(--border);
+}
+
+/* ============================================================================
+   11. STRONG & EMPHASIS
+   ============================================================================ */
+
+/* Table headers paint their own text colour on <thead>, and <strong> must
+   follow it: the header sits on the primary gradient, so a bolded word set in
+   --foreground would be near-black on a saturated blue. */
+.markdown thead strong,
+.markdown th strong {
+  color: inherit;
+}
+
+.markdown strong {
+  /* Weight, not hue. The predecessor set bold text to the primary, which reads
+     as a link on a page whose links are also the primary — and in dark mode
+     both landed on the same grey. */
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.markdown em {
+  /* Italic is the emphasis; a hue on top of it was a light-mode flourish that
+     went unreadable on a dark ground once the dark override was dropped. */
+  font-style: italic;
+}
+
+/* ============================================================================
+   12. PAGINATION & NAVIGATION
+   ============================================================================ */
+
+.pagination-nav {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 2px solid var(--vsor-ink-a010);
+}
+
+[data-theme="dark"] .pagination-nav {
+  border-top-color: var(--vsor-neutral-dark-a015);
+}
+
+.pagination-nav__link {
+  border: 2px solid var(--vsor-ink-a015);
+
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  /* Ported as the literal `white`; --card is the same surface, tokenized. */
+  background: var(--card);
+}
+
+[data-theme="dark"] .pagination-nav__link {
+  border-color: var(--vsor-neutral-dark-a020);
+  background: var(--vsor-surface-dark-solid);
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--primary);
+  background: var(--vsor-ink-a003);
+  transform: translateY(-2px);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .pagination-nav__link:hover {
+  border-color: var(--vsor-neutral-dark-solid);
+  background: var(--vsor-neutral-dark-a005);
+  box-shadow: 0 4px 16px var(--vsor-shadow-a030);
+}
+
+.pagination-nav__label {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ============================================================================
+   13. TABLE OF CONTENTS (TOC) — Right Sidebar
+   ============================================================================ */
+
+/* TOC Container - Sticky + scrollable, mirrors left sidebar pattern */
+.theme-doc-toc-desktop {
+  width: auto !important;
+  max-width: 250px !important;
+  position: sticky !important;
+  top: var(--ifm-navbar-height) !important;
+  height: calc(100vh - var(--ifm-navbar-height)) !important;
+  max-height: calc(100vh - var(--ifm-navbar-height)) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  border-left: 1px solid var(--sidebar-border, var(--vsor-neutral-l90)) !important;
+  padding-left: 0.75rem !important;
+}
+
+[data-theme="dark"] .theme-doc-toc-desktop {
+  border-left-color: var(--sidebar-border, var(--vsor-neutral-l25)) !important;
+}
+
+/* TOC list — the on-this-page "outline". Kept deliberately small and quiet so
+   it reads as a secondary index, not a second nav column. */
+.table-of-contents {
+  font-size: 0.6875rem !important;
+  line-height: 1.5 !important;
+  padding-left: 0 !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+}
+
+/* TOC links - the design system's own muted tone, not Infima's link blue */
+.table-of-contents__link {
+  display: block !important;
+  padding: 0.28rem 0 !important;
+  padding-left: 0 !important;
+  color: var(--vsor-neutral-l55) !important;
+  transition: color 150ms ease-out !important;
+  text-decoration: none !important;
+  border-left: none !important;
+  border: none !important;
+}
+
+[data-theme="dark"] .table-of-contents__link {
+  color: var(--muted-foreground) !important;
+}
+
+/* Hover - primary color, no movement */
+.table-of-contents__link:hover {
+  color: var(--primary) !important;
+  background: transparent !important;
+  border: none !important;
+  transform: none !important;
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* Active state - the site's primary */
+.table-of-contents__link--active {
+  color: var(--primary) !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+[data-theme="dark"] .table-of-contents__link:hover {
+  color: var(--primary) !important;
+}
+
+[data-theme="dark"] .table-of-contents__link--active {
+  color: var(--primary) !important;
+}
+
+/* ============================================================================
+   TOC HEADING HIERARCHY — Consistent spacing, indent only for sub-items
+   ============================================================================ */
+
+/* All TOC items - consistent spacing */
+.table-of-contents li {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Nested list (H3 headings) - just indented */
+.table-of-contents > li > ul {
+  margin-left: 0.75rem !important;
+  margin-top: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* ============================================================================
+   14. RESPONSIVE ADJUSTMENTS — the mobile type scale for doc bodies.
+   ============================================================================ */
+
+@media screen and (max-width: 996px) {
+  .markdown {
+    font-size: 1rem;
+  }
+
+  .markdown h1 {
+    font-size: 2.25rem;
+  }
+
+  .markdown h2 {
+    font-size: 1.75rem;
+    margin-top: 2.5rem;
+  }
+
+  .markdown h3 {
+    font-size: 1.35rem;
+  }
+
+  .markdown blockquote {
+    padding: 1.25rem 1.5rem;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .markdown {
+    font-size: 0.9375rem;
+  }
+
+  .markdown h1 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .markdown h2 {
+    font-size: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .markdown h3 {
+    font-size: 1.25rem;
+  }
+
+  .markdown blockquote {
+    padding: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .markdown table {
+    font-size: 0.85rem;
+  }
+
+  .markdown th,
+  .markdown td {
+    padding: 0.75rem 1rem;
+  }
+}
+
+/* Mobile optimizations for 375px (iPhone SE) viewports */
+@media screen and (max-width: 375px) {
+  .markdown h1 {
+    font-size: 1.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .markdown h1::after {
+    width: 60px;
+    height: 3px;
+    margin-top: 0.75rem;
+  }
+
+  .markdown h2 {
+    font-size: 1.5rem;
+    margin-top: 2.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .markdown h3 {
+    font-size: 1.25rem;
+  }
+
+  /* Ensure code blocks fit without horizontal scroll */
+  .markdown pre {
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Tables already have horizontal scroll enabled at base level */
+  .markdown table {
+    margin: 1.5rem 0;
+  }
+
+  /* Improve readability on smaller screens */
+  .markdown {
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+
+  .markdown ul,
+  .markdown ol {
+    padding-left: 1.5rem;
+  }
+
+  .markdown blockquote {
+    padding: 0.875rem;
+    margin: 1.5rem 0;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .markdown h1 {
+    font-size: 1.75rem;
+  }
+
+  .markdown h2 {
+    font-size: 1.35rem;
+  }
+
+  .markdown h3 {
+    font-size: 1.15rem;
+  }
+
+  .markdown ul,
+  .markdown ol {
+    padding-left: 1.5rem;
+  }
+
+  .markdown blockquote {
+    padding: 0.875rem;
+  }
+}

@@ -1,0 +1,359 @@
+/**
+ * THE TOKEN LAYER — the one file in this shell that names a colour.
+ *
+ * Ported from the predecessor's sor-site shell (decision 6), which is where
+ * every measurement and every found-live note below was made. Everything else
+ * (custom.css, doc-pages.css, sidebar.css, and the component stylesheets)
+ * consumes `var(--…)` and names no literal.
+ *
+ * ── How a consuming project re-brands ────────────────────────────────────────
+ * A project never edits this file. It sets ONE pair of values — Docusaurus's
+ * own `--ifm-color-primary`, light and dark:
+ *
+ *     :root                     { --ifm-color-primary: #7c3aed; }
+ *     html[data-theme="dark"]   { --ifm-color-primary: #a78bfa; }
+ *
+ * In this shell that pair lives in ./brand.css, which carries the KSoR blue and
+ * nothing else. Re-branding a copy of this shell is editing that one file.
+ *
+ * Everything accented on the page derives from that pair: Infima's own chrome
+ * reads it directly, `--primary` below bridges it into the shadcn palette, and
+ * the accent family in section 3 composes it into the deep shades and the eight
+ * opacities the chrome needs (hairlines, washes, focus rings, glows).
+ *
+ * ── Why the accent family is composed, not stored ────────────────────────────
+ * These tokens used to be an `R G B` channel triple carried verbatim from the
+ * upstream design system, which meant the deep shades and every tint painted
+ * upstream's own brand navy on a page whose owner had chosen a different colour
+ * — the italic in a paragraph, the rule under every H2, the table header's
+ * second gradient stop, none of which a project's
+ * primary could reach. They are `color-mix()` of `--primary` now, so there is
+ * exactly one brand value in the site and it is the project's.
+ *
+ * The percentages are measured rather than chosen: fed upstream's own primary,
+ * `65%` and `76%` toward black reproduce the two deep shades it had hard-coded
+ * to within one 8-bit step (#002753 vs #002952, #003368 vs #003366), so the
+ * default look is unchanged and only its ORIGIN moved.
+ *
+ * `color-mix()` is therefore load-bearing here and carries no literal fallback
+ * (Chrome 111 / Safari 16.2 / Firefox 113, all 2023). A fallback would have to
+ * name a colour, and the only colour available to name is the one this block
+ * exists to stop shipping.
+ *
+ * ── The three layers below ───────────────────────────────────────────────────
+ *  1. IDENTITY   — the type stack and the neutral channels.
+ *  2. SYSTEM     — the shadcn/Docusaurus palette the components are written
+ *                  against, including the one bridge: `--primary`.
+ *  3. DERIVED    — the accent family and the composed neutral tints. Follow (2);
+ *                  never overridden directly.
+ *
+ * The neutral values are inherited from the upstream design system verbatim.
+ * The ACCENT values are not: they are compositions of the project's own
+ * primary, which is what section 3 records.
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   0. THE TYPEFACES — self-hosted, never fetched
+
+   The surface contract forbids the shell from initiating ANY off-origin
+   request, which rules out the Google Fonts <link> the upstream app used —
+   but it does not rule out the typefaces themselves. The woff2 files sit in
+   ./fonts/ beside this stylesheet and are referenced RELATIVELY so webpack
+   emits them into the build and rewrites the URL under whatever baseUrl the
+   project configures. Same-origin, so the no-external-request assertion
+   stays green and the chrome matches upstream.
+
+   Latin subsets only. Licences ship beside the files: fonts/LICENSE-Inter.txt
+   and fonts/LICENSE-JetBrainsMono.txt, both SIL OFL 1.1.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/inter-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/inter-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/inter-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/inter-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1. IDENTITY — what a consuming project overrides
+   ═════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Navbar height. Declared (Infima's default is 3.75rem) so the swizzled
+       header's inner row is 4rem tall while the sidebar, TOC and
+       ReadingProgress sticky offsets — which all read this same variable —
+       stay exactly correct. Upstream hard-coded `h-16` on the row and left
+       this at 3.75rem, so its own offsets overhung by 5px. */
+  --ifm-navbar-height: 4rem;
+
+  /* Type. Self-hosted only (see section 0) — a project that wants a
+       different face adds its own @font-face over files it ships in its own
+       static/ and redeclares these two tokens. */
+  --font-sans:
+    "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  /* ...and BRIDGED onto Docusaurus's own two family tokens, exactly as the
+       colour palette is bridged onto --ifm-color-primary. Without this the two
+       stacks coexist and a reader meets both on one page: `.markdown` and
+       `.markdown code` (doc-pages.css) name the --ifm-* families, so a doc
+       page's prose set in the OS UI font and its code in the OS mono font
+       while the navbar, the homepage and the manifest labels set in the two
+       faces this shell vendors — measured 2026-08-14 on the built fixture,
+       where `document.fonts` reported JetBrains Mono UNLOADED on a doc page
+       carrying three fenced blocks. Vendoring a typeface and then not
+       rendering with it is the worst of both: the bytes ship and the design
+       does not arrive.
+       Declared here rather than on the rules, because this file loads before
+       the project's own custom.css — a project that wants a different face
+       redeclares --font-sans/--font-mono and both halves follow. */
+  --ifm-font-family-base: var(--font-sans);
+  --ifm-font-family-monospace: var(--font-mono);
+
+  /* Neutral channels, as `R G B` triples: the chrome needs each of these at
+     several opacities, and a bare triple composes to `rgb(… / α)` in section 3
+     so one value drives all of them. The BRAND is not among them — it is
+     `--ifm-color-primary`, composed in section 3; see the header.
+
+     The predecessor declared nine channels and a state palette (success,
+     danger, four admonition tints, a lightbox backdrop, a slate for nested tab
+     chrome). Four survive here, because four are read: the components and the
+     admonition rules that consumed the rest did not cross. README.md records
+     each one. */
+  /* inset highlights and light-on-dark washes */
+  --vsor-highlight-rgb: 255 255 255;
+  /* deep ink used for hairlines and wash backgrounds */
+  --vsor-ink-rgb: 3 24 17;
+  /* dark-theme neutral chrome */
+  --vsor-neutral-dark-rgb: 170 170 170;
+  /* elevation */
+  --vsor-shadow-rgb: 0 0 0;
+
+  /* The neutral ramp the doc chrome reads for breadcrumbs, the TOC and rules. */
+  --vsor-neutral-l25: oklch(0.25 0 0);
+  --vsor-neutral-l45: oklch(0.45 0 0);
+  --vsor-neutral-l55: oklch(0.55 0 0);
+  --vsor-neutral-l56: oklch(0.556 0 0);
+  --vsor-neutral-l65: oklch(0.65 0 0);
+  --vsor-neutral-l70: oklch(0.7 0 0);
+  --vsor-neutral-l90: oklch(0.9 0 0);
+  --vsor-neutral-dark-hi: #dddddd;
+  --vsor-neutral-dark-solid: #aaaaaa;
+  --vsor-surface-dark-hi: #2a2a2a;
+  --vsor-surface-dark-solid: #1a1a1a;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2. SYSTEM — the palette the components are written against
+
+   Order is load-bearing: the sidebar block is declared first and the general
+   palette second, because that is the order the two stylesheets were imported
+   in before this file existed, and both declare --sidebar-border. Swapping
+   them changes which value wins.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --sidebar-bg: oklch(0.985 0 0);
+  --sidebar-text: oklch(0.22 0 0);
+  --sidebar-text-muted: oklch(0.32 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-hover-bg: oklch(0.95 0 0);
+  --sidebar-active-bg: var(--sidebar-primary);
+  /* The active sidebar pill. Bridged to the site's primary — the literal
+     carried from upstream was a fixed navy, so a rebranded site painted its
+     own primary text on an upstream-coloured pill. */
+  --sidebar-active-bg-subtle: color-mix(in srgb, var(--ifm-color-primary) 10%, transparent);
+}
+
+:root {
+  /* The type stack is declared once, in the IDENTITY block above. */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  /* THE BRAND SEAM, and the one token here that is a var() read rather than a
+       literal. Upstream baked its own action blue in; carrying that across
+       verbatim (the 2026-08-14 tokenization pass preserved every rendered
+       colour, which is exactly how this got lost) leaves TWO unrelated
+       primaries in one site: Infima paints the sidebar highlight, the links and
+       the admonition stripes from --ifm-color-primary, while every shadcn
+       surface here paints from this one. A project redeclaring
+       --ifm-color-primary in its site/src/css/custom.css — the only rebrand path
+       the scaffold documents — then moves half the page and leaves the other
+       half on upstream's blue. Reading the Docusaurus token makes one colour,
+       set in one place, paint both.
+       Deliberately one-directional: this file never DECLARES the
+       --ifm-color-primary shade set — ./brand.css owns the value — because a
+       declaration here would silently beat it. */
+  --primary: var(--ifm-color-primary);
+  /* Neutral, not hue-baked: this paints text ON the site's primary, so a
+       tinted white would carry upstream's hue onto every rebranded button. */
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0px;
+  /* Same seam, sidebar family (see --primary above). */
+  --sidebar-primary: var(--ifm-color-primary);
+  --sidebar-border: oklch(0.922 0 0);
+}
+
+html[data-theme="dark"] {
+  --sidebar-bg: oklch(0.15 0 0);
+  --sidebar-text: oklch(0.96 0 0);
+  --sidebar-text-muted: oklch(0.85 0 0);
+  --sidebar-border: oklch(0.25 0 0);
+  --sidebar-hover-bg: oklch(0.2 0 0);
+  --sidebar-active-bg: var(--sidebar-primary);
+  --sidebar-active-bg-subtle: color-mix(in srgb, var(--ifm-color-primary) 16%, transparent);
+}
+
+html[data-theme="dark"] {
+  --background: oklch(0.01 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  /* The bridge again under dark: Infima redeclares --ifm-color-primary in
+       its own dark block, so reading it here is what makes the dark palette
+       follow the site's dark primary instead of upstream's. */
+  --primary: var(--ifm-color-primary);
+  /* Neutral, not hue-baked: this paints text ON the site's primary, so a
+       tinted white would carry upstream's hue onto every rebranded button. */
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.2 0.006 286);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.2 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.25 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  /* Same seam, dark half. `.menu__link--active` in sidebar.css paints its text
+       from --sidebar-primary, so this is the token the sidebar's active state
+       actually reads under data-theme="dark". */
+  --sidebar-primary: var(--ifm-color-primary);
+  --sidebar-border: oklch(1 0 0 / 10%);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3. DERIVED — composed tints. These follow the channels above; a project
+   overrides a channel, not these.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── THE ACCENT FAMILY — every one of these is `--primary` composed ──────
+       and `--primary` is `var(--ifm-color-primary)` (section 2), so a project
+       that sets one Docusaurus token moves all of them, in both themes: these
+       are declared on the root element, which is also what `html[data-theme]`
+       selects, so the dark half re-resolves from the dark primary with no
+       second declaration.
+
+       `-deep` and `-strong` are the two darkened shades the doc chrome paints
+       with (the italic, the table-header gradient, link hover, the home page's
+       action on hover); `-text-dark` is the accent as TEXT on a dark ground.
+       See the file header for where the percentages come from and why there is
+       no literal fallback. */
+  --vsor-accent-deep: color-mix(in oklab, var(--primary) 65%, black);
+  --vsor-accent-strong: color-mix(in oklab, var(--primary) 76%, black);
+  --vsor-accent-text-dark: color-mix(in oklab, var(--primary) 92%, white);
+
+  --vsor-highlight-a020: rgb(var(--vsor-highlight-rgb) / 0.2);
+  --vsor-ink-a003: rgb(var(--vsor-ink-rgb) / 0.03);
+  --vsor-ink-a005: rgb(var(--vsor-ink-rgb) / 0.05);
+  --vsor-ink-a006: rgb(var(--vsor-ink-rgb) / 0.06);
+  --vsor-ink-a010: rgb(var(--vsor-ink-rgb) / 0.1);
+  --vsor-ink-a015: rgb(var(--vsor-ink-rgb) / 0.15);
+  --vsor-ink-a030: rgb(var(--vsor-ink-rgb) / 0.3);
+  --vsor-ink-a050: rgb(var(--vsor-ink-rgb) / 0.5);
+  --vsor-neutral-dark-a003: rgb(var(--vsor-neutral-dark-rgb) / 0.03);
+  --vsor-neutral-dark-a005: rgb(var(--vsor-neutral-dark-rgb) / 0.05);
+  --vsor-neutral-dark-a008: rgb(var(--vsor-neutral-dark-rgb) / 0.08);
+  --vsor-neutral-dark-a010: rgb(var(--vsor-neutral-dark-rgb) / 0.1);
+  --vsor-neutral-dark-a015: rgb(var(--vsor-neutral-dark-rgb) / 0.15);
+  --vsor-neutral-dark-a020: rgb(var(--vsor-neutral-dark-rgb) / 0.2);
+  --vsor-neutral-dark-a030: rgb(var(--vsor-neutral-dark-rgb) / 0.3);
+  --vsor-neutral-dark-a040: rgb(var(--vsor-neutral-dark-rgb) / 0.4);
+  --vsor-shadow-a006: rgb(var(--vsor-shadow-rgb) / 0.06);
+  --vsor-shadow-a008: rgb(var(--vsor-shadow-rgb) / 0.08);
+  --vsor-shadow-a015: rgb(var(--vsor-shadow-rgb) / 0.15);
+  --vsor-shadow-a030: rgb(var(--vsor-shadow-rgb) / 0.3);
+  --vsor-shadow-a040: rgb(var(--vsor-shadow-rgb) / 0.4);
+  --vsor-shadow-a050: rgb(var(--vsor-shadow-rgb) / 0.5);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4. COMPONENT ALIASES — the names the component stylesheets actually use
+
+   found live in the predecessor, and the reason this section exists: a
+   tokenization pass there left `var(--…)` references with no declaration
+   anywhere in the shell. A custom property that is never declared makes its
+   whole declaration invalid at computed-value time, which is silent in every
+   direction — the build succeeds, no console error is logged, the class is
+   present in the stylesheet, and the rule simply paints nothing.
+
+   Nothing here is a new colour: each line binds a component's own vocabulary to
+   a token declared above, which is what makes the set auditable. The property
+   to hold when editing these files: every custom property this shell reads is
+   one it declares, and every one it declares is read.
+
+   The predecessor's list was longer. The bindings for its SearchBar, its
+   DocPageActions toolbar and its LessonContent panel went with those
+   components (README.md records why none of the three crossed).
+   ═════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ReadingProgress — `var(--ifm-color-primary)`, so the brand override
+       recolours the bar. It was documented and not declared, once. */
+  --vsor-reading-progress: var(--ifm-color-primary);
+}

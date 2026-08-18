@@ -1,0 +1,13 @@
+# scratch space for ksor verbs — everything transient lives under one roof
+.ksor/
+
+node_modules/
+system/site/.next/
+system/site/.source/
+system/site/out/
+*.tsbuildinfo
+
+# secrets never enter the record — system/ is their future home (serve)
+.env*
+
+.DS_Store

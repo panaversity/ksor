@@ -1,0 +1,458 @@
+/**
+ * ============================================================================
+ * SIDEBAR — the record's table of contents.
+ * ============================================================================
+ *
+ * Ported from the predecessor's sor-site shell (decision 6). Design rules it
+ * carries: sentence case (never all-caps), a subtle primary-tinted pill for the
+ * active page, generous row spacing, hairline rules for nesting, quiet muted
+ * text for everything inactive. It restyles Docusaurus's own `.menu__*`
+ * classes, so it ships no components and adds no vocabulary.
+ *
+ * Every colour is a token from ./tokens.css.
+ * ============================================================================
+ */
+
+/* ============================================================================
+   0. CSS VARIABLES
+   ============================================================================ */
+
+:root {
+  --doc-sidebar-width: 272px;
+  --doc-sidebar-hidden-width: 30px;
+}
+
+/* ============================================================================
+   1. SIDEBAR CONTAINER
+   ============================================================================ */
+
+/* FIX: Override default Docusaurus sidebar padding that uses navbar height */
+/* This targets CSS module classes like sidebar_kgCq that get padding-top: 60px in production */
+.theme-doc-sidebar-container,
+aside[class*="sidebar"],
+div[class*="sidebar_"] {
+  padding-top: 0 !important;
+}
+
+.theme-doc-sidebar-container {
+  background: transparent !important;
+  border-right: 1px solid var(--sidebar-border) !important;
+}
+
+/* found live 2026-08-14, in `vsor build` output and nowhere else — the fix for
+   the hosting acceptance's D4/D7 red, measured before it was written.
+ *
+ * Docusaurus tucks the sidebar container UNDER the navbar
+ * (`.docSidebarContainer { margin-top: calc(-1 * var(--ifm-navbar-height)) }`)
+ * and pays it back with `padding-top: var(--ifm-navbar-height)` on the inner
+ * `.sidebar_*` module class. The rule directly above deletes that padding, and
+ * this file compensates on `.sidebarViewport` instead, with `position: sticky;
+ * top: var(--ifm-navbar-height)`.
+ *
+ * That substitution is CONDITIONAL and the original was not. A sticky element
+ * can only be shifted by its `top` while it has slack inside its containing
+ * block, and the viewport's own `height: calc(100vh - navbar)` equals the
+ * container's height whenever the page is no taller than the window. Measured on
+ * a real `vsor build` at 1280x900, first document open:
+ *
+ *   before   aside top 1px · viewport top 1px (sticky inert, zero slack) ·
+ *            first sidebar link box y=21..57 · document.elementFromPoint at its
+ *            centre returns <div class="flex shrink-0 items-center gap-3"> —
+ *            the navbar. The first document in the tree cannot be clicked.
+ *   after    aside top 65px · viewport top 65px · first link y=85 ·
+ *            elementFromPoint returns the link. Identical at 1280x400, where the
+ *            page DOES scroll and the sticky compensation was already working —
+ *            which is why this had to cancel the margin rather than restore the
+ *            padding: restoring the padding measured link y=148 on that page, a
+ *            64px gap, because both compensations then apply at once.
+ *
+ * So: no negative margin, one compensation, unconditional. `make surface` never
+ * saw it — its assembled fixture already computes margin-top 0. */
+.theme-doc-sidebar-container {
+  margin-top: 0 !important;
+}
+
+/* Sticky positioning below navbar */
+@media (min-width: 997px) {
+  .theme-doc-sidebar-container [class*="sidebarViewport"] {
+    position: sticky !important;
+    top: var(--ifm-navbar-height) !important;
+    height: calc(100vh - var(--ifm-navbar-height)) !important;
+    max-height: calc(100vh - var(--ifm-navbar-height)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-right: 0.75rem !important;
+  }
+}
+
+/* ============================================================================
+   2. MENU STRUCTURE
+   ============================================================================ */
+
+/* The nav's own gutter, and the reason the pill has one. The predecessor set
+   this on `.sidebar` — a bare class name Docusaurus 3.10 does not emit (its
+   sidebar carries a hashed module class, `sidebar_ZBM0`), so the rule matched
+   nothing and every active row ran flush into the viewport edge. Measured on
+   the built site 2026-08-18: the active link's box was x=0, width=272. `.menu`
+   is a real class on the same subtree and needs the gutter anyway. */
+.menu {
+  margin-top: 0.25rem !important;
+  padding: 1rem 0.75rem 0 !important;
+  overflow-x: hidden !important;
+}
+
+.menu__list {
+  padding-left: 0;
+  margin: 0;
+  list-style: none;
+  overflow-x: hidden !important;
+}
+
+.menu__list-item {
+  margin-bottom: 0.25rem;
+}
+
+/* ============================================================================
+   3. CATEGORY HEADERS (folder names) — NO ALL-CAPS
+   ============================================================================ */
+
+.menu__link--sublist {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  color: var(--sidebar-text) !important;
+  background: transparent !important;
+  border-radius: 6px !important;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease !important;
+}
+
+.menu__link--sublist:hover {
+  background: var(--sidebar-hover-bg) !important;
+  color: var(--sidebar-text) !important;
+  text-decoration: none !important;
+}
+
+/* Remove default indicator dots */
+.menu__link--sublist::before {
+  display: none !important;
+}
+
+/* Hide our custom chevron - Docusaurus already provides one */
+.menu__link--sublist::after {
+  display: none !important;
+}
+
+/* Make the Docusaurus dropdown caret smaller */
+.menu__caret {
+  transform: scale(0.75) !important;
+  opacity: 0.6 !important;
+  margin-right: 1rem !important;
+  /* Spacing from scrollbar */
+}
+
+/* Active/expanded category */
+.menu__list-item:not(.menu__list-item--collapsed) > .menu__link--sublist {
+  color: var(--sidebar-text) !important;
+  font-weight: 600 !important;
+}
+
+/* ============================================================================
+   4. NESTED CONTENT — Section Dividers & Indentation
+   ============================================================================ */
+
+.menu__list .menu__list {
+  padding-left: 0 !important;
+  margin: 0.5rem 0 0.75rem 0 !important;
+  border-left: 2px solid var(--sidebar-border) !important;
+  margin-left: 0.75rem !important;
+  padding-left: 0.75rem !important;
+}
+
+/* ============================================================================
+   5. MENU LINKS — Clean, Readable Items
+   ============================================================================ */
+
+.menu__link {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  color: var(--sidebar-text-muted) !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
+  text-decoration: none !important;
+}
+
+/* Remove default bullets */
+.menu__link::before {
+  display: none !important;
+}
+
+/* Hover state - faint surface so items feel interactive (not inert text) */
+.menu__link:hover {
+  background: var(--sidebar-hover-bg) !important;
+  color: var(--sidebar-primary) !important;
+  text-decoration: none !important;
+}
+
+/* ============================================================================
+   6. ACTIVE STATE — Primary text color (not background)
+   ============================================================================ */
+
+.menu__link--active {
+  background: var(--sidebar-active-bg-subtle) !important;
+  color: var(--sidebar-primary) !important;
+  font-weight: 600 !important;
+}
+
+.menu__link--active:hover {
+  background: var(--sidebar-active-bg-subtle) !important;
+  color: var(--sidebar-primary) !important;
+}
+
+/* ============================================================================
+   7. DEEPLY NESTED ITEMS
+   ============================================================================ */
+
+.menu__list .menu__list .menu__link {
+  font-size: 0.8125rem !important;
+  padding: 0.5rem 1rem !important;
+  color: var(--sidebar-text-muted) !important;
+}
+
+/* Consistent hover - the site's primary at all nesting levels */
+.menu__list .menu__list .menu__link:hover {
+  color: var(--sidebar-primary) !important;
+}
+
+/* Consistent active - the site's primary at all nesting levels */
+.menu__list .menu__list .menu__link--active {
+  background: transparent !important;
+  color: var(--sidebar-primary) !important;
+  font-weight: 600 !important;
+}
+
+/* Third level and deeper - same consistent colors */
+.menu__list .menu__list .menu__list .menu__link:hover {
+  color: var(--sidebar-primary) !important;
+}
+
+.menu__list .menu__list .menu__list .menu__link--active {
+  color: var(--sidebar-primary) !important;
+}
+
+/* ============================================================================
+   7a. FORCE TRANSPARENT BACKGROUNDS — Override Docusaurus defaults
+   ============================================================================ */
+
+/* High-specificity active-pill: this block is the authoritative winner over
+   Docusaurus defaults at every nesting level. Was forced transparent to kill
+   the ugly default active background; now carries our own SUBTLE pill instead
+   (the "pill-style active state" this file's header always intended). */
+.theme-doc-sidebar-container .menu__link--active,
+.theme-doc-sidebar-container .menu__link--active:hover,
+.theme-doc-sidebar-container .menu__link--active:focus,
+.theme-doc-sidebar-container .menu__list-item--collapsed > .menu__link--active,
+.theme-doc-sidebar-container .menu__list .menu__link--active,
+.theme-doc-sidebar-container .menu__list .menu__list .menu__link--active,
+.theme-doc-sidebar-container .menu__list .menu__list .menu__list .menu__link--active,
+nav[class*="sidebar"] .menu__link--active,
+aside[class*="sidebar"] .menu__link--active {
+  background: var(--sidebar-active-bg-subtle) !important;
+  background-color: var(--sidebar-active-bg-subtle) !important;
+}
+
+/* Also ensure sublist (category) active states have no background */
+.theme-doc-sidebar-container .menu__link--sublist-caret,
+.theme-doc-sidebar-container .menu__link--sublist-caret:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* THE ACTUAL FIX: Override the collapsible wrapper div that has the background */
+.menu__list-item-collapsible,
+.menu__list-item-collapsible--active,
+.menu__list-item-collapsible:hover,
+.menu__list-item-collapsible--active:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Third level nesting - same padding */
+.menu__list .menu__list .menu__list .menu__link {
+  font-size: 0.8125rem !important;
+  padding: 0.5rem 1rem !important;
+}
+
+/* ============================================================================
+   8. SCROLLBAR STYLING
+   ============================================================================ */
+
+.theme-doc-sidebar-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.theme-doc-sidebar-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.theme-doc-sidebar-container::-webkit-scrollbar-thumb {
+  background: var(--sidebar-border);
+  border-radius: 3px;
+}
+
+.theme-doc-sidebar-container::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-text-muted);
+}
+
+/* Firefox scrollbar */
+.theme-doc-sidebar-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-border) transparent;
+}
+
+/* ============================================================================
+   9. COLLAPSE BUTTON — quieted, not hidden
+
+   The predecessor painted this out entirely, which makes
+   `docs.sidebar.hideable: true` in docusaurus.config.ts unreachable: a
+   configured affordance with its own control removed. The button stays; what
+   goes is Infima's button fill, which put a solid grey slab across the foot of
+   the sidebar (seen live 2026-08-18). A hairline and the muted text read as the
+   foot of the nav instead.
+   ============================================================================ */
+
+[class*="collapseSidebarButton"] {
+  background: transparent !important;
+  border: none !important;
+  border-top: 1px solid var(--sidebar-border) !important;
+  color: var(--sidebar-text-muted) !important;
+}
+
+[class*="collapseSidebarButton"]:hover {
+  background: var(--sidebar-hover-bg) !important;
+  color: var(--sidebar-primary) !important;
+}
+
+/* ============================================================================
+   10. MOBILE SIDEBAR (Hamburger Menu Overlay)
+   ============================================================================ */
+
+/* Docusaurus mobile sidebar (navbar-sidebar) - the overlay that appears when hamburger is clicked */
+.navbar-sidebar {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 80vw !important;
+  max-width: 350px !important;
+  background: var(--sidebar-bg) !important;
+  z-index: 100 !important;
+  transform: translateX(100%) !important;
+  transition: transform 0.3s ease !important;
+  box-shadow: -4px 0 20px var(--vsor-shadow-a015) !important;
+  overflow-y: auto !important;
+}
+
+.navbar-sidebar--show {
+  transform: translateX(0) !important;
+}
+
+/* Backdrop overlay when sidebar is open */
+.navbar-sidebar__backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: var(--vsor-shadow-a050) !important;
+  z-index: 99 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s ease !important;
+}
+
+.navbar-sidebar--show + .navbar-sidebar__backdrop,
+.navbar-sidebar__backdrop--show {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .navbar-sidebar {
+  background: var(--sidebar-bg) !important;
+  box-shadow: -4px 0 30px var(--vsor-shadow-a040) !important;
+}
+
+@media (max-width: 996px) {
+  .theme-doc-sidebar-container {
+    background: var(--sidebar-bg) !important;
+  }
+
+  /* Larger touch targets on mobile */
+  .menu__link {
+    padding: 0.875rem 1rem !important;
+  }
+
+  .menu__link--sublist {
+    padding: 0.875rem 1rem !important;
+  }
+}
+
+/* ============================================================================
+   11. FOCUS STATES (Accessibility)
+   ============================================================================ */
+
+.menu__link:focus-visible,
+.menu__link--sublist:focus-visible {
+  outline: 2px solid var(--sidebar-active-bg) !important;
+  outline-offset: 2px !important;
+}
+
+/* Section 12 did not cross: automatic leaf NUMBERING. Two of its rules key off
+   DOM depth alone, so any record with a folder inside a folder would have had
+   "1." "2." prefixed to its documents by the shell — the site inventing an
+   ordering the record never declared, which is exactly what the governed
+   `order:` key exists to state. The other three keyed off `_category_.json`
+   classNames and a `sidebar_class_name` frontmatter key, neither of which the
+   record's frontmatter admits. README.md records it.
+   ============================================================================ */
+
+/* ============================================================================
+   13. SECTION SPACING — Visual Grouping
+   ============================================================================ */
+
+/* Top-level items breathe on WHITESPACE, not on a full-width rule between
+   every row. 22 stacked 1px dividers turned the nav into a spreadsheet; a
+   consistent small gap + the category carets (and the active pill) carry the
+   structure instead. Expanded categories get a touch more air below. */
+.theme-doc-sidebar-menu > .menu__list-item {
+  margin-bottom: 0.125rem !important;
+}
+
+.theme-doc-sidebar-menu > .menu__list-item:not(:first-child) {
+  border-top: none !important;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* Give expanded categories a touch more air above/below so an open folder
+   tree reads as its own block without needing a divider. */
+.theme-doc-sidebar-menu > .menu__list-item:not(.menu__list-item--collapsed):has(> .menu__list) {
+  margin-top: 0.375rem !important;
+  margin-bottom: 0.375rem !important;
+}
+
+/* Section 14 did not cross: a width transition keyed on `body.sidebar-collapsed`,
+   a class the predecessor set from its own chrome. No code in this shell sets
+   it, and a rule waiting for a class nobody writes is dead weight. */

@@ -31,6 +31,7 @@
   "files": [
     "dist",
     "docs",
+    "templates",
     "CHANGELOG.md",
     "NOTICE"
   ],
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "playwright": "^1.58.0",
     "publint": "0.3.23",
     "tsdown": "0.22.14",
     "typescript": "catalog:",

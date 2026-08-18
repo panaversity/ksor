@@ -1,0 +1,5 @@
+# Checkout bytes are provenance bytes: markdown is LF on every platform so
+# the same commit hashes identically on Windows, macOS, and Linux.
+* text=auto
+*.md text eol=lf
+instance.md text eol=lf

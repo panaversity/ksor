@@ -1,0 +1,19 @@
+packages:
+  - system/site
+  # reserved homes for future system components (gateways, MCP surface, packages)
+  - system/gateways/*
+  - system/packages/*
+
+# 48-hour quarantine on newly published dependency versions — a routine
+# `pnpm install` here never picks up a day-zero compromised release.
+minimumReleaseAge: 2880
+
+# Dependency install scripts are denied by default. Flip an entry to true
+# only with a comment naming what breaks without it. esbuild and sharp are
+# reviewed and stay denied: both ship prebuilt platform binaries as
+# optionalDependencies, so their install scripts are download fallbacks the
+# site never needs — but pnpm 11 exits 1 on every install/dev until each is
+# explicitly decided. (found live: fresh-scaffold pnpm dev, 2026-08-18)
+allowBuilds:
+  esbuild: false
+  sharp: false

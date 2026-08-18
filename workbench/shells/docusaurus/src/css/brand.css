@@ -1,0 +1,75 @@
+/**
+ * THE BRAND — the whole re-brand of the ported design system, in one file.
+ *
+ * ./tokens.css is the predecessor's token layer and its header states the
+ * contract: a consuming project never edits it and sets ONE pair of values,
+ * Docusaurus's own `--ifm-color-primary`, light and dark. Everything accented
+ * derives from that pair — Infima's chrome reads it directly, `--primary`
+ * bridges it into the shadcn palette, and the accent family composes it into
+ * the deep shades and the eight opacities the chrome needs.
+ *
+ * This shell is that consuming project, so this is that pair.
+ *
+ * ── Where the two values come from ───────────────────────────────────────────
+ * Sampled from the KSoR mark itself (static/img/ksor-mark.png and the repo
+ * banner it is cut from), not chosen: the mark's field and its K are a deep
+ * royal blue whose most common quantized value across the 1448x1086 banner is
+ * #0050C0, with #004CC5 the exact value on the mark's own K. The mark's node
+ * tree carries a teal (#009F99) and greens, but a second brand hue would have
+ * to be bridged into a system built around one — the tokens compose ONE
+ * primary — so the accent stays the blue and the greens stay in the mark.
+ *
+ * Measured, because both directions have to pass: #004CC5 sits at 7.44:1
+ * against the light background AND against `--primary-foreground` (near-white),
+ * so it works as text on the page and as a surface under a label. It is used
+ * both ways — links, `<strong>`, the H3 rule, sidebar active, TOC active are
+ * text; the home page's action is a filled surface.
+ *
+ * The dark value is the same hue lightened until it clears a near-black ground:
+ * #6FA8FF measures 8.7:1 there. The light value cannot be reused (2.8:1 on
+ * black — the predecessor's dark block redeclares its own primary for exactly
+ * this reason).
+ */
+
+:root {
+  --ifm-color-primary: #004cc5;
+}
+
+html[data-theme="dark"] {
+  --ifm-color-primary: #6fa8ff;
+}
+
+:root {
+  /* Infima's other six primary shades, which its own chrome reads for button
+     hovers, active menu items and link hovers. Declared as compositions of the
+     one value above rather than as six more literals, which is the idiom
+     tokens.css section 3 already uses — so there is still exactly one brand
+     colour per theme in this shell, and the dark half re-resolves with no
+     second declaration (these sit on the root element, which is what
+     `html[data-theme]` selects). Left undeclared, Infima's stock green family
+     stays and a re-branded site hovers green. */
+  --ifm-color-primary-dark: color-mix(in srgb, var(--ifm-color-primary) 90%, black);
+  --ifm-color-primary-darker: color-mix(in srgb, var(--ifm-color-primary) 85%, black);
+  --ifm-color-primary-darkest: color-mix(in srgb, var(--ifm-color-primary) 70%, black);
+  --ifm-color-primary-light: color-mix(in srgb, var(--ifm-color-primary) 90%, white);
+  --ifm-color-primary-lighter: color-mix(in srgb, var(--ifm-color-primary) 85%, white);
+  --ifm-color-primary-lightest: color-mix(in srgb, var(--ifm-color-primary) 70%, white);
+}
+
+/* The third value the pair forces, and the only token outside the pair this
+   file touches.
+ *
+ * `--primary-foreground` paints text ON the primary — the label of the home
+ * page's action. tokens.css sets it to near-white in BOTH themes, which is
+ * right under a dark primary and wrong under a light one: near-white on
+ * #6FA8FF measures 2.4:1, well under the 4.5:1 a button label needs. (The
+ * predecessor shipped the same weakness under its own light dark-mode primary;
+ * it is a property of the token, not of our blue.) Near-black on the same
+ * surface measures 6.8:1.
+ *
+ * Kept here rather than corrected in tokens.css so the ported file stays the
+ * ported file, and so a project that re-brands to a DARK dark-mode primary
+ * deletes one block instead of hunting a token. */
+html[data-theme="dark"] {
+  --primary-foreground: oklch(0.18 0 0);
+}

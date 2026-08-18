@@ -1,0 +1,29 @@
+/**
+ * ReadingProgress styles, ported with the component.
+ *
+ * found live in the predecessor: pinned to `top: 0` the bar is a
+ * full-saturation 4px stripe slicing across the top of the glass header at
+ * z-index 9999 — the loudest thing on the page. Under the header instead, the
+ * same stripe reads as the header's own underline. --ifm-navbar-height is
+ * Docusaurus's own variable, so a site that changes the bar height keeps the
+ * bar and the rule together.
+ */
+
+.progressBarContainer {
+  position: fixed;
+  top: var(--ifm-navbar-height);
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  /* Below the navbar (z-40) and the mobile sheet (z-50): at 9999 the stripe
+     painted over the open sheet (review finding, 2026-08-18). */
+  z-index: 30;
+  pointer-events: none;
+}
+
+.progressBar {
+  height: 100%;
+  background: var(--vsor-reading-progress);
+  transition: width 0.1s ease-out;
+}

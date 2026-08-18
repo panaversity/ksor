@@ -1,0 +1,53 @@
+import { source } from "@/lib/source";
+import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import { notFound } from "next/navigation";
+import { getMDXComponents } from "@/components/mdx";
+import type { Metadata } from "next";
+import { createRelativeLink } from "fumadocs-ui/mdx";
+
+export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  const MDX = page.data.body;
+
+  return (
+    <DocsPage toc={page.data.toc} full={page.data.full}>
+      <DocsTitle>{page.data.title}</DocsTitle>
+      <DocsDescription>{page.data.description}</DocsDescription>
+      <DocsBody>
+        <MDX
+          components={getMDXComponents({
+            // relative links between documents in knowledge/ resolve to
+            // their rendered pages
+            a: createRelativeLink(source, page),
+          })}
+        />
+      </DocsBody>
+    </DocsPage>
+  );
+}
+
+export async function generateStaticParams() {
+  const params = source.generateParams();
+  if (params.length === 0) {
+    // Without this, Next fails the empty-record build with an error that
+    // names neither the record nor the rule (found live, 2026-08-18).
+    throw new Error(
+      "the record has no documents — a KSoR is never empty; add one to knowledge/ or restore one from git history (pnpm check says the same).",
+    );
+  }
+  return params;
+}
+
+export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): Promise<Metadata> {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  return {
+    title: page.data.title,
+    description: page.data.description,
+  };
+}

@@ -5,3 +5,10 @@ dist/
 .mypy_cache/
 __pycache__/
 .turbo/
+
+# Running a workbench shell in place generates these; the swap must never
+# carry them into a project either (the suite filters them too).
+workbench/shells/*/node_modules/
+workbench/shells/*/.docusaurus/
+workbench/shells/*/.generated/
+workbench/shells/*/out/

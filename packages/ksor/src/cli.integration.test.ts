@@ -47,7 +47,7 @@ describe("ksor CLI (built artifact)", () => {
       const result = runCli([flag]);
       expect(result.status, `${flag} exit code`).toBe(0);
       expect(result.stdout).toContain("Usage: ksor <verb>");
-      expect(result.stdout).toContain("designed; none implemented");
+      expect(result.stdout).toContain("init is implemented");
     }
   });
 

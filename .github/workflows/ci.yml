@@ -87,3 +87,34 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm build
       - run: pnpm publint
+
+  scaffold-e2e:
+    name: Scaffold walkthrough (browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      # playwright is a devDependency of packages/ksor, so its binary is not
+      # visible to `pnpm exec` at the workspace root (found live: first CI run,
+      # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, 2026-08-18).
+      - run: pnpm --dir packages/ksor exec playwright install chromium --with-deps
+      - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts
+      # The shell swap seam, proven with two implementations: the Fumadocs
+      # reference as emitted, and the workbench Docusaurus shell via its swap
+      # recipe — one suite, identical assertions (surface contract clauses 1-4).
+      - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/shell-conformance.integration.test.ts
+
+  init-windows:
+    name: Init acceptance (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/init.integration.test.ts
+      - run: pnpm test:unit

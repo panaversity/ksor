@@ -2,13 +2,31 @@
 
 **The Knowledge System of Record for humans and AI agents.**
 
-One governed source of markdown, published as a site people read and an MCP
-surface AI agents query — with citations, and an honest refusal when the corpus
-does not cover the question.
+Knowledge you can govern. Answers you can trace. Boundaries agents can
+respect. One governed source of markdown, published as a site people read
+and an MCP surface AI agents query — with citations, and an honest refusal
+when the corpus does not cover the question.
 
-> **`0.x` status:** this package currently reserves the name and states the
-> intent. The CLI answers honestly (`exit 2`, "designed but not implemented")
-> rather than pretending. [`docs/status.md`](https://github.com/panaversity/ksor/blob/main/docs/status.md)
+## Start
+
+```bash
+npx @panaversity/ksor init my-sor
+cd my-sor
+pnpm install
+pnpm dev        # the site, live at http://localhost:3000
+```
+
+One command emits a complete governed project: the record (`knowledge/`,
+plain CommonMark), a working documentation site with hot reload, offline
+search and `llms.txt`, adopter CI, a dependency-free format checker
+(`pnpm check`), and the instructions and skills any coding agent needs to
+operate it. Everything emitted is yours (the templates are MIT-0), the
+scaffold is deterministic and offline, and every refusal explains itself.
+
+> **`0.x` status:** `init` works; `dev`, `build` and `serve` are designed,
+> not implemented — each prints an honest notice and exits `2` (inside a
+> scaffolded project, `pnpm dev` / `pnpm build` cover local work).
+> [`docs/status.md`](https://github.com/panaversity/ksor/blob/main/docs/status.md)
 > and the released version number are authoritative for implemented
 > functionality.
 
