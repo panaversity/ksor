@@ -91,10 +91,11 @@ its own code-wins rule), or **recorded** (deliberate, reason stated).
 - Surface contract clause 2: governed directives **deferred** — no directive
   grammar is ratified; shells pass them through as the readable text they
   degrade to. Inventing quiz semantics ad hoc was rejected.
-- Two-implementation clause: the Docusaurus-vs-Fumadocs comparison ran live
-  before ratification and the owner chose Fumadocs, ruling Docusaurus
-  support a later verb — the workbench fixture + conformance suite move
-  there (supersedes the in-PR commitment).
+- Two-implementation clause: briefly deferred to a later verb after the
+  live Docusaurus-vs-Fumadocs comparison; the owner re-activated it the
+  same day, and this PR ships the workbench shell and the conformance
+  suite in CI (see "Round two" below — this bullet records the morning's
+  state, superseded by the afternoon's).
 
 ## Verified clean (what the attack did NOT find)
 

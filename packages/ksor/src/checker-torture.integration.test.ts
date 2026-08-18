@@ -219,6 +219,36 @@ describe("scaffolded format-checker — torture", () => {
     expect(edges.output).toContain("frontmatter value needs quoting: title: Pay # policy");
   });
 
+  it("refuses duplicate frontmatter keys — YAML would, after a green check", () => {
+    const result = probe({
+      "knowledge/dup.md": "---\ntitle: One\nstatus: draft\ntitle: Two\n---\n\nBody.\n",
+    });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain("duplicate frontmatter key: title");
+  });
+
+  it("refuses malformed quoting instead of treating it as quoted", () => {
+    const result = probe({
+      "knowledge/mq1.md": '---\ntitle: "a" and "b"\nstatus: draft\n---\n\nBody.\n',
+      "knowledge/mq2.md": "---\ntitle: 'unclosed\nstatus: draft\n---\n\nBody.\n",
+      "knowledge/mq3.md": "---\ntitle: - foo\nstatus: draft\n---\n\nBody.\n",
+    });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain('frontmatter quoting is malformed: title: "a" and "b"');
+    expect(result.output).toContain("frontmatter quoting is malformed: title: 'unclosed");
+    expect(result.output).toContain("frontmatter value needs quoting: title: - foo");
+  });
+
+  it("keeps checking links after a stray unpaired backtick", () => {
+    const result = probe({
+      "knowledge/stray.md": doc(
+        "A stray ` backtick here.\n\nLater, [a dead link](./missing-after-stray.md) and `real code`.",
+      ),
+    });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain("dead link: ./missing-after-stray.md");
+  });
+
   it("refuses a scalar provenance and accepts the list form", () => {
     const scalar = probe({
       "knowledge/prov.md": doc(

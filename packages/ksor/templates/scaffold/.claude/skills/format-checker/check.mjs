@@ -109,7 +109,9 @@ function parseFrontmatter(text) {
   const keys = new Map();
   const children = new Map();
   const quoted = new Set();
+  const malformedQuote = new Map();
   const malformed = [];
+  const duplicates = [];
   let current = null;
   for (const raw of match[1].split("\n")) {
     const line = raw.replace(/[ \t]+$/, "");
@@ -117,7 +119,18 @@ function parseFrontmatter(text) {
     const top = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
     if (top) {
       current = top[1];
-      if (/^(["']).*\1$/.test(top[2].trim())) quoted.add(current);
+      // A Map silently keeps the last write; YAML refuses the document
+      // (review finding, 2026-08-18: green check, red build).
+      if (keys.has(current)) duplicates.push(current);
+      const rawValue = top[2].trim();
+      if (/^"(?:[^"\\]|\\.)*"$/.test(rawValue) || /^'[^']*'$/.test(rawValue)) {
+        quoted.add(current);
+      } else if (/^["']/.test(rawValue)) {
+        // Starts like a quote but is not one clean quoted string — YAML
+        // refuses it, and unquote() below hides the evidence (review
+        // finding, 2026-08-18: `"a" and "b"` slipped every danger test).
+        malformedQuote.set(current, rawValue);
+      }
       keys.set(current, unquote(top[2]));
       children.set(current, new Map());
       continue;
@@ -130,7 +143,7 @@ function parseFrontmatter(text) {
     if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
     malformed.push(line.trim());
   }
-  return { keys, children, quoted, malformed };
+  return { keys, children, quoted, malformedQuote, duplicates, malformed };
 }
 
 /**
@@ -171,7 +184,10 @@ function stripCode(text) {
     blank = line.trim() === "";
     kept.push(line);
   }
-  return kept.join("\n").replace(/(`+)[^`]*?\1/g, " ");
+  // Spans bounded to one line: a stray unpaired backtick once paired with
+  // the next backtick pages later and silently exempted every link between
+  // them from the dead-link rules (review finding, 2026-08-18).
+  return kept.join("\n").replace(/(`+)[^`\n]*?\1/g, " ");
 }
 
 // Every shape CommonMark gives a link destination: inline (bare or
@@ -366,6 +382,14 @@ if (!existsSync(knowledgeDir)) {
         "close the block with --- on its own line; every line inside it is `key: value` or a `- list item` — no prose, no comments",
       );
     } else {
+      for (const dup of fm.duplicates) {
+        problem(
+          rel,
+          `duplicate frontmatter key: ${dup}`,
+          "YAML refuses a repeated key, so the build would fail after this check passed — and only one of the two values can be the truth",
+          `keep one ${dup}: line`,
+        );
+      }
       for (const key of REQUIRED_KEYS) {
         if (!fm.keys.has(key) || fm.keys.get(key) === "") {
           problem(
@@ -394,12 +418,20 @@ if (!existsSync(knowledgeDir)) {
         // YAMLException from inside node_modules (found live 2026-08-18:
         // an unquoted colon in a title killed both site builds after a
         // green check).
-        if (
+        if (fm.malformedQuote.has(key)) {
+          problem(
+            rel,
+            `frontmatter quoting is malformed: ${key}: ${fm.malformedQuote.get(key)}`,
+            "the value starts like a quoted string but is not one clean quoted string — YAML refuses it, so the build would fail after this check passed",
+            `quote the whole value exactly once: ${key}: "..."`,
+          );
+        } else if (
           !fm.quoted.has(key) &&
           (value.includes(": ") ||
             value.endsWith(":") ||
             value.includes(" #") ||
-            /^[[{>|&*!%@`]/.test(value))
+            /^[[{>|&*!%@`'"]/.test(value) ||
+            /^-(\s|$)/.test(value))
         ) {
           problem(
             rel,
