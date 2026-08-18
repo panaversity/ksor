@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -83,19 +91,26 @@ describe("published tarball", () => {
   // and so no longer govern this repo. found live: with nothing in their place,
   // npm pack listed a stray templates/scaffold/system/site/out/ — one `pnpm dev`
   // under the template would publish a Next.js build to npm (2026-08-18).
-  it("never publishes transient output from the template tree", { timeout: 30_000 }, () => {
-    const probe = path.join(pkgDir, "templates", "scaffold", "system", "site", "probe.tsbuildinfo");
-    try {
-      writeFileSync(probe, "transient\n");
-      const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
-        cwd: pkgDir,
-        encoding: "utf8",
-      });
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout, "build output reached the tarball").not.toContain("probe.tsbuildinfo");
-    } finally {
-      rmSync(probe, { force: true });
-    }
+  it("never publishes transient output from the template tree", { timeout: 60_000 }, () => {
+    // On a COPY of the package: planting the probe in the real template tree
+    // raced the init suite's templates-identity test, which reads that tree
+    // while vitest runs files in parallel (found live 2026-08-18 — the one
+    // flake in three chained heavy runs, reproduced and pinned here). The
+    // copy carries the same pack rules, so the mechanism under test rides
+    // along.
+    const staged = path.join(workDir(), "pkg");
+    cpSync(pkgDir, staged, {
+      recursive: true,
+      filter: (src) => path.basename(src) !== "node_modules",
+    });
+    const probe = path.join(staged, "templates", "scaffold", "system", "site", "probe.tsbuildinfo");
+    writeFileSync(probe, "transient\n");
+    const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+      cwd: staged,
+      encoding: "utf8",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout, "build output reached the tarball").not.toContain("probe.tsbuildinfo");
   });
 
   // The manifest above is a list of names someone maintains; this is the
