@@ -190,3 +190,30 @@ both in-corpus questions SERVED with the right document ranked first; the
 far-domain question ABSTAINED; and the scope-adjacent near-miss ("what is
 the parental leave policy?" against a policy corpus) ABSTAINED — the
 near-miss class the testing rules demand, on real vectors.
+
+## The CLI walk (2026-08-19 — the commands an adopter runs)
+
+The full loop, real Gemini, the example corpus, nothing but the shipped
+binaries:
+
+```sh
+ksor-content schema --instance instance.md --apply     # DDL at the declared space
+psql "$DSN" -c "INSERT INTO ingest_tenant_grants (role_name, tenant_id)
+  VALUES ('sor_content_ingest', '<name>')"             # authorization is a row, not a flag
+ksor-content ingest --instance instance.md --knowledge knowledge/ --flip
+#   → "ingest: generation 1 — 4 nodes, 3 chunks; embedded 3, carried 0, failed 0"
+ksor-content calibrate --instance instance.md          # synthesized door, live
+#   → "vector_floor: 0.611   # calibrated on generation None, model gemini-embedding-001/d1536, door: synthesized"
+# paste the line into instance.md (the human ratification act), then:
+ksor-gateway                                            # stdio; --http for the hosted door
+```
+
+Driven by a real MCP client afterwards: tools search/outline/read listed;
+"who approves purchases over fifty thousand dollars?" SERVED with
+generation-1 citations; "how do I tune a postgres autovacuum daemon?"
+ABSTAINED; outline browsed; the document read back byte-faithful.
+
+Review round 1 (independent agent, live-verified): 11 findings — 4
+confirmed (chunked-body replay dropped; unbounded chunked-GET read;
+audit actor never wired; a false premise under the DNS-rebind
+deviation) — all fixed fail-closed in 91c1910 with live probes added.
