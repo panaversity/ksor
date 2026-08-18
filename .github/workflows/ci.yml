@@ -31,7 +31,14 @@ jobs:
 
   changesets:
     name: Changeset present
-    if: github.event_name == 'pull_request'
+    # Version PRs CONSUME changesets — that is their whole job — so the gate
+    # exempts them (found live: the 0.0.2 version PR failed its own release
+    # mechanism's check, 2026-08-18). changeset-release/* is the changesets
+    # action's branch; release-* is the manual rescue's.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !startsWith(github.head_ref, 'changeset-release/') &&
+      !startsWith(github.head_ref, 'release-')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
