@@ -53,6 +53,11 @@ export function materialize(
   created: string[] = [],
 ): readonly string[] {
   for (const entry of readdirSync(templateDir, { withFileTypes: true })) {
+    // A dev checkout's template can be accidentally installed into (found
+    // live 2026-08-18: a concurrent agent left 477 MB of node_modules there);
+    // the scaffold must never inherit it. The published tarball never
+    // carries one, so this guard is inert in production.
+    if (entry.name === "node_modules") continue;
     const from = path.join(templateDir, entry.name);
     const to = path.join(targetDir, EMITTED_NAMES.get(entry.name) ?? entry.name);
     if (entry.isDirectory()) {

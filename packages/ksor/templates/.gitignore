@@ -12,3 +12,4 @@ scaffold/system/site/out/
 scaffold/**/*.tsbuildinfo
 scaffold/.env*
 scaffold/**/.DS_Store
+scaffold/system/site/.staged-knowledge/

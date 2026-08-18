@@ -20,12 +20,21 @@ function findInstance(start: string): string {
   );
 }
 
-function readInstanceName(): string {
+/**
+ * instance.md's frontmatter block — the configuration every surface reads
+ * (identity here, the audience model in lib/audience.ts). Only this block:
+ * body prose that looks like a key must never become configuration (review
+ * finding, 2026-08-18).
+ */
+export function instanceFrontmatter(): string {
   const text = readFileSync(findInstance(process.cwd()), "utf8");
-  // Only the frontmatter block: body prose mentioning `name:` must never
-  // become the site's identity (review finding, 2026-08-18).
-  const block = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
-  const raw = /^name:[ \t]*(.*)$/m.exec(block)?.[1]?.trim() ?? "";
+  // The checker's boundary exactly: BOM stripped, CRLF normalized, lax close.
+  const normalized = text.replace(/^\uFEFF/, "").replaceAll("\r\n", "\n");
+  return /^---\n([\s\S]*?)\n---/.exec(normalized)?.[1] ?? "";
+}
+
+function readInstanceName(): string {
+  const raw = /^name:[ \t]*(.*)$/m.exec(instanceFrontmatter())?.[1]?.trim() ?? "";
   const unquoted = /^(['"])(.*)\1$/.exec(raw);
   const name = unquoted?.[2] ?? raw;
   if (name === "") {

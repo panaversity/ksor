@@ -2,7 +2,7 @@
 name: add-sources
 description: Turn source material — documents, pages, pasted text, notes — into governed knowledge in knowledge/. Use when the owner shares material to add, says "add this to the knowledge base", or asks how to get existing content in. Not for editing the site.
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Add sources
@@ -24,6 +24,9 @@ The rules that make it _governed_ rather than merely stored:
   file names, systems, people, dates) whenever the owner can tell you.
   Precision matters: "Finance policy manual §4.2, 2025 edition" governs;
   "internal docs" does not.
+- When `instance.md` declares `audiences:`, ask the owner which audience the
+  new material belongs to and write it as `visibility:` — never guess that
+  restricted material is public.
 
 ## Fidelity rules
 

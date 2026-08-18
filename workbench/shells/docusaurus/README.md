@@ -8,10 +8,11 @@ record, the same root commands, a different framework — and nothing outside
 shell; there is no shell selector (decision 9) — swapping is an act the
 project's coding agent performs, and this directory is the recipe.
 
-**Conformance-lean, never feature parity.** It satisfies the contract's four
+**Conformance-lean, never feature parity.** It satisfies the contract's five
 clauses (dev + build at `system/site/`, renders every record document and
-nothing authored inside itself, serves `llms.txt`, passes the browser smoke)
-and translates the governed `order:` key.
+nothing authored inside itself, serves `llms.txt`, passes the browser smoke,
+and never emits a document outside the audience it was built for) and
+translates the governed `order:` key.
 
 It is not, however, unstyled. The predecessor's design system crossed with it
 (below), so a swapped project looks like a finished publication rather than a
@@ -89,6 +90,176 @@ Each of these is a divergence from the ported file, measured here:
 - **Two hashed CSS-module selectors** (`tocMobile_ITEo`, `tocCollapsible_ETCw`)
   became prefix matches. A hash is a build artifact of one Docusaurus release.
 
+## Visibility: per-audience builds, by staging
+
+If `instance.md` declares audiences, this shell builds ONE audience at a time
+and every reader takes the same filtered directory
+(`specs/ksor/visibility/spec.md`).
+
+```yaml
+audiences: # ordered least- to most-restricted; `public` first
+  - public
+  - internal
+  - restricted
+default_visibility: public # the tier of a document that declares none
+```
+
+A document's tier is its `visibility:` key or that default; a build for
+audience A publishes every document at or below A. **No `audiences:` key is
+today's behaviour exactly** — no stage, no label, `KSOR_AUDIENCE` ignored
+(measured below).
+
+### The mechanism, and the trap it avoids
+
+At config load, `lib/visibility.ts` copies the permitted documents — **and
+only the assets those documents reference** — into `system/site/.staged-knowledge/`,
+and `docusaurus.config.ts` points **both** readers at it: the docs plugin's
+`path` and `readRecord()`, which generates `llms.txt`/`llms-full.txt`. One
+chokepoint, both readers; the directory is REPLACED on every load, like
+`.generated/`, because a document permitted by the previous audience is
+exactly the file that must not survive into this build.
+
+The name is the reference shell's name, deliberately: both shells stage into
+`system/site/.staged-knowledge/`, so a project gets one `.gitignore` line, one
+checker exemption and one swap-recipe line no matter which shell it runs, and
+the conformance suite has one directory to look for.
+
+The obvious fix is the trap. **Passing the hidden filenames to the docs
+plugin's `exclude:` zeroes every canary and serializes the exclusion list —
+with the record's absolute path — into the client bundle** served to every
+visitor (found live, research/visibility.md §2). Docusaurus serializes plugin
+options verbatim; a correct filter that ships to the browser is a leak wearing
+the costume of a fix. Staging means nothing about an excluded document ever
+reaches the config, so nothing about it can reach the bundle. The same
+serialization is why the docs `path` is **site-relative**: measured
+2026-08-18, the pre-staging shell shipped
+`path:"/Users/…/vis-doc/knowledge"` — the building machine's checkout path —
+to every visitor. It now reads `"../../knowledge"`.
+
+Filtering only `readRecord()` is the other trap: it produces a clean
+`llms.txt`, the surface an auditor checks first, while the document stays live
+at its URL and fully indexed in search (§3).
+
+### The `KSOR_AUDIENCE` contract
+
+| Value                        | Result                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| unset, no `audiences:`       | today's behaviour, untouched                                                                                      |
+| unset, `audiences:` declared | builds `audiences[0]` — the least-restricted tier, the only safe default                                          |
+| a declared audience          | builds that tier and everything below it                                                                          |
+| an undeclared audience       | **fails the build**, naming the declared set — never widens it                                                    |
+| set, but no `audiences:`     | **fails the build** — an operator who asked to filter must never be handed an unfiltered site that looks filtered |
+
+Below the top tier the footer carries `<audience> build — not for
+publication`, so a leaked screenshot names itself. That label is the **only**
+audience vocabulary that reaches the client: never the audience list, never
+the name of anything excluded, and on a public build the field is absent
+rather than null.
+
+### Refusals — the same slugs on both shells
+
+Everything fails closed, and every refusal reads `slug: what` + `why:` +
+`fix:`, so a pipeline can match the first word and an operator never has to
+open the source. The slugs are shared with the reference shell: a record
+refused here is refused there under the same word. Each measured on a real
+build, exit 1 in every case — Docusaurus reports config-load failures as a
+`[cause]` under its "could not load module" wrapper, several stack frames
+down, which is how this shell's `KSOR_BASE_PATH` refusal has always surfaced.
+
+| Slug                                 | Fires when                                                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ksor-audiences-unreadable`          | `audiences:` is declared but no audience parses out of it                                                                                                    |
+| `ksor-default-visibility-missing`    | `audiences:` without `default_visibility:`                                                                                                                   |
+| `ksor-default-visibility-undeclared` | `default_visibility:` names a tier the list does not                                                                                                         |
+| `ksor-audience-undeclared`           | `KSOR_AUDIENCE` names a tier the record does not declare                                                                                                     |
+| `ksor-audiences-not-declared`        | `KSOR_AUDIENCE` is set on a record with no model                                                                                                             |
+| `ksor-visibility-without-audiences`  | a document declares `visibility:` while `instance.md` declares no `audiences:` — the case where a deleted model silently publishes every restricted document |
+| `ksor-audience-empty`                | the tier being built permits no document at all                                                                                                              |
+
+Both YAML shapes of the list parse — block sequence and `[a, b]` flow — for
+the reason above: the reference shell reads both, and a record that builds on
+one shell and refuses on the other is a trap. `pnpm check` reports all of
+these earlier; the build never depends on anyone having run it.
+
+### Measured, on a swapped scaffold with a canary corpus
+
+Five documents (three public, one `internal`, one `restricted`), three canary
+strings in the restricted document's title, description and body, an image
+only it references, and three public assets. `grep -rl` over the whole export;
+the asset probed by its own bytes, not its name.
+
+| Probe                          | public | internal | restricted (control) |
+| ------------------------------ | ------ | -------- | -------------------- |
+| restricted title / desc / body | 0/0/0  | 0/0/0    | 11 / 5 / 4 files     |
+| internal title / desc / body   | 0/0/0  | 9/5/4    | 11 / 5 / 4 files     |
+| canary image, BYTES            | 0      | 0        | 1                    |
+| canary image, filename         | 0      | 0        | 1                    |
+| routes                         | 3 docs | 4 docs   | 5 docs               |
+| `llms.txt` entries             | 3      | 4        | 5                    |
+
+Sidebar, `llms.txt`, `sitemap.xml` and `search-index.json` agree at every
+tier, in the `order:` the record declares; excluded routes are simply absent
+from the static export. The dev server registers no route for an excluded
+document (`.docusaurus/routes.js`), and its `llms.txt` is filtered too.
+Verified alongside `KSOR_BASE_PATH=/repo`: prefixed links, prefixed asset
+`src`, canaries still zero.
+
+**The additive guarantee, measured file by file.** A record with no
+`audiences:`, built by this shell and by the pre-visibility shell: 35 of 37
+exported files byte-identical after normalizing content hashes. The two that
+differ are the JS bundles, and the only semantic deltas in them are the
+footer's watermark branch and the docs `path` becoming relative. Routes, HTML,
+CSS, fonts, `llms.txt`, `llms-full.txt`, `sitemap.xml` and `search-index.json`
+are byte-identical.
+
+### What to know before working on it
+
+- **A knowledge edit does not reach a running dev server** once audiences are
+  declared: the stage is a snapshot taken at config load. Measured — after
+  editing `knowledge/handbook/policies.md` under a live `pnpm dev`, the stage
+  copy and the served page were unchanged. Restart the server. (Without
+  audiences, hot reload is unaffected: the plugin reads `knowledge/` directly.)
+- **A cross-audience link fails the build here**, loudly:
+  `Markdown link with URL './compensation.md' … couldn't be resolved`, exit 1
+  under `onBrokenLinks: "throw"`. That is correct — the build that publishes
+  the link has already dropped the target — but the record-wide check
+  (`pnpm check`, checker rule 6) is what catches it before either shell runs.
+  A link to a same-tier or less-restricted document resolves normally.
+- **Config-load refusals arrive as a `[cause]`** under Docusaurus's "could not
+  load module" wrapper, several stack frames down. That is how this shell's
+  `KSOR_BASE_PATH` refusal has always surfaced; `pnpm build` still exits 1.
+- **Asset detection is the CHECKER's link grammar, matched exactly** — its
+  `stripCode` (fenced blocks, indented blocks except where the indent starts a
+  list item, inline spans per paragraph) and its `linkTargets` (inline links
+  bare or angle-bracketed with a title, and reference definitions), then its
+  `checkLinkTarget` resolution. One definition of "this is a link" across the
+  checker and both shells, so the two stages hold the same set on any record
+  the checker passes. The stage is the one place over-detection can put
+  restricted bytes where something might later ship them, which is why the
+  grammar is copied rather than improvised — and why there is no `?query`
+  handling or percent-decoding: the checker reports `./chart.png?v=2` as a
+  dead link and refuses spaces and non-ascii in filenames, so neither occurs
+  on a record it passes. Verified with an indented code sample naming a
+  restricted-only asset (not staged) beside a nested list item at the same
+  indent carrying a real link (staged).
+- **Raw `<img src="./x.png">` is not a reference in either shell**, so it is
+  not detected. Measured 2026-08-18: Docusaurus ships the element with its
+  `src` verbatim, which 404s at runtime; Fumadocs drops the element entirely.
+  Reference-style images (`![alt][ref]`) ARE staged — the checker's grammar
+  reads the definition — but Docusaurus leaves their `src` verbatim too, so
+  they 404 as well. Both are pre-existing and unrelated to visibility (they
+  reproduce without a model). If a shell ever renders raw HTML, `src=`
+  detection lands in the checker and both stages in the same commit.
+- **A canary sweep must probe the right thing.** A public document that quotes
+  a restricted asset's filename in a code sample, or uses the word
+  "restricted" in its own prose, puts those strings in the export
+  legitimately — measured, 4 files each. The sweep asserts on the excluded
+  document's canaries and on the asset's BYTES, never on a bare filename or an
+  audience word appearing anywhere. The same holds for the client bundle:
+  "internal" appears in a public build as library internals (React's
+  `_internalRoot`, Prism's keyword lists), so clause 5 is measured as "no
+  excluded document's slug, title or filename, and no exclusion list."
+
 ## The re-brand, in one file
 
 `src/css/brand.css` carries the whole of it: one `--ifm-color-primary` per
@@ -141,13 +312,18 @@ left `node_modules/.cache` in place, which makes "cold" and "warm" converge.
 rm -rf system/site
 cp -R <ksor-repo>/workbench/shells/docusaurus system/site
 rm -rf system/site/README.md system/site/node_modules \
-       system/site/.docusaurus system/site/.generated system/site/out
+       system/site/.docusaurus system/site/.generated system/site/.staged-knowledge \
+       system/site/out
                            # the README documents the workbench artifact (the
                            # format checker rightly refuses .md inside the
                            # site); the rest are generated dirs a locally-run
                            # workbench shell may carry — the conformance suite
                            # performs this same filtered copy
-printf '%s\n' 'system/site/.docusaurus/' 'system/site/.generated/' >> .gitignore
+printf '%s\n' 'system/site/.docusaurus/' 'system/site/.generated/' \
+              'system/site/.staged-knowledge/' >> .gitignore
+                           # .staged-knowledge/ holds one audience's filtered copy
+                           # of the record; committing it would put the same
+                           # documents in the repo twice
 pnpm install               # stops once on the build-scripts gate — see below
                            # (in CI, add --no-frozen-lockfile: the swap
                            # changes the dependency set, and CI defaults the
@@ -195,9 +371,11 @@ Git has the bytes that were actually there; take them from git.
 
 Two leftovers are harmless and can stay: the `allowBuilds` denials the swap
 added to `pnpm-workspace.yaml` (they deny install scripts for packages that are
-no longer installed) and the two `.gitignore` lines (`system/site/.docusaurus/`,
-`system/site/.generated/`, which name directories the reference shell never
-creates).
+no longer installed) and the `.gitignore` lines. Of those,
+`system/site/.docusaurus/` and `system/site/.generated/` name directories the
+reference shell never creates; `system/site/.staged-knowledge/` is the one the
+reference shell writes too — the scaffold already ignores it, so a swap back
+needs no edit there.
 
 ## Notes recorded live
 

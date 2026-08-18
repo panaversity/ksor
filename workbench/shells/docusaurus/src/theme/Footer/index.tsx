@@ -170,9 +170,16 @@ function FooterLogoImage({ logo }: { logo: FooterLogo }): ReactElement {
 export default function Footer(): ReactElement | null {
   const { footer } = useThemeConfig();
   const { siteConfig } = useDocusaurusContext();
+  // The audience watermark: present only on a build below the record's
+  // least-restricted tier, so a screenshot of an internal page says what it
+  // is. A whole string, composed in the config — this component never sees
+  // the audience list, and a public build carries no such field at all.
+  const audienceLabel = siteConfig.customFields?.audienceLabel as string | undefined;
 
-  // Stock behaviour: no themeConfig.footer, no footer.
-  if (!footer) {
+  // Stock behaviour: no themeConfig.footer, no footer — but the watermark
+  // outranks it. A build that must not be published says so even in a project
+  // whose owner deleted their footer config.
+  if (!footer && !audienceLabel) {
     return null;
   }
 
@@ -180,7 +187,7 @@ export default function Footer(): ReactElement | null {
     copyright,
     links = [],
     logo,
-  } = footer as {
+  } = (footer ?? {}) as {
     copyright?: string;
     links?: (FooterLink | FooterColumn)[];
     logo?: FooterLogo;
@@ -201,7 +208,7 @@ export default function Footer(): ReactElement | null {
             name across five columns and left seven empty, a 214px band of
             nothing (found live in the predecessor). Columns get the grid; a
             row sits under the name. */}
-        {multiColumn ? (
+        {!footer ? null : multiColumn ? (
           <div className="mb-10 grid grid-cols-1 gap-10 md:grid-cols-12">
             <div className="flex flex-col gap-4 md:col-span-5">
               {logo ? <FooterLogoImage logo={logo} /> : null}
@@ -220,13 +227,25 @@ export default function Footer(): ReactElement | null {
           </div>
         )}
 
-        {copyright ? (
-          <div className="flex flex-col items-center justify-between gap-4 border-t border-border/40 pt-8 text-sm text-muted-foreground md:flex-row">
-            <div
-              className="footer__copyright"
-              // The config author provided the HTML, as stock Docusaurus does.
-              dangerouslySetInnerHTML={{ __html: copyright }}
-            />
+        {copyright || audienceLabel ? (
+          <div
+            className={cn(
+              "flex flex-col items-center justify-between gap-4 text-sm text-muted-foreground md:flex-row",
+              // The hairline separates the closing line from the footer above
+              // it; with no footer configured there is nothing to separate.
+              footer ? "border-t border-border/40 pt-8" : undefined,
+            )}
+          >
+            {copyright ? (
+              <div
+                className="footer__copyright"
+                // The config author provided the HTML, as stock Docusaurus does.
+                dangerouslySetInnerHTML={{ __html: copyright }}
+              />
+            ) : null}
+            {audienceLabel ? (
+              <div className="uppercase tracking-widest">{audienceLabel}</div>
+            ) : null}
           </div>
         ) : null}
       </div>

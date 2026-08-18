@@ -1,8 +1,8 @@
 ---
 name: intake-interview
-description: The first conversation with the owner of this Knowledge System of Record — five questions that define what it is authoritative for, then write instance.md together. Use when the owner asks to set up, configure, or "get started with" this project, when instance.md still contains its scaffold placeholder text, or when the scope of the corpus is unclear.
+description: The first conversation with the owner of this Knowledge System of Record — six questions that define what it is authoritative for and who may read it, then write instance.md together. Use when the owner asks to set up, configure, or "get started with" this project, when instance.md still contains its scaffold placeholder text, or when the scope of the corpus is unclear.
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Intake interview
@@ -12,7 +12,7 @@ prose will one day be the agent surface's system prompt. Do not draft it from
 guesses — interview the owner, one question at a time, and write down what
 they actually say.
 
-## The five questions
+## The six questions
 
 Ask these one at a time; follow up until each answer is concrete enough to
 act on:
@@ -30,6 +30,18 @@ act on:
 5. **Strictness** — "When the record doesn't cover a question, how firmly
    should it decline? ('Not in this corpus' is a correct answer here —
    confirm the owner wants that behavior and where they want it softened.)"
+6. **Audiences** — "Does every reader of this record see every document? If
+   not, what are the audiences, from most public to most restricted?" A yes
+   is the common answer and the whole answer: write no `audiences:` key and
+   nothing about the project changes. A list means writing it into
+   `instance.md`'s frontmatter — ordered least- to most-restricted with
+   `public` first, plus `default_visibility:` naming the audience a document
+   takes when it says nothing (there is no safe guess, so the checker
+   requires it). Tell the owner what the key does and does not do:
+   documents carry `visibility:` and builds are made per audience, but
+   anyone who can clone the repository reads everything in it — if someone
+   must not read a document and can clone, that document belongs in a
+   different repository.
 
 ## Then write
 
@@ -37,7 +49,10 @@ act on:
   record's **display title**, the human name every page will lead with
   ("Acme Operations Handbook", not the slug) — then the authority sentence,
   boundary, audience, and strictness — plain prose, written for a reader
-  who must act on it. Do not touch the frontmatter keys.
+  who must act on it. Leave the frontmatter keys alone, with one exception:
+  an audience model from question 6 is written there as `audiences:` (a
+  list) and `default_visibility:`, and `pnpm check` will hold the record to
+  it from that moment on.
 - Restart `pnpm dev` afterwards so the site picks the new title up, and
   show the owner their name on the page.
 - Offer to capture the source list from question 4 as the first real

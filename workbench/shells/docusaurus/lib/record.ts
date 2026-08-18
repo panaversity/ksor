@@ -20,9 +20,20 @@ export interface RecordDoc {
   readonly body: string;
 }
 
-const FRONTMATTER = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+/**
+ * The frontmatter block, and one reader for the values inside it. Exported
+ * because lib/visibility.ts reads the same governed keys out of the same
+ * blocks: one record, one parser — a second copy is where two shells start
+ * reading one key two ways.
+ */
+// The checker's boundary exactly — lax close (`----` closes), BOM and CRLF
+// tolerated inline since this regex is applied to raw text everywhere. The
+// strict close published a restricted document whose block ended in `----`
+// while the checker and the reference shell both read it (review finding,
+// 2026-08-19). One grammar, three implementations, or the tiers lie.
+export const FRONTMATTER: RegExp = /^﻿?---\r?\n([\s\S]*?)\r?\n---/;
 
-function frontmatterValue(block: string, key: string): string | null {
+export function frontmatterValue(block: string, key: string): string | null {
   const match = new RegExp(`^${key}:[ \\t]*(.*)$`, "m").exec(block);
   if (match?.[1] === undefined) return null;
   const raw = match[1].trim();

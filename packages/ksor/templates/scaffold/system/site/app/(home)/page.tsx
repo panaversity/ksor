@@ -3,7 +3,7 @@ import Link from "next/link";
 // The same file Next serves as the favicon (app/icon.png) — one mark, one
 // asset. Replace it with your own and the tab icon changes with the page.
 import mark from "@/app/icon.png";
-import { BuiltWith } from "@/components/built-with";
+import { FooterMark } from "@/components/footer-mark";
 import { appName, appTitle } from "@/lib/shared";
 import { basePath, getSortedPages } from "@/lib/source";
 
@@ -75,7 +75,7 @@ export default function HomePage() {
 
       <footer className="mx-auto w-full max-w-2xl px-6 pb-10">
         <p className="border-t border-fd-border pt-6 text-xs">
-          <BuiltWith />
+          <FooterMark />
         </p>
       </footer>
     </main>

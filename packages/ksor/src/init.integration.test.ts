@@ -77,7 +77,12 @@ function fakeInstall(options: { readonly templates: boolean }): string {
   cpSync(distDir, path.join(home, "dist"), { recursive: true });
   copyFileSync(pkgManifest, path.join(home, "package.json"));
   if (options.templates) {
-    cpSync(templatesDir, path.join(home, "templates", "scaffold"), { recursive: true });
+    cpSync(templatesDir, path.join(home, "templates", "scaffold"), {
+      recursive: true,
+      // A dev checkout's template may have been installed into (found live,
+      // twice, 2026-08-18); copying 477 MB of node_modules times the suite out.
+      filter: (src) => path.basename(src) !== "node_modules",
+    });
   }
   return home;
 }
@@ -94,7 +99,7 @@ function treeFiles(root: string): string[] {
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
       const p = path.join(dir, entry.name);
-      if (entry.name === ".git") return [];
+      if (entry.name === ".git" || entry.name === "node_modules") return [];
       if (entry.isSymbolicLink()) throw new Error(`symlink in scaffold output: ${p}`);
       return entry.isDirectory() ? walk(p) : [path.relative(root, p)];
     });

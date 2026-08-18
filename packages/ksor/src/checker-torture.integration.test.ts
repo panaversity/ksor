@@ -42,6 +42,10 @@ const TEXT_EXTENSIONS = new Set([
 function stage(from: string, to: string): void {
   mkdirSync(to, { recursive: true });
   for (const entry of readdirSync(from, { withFileTypes: true })) {
+    // The shipped template has no node_modules; a local `pnpm install` inside
+    // it must not decide whether this suite can run (found live 2026-08-18:
+    // pnpm's symlink farm failed the copy with ENOTSUP before any test ran).
+    if (entry.name === "node_modules") continue;
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
     if (entry.isDirectory()) {
@@ -70,6 +74,17 @@ interface Probe {
 /** A governed document with the two level-0 keys, unless the caller says otherwise. */
 function doc(body: string, front = "title: Probe\nstatus: draft"): string {
   return `---\n${front}\n---\n\n${body}\n`;
+}
+
+const INSTANCE_BASE =
+  'format: 1\nname: torture-sor\nksor:\n  requires: ">=0.0.0"\n  scaffolded: "0.0.0"';
+const INSTANCE_BODY = "\n\n# torture-sor\n\nAuthoritative for the torture suite.\n";
+/** The three-tier audience model of specs/ksor/visibility/spec.md. */
+const MODEL = "audiences:\n  - public\n  - internal\n  - restricted\ndefault_visibility: public";
+
+/** instance.md exactly as the scaffold ships it, plus the given frontmatter keys. */
+function instance(extra: string): string {
+  return `---\n${INSTANCE_BASE}\n${extra}\n---${INSTANCE_BODY}`;
 }
 
 describe("scaffolded format-checker — torture", () => {
@@ -479,6 +494,20 @@ describe("scaffolded format-checker — torture", () => {
     expect(result.output, "checker output").toContain("content file inside the site");
   });
 
+  it("skips the per-audience stage inside the site, but not content beside it", () => {
+    // The shells stage a filtered corpus into system/site/.staged-knowledge/
+    // (specs/ksor/visibility/spec.md): generated copies of the record, which
+    // is the opposite of the authored content this rule exists to catch.
+    const staged = probe({
+      "system/site/.staged-knowledge/example.md": doc("A staged copy of the record."),
+    });
+    expect(staged.status, staged.output).toBe(0);
+
+    const authored = probe({ "system/site/app/notes.md": "# a page that forks the record\n" });
+    expect(authored.status, authored.output).toBe(1);
+    expect(authored.output, "checker output").toContain("content file inside the site");
+  });
+
   it("requires superseded_by to resolve to a document that exists", () => {
     const broken = probe({
       "knowledge/old.md": doc(
@@ -548,6 +577,265 @@ describe("scaffolded format-checker — torture", () => {
       "instance.md": `---\n${base}\nsite:\n  url: "https://example.test"\n---${body}`,
     });
     expect(reserved.status, reserved.output).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // visibility — the audience model (specs/ksor/visibility/spec.md)
+  // -------------------------------------------------------------------------
+
+  it("refuses a visibility the record never declared, and names the declared set", () => {
+    const undeclared = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: secret"),
+    });
+    expect(undeclared.status, undeclared.output).toBe(1);
+    expect(undeclared.output, "checker output").toContain(
+      'visibility "secret" is not a declared audience',
+    );
+    expect(undeclared.output, "the message names the declared set").toContain(
+      "public, internal, restricted",
+    );
+
+    const declared = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: internal"),
+    });
+    expect(declared.status, declared.output).toBe(0);
+  });
+
+  it("refuses visibility: while the record declares no audience model", () => {
+    const keyed = probe({
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: internal"),
+    });
+    expect(keyed.status, keyed.output).toBe(1);
+    expect(keyed.output, "checker output").toContain("the record declares no audience model");
+
+    const plain = probe({ "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft") });
+    expect(plain.status, plain.output).toBe(0);
+  });
+
+  it("refuses audiences: without default_visibility: — there is no safe inference", () => {
+    const noDefault = probe({ "instance.md": instance("audiences:\n  - public\n  - internal") });
+    expect(noDefault.status, noDefault.output).toBe(1);
+    expect(noDefault.output, "checker output").toContain("audiences: without default_visibility:");
+
+    const withDefault = probe({
+      "instance.md": instance("audiences:\n  - public\n  - internal\ndefault_visibility: public"),
+    });
+    expect(withDefault.status, withDefault.output).toBe(0);
+  });
+
+  it("refuses an audience list that does not lead with public, or repeats an audience", () => {
+    const notFirst = probe({
+      "instance.md": instance("audiences:\n  - internal\n  - public\ndefault_visibility: public"),
+    });
+    expect(notFirst.status, notFirst.output).toBe(1);
+    expect(notFirst.output, "checker output").toContain("does not start with public");
+
+    const duplicated = probe({
+      "instance.md": instance(
+        "audiences:\n  - public\n  - internal\n  - internal\ndefault_visibility: public",
+      ),
+    });
+    expect(duplicated.status, duplicated.output).toBe(1);
+    expect(duplicated.output, "checker output").toContain("duplicate audience: internal");
+  });
+
+  it("reads the audience list the way YAML does — a trailing comment is not a name", () => {
+    // found live: `- public # the default` refused every public document
+    // instead of the list, naming a defect in the wrong file.
+    const commented = probe({
+      "instance.md": instance(
+        "audiences:\n  - public # everyone\n  - internal\ndefault_visibility: public",
+      ),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: public"),
+    });
+    expect(commented.status, commented.output).toBe(0);
+  });
+
+  it("reads default_visibility the way YAML does — a trailing comment is not a tier", () => {
+    // found live 2026-08-19: both build scanners stripped the comment, the
+    // checker did not — `default_visibility: public # the default` built
+    // fine and failed check.
+    const commented = probe({
+      "instance.md": instance(
+        "audiences:\n  - public\n  - internal\ndefault_visibility: public # the default",
+      ),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: public"),
+    });
+    expect(commented.status, commented.output).toBe(0);
+  });
+
+  it("tolerates blank lines and a key-line comment in the model — the shells do too", () => {
+    // found live 2026-08-19: both shapes passed this checker and refused
+    // every build with ksor-audiences-unreadable before the build scanners
+    // learned them; this pins the grammar all three parsers now share.
+    const spaced = probe({
+      "instance.md": instance(
+        "audiences: # least- to most-restricted\n\n  - public\n\n  - internal\ndefault_visibility: public",
+      ),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: internal"),
+    });
+    expect(spaced.status, spaced.output).toBe(0);
+  });
+
+  it("refuses a dash glued to its value — a list item to nobody", () => {
+    // found live 2026-08-19: `  -internal` was silently skipped here while
+    // both build scanners stopped reading the list at it — one green record,
+    // two different audience lists.
+    const glued = probe({
+      "instance.md": instance("audiences:\n  - public\n  -internal\ndefault_visibility: public"),
+    });
+    expect(glued.status, glued.output).toBe(1);
+    expect(glued.output, "checker output").toContain("-internal");
+  });
+
+  it("refuses a default_visibility that is not one of the declared audiences", () => {
+    const stray = probe({
+      "instance.md": instance("audiences:\n  - public\n  - internal\ndefault_visibility: secret"),
+    });
+    expect(stray.status, stray.output).toBe(1);
+    expect(stray.output, "checker output").toContain(
+      'default_visibility "secret" is not one of the declared audiences',
+    );
+  });
+
+  it("refuses audiences: written as a value, and default_visibility: with no audiences", () => {
+    const scalar = probe({
+      "instance.md": instance("audiences: public\ndefault_visibility: public"),
+    });
+    expect(scalar.status, scalar.output).toBe(1);
+    expect(scalar.output, "checker output").toContain("audiences is a list, not a value: public");
+
+    const orphan = probe({ "instance.md": instance("default_visibility: public") });
+    expect(orphan.status, orphan.output).toBe(1);
+    expect(orphan.output, "checker output").toContain("default_visibility: without audiences:");
+  });
+
+  it("refuses a visibility written as a list — one document, one audience", () => {
+    const block = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/hr.md": doc(
+        "Body.",
+        "title: HR\nstatus: draft\nvisibility:\n  - public\n  - internal",
+      ),
+    });
+    expect(block.status, block.output).toBe(1);
+    expect(block.output, "checker output").toContain("visibility is one value, not a list");
+
+    const flow = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: [public, internal]"),
+    });
+    expect(flow.status, flow.output).toBe(1);
+    expect(flow.output, "checker output").toContain("visibility is one value, not a list");
+  });
+
+  it("refuses a link to a more restricted document — the leak no single build can catch", () => {
+    const leak = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/handbook.md": doc(
+        "See [the bands](./bands.md).",
+        "title: Handbook\nstatus: draft",
+      ),
+      "knowledge/bands.md": doc("Body.", "title: Bands\nstatus: draft\nvisibility: restricted"),
+    });
+    expect(leak.status, leak.output).toBe(1);
+    expect(leak.output, "checker output").toContain(
+      "link to a more restricted document: ./bands.md — knowledge/bands.md is restricted, this document is public",
+    );
+    expect(leak.output, "the linking document is named").toContain("knowledge/handbook.md");
+
+    // Down the tiers is fine: a restricted document may link to a public one.
+    const downward = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/handbook.md": doc("Body.", "title: Handbook\nstatus: draft"),
+      "knowledge/bands.md": doc(
+        "See [the handbook](./handbook.md).",
+        "title: Bands\nstatus: draft\nvisibility: restricted",
+      ),
+    });
+    expect(downward.status, downward.output).toBe(0);
+  });
+
+  it("sees the cross-audience link through reference and angle-bracket forms", () => {
+    const result = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/ref.md": doc(
+        "See [the bands][b].\n\n[b]: ./bands.md",
+        "title: Ref\nstatus: draft",
+      ),
+      "knowledge/angle.md": doc("See [the bands](<./bands.md>).", "title: Angle\nstatus: draft"),
+      "knowledge/bands.md": doc("Body.", "title: Bands\nstatus: draft\nvisibility: internal"),
+    });
+    expect(result.status, result.output).toBe(1);
+    const hits = result.output.match(/link to a more restricted document/g) ?? [];
+    expect(hits.length, result.output).toBe(2);
+    expect(result.output, "checker output").toContain("knowledge/ref.md");
+    expect(result.output, "checker output").toContain("knowledge/angle.md");
+  });
+
+  it("refuses a superseded_by that strands readers in a more restricted tier", () => {
+    const stranded = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/old.md": doc(
+        "Replaced.",
+        "title: Old\nstatus: superseded\nsuperseded_by: ./bands.md",
+      ),
+      "knowledge/bands.md": doc("Body.", "title: Bands\nstatus: draft\nvisibility: internal"),
+    });
+    expect(stranded.status, stranded.output).toBe(1);
+    expect(stranded.output, "checker output").toContain(
+      "superseded_by points at a more restricted document: ./bands.md — knowledge/bands.md is internal, this document is public",
+    );
+
+    const reachable = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/old.md": doc(
+        "Replaced.",
+        "title: Old\nstatus: superseded\nvisibility: internal\nsuperseded_by: ./bands.md",
+      ),
+      "knowledge/bands.md": doc("Body.", "title: Bands\nstatus: draft\nvisibility: internal"),
+    });
+    expect(reachable.status, reachable.output).toBe(0);
+  });
+
+  it("passes a complete audience model: mixed visibility, links down the tiers", () => {
+    const result = probe({
+      "instance.md": instance(MODEL),
+      "knowledge/handbook.md": doc(
+        "The public handbook.",
+        "title: Handbook\nstatus: approved\nvisibility: public",
+      ),
+      "knowledge/onboarding.md": doc(
+        "See [the handbook](./handbook.md).",
+        "title: Onboarding\nstatus: draft\nvisibility: internal",
+      ),
+      "knowledge/bands.md": doc(
+        "See [onboarding](./onboarding.md) and [the handbook](./handbook.md).",
+        "title: Bands\nstatus: draft\nvisibility: restricted",
+      ),
+      "knowledge/notes.md": doc(
+        "Takes the default. See [the handbook](./handbook.md).",
+        "title: Notes\nstatus: draft",
+      ),
+    });
+    expect(result.status, result.output).toBe(0);
+  });
+
+  it("stays inert while instance.md declares no audiences — the additive guarantee", () => {
+    // The same shape that fires under a model: with none declared, nothing to enforce.
+    const result = probe({
+      "knowledge/handbook.md": doc(
+        "See [the bands](./bands.md).",
+        "title: Handbook\nstatus: draft",
+      ),
+      "knowledge/bands.md": doc(
+        "Replaced.",
+        "title: Bands\nstatus: superseded\nsuperseded_by: ./handbook.md",
+      ),
+    });
+    expect(result.status, result.output).toBe(0);
   });
 
   it("leaves the scaffold as it found it", () => {

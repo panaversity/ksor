@@ -23,6 +23,7 @@ const ALLOWED_KEYS = new Set([
   "title",
   "description",
   "status",
+  "visibility",
   "owner",
   "provenance",
   "effective",
@@ -96,9 +97,10 @@ function unquote(value) {
 
 /**
  * The frontmatter block, two levels deep (`ksor:` has children; `provenance:`
- * has list items). Returns null when there is no block at all, and collects
- * every line that is neither `key: value`, a list item, an indented
- * continuation, nor blank — those mean the block was never closed.
+ * and `audiences:` have list items, collected under the key above them).
+ * Returns null when there is no block at all, and collects every line that is
+ * neither `key: value`, a list item, an indented continuation, nor blank —
+ * those mean the block was never closed.
  */
 function parseFrontmatter(text) {
   // An editor's byte-order mark is invisible to the author; it must not be
@@ -108,6 +110,7 @@ function parseFrontmatter(text) {
   if (!match) return null;
   const keys = new Map();
   const children = new Map();
+  const lists = new Map();
   const quoted = new Set();
   const malformedQuote = new Map();
   const malformed = [];
@@ -139,6 +142,7 @@ function parseFrontmatter(text) {
       }
       keys.set(current, unquote(top[2]));
       children.set(current, new Map());
+      lists.set(current, []);
       continue;
     }
     const nested = /^[ \t]+([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
@@ -146,10 +150,40 @@ function parseFrontmatter(text) {
       children.get(current).set(nested[1], unquote(nested[2]));
       continue;
     }
+    // A list item belongs to the key above it: audiences: is a list of
+    // audiences, and the rules that read it need the entries, not their count.
+    const item = /^[ \t]*-[ \t]+(.*)$/.exec(line);
+    if (item && current !== null) {
+      // YAML ends a plain scalar at ` #` — the comment is not part of the
+      // entry, and reading it as one refuses the documents instead of the
+      // list (found live 2026-08-18: `- public # the default` made every
+      // public document's visibility undeclared).
+      const value = /^["']/.test(item[1]) ? item[1] : item[1].replace(/\s+#.*$/, "");
+      lists.get(current).push(unquote(value));
+      continue;
+    }
+    // A dash glued to its value (`-internal`) is a list item to nobody —
+    // the indented-continuation escape below swallowed it while the build
+    // scanners stopped reading the list there: one green record, two
+    // different audience lists (review finding, 2026-08-19).
+    if (/^[ \t]*-\S/.test(line)) {
+      malformed.push(line.trim());
+      continue;
+    }
     if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
     malformed.push(line.trim());
   }
-  return { keys, children, quoted, malformedQuote, duplicates, malformed, tightColons, tabIndents };
+  return {
+    keys,
+    children,
+    lists,
+    quoted,
+    malformedQuote,
+    duplicates,
+    malformed,
+    tightColons,
+    tabIndents,
+  };
 }
 
 /**
@@ -218,13 +252,14 @@ function linkTargets(body) {
   return raw.map((t) => (t.startsWith("<") && t.endsWith(">") ? t.slice(1, -1).trim() : t));
 }
 
+/** Reports a broken target; returns the record document it resolves to, if any. */
 function checkLinkTarget(rel, docPath, target) {
   // Anything with a URI scheme (https:, mailto:, tel:, ftp:, …) or a
   // protocol-relative // host leaves the record on purpose — only relative
   // paths are the record's own links (review finding 2026-08-18: tel: was
   // reported as a dead file and //host as an escape).
-  if (target === "" || target.startsWith("#") || target.startsWith("//")) return;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return;
+  if (target === "" || target.startsWith("#") || target.startsWith("//")) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return null;
   const resolved = path.resolve(path.dirname(docPath), target.split("#")[0]);
   if (!resolved.startsWith(knowledgeDir + path.sep) && resolved !== knowledgeDir) {
     problem(
@@ -240,8 +275,45 @@ function checkLinkTarget(rel, docPath, target) {
       "a record with dead internal links serves different truths by path",
       "fix the path or remove the link",
     );
+  } else if (resolved.endsWith(".md")) {
+    return resolved;
   }
+  return null;
 }
+
+// ---------------------------------------------------------------------------
+// the audience model: who may read a document, declared in instance.md
+// ---------------------------------------------------------------------------
+const instanceMd = path.join(root, "instance.md");
+
+/**
+ * The declared audiences, ordered least- to most-restricted, or null when the
+ * record declares none — and then every visibility rule below stays inert, so
+ * a record without an audience model behaves exactly as it did before the key
+ * existed. Read before the record itself: who may read what is a property of
+ * the whole record, which no single document can answer.
+ */
+function readAudienceModel() {
+  if (!existsSync(instanceMd)) return null;
+  const fm = parseFrontmatter(readFileSync(instanceMd, "utf8"));
+  const audiences = fm?.lists.get("audiences") ?? [];
+  if (audiences.length === 0) return null;
+  return { audiences, defaultVisibility: scalarValue(fm, "default_visibility") ?? "" };
+}
+
+/**
+ * A plain scalar ends at ` #` — the rule the list items above already follow
+ * and both build scanners apply. The checker not applying it to values let
+ * `default_visibility: public # the default` build fine and fail `pnpm check`
+ * (review finding, 2026-08-19).
+ */
+function scalarValue(fm, key) {
+  const value = fm.keys.get(key);
+  if (value === undefined || fm.quoted.has(key)) return value;
+  return value.replace(/\s+#.*$/, "").trim();
+}
+
+const audienceModel = readAudienceModel();
 
 if (!existsSync(knowledgeDir)) {
   problem(
@@ -389,6 +461,8 @@ if (!existsSync(knowledgeDir)) {
   }
 
   // frontmatter + links per document
+  const visibilityByPath = new Map();
+  const crossings = [];
   for (const p of mdFiles) {
     const rel = path.relative(root, p);
     const text = readFileSync(p, "utf8");
@@ -552,22 +626,97 @@ if (!existsSync(knowledgeDir)) {
             "a replaced document must hand the reader its successor — a broken pointer dead-ends them on stale truth",
             "fix the path (it resolves relative to this document), or write the successor first",
           );
+        } else {
+          crossings.push({ kind: "superseded_by", rel, from: p, to: resolved, target: successor });
         }
+      }
+      // visibility: one audience per document, from the set instance.md declares
+      const visibility = fm.keys.get("visibility");
+      const listed = fm.lists.get("visibility") ?? [];
+      // A flow list ([a, b]) is already named by the shape rule above.
+      const flowList = !fm.quoted.has("visibility") && /^\[.*\]$/.test(visibility ?? "");
+      if (listed.length > 0) {
+        problem(
+          rel,
+          "visibility is one value, not a list",
+          "a list makes every document a set-membership question, and set intersection is where access-control bugs live — one document belongs to exactly one audience",
+          `write a single audience: visibility: ${audienceModel?.audiences.at(-1) ?? "<audience>"}`,
+        );
+      } else if (visibility !== undefined && !flowList) {
+        if (audienceModel === null) {
+          problem(
+            rel,
+            `visibility: ${visibility} — the record declares no audience model`,
+            "who may read a document is governance, not a comment: with no audiences: in instance.md nothing constrains this value, and every surface publishes the document to everyone regardless",
+            "add audiences: to instance.md (ordered least- to most-restricted, public first) with default_visibility:, or remove the visibility: key",
+          );
+        } else if (!audienceModel.audiences.includes(visibility)) {
+          problem(
+            rel,
+            `visibility "${visibility}" is not a declared audience`,
+            "the audience set is closed in instance.md — a value outside it names a build that does not exist, so the document reaches either nobody or everybody",
+            `use one of: ${audienceModel.audiences.join(", ")} — or remove the key to take the default (${audienceModel.defaultVisibility})`,
+          );
+        }
+      }
+      if (audienceModel !== null) {
+        visibilityByPath.set(p, visibility ?? audienceModel.defaultVisibility);
       }
     }
     // links: resolve, and never escape the record
-    for (const target of linkTargets(stripCode(text))) checkLinkTarget(rel, p, target);
+    for (const target of linkTargets(stripCode(text))) {
+      const to = checkLinkTarget(rel, p, target);
+      if (to !== null) crossings.push({ kind: "link", rel, from: p, to, target });
+    }
+  }
+
+  // Pointers across audiences: the leak no single build can catch, because the
+  // build that publishes the pointer has already dropped its target and cannot
+  // know it ever existed. Only the whole record sees both ends.
+  if (audienceModel !== null) {
+    const audienceOf = (file) => visibilityByPath.get(file) ?? audienceModel.defaultVisibility;
+    const tier = (file) => audienceModel.audiences.indexOf(audienceOf(file));
+    for (const { kind, rel, from, to, target } of crossings) {
+      const here = tier(from);
+      const there = tier(to);
+      // An undeclared audience at either end is already reported; comparing
+      // against a tier that does not exist would invent a second problem.
+      if (here === -1 || there === -1 || there <= here) continue;
+      const relTo = path.relative(root, to);
+      const both = `${relTo} is ${audienceOf(to)}, this document is ${audienceOf(from)}`;
+      if (kind === "link") {
+        problem(
+          rel,
+          `link to a more restricted document: ${target} — ${both}`,
+          "the build that publishes this link has already dropped its target: the link text and URL ship to readers who cannot open them, naming a document they were never meant to know exists",
+          `raise this document to ${audienceOf(to)}, widen ${relTo} to ${audienceOf(from)}, or remove the link`,
+        );
+      } else {
+        problem(
+          rel,
+          `superseded_by points at a more restricted document: ${target} — ${both}`,
+          "it strands the very readers the supersession exists to redirect: they are told this document is replaced, by a successor their build does not contain",
+          `widen ${relTo} to ${audienceOf(from)}, raise this document to ${audienceOf(to)}, or supersede it with a document its readers can reach`,
+        );
+      }
+    }
   }
 }
 
 // ---------------------------------------------------------------------------
 // instance.md: the identity of this SoR — format 1, closed key set
 // ---------------------------------------------------------------------------
-const INSTANCE_KEYS = new Set(["format", "name", "ksor", "site"]);
+const INSTANCE_KEYS = new Set([
+  "format",
+  "name",
+  "ksor",
+  "site",
+  "audiences",
+  "default_visibility",
+]);
 const INSTANCE_KSOR_KEYS = new Set(["requires", "scaffolded"]);
 const INSTANCE_SITE_KEYS = new Set(["url"]);
 
-const instanceMd = path.join(root, "instance.md");
 if (!existsSync(instanceMd)) {
   problem(
     "instance.md",
@@ -673,6 +822,63 @@ if (!existsSync(instanceMd)) {
         );
       }
     }
+    // the audience model: ordered, public first, and never without its default
+    const audiences = fm.lists.get("audiences") ?? [];
+    const defaultVisibility = scalarValue(fm, "default_visibility") ?? "";
+    if (fm.keys.has("audiences") && audiences.length === 0) {
+      const value = fm.keys.get("audiences");
+      problem(
+        "instance.md",
+        value === ""
+          ? "audiences: declares no audiences"
+          : `audiences is a list, not a value: ${value}`,
+        "the audience list is the record's whole access model, ordered least- to most-restricted — with nothing in it, no document's visibility: can be answered",
+        "write it as list items:\n      audiences:\n        - public\n        - internal",
+      );
+    } else if (audiences.length > 0) {
+      if (audiences[0] !== "public") {
+        problem(
+          "instance.md",
+          `audiences: does not start with public (it starts with "${audiences[0]}")`,
+          "the order is the restriction level, and that ordering is what makes an internal build mean public-and-internal with no further configuration — public is the least restricted tier by definition",
+          "list public first, then each narrower audience in turn",
+        );
+      }
+      const seen = new Set();
+      for (const audience of audiences) {
+        if (seen.has(audience)) {
+          problem(
+            "instance.md",
+            `duplicate audience: ${audience}`,
+            "an audience's position in the list is its restriction level — named twice, it has two levels and neither can be trusted",
+            `keep one ${audience} entry`,
+          );
+        }
+        seen.add(audience);
+      }
+      if (defaultVisibility === "") {
+        problem(
+          "instance.md",
+          "audiences: without default_visibility:",
+          "there is no safe inference for a document that declares no audience: guessing the widest leaks the first document whose key is forgotten, guessing the narrowest hides the record from everyone it was written for",
+          `add default_visibility: — one of ${audiences.join(", ")} — the audience a document belongs to when it declares none`,
+        );
+      } else if (!audiences.includes(defaultVisibility)) {
+        problem(
+          "instance.md",
+          `default_visibility "${defaultVisibility}" is not one of the declared audiences`,
+          "every document without a visibility: key takes this value — a default outside the list puts most of the record in an audience that does not exist",
+          `use one of: ${audiences.join(", ")}`,
+        );
+      }
+    } else if (fm.keys.has("default_visibility")) {
+      problem(
+        "instance.md",
+        "default_visibility: without audiences:",
+        "a default audience with no audience list is a setting with nothing to select from — the owner believes the record has a visibility model while every surface publishes every document to everyone",
+        "add audiences: (ordered least- to most-restricted, public first), or remove default_visibility:",
+      );
+    }
     for (const [parent, allowed] of [
       ["ksor", INSTANCE_KSOR_KEYS],
       ["site", INSTANCE_SITE_KEYS],
@@ -757,6 +963,9 @@ if (existsSync(siteDir)) {
       (p) =>
         !p.includes(`${path.sep}.next${path.sep}`) &&
         !p.includes(`${path.sep}.source${path.sep}`) &&
+        // The per-audience stage: generated copies of the record a build makes
+        // for one audience, never authored content (specs/ksor/visibility).
+        !p.includes(`${path.sep}.staged-knowledge${path.sep}`) &&
         !p.includes(`${path.sep}out${path.sep}`),
     )
     .filter((p) => p.toLowerCase().endsWith(".md") || p.toLowerCase().endsWith(".mdx"));
