@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Installs the pre-commit hook (runs via `pnpm prepare`). The hook CHECKS the
-// formatting of staged source files — check-mode only, because rewriting and
-// re-staging files would silently commit unstaged hunks and destroy partial
-// staging. Skipped in CI and in non-git checkouts (e.g. published tarballs).
+// formatting of the STAGED FILES' paths only — never repo-wide, so an
+// unformatted unrelated file cannot block a clean commit, and check-mode only,
+// so partial staging is never destroyed. Known limit, accepted: it reads the
+// worktree copy of each staged path, so the rare staged-dirty/worktree-clean
+// split slips through locally — CI's fmt:ci catches it.
+// Skipped in CI and in non-git checkouts (e.g. published tarballs).
 
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -32,16 +35,20 @@ try {
 
 const hook = `#!/bin/sh
 # Installed by scripts/install-git-hooks.mjs (pnpm prepare). Checks formatting
-# of staged source files — the same check CI's lint job runs (pnpm fmt:ci).
-# NUL-separated so filenames with spaces survive; check-only so partial
-# staging is never destroyed.
-git diff --cached --name-only --diff-filter=ACMR -z \\
-  | tr '\\0' '\\n' \\
-  | grep -E '\\.(ts|mts|js|mjs)$' > /dev/null || exit 0
-if ! pnpm fmt:ci > /dev/null 2>&1; then
-  echo "pre-commit: formatting check failed — run: pnpm fmt, then re-stage" >&2
-  exit 1
+# of the staged source files (worktree copies, by path — NUL-separated so
+# filenames with spaces survive; check-only so partial staging is never
+# destroyed). CI runs the same formatter repo-wide.
+# Fast exit when no source files are staged (BSD xargs would also skip on
+# empty input, but GNU xargs would not — this check keeps the hook portable).
+git diff --cached --name-only --diff-filter=ACMR \\
+  | grep -qE '\\.(ts|mts|js|mjs)$' || exit 0
+if git diff --cached --name-only --diff-filter=ACMR -z \\
+  | grep -zE '\\.(ts|mts|js|mjs)$' \\
+  | xargs -0 pnpm exec oxfmt --check -- > /dev/null 2>&1; then
+  exit 0
 fi
+echo "pre-commit: staged files fail the format check — run: pnpm fmt, restage, retry" >&2
+exit 1
 `;
 
 mkdirSync(hooksDir, { recursive: true });

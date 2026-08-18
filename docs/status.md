@@ -37,6 +37,8 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
 - The MCP agent surface and the human site surface.
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - The agent-eval harness (contract in AGENTS.md → Testing).
+- Doc code-sample checking (`check-snippets`) — deferred until the docs carry
+  import fences worth verifying.
 - The `ksor init` scaffold (generated constitution, rules, corpus skills) —
   designed fresh when `init` lands; the predecessor's templates are one input,
   not the blueprint.
@@ -51,9 +53,9 @@ ships a working product (`vsor` 0.1.4 on PyPI, live demo at
 vsor-demo.vercel.app). **It is reference material, not authority**: this repo
 reads it for ideas and for its failure record
 (`research/handover-vsor-to-ksor.md`) and decides independently — no code,
-Python or TypeScript, is ported without an independent case. For
-completeness: its Python packages also carry an unwritten copy grant, which
-is moot under this posture.
+Python or TypeScript, is ported without an independent case — and its Python
+packages additionally may not be ported at all while their copy grant remains
+unwritten (the predecessor's own extraction rule).
 
 ## Pending owner actions
 

@@ -2,7 +2,7 @@
 name: implement-spec
 description: The discipline for implementing any spec or planned change in this repo — breakdown per aspect, red acceptance first, aggressive self-review, live verification like a human (browser included for site work), the detail pass, and the truth sweep. Load before writing the first line of an implementation.
 metadata:
-  version: "1.0.0"
+  version: "1.0.2"
   origin: ported from panaversity/zia-vsor-sdk .agents/skills/implement-spec (2026-08-17)
 ---
 
@@ -80,7 +80,7 @@ unbuilt behavior anywhere in the diff.
 Any document the change made false is corrected **in the same commit** (README, AGENTS.md,
 `docs/status.md`, the spec itself). Then the full local gate: `pnpm lint && pnpm fmt:ci &&
 pnpm typecheck && pnpm guard && pnpm check:corpus && pnpm test:unit && pnpm build &&
-pnpm test:integration`. Done means: acceptance green on a clean machine, docs true, findings
+pnpm test:integration && pnpm publint`. Done means: acceptance green on a clean machine, docs true, findings
 resolved or recorded.
 
 ## The rule under all of it

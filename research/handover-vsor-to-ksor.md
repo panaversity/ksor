@@ -87,7 +87,7 @@ message print the value it actually saw.
 
 ## Two mistakes from the handover session
 
-Recorded in AGENTS.md → Decisions (decision 2) and here: a registry 404 does not
+Recorded in AGENTS.md → Decisions (decision 2 and the PyPI open question) and here: a registry 404 does not
 mean a name is publishable (`ksor` was rejected with E403 by npm's
 publish-time similarity gate), and a PyPI pending publisher reserves nothing.
 

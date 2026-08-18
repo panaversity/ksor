@@ -62,4 +62,51 @@ describe("check-corpus", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("dead relative link");
   });
+
+  it("rejects authored id:/name: keys — identity derives from the path", () => {
+    const corpus = makeCorpus();
+    writeFileSync(
+      path.join(corpus, "knowledge", "twin.md"),
+      "---\ntitle: Twin\nid: authored-twin\nstatus: draft\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# Twin\n",
+    );
+    const result = runCheck(["--corpus", corpus]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('authored "id:" frontmatter key');
+  });
+
+  it("rejects an invalid status and an empty status", () => {
+    const corpus = makeCorpus();
+    writeFileSync(
+      path.join(corpus, "knowledge", "freeform.md"),
+      "---\ntitle: Freeform\nstatus: finished\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# F\n",
+    );
+    const invalid = runCheck(["--corpus", corpus]);
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain('status "finished" is not one of');
+
+    writeFileSync(
+      path.join(corpus, "knowledge", "freeform.md"),
+      "---\ntitle: Freeform\nstatus:\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# F\n",
+    );
+    const empty = runCheck(["--corpus", corpus]);
+    expect(empty.status).toBe(1);
+    expect(empty.stderr).toContain("status key has no value");
+  });
+
+  it("accepts a YAML-quoted lifecycle value", () => {
+    const corpus = makeCorpus();
+    writeFileSync(
+      path.join(corpus, "knowledge", "quoted.md"),
+      '---\ntitle: Quoted\nstatus: "approved"\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# Q\n',
+    );
+    expect(runCheck(["--corpus", corpus]).status).toBe(0);
+  });
+
+  it("rejects a corpus with no instance.md", () => {
+    const corpus = makeCorpus();
+    rmSync(path.join(corpus, "instance.md"));
+    const result = runCheck(["--corpus", corpus]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("missing instance.md");
+  });
 });

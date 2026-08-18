@@ -49,9 +49,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Fails when packages/ksor changed without a changeset (AGENTS.md policy:
-      # patch by default pre-1.0; docs-only and repo-tooling changes are exempt
-      # because they do not touch the published package).
+      # Fails when anything under packages/ksor changed without a changeset —
+      # bundled docs included, they ship in the tarball (AGENTS.md policy:
+      # patch by default pre-1.0; repo docs/tooling outside the package are
+      # exempt because the gate only watches the published package).
       - run: pnpm changeset status --since=origin/main
 
   typecheck:

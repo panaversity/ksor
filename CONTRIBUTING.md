@@ -22,11 +22,11 @@ pnpm install   # Node >= 24; pnpm is pinned via the packageManager field
 
 ```sh
 pnpm lint && pnpm fmt:ci && pnpm typecheck && pnpm guard && pnpm check:corpus \
-  && pnpm test:unit && pnpm build && pnpm test:integration
+  && pnpm test:unit && pnpm build && pnpm test:integration && pnpm publint
 ```
 
-CI runs the same checks; treat local runs as advisory and CI as the source of
-truth. Every PR touching `packages/ksor` needs a changeset
+CI runs the same checks plus a changeset-presence gate on pull requests;
+treat local runs as advisory and CI as the source of truth. Every PR touching `packages/ksor` needs a changeset
 (`pnpm changeset` — patch by default pre-1.0).
 
 ## What helps most right now

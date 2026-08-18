@@ -49,6 +49,7 @@ pnpm guard                # guard-invariants.mjs (<1s)
 pnpm check:corpus         # frontmatter, links, instance identity (<1s)
 pnpm test:unit            # *.test.ts, colocated, pure (<3s)
 pnpm build && pnpm test:integration   # built artifacts + repo-tree suites (<15s)
+pnpm publint               # package manifest/tarball correctness (needs build)
 ```
 
 Run fmt/lint/typecheck freely — they are cheap. Treat local checks as advisory:
@@ -67,7 +68,8 @@ reverse it. **Work that contradicts one stops and goes back to a human.**
 2. **Package `@panaversity/ksor`, command `ksor`.** Unscoped `ksor` is blocked
    by npm's publish-time similarity gate (verified by a real `E403`; a registry
    404 is not evidence of publishability). Not reversible.
-3. **Apache-2.0, whole repository.**
+3. **Apache-2.0, whole repository.** Reversed only by an explicit owner
+   relicensing decision recorded here.
 4. **Corpus scaffolds are copy-into-repo** (the shadcn model, validated by our
    own study of its mechanics): the adopter owns what `ksor init` emits;
    updates are offered as diffs and applied only by explicit overwrite.
@@ -78,12 +80,15 @@ reverse it. **Work that contradicts one stops and goes back to a human.**
    pnpm exact-pinned, pure ESM, tsdown, vitest tiers, oxlint+oxfmt, changesets
    with npm trusted publishing. Reversed per-pin when a recorded caveat fires.
 
-**Open questions — deliberately not settled, decide independently when the
-work arrives:** how retrieval and abstention are implemented for `serve`
-(reimplement in TS is the default posture; the predecessor's Python kernel is
-reference only), and the site shell (Docusaurus vs Fumadocs — evidence in
-`research/primitives-proposal.md` §4, decide before the site slice). PyPI
-`ksor` is left unclaimed on purpose; revisit only if the exposure changes.
+**Open questions — decide independently when the work arrives:** how retrieval
+and abstention are implemented for `serve` (reimplement in TS is the default
+posture; the predecessor's Python kernel is reference only — revision note:
+this was recorded as settled "stays Python" on 2026-08-17 and reversed on
+2026-08-18 when the predecessor was demoted to reference), and the site shell
+(Docusaurus vs Fumadocs — evidence in `research/primitives-proposal.md` §4,
+decide before the site slice). PyPI `ksor` is left unclaimed on purpose (a
+PyPI pending publisher reserves nothing — only an upload claims a name);
+revisit only if the exposure changes.
 
 ## Product principles
 
@@ -156,7 +161,8 @@ reference only), and the site shell (Docusaurus vs Fumadocs — evidence in
 Two tiers by filename convention; pick the tightest tier that can express the
 assertion.
 
-- `src/**/*.test.ts` — unit: pure, no fs/subprocess/network (<3s total)
+- `*.test.ts` — unit, colocated (packages `src/` and `scripts/`): pure, no
+  fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
   tmp dirs (<15s)
 - Agent evals land with `ksor serve`: fixture corpus + prompt + assertions,
@@ -188,9 +194,11 @@ rendered at all.
 
 ## Changesets and releases
 
-Every PR touching `packages/ksor` needs a changeset. Patch by default pre-1.0;
-minor only for public-API breaks; docs-only and repo-tooling changes are
-exempt. Write the body for release-notes readers.
+Every PR changing anything under `packages/ksor` needs a changeset — bundled
+docs included, they ship in the tarball (and the CI gate watches the whole
+package directory). Repo docs and tooling outside `packages/ksor` are exempt.
+Patch by default pre-1.0; minor only for public-API breaks. Write the body
+for release-notes readers.
 Check: `pnpm changeset status --since=origin/main`.
 
 Releases publish only from CI (`release.yml`: changesets action + npm trusted
@@ -233,8 +241,10 @@ findings were fixed or recorded, never quietly dropped.
 - Do not add runtime dependencies without a recorded decision (guard rule 5).
 - Do not author `id:`/`name:` fields where the path is the identity.
 - Do not edit guard baselines upward, or ALLOWED graphs without review.
-- Do not commit `.only` or skipped tests.
-- Do not port predecessor code — TypeScript or Python — without an independent
-  case for it; ideas cross freely, code must re-earn its place.
+- Do not commit `.only` or skipped tests (guard rule 7 rejects them).
+- Do not port predecessor code without an independent case for it — and never
+  its Python code while that code's copy grant remains unwritten
+  (`research/handover-vsor-to-ksor.md`). Ideas cross freely; code must re-earn
+  its place.
 - Do not create GitHub issues/comments or publish packages on your own
   initiative.

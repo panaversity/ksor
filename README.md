@@ -561,7 +561,7 @@ used by Example Corporation.
 
 Configuration and customization for the human-readable surface.
 
-The website layer is based on Docusaurus and remains ordinary source code rather than an opaque hosted service.
+The website layer will remain ordinary source code rather than an opaque hosted service; the concrete site framework is an open decision (see `research/primitives-proposal.md` §4).
 
 ---
 
@@ -1147,7 +1147,7 @@ KSoR is under active development.
 
 The project is evolving from the original VSOR implementation into the more general **Knowledge System of Record** architecture.
 
-The predecessor (vsor) implementation already establishes several important foundations that are crossing into this package, including:
+The predecessor (vsor) implementation — reference material for this rebuild, not its authority — already proved out several foundations that inform this package's design, including:
 
 - Markdown-based authoritative source content,
 - generated human-readable documentation sites,
@@ -1159,7 +1159,7 @@ The predecessor (vsor) implementation already establishes several important foun
 - automated testing,
 - and deployment workflows.
 
-The MCP-based agent surface remains an active area of implementation.
+The MCP-based agent surface is designed, not implemented — see [`docs/status.md`](docs/status.md).
 
 See:
 
@@ -1215,7 +1215,7 @@ Expose the agent-readable KSoR interface.
 ksor serve
 ```
 
-Refer to the CLI help for the commands supported by the installed release:
+The installed release's help will list the commands it supports:
 
 ```bash
 ksor --help
@@ -1268,15 +1268,10 @@ CONTRIBUTING.md
 
 The project is intentionally agent-friendly, so coding agents should also read `AGENTS.md` before making changes.
 
-Typical development checks include:
-
-- linting,
-- type checking,
-- unit tests,
-- boundary tests,
-- build acceptance,
-- browser acceptance,
-- and deployment acceptance.
+The development gate is defined in [`CONTRIBUTING.md`](CONTRIBUTING.md):
+lint, format check, typecheck, guard invariants, corpus checks, unit and
+integration tests, build, and publint. Browser and deployment acceptance will
+join it when a site surface exists.
 
 Do not weaken provenance, abstention, governance, or reproducibility guarantees merely to simplify an implementation.
 

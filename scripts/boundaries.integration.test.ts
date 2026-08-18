@@ -65,8 +65,8 @@ function importSpecifiers(text: string): string[] {
   const patterns = [
     /\b(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]/g,
     /\bimport\s*['"]([^'"]+)['"]/g,
-    /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
   ];
   for (const pattern of patterns) {
     for (const match of flat.matchAll(pattern)) {
@@ -112,7 +112,7 @@ describe("package boundaries", () => {
 
   it("nothing hides the graph behind a dynamic import", () => {
     const violations = files
-      .filter((file) => /\bimport\(\s*[^'")\s]/.test(file.text))
+      .filter((file) => /\bimport\s*\(\s*[^'")\s]/.test(file.text))
       .map((file) => file.rel);
     expect(
       violations,
@@ -121,11 +121,18 @@ describe("package boundaries", () => {
   });
 
   it("nothing imports the CLI — it is the top of the graph, never a library", () => {
+    // Only relative and workspace-internal specifiers count: an external npm
+    // package that happens to be named `cli` is not our CLI module.
+    const isOurCliModule = (spec: string): boolean => {
+      const root = spec.startsWith("@")
+        ? spec.split("/").slice(0, 2).join("/")
+        : spec.split("/")[0];
+      const internal = spec.startsWith(".") || (root !== undefined && packages.has(root));
+      return internal && /(?:^|\/)cli(?:\.m?js|\.ts)?$/.test(spec);
+    };
     const violations = files
       .filter((file) => !file.rel.endsWith(`src${path.sep}cli.ts`))
-      .filter((file) =>
-        importSpecifiers(file.text).some((spec) => /(?:^|\/)cli(?:\.js)?$/.test(spec)),
-      )
+      .filter((file) => importSpecifiers(file.text).some(isOurCliModule))
       .map((file) => file.rel);
     expect(
       violations,

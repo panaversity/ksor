@@ -64,7 +64,7 @@ function checkFrontmatter(file, rel, profile) {
   const keys = new Set(
     block
       .split("\n")
-      .map((line) => /^([A-Za-z_][\w-]*):/.exec(line)?.[1])
+      .map((line) => /^([A-Za-z_][\w-]*)\s*:/.exec(line)?.[1])
       .filter(Boolean),
   );
   const missing = PROFILES[profile].required.filter((k) => !keys.has(k));
@@ -88,9 +88,10 @@ function checkFrontmatter(file, rel, profile) {
   }
   // [ \t]* only — \s* would cross the newline and read the next line's key as
   // the status value.
-  const statusLine = /^status:[ \t]*(.*)$/m.exec(block);
+  const statusLine = /^status\s*:[ \t]*(.*)$/m.exec(block);
   if (statusLine !== null) {
-    const status = statusLine[1].trim();
+    // Strip matching YAML quotes so `status: "approved"` reads as approved.
+    const status = statusLine[1].trim().replace(/^(["'])(.*)\1$/, "$2");
     if (status === "") {
       problem(
         rel,
@@ -110,7 +111,11 @@ function checkFrontmatter(file, rel, profile) {
 }
 
 function checkRelativeLinks(file, rel) {
-  const text = readFileSync(file, "utf8");
+  // Code fences and inline code spans SHOW syntax rather than linking, so they
+  // are stripped before scanning.
+  const text = readFileSync(file, "utf8")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`[^`\n]*`/g, "");
   // The optional quoted part accepts link titles: [a](./x.md "see also").
   for (const match of text.matchAll(/\[[^\]]*\]\(\s*([^)\s]+)(?:\s+"[^"]*"|\s+'[^']*')?\s*\)/g)) {
     const target = match[1];

@@ -26,7 +26,7 @@ function frontmatterKeys(file) {
   if (!match) return null;
   const keys = {};
   for (const line of match[1].split("\n")) {
-    const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    const kv = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
     if (kv) keys[kv[1]] = kv[2];
   }
   return keys;
@@ -110,9 +110,17 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
 {
   const researchRoot = path.join(repoRoot, "research");
   if (existsSync(researchRoot)) {
-    for (const file of readdirSync(researchRoot)) {
-      if (!file.endsWith(".md")) continue;
-      const fm = frontmatterKeys(path.join(researchRoot, file));
+    const walkMd = (dir) =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walkMd(path.join(dir, e.name))
+          : e.name.endsWith(".md")
+            ? [path.join(dir, e.name)]
+            : [],
+      );
+    for (const abs of walkMd(researchRoot)) {
+      const file = path.relative(researchRoot, abs);
+      const fm = frontmatterKeys(abs);
       const missing = ["issue", "status", "last_updated"].filter(
         (k) => !fm || !(k in fm) || fm[k] === "",
       );
@@ -187,6 +195,31 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 7 — no focused or skipped tests may be committed. A committed .only
+// silently shrinks the suite to one test; a committed .skip hides a red light.
+{
+  const testDirs = [path.join(repoRoot, "packages"), path.join(repoRoot, "scripts")];
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const child = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        return e.name === "node_modules" || e.name === "dist" ? [] : walk(child);
+      }
+      return e.name.endsWith(".test.ts") ? [child] : [];
+    });
+  for (const file of testDirs.filter(existsSync).flatMap(walk)) {
+    if (/\b(?:describe|it|test)\.(?:only|skip)\(/.test(readFileSync(file, "utf8"))) {
+      violate(
+        7,
+        `test-override:${path.relative(repoRoot, file)}`,
+        `${path.relative(repoRoot, file)} contains a focused or skipped test`,
+        "a committed .only silently shrinks the suite; a committed .skip hides a red light",
+        "remove the .only/.skip modifier before committing",
+      );
+    }
+  }
+}
+
 // Baseline handling: known violations may be temporarily accepted, but the
 // baseline may only shrink.
 const baselinePath = path.join(repoRoot, "scripts", "guard-invariants-baseline.json");
@@ -210,4 +243,4 @@ if (active.length > 0) {
   for (const v of active) console.error(`  ${v.text}\n`);
 }
 if (active.length > 0 || stale.length > 0) process.exit(1);
-console.log(`guard: ok (${violations.length} baselined, 6 rules)`);
+console.log(`guard: ok (${violations.length} baselined, 7 rules)`);
