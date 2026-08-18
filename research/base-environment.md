@@ -18,7 +18,11 @@ last_updated: 2026-08-18
 > fences worth verifying. Later the same day: lint/format run zero-config
 > (oxlint/oxfmt honor .gitignore, so the ~4-line configs were deleted) and the
 > hook installer became a committed `.githooks/pre-commit` + repo-local
-> `core.hooksPath`.
+> `core.hooksPath`. And later still: turbo and the guard baseline machinery
+> were cut on the owner's call (a task runner for one package and a
+> suppression list guarding zero entries both failed "code is liability");
+> `isolatedDeclarations` was enabled — explicit types at exported boundaries,
+> oxc fast path for declaration emit.
 
 Plan for the base environment of ksor: the AGENTS.md constitution, the agent-skills
 roster, and the TypeScript toolchain. Derived from studying fresh clones of

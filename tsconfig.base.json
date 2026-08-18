@@ -16,6 +16,8 @@
     "noUncheckedSideEffectImports": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    "types": []
+    "types": [],
+    "isolatedDeclarations": true,
+    "declaration": true
   }
 }

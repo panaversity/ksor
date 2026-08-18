@@ -94,7 +94,7 @@ Used precisely; do not repurpose.
 
 ```sh
 pnpm install              # respects the packageManager pin (pnpm 11)
-pnpm build                # tsdown via turbo (<10s)
+pnpm build                # tsdown per package (<10s)
 pnpm typecheck            # tsc --noEmit, packages + scripts (<5s)
 pnpm lint                 # oxlint --fix (<1s)
 pnpm fmt                  # oxfmt (<1s)
@@ -131,8 +131,12 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    a product guarantee.
 5. **Toolchain** per the `research/base-environment.md` §2 ledger: TS 7 native
    (never depend on its compiler API before 7.1 — guard rule 6), Node ≥24,
-   pnpm exact-pinned, pure ESM, tsdown, vitest tiers, oxlint+oxfmt, changesets
-   with npm trusted publishing. Reversed per-pin when a recorded caveat fires.
+   pnpm exact-pinned, pure ESM, tsdown with `isolatedDeclarations` (explicit
+   types at every exported boundary, oxc fast path for `.d.ts`), vitest tiers,
+   oxlint+oxfmt, changesets with npm trusted publishing. Reversed per-pin when
+   a recorded caveat fires. _Revision 2026-08-18: turbo removed — a task
+   runner for one package earned nothing; plain `pnpm -r` is the whole of it.
+   Re-judge at the second package._
 6. **Predecessor conversion is granted** (owner, 2026-08-18): Apache-2.0
    covers the predecessor work end to end, and the owner has granted taking it
    — Python included — and converting it to TypeScript. This retires the
@@ -253,17 +257,22 @@ appears with the first spec, never before.
 
 1. **Code is liability — and so is context.** Every net-new snippet, file, and
    skill earns its right to exist; cut what stops earning it.
-2. TypeScript strict, pure ESM, no `require()`, no `any`. Types derive from
-   values (schemas, `as const`, inference) rather than being declared beside
-   them. Never depend on the TypeScript compiler API — TS 7 has no stable one
-   until 7.1 (guard rule 6).
+2. TypeScript strict, pure ESM, no `require()`, no `any`. **Derive types from
+   values wherever a value already holds the truth** (`as const`, schema
+   inference — a hand annotation wider than the value is a downgrade); declare
+   them **explicitly at the exported boundary** (`isolatedDeclarations`
+   enforces this) and wherever the type carries a constraint no value
+   expresses (brands, discriminated unions that encode a protocol). Never
+   depend on the TypeScript compiler API — TS 7 has no stable one until 7.1
+   (guard rule 6).
 3. Runtime dependencies need a recorded decision (guard rule 5). Wrap
    third-party libraries at a boundary module so they stay replaceable.
 4. Pre-1.0: prefer breaking changes. Correctness and simplicity over backwards
    compatibility; no legacy fallback paths.
 5. Comment why, not what. Default to no comment.
-6. If a guard fails, fix the violation — never edit the baseline. Baselines
-   only shrink.
+6. If a guard fails, fix the violation. Guards have no suppression mechanism;
+   a rule that must land against existing violations lands together with the
+   fixes.
 7. Package boundaries are enrolled, never implied: every workspace package
    appears in `ALLOWED` in `scripts/boundaries.integration.test.ts`, declaring
    what it may import.
@@ -332,6 +341,9 @@ duplicate this file — they go deeper.
 - $implement-spec — the implementation discipline: red-first, live
   verification, detail pass, truth sweep
 - $find-skills — discover/install ecosystem skills (hash-pinned in skills-lock.json)
+- $skill-creator — vendored (anthropics/skills): create, improve, and eval skills
+- $mcp-builder — vendored (anthropics/skills): MCP server design and tooling,
+  for the `serve` slice
 
 The contract for authoring one: frontmatter `name` equals the directory name
 (guard rule 3), the `description` is the trigger — name the tasks and phrases,
@@ -365,7 +377,7 @@ review findings were fixed or recorded, never quietly dropped.
   pass.
 - Do not add runtime dependencies without a recorded decision (guard rule 5).
 - Do not author `id:`/`name:` fields where the path is the identity.
-- Do not edit guard baselines upward, or ALLOWED graphs without review.
+- Do not edit ALLOWED import graphs without review.
 - Do not commit `.only` or skipped tests (guard rule 7 rejects them).
 - Do not carry a predecessor mechanism across without asking what it was for,
   and never without tests here — conversion is granted (decision 6), blind

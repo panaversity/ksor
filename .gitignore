@@ -4,4 +4,3 @@ node_modules/
 dist/
 .mypy_cache/
 __pycache__/
-.turbo/

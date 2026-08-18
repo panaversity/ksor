@@ -12,8 +12,8 @@
   },
   "type": "module",
   "scripts": {
-    "build": "turbo run build",
-    "typecheck": "turbo run typecheck && tsc -p scripts",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck && tsc -p scripts",
     "lint": "oxlint --fix",
     "lint:ci": "oxlint",
     "fmt": "oxfmt",
@@ -22,7 +22,7 @@
     "check:corpus": "node scripts/check-corpus.mjs",
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "publint": "turbo run publint",
+    "publint": "pnpm -r publint",
     "changeset": "changeset",
     "prepare": "git config core.hooksPath .githooks || echo hooks-skipped"
   },
@@ -31,7 +31,6 @@
     "@types/node": "catalog:",
     "oxfmt": "0.63.0",
     "oxlint": "1.78.0",
-    "turbo": "^2.10.10",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

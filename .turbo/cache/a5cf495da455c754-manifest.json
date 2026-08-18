@@ -1,0 +1,43 @@
+{
+  "files": {
+    "packages/ksor/.turbo/turbo-build.log": {
+      "size": 1113,
+      "mtime_nanos": 1786993560278344173,
+      "mode": 420,
+      "is_dir": false
+    },
+    "packages/ksor/dist/cli.mjs": {
+      "size": 805,
+      "mtime_nanos": 1786993560257567188,
+      "mode": 493,
+      "is_dir": false
+    },
+    "packages/ksor/dist/cli.d.mts": {
+      "size": 9,
+      "mtime_nanos": 1786993560257451687,
+      "mode": 420,
+      "is_dir": false
+    },
+    "packages/ksor/dist/index.mjs": {
+      "size": 1179,
+      "mtime_nanos": 1786993560257775272,
+      "mode": 420,
+      "is_dir": false
+    },
+    "packages/ksor/dist": { "size": 0, "mtime_nanos": 0, "mode": 0, "is_dir": true },
+    "packages/ksor/dist/index.d.mts": {
+      "size": 1491,
+      "mtime_nanos": 1786993560257669147,
+      "mode": 420,
+      "is_dir": false
+    }
+  },
+  "order": [
+    "packages/ksor/.turbo/turbo-build.log",
+    "packages/ksor/dist",
+    "packages/ksor/dist/cli.d.mts",
+    "packages/ksor/dist/cli.mjs",
+    "packages/ksor/dist/index.d.mts",
+    "packages/ksor/dist/index.mjs"
+  ]
+}

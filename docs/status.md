@@ -21,13 +21,13 @@ reservation notice and exits `2`. It has no exports and bundles no docs.
 
 - **Base environment**: pnpm 11 workspace with catalog pins, TypeScript 7
   (native compiler), pure-ESM package build via tsdown, vitest unit +
-  integration tiers, oxlint + oxfmt, minimal turbo, changesets with npm
+  integration tiers, oxlint + oxfmt, changesets with npm
   trusted publishing, CI with SHA-pinned actions.
 - **Governance machinery**: AGENTS.md constitution (CLAUDE.md symlinks to it)
-  carrying the decision record, guard invariants with a shrink-only baseline
-  (`pnpm guard`), corpus integrity checks (`pnpm check:corpus`),
+  carrying the decision record, guard invariants (`pnpm guard`), corpus integrity checks (`pnpm check:corpus`),
   package-boundary tests at baseline zero, and two repo-maintenance skills
-  under `.agents/skills/` (`implement-spec`, `find-skills`).
+  under `.agents/skills/` (`implement-spec`, plus vendored `find-skills`,
+  `skill-creator`, `mcp-builder` — hash-pinned in `skills-lock.json`).
 - **Fixture**: `workbench/example-corpus/` — a tiny governed corpus exercising
   the same rules adopters will live under.
 
