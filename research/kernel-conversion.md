@@ -176,3 +176,17 @@ cannot cancel (timeout abandons, never rejects unhandled).
 Open at this ledger's write: the ingest pipeline worker (build/carry-
 forward/worker/gc + `ksor-content` CLI) and the live-Gemini walk; the
 calibrate CLI's doors; visibility-staged serve; behavioural evals in CI.
+
+## The live walk (2026-08-19, real space)
+
+Run against a throwaway Neon at the production space
+(gemini-embedding-001/d1536): three example-corpus documents ingested with
+real embeddings; the SYNTHESIZED calibration door live (Gemini wrote the
+probe questions); the report separable (max OOC 0.553 < min in-corpus
+0.682), paste line emitted in the oracle's exact format
+(`vector_floor: 0.618 # calibrated on generation None, model
+gemini-embedding-001/d1536, door: synthesized`). Under the ratified floor:
+both in-corpus questions SERVED with the right document ranked first; the
+far-domain question ABSTAINED; and the scope-adjacent near-miss ("what is
+the parental leave policy?" against a policy corpus) ABSTAINED — the
+near-miss class the testing rules demand, on real vectors.
