@@ -33,6 +33,12 @@ const RESTRICTED_TITLE = "Zebra Bands CANARYTITLE9F3A";
 const RESTRICTED_DESC = "CANARYDESC4A8C internal only";
 const RESTRICTED_BODY = "CANARYBODY7B2E1";
 const INTERNAL_BODY = "INTERNALCANARY7A1D";
+// Round-2 fail-open shapes (2026-08-19), each with its own canary so a leak
+// names its document: a `----`-closed frontmatter hid `visibility:` from a
+// strict boundary; a block-list `visibility:` read as ABSENT and took the
+// public default.
+const DASHCLOSE_BODY = "DASHCLOSECANARY5D9";
+const BLOCKLIST_BODY = "BLOCKLISTCANARY3E7";
 
 // A real 4x4 PNG for the asset probe; its bytes are the probe.
 const ASSET_PNG = Buffer.from(
@@ -165,7 +171,10 @@ describe.runIf(enabled).each(SHELLS)(
         instance,
         text.replace(
           /^---\n/,
-          "---\naudiences:\n  - public\n  - internal\n  - restricted\ndefault_visibility: public\n",
+          // Checker-green hostile shapes on purpose: a key-line comment, a
+          // blank line among the items, an item comment, a default comment —
+          // each refused every build of a green record once (2026-08-19).
+          "---\naudiences: # least- to most-restricted\n\n  - public\n  - internal # staff\n  - restricted\ndefault_visibility: public # the default\n",
         ),
       );
 
@@ -183,6 +192,10 @@ describe.runIf(enabled).each(SHELLS)(
         `---\ntitle: "${RESTRICTED_TITLE}"\ndescription: ${RESTRICTED_DESC}\nstatus: approved\nvisibility: restricted\n---\n\nBand 4 engineers ${RESTRICTED_BODY} receive between 180000 and 240000.\n\n![bands](./comp-chart.png)\n`,
       );
       writeFileSync(path.join(knowledge, "comp-chart.png"), ASSET_PNG);
+      writeFileSync(
+        path.join(knowledge, "board-minutes.md"),
+        `---\ntitle: Board minutes\nstatus: approved\nvisibility: restricted\n----\n\nMinutes ${DASHCLOSE_BODY} of the board.\n`,
+      );
 
       swap?.(project);
       mustPass(
@@ -195,6 +208,21 @@ describe.runIf(enabled).each(SHELLS)(
         run("node", [path.join(".agents", "skills", "format-checker", "check.mjs")], project),
         "pnpm check on the canary corpus",
       );
+
+      // After the green check, deliberately checker-red: a block-list
+      // `visibility:` must fail closed at STAGING TIME, with no checker to
+      // lean on — the shape read as absent and shipped public (2026-08-19).
+      writeFileSync(
+        path.join(knowledge, "malformed-visibility.md"),
+        `---\ntitle: Malformed visibility\nstatus: draft\nvisibility:\n  - internal\n---\n\nBody ${BLOCKLIST_BODY} here.\n`,
+      );
+      const recheck = run(
+        "node",
+        [path.join(".agents", "skills", "format-checker", "check.mjs")],
+        project,
+      );
+      // The control that the doc is present and seen: the checker names it.
+      if (recheck.status === 0) throw new Error("control: checker must refuse the block-list doc");
     }, 600_000);
 
     afterAll(() => {
@@ -211,7 +239,14 @@ describe.runIf(enabled).each(SHELLS)(
         "control: public body",
       ).toBeGreaterThan(0);
 
-      for (const canary of [RESTRICTED_TITLE, RESTRICTED_DESC, RESTRICTED_BODY, INTERNAL_BODY]) {
+      for (const canary of [
+        RESTRICTED_TITLE,
+        RESTRICTED_DESC,
+        RESTRICTED_BODY,
+        INTERNAL_BODY,
+        DASHCLOSE_BODY,
+        BLOCKLIST_BODY,
+      ]) {
         const hits = filesContaining(outDir, canary);
         expect(hits, `canary "${canary.slice(0, 24)}…" leaked into: ${hits.join(", ")}`).toEqual(
           [],
@@ -236,7 +271,13 @@ describe.runIf(enabled).each(SHELLS)(
         filesContaining(outDir, INTERNAL_BODY).length,
         "internal canary must render at its own tier",
       ).toBeGreaterThan(0);
-      for (const canary of [RESTRICTED_TITLE, RESTRICTED_DESC, RESTRICTED_BODY]) {
+      for (const canary of [
+        RESTRICTED_TITLE,
+        RESTRICTED_DESC,
+        RESTRICTED_BODY,
+        DASHCLOSE_BODY,
+        BLOCKLIST_BODY,
+      ]) {
         expect(filesContaining(outDir, canary), `restricted canary in internal build`).toEqual([]);
       }
       expect(assetHits(outDir), "asset bytes in internal build (raw or base64)").toEqual([]);
@@ -248,12 +289,18 @@ describe.runIf(enabled).each(SHELLS)(
 
     it("restricted build (the control): every canary present, asset shipped", () => {
       mustPass(build("restricted"), "restricted build");
-      for (const canary of [RESTRICTED_TITLE, RESTRICTED_BODY, INTERNAL_BODY]) {
+      for (const canary of [RESTRICTED_TITLE, RESTRICTED_BODY, INTERNAL_BODY, DASHCLOSE_BODY]) {
         expect(
           filesContaining(outDir, canary).length,
           `control: "${canary.slice(0, 24)}…" must exist at its own tier`,
         ).toBeGreaterThan(0);
       }
+      // The block-list tier is undeclarable: below EVERY audience, even this
+      // one — its presence control is the checker refusal in beforeAll.
+      expect(
+        filesContaining(outDir, BLOCKLIST_BODY),
+        "an unreadable visibility must appear in no build at all",
+      ).toEqual([]);
       expect(
         assetHits(outDir).length,
         "control: asset bytes (raw or base64) at its own tier",
@@ -277,7 +324,14 @@ describe.runIf(enabled).each(SHELLS)(
       // Rebuild public WITHOUT wiping: the shell's own output handling is
       // what must not leave restricted bytes behind.
       mustPass(build(undefined, { keepOut: true }), "public rebuild over restricted output");
-      for (const canary of [RESTRICTED_TITLE, RESTRICTED_DESC, RESTRICTED_BODY, INTERNAL_BODY]) {
+      for (const canary of [
+        RESTRICTED_TITLE,
+        RESTRICTED_DESC,
+        RESTRICTED_BODY,
+        INTERNAL_BODY,
+        DASHCLOSE_BODY,
+        BLOCKLIST_BODY,
+      ]) {
         const hits = filesContaining(outDir, canary);
         expect(
           hits,
@@ -294,8 +348,8 @@ describe.runIf(enabled).each(SHELLS)(
         writeFileSync(
           instance,
           original.replace(
-            /audiences:\n  - public\n  - internal\n  - restricted/,
-            "audiences:\n  - restricted\n  - internal\n  - public",
+            /  - public\n  - internal # staff\n  - restricted/,
+            "  - restricted\n  - internal\n  - public",
           ),
         );
         const result = build();

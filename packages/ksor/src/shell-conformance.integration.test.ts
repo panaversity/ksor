@@ -51,7 +51,13 @@ const SHELLS: readonly Shell[] = [
       // The swap recipe from workbench/shells/docusaurus/README.md, verbatim
       // — filtered so a locally-run workbench shell's generated dirs never
       // ride along (review finding, 2026-08-18).
-      const GENERATED = new Set(["node_modules", ".docusaurus", ".generated", "out"]);
+      const GENERATED = new Set([
+        "node_modules",
+        ".docusaurus",
+        ".generated",
+        ".staged-knowledge",
+        "out",
+      ]);
       rmSync(path.join(project, "system", "site"), { recursive: true });
       cpSync(docusaurusShell, path.join(project, "system", "site"), {
         recursive: true,

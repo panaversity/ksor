@@ -101,14 +101,16 @@ swapping shells must require no change outside `system/site/`:
 
 Fumadocs is the reference implementation core ships; a Docusaurus shell, a
 bare Next.js app, or any registry-distributed alternative that satisfies
-1–4 is equally conformant. **The contract proves itself with two
+all five is equally conformant. **The contract proves itself with two
 implementations**: the conformance shell at `workbench/shells/docusaurus/`
 (based on the predecessor's de-branded shell under decision 6, never
 feature parity) swaps into any scaffolded project by the recipe in its
 README, and one shell-agnostic suite —
 `packages/ksor/src/shell-conformance.integration.test.ts` — runs clauses
 1–4, the `order:` translation, and the base-path build against both shells
-in CI. The default is not a choice the adopter makes at init: `ksor init`
+in CI; clause 5 has its own shell-agnostic suite,
+`visibility-conformance.integration.test.ts`, run against both shells in
+the same job. The default is not a choice the adopter makes at init: `ksor init`
 emits Fumadocs, always; the swap is an act their coding agent performs.
 _Revision note: this clause was briefly deferred to a Docusaurus-support
 verb earlier on 2026-08-18; the owner re-activated it the same day — the

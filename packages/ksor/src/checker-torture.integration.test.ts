@@ -653,6 +653,43 @@ describe("scaffolded format-checker — torture", () => {
     expect(commented.status, commented.output).toBe(0);
   });
 
+  it("reads default_visibility the way YAML does — a trailing comment is not a tier", () => {
+    // found live 2026-08-19: both build scanners stripped the comment, the
+    // checker did not — `default_visibility: public # the default` built
+    // fine and failed check.
+    const commented = probe({
+      "instance.md": instance(
+        "audiences:\n  - public\n  - internal\ndefault_visibility: public # the default",
+      ),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: public"),
+    });
+    expect(commented.status, commented.output).toBe(0);
+  });
+
+  it("tolerates blank lines and a key-line comment in the model — the shells do too", () => {
+    // found live 2026-08-19: both shapes passed this checker and refused
+    // every build with ksor-audiences-unreadable before the build scanners
+    // learned them; this pins the grammar all three parsers now share.
+    const spaced = probe({
+      "instance.md": instance(
+        "audiences: # least- to most-restricted\n\n  - public\n\n  - internal\ndefault_visibility: public",
+      ),
+      "knowledge/hr.md": doc("Body.", "title: HR\nstatus: draft\nvisibility: internal"),
+    });
+    expect(spaced.status, spaced.output).toBe(0);
+  });
+
+  it("refuses a dash glued to its value — a list item to nobody", () => {
+    // found live 2026-08-19: `  -internal` was silently skipped here while
+    // both build scanners stopped reading the list at it — one green record,
+    // two different audience lists.
+    const glued = probe({
+      "instance.md": instance("audiences:\n  - public\n  -internal\ndefault_visibility: public"),
+    });
+    expect(glued.status, glued.output).toBe(1);
+    expect(glued.output, "checker output").toContain("-internal");
+  });
+
   it("refuses a default_visibility that is not one of the declared audiences", () => {
     const stray = probe({
       "instance.md": instance("audiences:\n  - public\n  - internal\ndefault_visibility: secret"),

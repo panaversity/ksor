@@ -162,6 +162,14 @@ function parseFrontmatter(text) {
       lists.get(current).push(unquote(value));
       continue;
     }
+    // A dash glued to its value (`-internal`) is a list item to nobody —
+    // the indented-continuation escape below swallowed it while the build
+    // scanners stopped reading the list there: one green record, two
+    // different audience lists (review finding, 2026-08-19).
+    if (/^[ \t]*-\S/.test(line)) {
+      malformed.push(line.trim());
+      continue;
+    }
     if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
     malformed.push(line.trim());
   }
@@ -290,7 +298,19 @@ function readAudienceModel() {
   const fm = parseFrontmatter(readFileSync(instanceMd, "utf8"));
   const audiences = fm?.lists.get("audiences") ?? [];
   if (audiences.length === 0) return null;
-  return { audiences, defaultVisibility: fm.keys.get("default_visibility") ?? "" };
+  return { audiences, defaultVisibility: scalarValue(fm, "default_visibility") ?? "" };
+}
+
+/**
+ * A plain scalar ends at ` #` — the rule the list items above already follow
+ * and both build scanners apply. The checker not applying it to values let
+ * `default_visibility: public # the default` build fine and fail `pnpm check`
+ * (review finding, 2026-08-19).
+ */
+function scalarValue(fm, key) {
+  const value = fm.keys.get(key);
+  if (value === undefined || fm.quoted.has(key)) return value;
+  return value.replace(/\s+#.*$/, "").trim();
 }
 
 const audienceModel = readAudienceModel();
@@ -804,7 +824,7 @@ if (!existsSync(instanceMd)) {
     }
     // the audience model: ordered, public first, and never without its default
     const audiences = fm.lists.get("audiences") ?? [];
-    const defaultVisibility = fm.keys.get("default_visibility") ?? "";
+    const defaultVisibility = scalarValue(fm, "default_visibility") ?? "";
     if (fm.keys.has("audiences") && audiences.length === 0) {
       const value = fm.keys.get("audiences");
       problem(

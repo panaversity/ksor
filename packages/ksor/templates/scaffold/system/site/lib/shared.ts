@@ -28,7 +28,9 @@ function findInstance(start: string): string {
  */
 export function instanceFrontmatter(): string {
   const text = readFileSync(findInstance(process.cwd()), "utf8");
-  return /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
+  // The checker's boundary exactly: BOM stripped, CRLF normalized, lax close.
+  const normalized = text.replace(/^\uFEFF/, "").replaceAll("\r\n", "\n");
+  return /^---\n([\s\S]*?)\n---/.exec(normalized)?.[1] ?? "";
 }
 
 function readInstanceName(): string {

@@ -17,14 +17,31 @@ import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience
 const RECORD_DIR = "../../knowledge";
 const STAGE_DIR = "./.staged-knowledge";
 
-const FRONTMATTER = /^﻿?---\r?\n([\s\S]*?)\r?\n---/;
+// ONE frontmatter boundary, the checker's exactly: BOM stripped, CRLF
+// normalized, lax close (a `----` line closes — review finding 2026-08-19:
+// two boundaries in one file meant a doc one regex saw and the other
+// didn't, and the strict one published a restricted document).
+function frontmatterBlock(text: string): string {
+  const normalized = text.replace(/^\uFEFF/, "").replaceAll("\r\n", "\n");
+  return /^---\n([\s\S]*?)\n---/.exec(normalized)?.[1] ?? "";
+}
 
-/** A document's declared tier, or null when it declares none. */
+/** Exclusion sentinel: present-but-unreadable ranks below every tier. */
+const UNREADABLE = "\u0000ksor-unreadable";
+
+/**
+ * A document's declared tier: null when the key is absent (default applies),
+ * UNREADABLE when the key is present but carries no scalar — a block-list
+ * `visibility:` read as absence took the DEFAULT tier and shipped public
+ * (review finding, 2026-08-19: the one malformed shape that failed open).
+ */
 function visibilityOf(text: string): string | null {
-  const block = FRONTMATTER.exec(text)?.[1] ?? "";
-  const raw = /^visibility:[ \t]*(.*)$/m.exec(block)?.[1]?.trim() ?? "";
+  const block = frontmatterBlock(text);
+  const match = /^visibility:[ \t]*(.*)$/m.exec(block);
+  if (match === null) return null;
+  const raw = (match[1] ?? "").replace(/\s+#.*$/, "").trim();
   const value = /^(['"])(.*)\1$/.exec(raw)?.[2] ?? raw;
-  return value === "" ? null : value;
+  return value === "" ? UNREADABLE : value;
 }
 
 function walkFiles(dir: string): string[] {
@@ -147,7 +164,8 @@ function planStage(recordDir: string): StagePlan {
     // Body only: frontmatter carries no links in the record grammar, and
     // scanning it here while the other shell strips it staged different
     // asset sets from one record (review finding, 2026-08-18).
-    const body = text.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
+    const block = frontmatterBlock(text);
+    const body = block === "" ? text : text.slice(text.indexOf(block) + block.length);
     for (const target of linkTargets(stripCode(body))) {
       const asset = assetTarget(recordDir, file, target);
       if (asset !== null) assets.add(asset);
@@ -158,6 +176,11 @@ function planStage(recordDir: string): StagePlan {
 
 /** Fill a clean stage with exactly the set this build may publish. */
 function fillStage(recordDir: string, stageDir: string): void {
+  // The old stage goes first, before any refusal can throw: a refused build
+  // that leaves the previous, more permissive stage on disk hands the next
+  // careless build a filtered copy nothing governs (review finding,
+  // 2026-08-19).
+  rmSync(stageDir, { recursive: true, force: true });
   const plan = planStage(recordDir);
   // An empty record is its own problem, reported by the page that renders it;
   // an empty AUDIENCE is a misconfiguration that would otherwise surface as
@@ -170,7 +193,6 @@ function fillStage(recordDir: string, stageDir: string): void {
       "build a wider audience with KSOR_AUDIENCE, lower default_visibility in instance.md, or give at least one document this tier",
     );
   }
-  rmSync(stageDir, { recursive: true, force: true });
   for (const from of plan.files) {
     const to = path.join(stageDir, path.relative(recordDir, from));
     mkdirSync(path.dirname(to), { recursive: true });
@@ -266,10 +288,11 @@ export function knowledgeSourceDir(): string {
   const stageDir = path.resolve(process.cwd(), STAGE_DIR);
   const recordDir = path.resolve(process.cwd(), RECORD_DIR);
   if (audienceModel === null) {
-    refuseVisibilityWithoutAudiences(recordDir);
     // A stage left behind by an earlier model would be a filtered copy of the
-    // record nothing governs any more.
+    // record nothing governs any more — removed before the refusal below can
+    // throw, so a refused build never leaves one behind either.
     rmSync(stageDir, { recursive: true, force: true });
+    refuseVisibilityWithoutAudiences(recordDir);
     return RECORD_DIR;
   }
   fillStage(recordDir, stageDir);

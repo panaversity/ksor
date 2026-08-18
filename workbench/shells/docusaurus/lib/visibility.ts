@@ -104,10 +104,14 @@ function readAudienceList(block: string): string[] {
       .map(unquote)
       .filter((value) => value !== "");
   const lines = block.split("\n");
-  const start = lines.findIndex((line) => /^audiences:[ \t\r]*$/.test(line));
+  // Key-line comments tolerated, blank lines among the items skipped — both
+  // are checker-green shapes that refused every build here (review finding,
+  // 2026-08-19).
+  const start = lines.findIndex((line) => /^audiences:[ \t]*(?:#.*)?\r?$/.test(line));
   if (start === -1) return [];
   const values: string[] = [];
   for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") continue;
     const item = LIST_ITEM.exec(line);
     if (item === null) break;
     const value = unquote(stripComment(item[1] ?? ""));
@@ -211,9 +215,9 @@ export function buildAudience(model: AudienceModel | null): string {
 
 /** Whether a document of this tier belongs in a build for this audience. */
 function permits(model: AudienceModel, audience: string, visibility: string | null): boolean {
-  // An empty `visibility:` is an ABSENT declaration, not an empty tier — the
-  // same reading `order:` gets in lib/record.ts, and for the same reason: two
-  // shells reading one key two ways is how a record silently means two things.
+  // Only a truly ABSENT key (null) takes the default tier. A present-but-
+  // empty `visibility:` arrives from documents() as an undeclarable sentinel
+  // and falls to rank -1 below — fail closed, never the default.
   const tier = visibility !== null && visibility.trim() !== "" ? visibility.trim() : model.fallback;
   const rank = model.audiences.indexOf(tier);
   // A tier nobody declared is excluded, never included. `pnpm check` refuses
@@ -239,7 +243,16 @@ function* documents(dir: string, prefix: string): Generator<KnowledgeDoc> {
     } else if (entry.name.endsWith(".md")) {
       const text = fs.readFileSync(path.join(dir, entry.name), "utf8");
       const block = FRONTMATTER.exec(text)?.[1] ?? "";
-      yield { rel, text, visibility: frontmatterValue(block, "visibility") };
+      // Present-but-empty (a block-list visibility:) must never read as
+      // absent — absence takes the DEFAULT tier and ships public (review
+      // finding, 2026-08-19). The sentinel ranks below every tier.
+      const declared = /^visibility:/m.test(block);
+      const value = frontmatterValue(block, "visibility");
+      yield {
+        rel,
+        text,
+        visibility: declared && (value === null || value === "") ? "\u0000ksor-unreadable" : value,
+      };
     }
   }
 }

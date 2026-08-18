@@ -43,15 +43,28 @@ function readAudienceModel(): AudienceModel | null {
   // ANY indent (YAML allows unindented block sequences), and a ` #` comment
   // ends an unquoted entry (all three found live 2026-08-18: records the
   // checker blessed either failed this build or silently lost a tier).
-  const flow = /^audiences:[ \t]*\[(.*)\][ \t]*\r?$/m.exec(block)?.[1];
-  const list = /^audiences:[ \t]*\r?\n((?:[ \t]*-[ \t]+.*\r?\n?)+)/m.exec(block)?.[1];
   const stripComment = (value: string): string =>
     /^["']/.test(value.trim()) ? value : value.replace(/\s+#.*$/, "");
-  const audiences = (
-    flow !== undefined
-      ? flow.split(",")
-      : (list ?? "").split(/\r?\n/).map((line) => /^[ \t]*-[ \t]+(.*)$/.exec(line)?.[1] ?? "")
-  )
+  // A line scanner, not a block regex: a blank line among the items or a
+  // comment on the key line broke the block capture and refused every build
+  // of a checker-green record (review finding, 2026-08-19).
+  const flow = /^audiences:[ \t]*\[(.*)\][ \t]*(?:#.*)?$/m.exec(block)?.[1];
+  let items: string[] = [];
+  if (flow !== undefined) {
+    items = flow.split(",");
+  } else {
+    const lines = block.split("\n");
+    const start = lines.findIndex((line) => /^audiences:[ \t]*(?:#.*)?$/.test(line));
+    if (start !== -1) {
+      for (const line of lines.slice(start + 1)) {
+        if (line.trim() === "") continue;
+        const item = /^[ \t]*-[ \t]+(.*)$/.exec(line);
+        if (item === null) break;
+        items.push(item[1] ?? "");
+      }
+    }
+  }
+  const audiences = items
     .map(stripComment)
     .map(unquote)
     .filter((value) => value !== "");
