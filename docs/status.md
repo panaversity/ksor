@@ -28,6 +28,14 @@ the tarball under `docs/`.
   stable slugs and remedies. Acceptance runs on ubuntu and windows; a
   gated browser e2e drives the built site in real Chromium.
 
+- **The shell swap seam, proven with two implementations** — a Docusaurus
+  conformance shell at `workbench/shells/docusaurus/` (predecessor-based,
+  decision 6) swaps into any scaffolded project by its README recipe, and
+  one shell-agnostic suite runs the surface contract's four clauses, the
+  `order:` translation, and the base-path build against both shells in CI.
+  `ksor init` still emits Fumadocs, always — the second shell is the
+  option and the vendor-neutrality proof, not a selector.
+
 - **Base environment**: pnpm 11 workspace with catalog pins, TypeScript 7
   (native compiler), pure-ESM package build via tsdown, vitest unit +
   integration tiers, oxlint + oxfmt, changesets with npm
@@ -50,8 +58,6 @@ the tarball under `docs/`.
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
-- The Docusaurus conformance fixture + shell-agnostic conformance suite —
-  moved to the Docusaurus-support verb (spec, deferred 2026-08-18).
 - The agent-eval harness (contract in AGENTS.md → Testing); until it
   exists, acceptance (6) runs as a manual rubric-scored walk.
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry

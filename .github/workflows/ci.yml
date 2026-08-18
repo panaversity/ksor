@@ -102,6 +102,10 @@ jobs:
       # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, 2026-08-18).
       - run: pnpm --dir packages/ksor exec playwright install chromium --with-deps
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts
+      # The shell swap seam, proven with two implementations: the Fumadocs
+      # reference as emitted, and the workbench Docusaurus shell via its swap
+      # recipe — one suite, identical assertions (surface contract clauses 1-4).
+      - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/shell-conformance.integration.test.ts
 
   init-windows:
     name: Init acceptance (Windows)

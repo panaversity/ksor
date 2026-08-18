@@ -98,17 +98,20 @@ swapping shells must require no change outside `system/site/`:
 
 Fumadocs is the reference implementation core ships; a Docusaurus shell, a
 bare Next.js app, or any registry-distributed alternative that satisfies
-1–4 is equally conformant. **The contract proved itself with two
-implementations before ratification**: on 2026-08-18 both a Docusaurus and
-a Fumadocs shell were built live against the same corpus and compared side
-by side, and the owner chose Fumadocs to ship, ruling Docusaurus support
-comes later as its own verb ("we will ship with fumadocs and later add
-support for docusaurus to make the case for the board"). The
-conformance-minimal Docusaurus fixture under `workbench/` and the
-shell-agnostic conformance suite in CI move to that verb (deferred
-2026-08-18, superseding the earlier in-PR commitment); the suite remains
-the bar any future registry shell must pass, and the measured comparison
-is recorded under decision 9.
+1–4 is equally conformant. **The contract proves itself with two
+implementations**: the conformance shell at `workbench/shells/docusaurus/`
+(based on the predecessor's de-branded shell under decision 6, never
+feature parity) swaps into any scaffolded project by the recipe in its
+README, and one shell-agnostic suite —
+`packages/ksor/src/shell-conformance.integration.test.ts` — runs clauses
+1–4, the `order:` translation, and the base-path build against both shells
+in CI. The default is not a choice the adopter makes at init: `ksor init`
+emits Fumadocs, always; the swap is an act their coding agent performs.
+_Revision note: this clause was briefly deferred to a Docusaurus-support
+verb earlier on 2026-08-18; the owner re-activated it the same day — the
+team keeps the option, and a working second shell is what "vendor
+neutral" means in practice._ The suite is the bar any future registry
+shell must pass.
 
 ## Acceptance
 

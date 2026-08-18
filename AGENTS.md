@@ -78,18 +78,19 @@ Used precisely; do not repurpose.
 
 ## Repository layout
 
-| Path                        | What it is                                                |
-| --------------------------- | --------------------------------------------------------- |
-| `packages/ksor/`            | the published package: CLI + SDK (MCP surface lands here) |
-| `packages/ksor/docs/`       | user docs, shipped inside the npm tarball                 |
-| `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface      |
-| `docs/status.md`            | the only authority on what is implemented (npm links it)  |
-| `research/`                 | plans and records; frontmatter is guard-enforced          |
-| `specs/`                    | one-page feature contracts; frontmatter is guard-enforced |
-| `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)  |
-| `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest |
-| `tsconfig.base.json`        | the shared strict base — extend, don't fork               |
-| `.githooks/`                | committed pre-commit hook (`pnpm prepare` sets hooksPath) |
+| Path                        | What it is                                                 |
+| --------------------------- | ---------------------------------------------------------- |
+| `packages/ksor/`            | the published package: CLI + SDK (MCP surface lands here)  |
+| `packages/ksor/docs/`       | user docs, shipped inside the npm tarball                  |
+| `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface       |
+| `workbench/shells/`         | alternative site shells proving the swap seam (decision 9) |
+| `docs/status.md`            | the only authority on what is implemented (npm links it)   |
+| `research/`                 | plans and records; frontmatter is guard-enforced           |
+| `specs/`                    | one-page feature contracts; frontmatter is guard-enforced  |
+| `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)   |
+| `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest  |
+| `tsconfig.base.json`        | the shared strict base — extend, don't fork                |
+| `.githooks/`                | committed pre-commit hook (`pnpm prepare` sets hooksPath)  |
 
 ## Commands
 
@@ -181,7 +182,11 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    the extensibility ceiling (auth, features), agent-ecosystem alignment,
    and the verified portability of the predecessor's remark layer decided
    it._ Reversed if Fumadocs's static export or llms surface regresses
-   before the site slice ships.
+   before the site slice ships. _Revision 2026-08-18: the two-shell proof
+   is in-tree — `workbench/shells/docusaurus/` swaps in by its README
+   recipe and one shell-agnostic conformance suite runs the surface
+   contract against both shells in CI. `ksor init` still emits Fumadocs,
+   always; no selector was added._
 10. **Scaffold templates are MIT-0** (owner, 2026-08-18): init's output
     lands in the adopter's proprietary repo free of attribution
     obligations, and init never emits a LICENSE file into a repo whose

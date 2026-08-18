@@ -1,0 +1,12 @@
+/**
+ * The shell's whole stylesheet. Everything else is Infima's default, on
+ * purpose: a conformance shell that restyled the theme would be testing its
+ * own CSS rather than the surface contract.
+ *
+ * The KSoR mark ships as an opaque PNG, so on the dark navbar it lands as a
+ * white tile (seen live 2026-08-18). Rounding it reads as an app icon in both
+ * color modes and matches the mark on the home page.
+ */
+.navbar__logo img {
+  border-radius: 6px;
+}
