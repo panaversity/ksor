@@ -5,6 +5,9 @@
   "description": "The KSoR content kernel: ingest, chunking, generations, retrieval with calibrated abstention — converted from the production sor-content.",
   "license": "Apache-2.0",
   "author": "Panaversity",
+  "bin": {
+    "ksor-content": "./dist/cli.mjs"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {

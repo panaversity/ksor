@@ -60,6 +60,8 @@ const DOCS = [
 const IN_CORPUS_QUERY = "when are zebra compensation bands reviewed";
 /** The question whose only passing answer is the abstention. */
 const OOC_QUERY = "what does quantum blockchain weather forecasting cost";
+/** Scope-adjacent: shares tokens with the corpus, answered by nothing in it. */
+const NEAR_MISS_QUERY = "what is the zebra parental leave policy in belgium";
 
 describe.runIf(adminDsn !== "")("gateway acceptance (stdio, real MCP client)", () => {
   let admin: pg.Pool;
@@ -70,6 +72,7 @@ describe.runIf(adminDsn !== "")("gateway acceptance (stdio, real MCP client)", (
   let instancePath: string;
   let client: Client;
   let floor: number;
+  let nearMissScore: number;
 
   beforeAll(async () => {
     dbName = `ksor_g_${randomBytes(4).toString("hex")}`;
@@ -136,6 +139,7 @@ describe.runIf(adminDsn !== "")("gateway acceptance (stdio, real MCP client)", (
     };
     const inScore = await score(IN_CORPUS_QUERY);
     const oocScore = await score(OOC_QUERY);
+    nearMissScore = (await score(NEAR_MISS_QUERY)) ?? 0;
     expect(inScore, "in-corpus probe must score").not.toBeNull();
     expect(oocScore, "ooc probe must score").not.toBeNull();
     expect(
@@ -258,15 +262,25 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(body.hits).toEqual([]);
   });
 
-  it("a scope-adjacent near-miss abstains too, not only far-domain questions", async () => {
+  it("a scope-adjacent near-miss gets exactly the answer the calibrated floor decides", async () => {
     const result = await client.callTool({
       name: "search",
-      arguments: { query: "what is the zebra parental leave policy in belgium", k: 5 },
+      arguments: { query: NEAR_MISS_QUERY, k: 5 },
     });
-    const body = result.structuredContent as { ok: boolean };
-    // Near-miss shares tokens ("zebra", "policy") — whichever way the
-    // midpoint floor decides it, the envelope must be typed, never prose.
-    expect(typeof body.ok).toBe("boolean");
+    const body = result.structuredContent as { ok: boolean; reason?: string };
+    // The assertion is tied to the calibration, so it CAN fail (a vacuous
+    // typeof check shipped here once — review finding 2026-08-19): the
+    // gate must decide this query exactly as its measured score against
+    // the ratified floor says, and with the token-bag fake the shared
+    // tokens ("zebra", "policy") still land below the midpoint floor.
+    const expectAbstain = nearMissScore < floor;
+    expect(
+      body.ok,
+      `near-miss score ${nearMissScore} vs floor ${floor}: ${JSON.stringify(body)}`,
+    ).toBe(!expectAbstain);
+    expect(expectAbstain, "the near-miss must actually probe the gate (below the floor)").toBe(
+      true,
+    );
   });
 
   it("the http door refuses to boot with no auth decision (fail-closed), and boots with the explicit opt-out", async () => {
@@ -335,6 +349,35 @@ Answer ONLY from this record. Abstention is a correct answer.
       } finally {
         await httpClient.close();
       }
+
+      // A CHUNKED POST must work through harden's buffered replay seam —
+      // the gateway once dropped the replayed body and every chunked
+      // request failed (review finding, 2026-08-19).
+      const initialize = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "chunked-probe", version: "0" },
+        },
+      });
+      const chunked = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(initialize));
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit);
+      expect(chunked.status, await chunked.text().catch(() => "")).toBe(200);
     } finally {
       server.kill();
     }

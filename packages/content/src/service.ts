@@ -24,7 +24,7 @@ import {
 } from "./lib/snapshot.js";
 import { logRead } from "./lib/rlog.js";
 import { documentChunks, findDocument, outline as outlineQuery } from "./lib/read.js";
-import { windowDocument } from "./lib/windowing.js";
+import { codePointLength, windowDocument } from "./lib/windowing.js";
 
 export const SEARCH_BUDGET_CHARS: number = 34_000 * CHARS_PER_TOKEN;
 export const MAX_SEARCH_K = 50;
@@ -156,9 +156,12 @@ export class EmptyQueryError extends Error {
 
 export async function search(ctx: ServiceContext, query: string, k = 10): Promise<SearchResult> {
   if (query.trim() === "") throw new EmptyQueryError();
-  if (query.length > MAX_QUERY_CHARS) {
+  // Code points, Python len parity — the two planes must read the same
+  // budget contract (review finding, 2026-08-19).
+  const queryChars = codePointLength(query);
+  if (queryChars > MAX_QUERY_CHARS) {
     throw new Error(
-      `query is ${query.length} chars; the limit is ${MAX_QUERY_CHARS} — ask a focused question`,
+      `query is ${queryChars} chars; the limit is ${MAX_QUERY_CHARS} — ask a focused question`,
     );
   }
   const inst = ctx.instance;
@@ -221,7 +224,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       action: "search_abstained",
       instanceDigest: ctx.instanceDigest,
       detail: {
-        query_chars: query.length,
+        query_chars: queryChars,
         k,
         k_effective: kb,
         top_cosine: topCosine,
@@ -248,11 +251,12 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   let truncated = 0;
   for (const hit of hits) {
     const content = stripAssetMarkup(hit.content);
-    if (spent + content.length > budget) {
+    const size = codePointLength(content);
+    if (spent + size > budget) {
       truncated += 1;
       continue;
     }
-    spent += content.length;
+    spent += size;
     shaped.push({
       slug: hit.slug,
       heading_path: hit.headingPath ?? "",
@@ -279,7 +283,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     chunkPolicyVersion: CHUNK_POLICY,
     embeddingModel: inst.embeddingModel,
     detail: {
-      query_chars: query.length,
+      query_chars: queryChars,
       k,
       k_effective: kb,
       returned: shaped.length,
@@ -405,7 +409,8 @@ export async function readDocument(
   const window = windowDocument(scoped, budget, options.fromHeading ?? null);
   const text = window.chunks.map((c) => c.content).join("");
   const windowed = window.chunks.length < scoped.length;
-  const totalChars = scoped.reduce((n, c) => n + c.content.length, 0);
+  const textChars = codePointLength(text);
+  const totalChars = scoped.reduce((n, c) => n + codePointLength(c.content), 0);
   const sections = [
     ...new Set(scoped.map((c) => c.headingPath.split("/")[0] ?? "").filter((s) => s !== "")),
   ];
@@ -417,7 +422,7 @@ export async function readDocument(
     action: "content_served",
     instanceDigest: ctx.instanceDigest,
     generation: node.generation,
-    detail: { slug: node.slug, chars: text.length, windowed },
+    detail: { slug: node.slug, chars: textChars, windowed },
   });
 
   return {
@@ -438,7 +443,7 @@ export async function readDocument(
           window_to: window.windowTo ?? "",
           next: window.nextHeading,
           remaining_outline: [...window.remainingSections],
-          est_tokens: Math.ceil(text.length / CHARS_PER_TOKEN),
+          est_tokens: Math.ceil(textChars / CHARS_PER_TOKEN),
           total_est_tokens: Math.ceil(totalChars / CHARS_PER_TOKEN),
           note:
             window.nextHeading === null

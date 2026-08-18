@@ -34,10 +34,24 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(text);
 }
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  const text = Buffer.concat(chunks).toString("utf8");
+/**
+ * POST bodies only. A chunked body arrives PRE-BUFFERED from harden's
+ * replay seam (review finding 2026-08-19: dropping that third argument
+ * broke every chunked request); a declared-length body is read here, the
+ * cap already enforced by harden. Other methods never read — the oracle's
+ * ASGI app never read GET bodies, and reading them here let a chunked GET
+ * stream unbounded bytes into memory (review finding, same day).
+ */
+async function readBody(req: IncomingMessage, preRead?: Buffer): Promise<unknown> {
+  if (req.method !== "POST") return undefined;
+  let text: string;
+  if (preRead !== undefined) {
+    text = preRead.toString("utf8");
+  } else {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    text = Buffer.concat(chunks).toString("utf8");
+  }
   if (text === "") return undefined;
   return JSON.parse(text);
 }
@@ -51,11 +65,28 @@ function bearerToken(req: IncomingMessage): string | null {
 
 export async function runHttp(composition: Composition): Promise<void> {
   const auth: Auth = buildAuth(process.env);
-  const security = transportSecurityFromEnv(process.env);
   const bind = resolveBind(process.env);
+  // The SDK does NOT arm rebinding protection on its own (verified in
+  // 1.30.0 — a recorded deviation rested on that false premise; review
+  // finding 2026-08-19). On the loopback door, browsers are the threat
+  // model (DNS rebinding reaches localhost), so unset env defaults to
+  // protection pinned to the bind; an explicit KSOR_ALLOWED_HOSTS/ORIGINS
+  // declaration always wins, and a non-loopback bind is bearer-gated.
+  const security =
+    transportSecurityFromEnv(process.env) ??
+    (bind.host === "127.0.0.1"
+      ? {
+          enableDnsRebindingProtection: true,
+          allowedHosts: [`127.0.0.1:${bind.port}`, `localhost:${bind.port}`],
+        }
+      : null);
   const { ctx, instance, pool, spaceSkipReason } = composition;
 
-  const handleMcp = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const handleMcp = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    preRead?: Buffer,
+  ): Promise<void> => {
     // Stateless: a fresh server + transport per request; nothing survives
     // the response, so there is no session to fixate or leak.
     const server = buildServer(ctx, composition.version);
@@ -69,11 +100,15 @@ export async function runHttp(composition: Composition): Promise<void> {
       void server.close();
     });
     await server.connect(transport);
-    const body = await readBody(req);
+    const body = await readBody(req, preRead);
     await transport.handleRequest(req, res, body);
   };
 
-  const app = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const app = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    preRead?: Buffer,
+  ): Promise<void> => {
     const path = (req.url ?? "").split("?", 1)[0] ?? "";
     if (path === "/live") {
       sendJson(res, 200, { live: true });
@@ -128,10 +163,13 @@ export async function runHttp(composition: Composition): Promise<void> {
         res.end(JSON.stringify({ error: "bearer token required" }));
         return;
       }
+      // The try wraps ONLY the verify: a post-auth fault answered 401
+      // told authenticated clients their token was invalid and sent them
+      // into refresh loops (review finding, 2026-08-19). Transport faults
+      // propagate to the server's 500 path.
+      let identity;
       try {
-        const identity = await auth.verify(token);
-        await runWithIdentity(identity, () => handleMcp(req, res));
-        return;
+        identity = await auth.verify(token);
       } catch (error) {
         const transient = error instanceof TokenVerifyError && error.transient;
         sendJson(res, transient ? 503 : 401, {
@@ -139,8 +177,10 @@ export async function runHttp(composition: Composition): Promise<void> {
         });
         return;
       }
+      await runWithIdentity(identity, () => handleMcp(req, res, preRead));
+      return;
     }
-    await handleMcp(req, res);
+    await handleMcp(req, res, preRead);
   };
 
   await runServer(harden(app), bind);

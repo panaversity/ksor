@@ -66,7 +66,9 @@ function isDriverError(error: unknown): boolean {
 
 function sanitized(error: unknown): never {
   if (isDriverError(error)) {
-    throw new ContentStoreError(error instanceof Error ? error.name : "Error");
+    // pg's DatabaseError carries name="error" — the constructor name is
+    // the diagnostic the oracle's class-name contract meant.
+    throw new ContentStoreError(error instanceof Error ? error.constructor.name : "Error");
   }
   throw error;
 }

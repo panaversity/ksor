@@ -91,3 +91,4 @@ export {
   type CalibrationReport,
   type ScoredQuery,
 } from "./calibrate/math.js";
+export { GeminiTextGenerator } from "./lib/providers/gemini.js";

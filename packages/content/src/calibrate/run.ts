@@ -171,10 +171,19 @@ export async function runCalibration(
     const synthesized: string[] = [];
     for (const passage of passages) {
       const truncated = [...passage].slice(0, 1500).join(""); // code points, Python [:1500] parity
-      const q = await generator.generate(QUERY_PROMPT(truncated), {
+      const generated = await generator.generate(QUERY_PROMPT(truncated), {
         maxOutputTokens: 64,
       });
-      if (q.trim() !== "") synthesized.push(q);
+      // FIRST line only (oracle parity — review finding 2026-08-19: keeping
+      // a multi-line generation whole made an unfocused query, dragged the
+      // min() down, and biased the recommended floor WEAKER); empty
+      // generations are skipped with a note, never silently.
+      const q = (generated.split("\n").find((line) => line.trim() !== "") ?? "").trim();
+      if (q === "") {
+        console.warn("calibrate: empty generation skipped");
+        continue;
+      }
+      synthesized.push(q);
     }
     inQueries = normalizeQueries(synthesized);
   }

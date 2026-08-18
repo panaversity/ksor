@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type pg from "pg";
 import { pooledEndpointFor } from "@panaversity/ksor-platform";
+import { currentActor } from "@panaversity/ksor-gateway-kit";
 import {
   buildShippedProvider,
   checkEmbeddingSpace,
@@ -82,6 +83,10 @@ export async function compose(instancePath: string, version: string): Promise<Co
     ring: keyRingFromEnv(process.env["KSOR_SNAPSHOT_KEYS"]),
     instanceDigest,
     embedQuery: (query: string) => embedQueryVlit(query, { provider }),
+    // The §7 rows must name the verified caller (a row that says
+    // "anonymous" for a bearer-verified read proves nothing — review
+    // finding 2026-08-19); the kit's AsyncLocalStorage carries it.
+    actor: currentActor,
   };
   return { ctx, instance, pool, spaceSkipReason, version };
 }
