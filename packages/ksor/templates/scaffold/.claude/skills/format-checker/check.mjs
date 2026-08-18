@@ -101,6 +101,8 @@ function parseFrontmatter(text) {
 function stripCode(text) {
   const kept = [];
   let fence = null;
+  let blank = true;
+  let indented = false;
   for (const line of text.replaceAll("\r\n", "\n").split("\n")) {
     if (fence) {
       const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
@@ -112,6 +114,20 @@ function stripCode(text) {
       fence = { char: open[1][0], length: open[1].length };
       continue;
     }
+    // Indented code blocks: a 4-space/tab-indented run opened after a blank
+    // line is treated as code (review finding 2026-08-18 — links inside
+    // code samples were checked as real). Known tradeoff: a loose list's
+    // indented continuation matches too, so links there go unchecked — a
+    // false negative, preferred over failing the gate on real code samples.
+    if (/^(?: {4}|\t)/.test(line)) {
+      if (blank || indented) {
+        indented = true;
+        continue;
+      }
+    } else if (line.trim() !== "") {
+      indented = false;
+    }
+    blank = line.trim() === "";
     kept.push(line);
   }
   return kept.join("\n").replace(/(`+)[^`]*?\1/g, " ");
@@ -134,7 +150,12 @@ function linkTargets(body) {
 }
 
 function checkLinkTarget(rel, docPath, target) {
-  if (target === "" || /^(https?:|mailto:|#)/.test(target)) return;
+  // Anything with a URI scheme (https:, mailto:, tel:, ftp:, …) or a
+  // protocol-relative // host leaves the record on purpose — only relative
+  // paths are the record's own links (review finding 2026-08-18: tel: was
+  // reported as a dead file and //host as an escape).
+  if (target === "" || target.startsWith("#") || target.startsWith("//")) return;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return;
   const resolved = path.resolve(path.dirname(docPath), target.split("#")[0]);
   if (!resolved.startsWith(knowledgeDir + path.sep) && resolved !== knowledgeDir) {
     problem(

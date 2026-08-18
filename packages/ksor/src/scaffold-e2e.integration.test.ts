@@ -41,13 +41,27 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(build.status, build.stderr.slice(-2000)).toBe(0);
 
     const outDir = path.join(project, "system", "site", "out");
+    // Real content types: a classic worker's importScripts refuses
+    // non-JavaScript MIME, so a typeless server can hide a broken worker
+    // (found live in the Docusaurus shell's search, 2026-08-18).
+    const mime: Record<string, string> = {
+      ".html": "text/html",
+      ".js": "text/javascript",
+      ".css": "text/css",
+      ".json": "application/json",
+      ".png": "image/png",
+      ".svg": "image/svg+xml",
+      ".txt": "text/plain",
+    };
     const server = createServer((req, res) => {
       const url = (req.url ?? "/").split("?")[0] ?? "/";
       const candidates = [url, `${url}/index.html`, `${url}index.html`, `${url}.html`];
       for (const candidate of candidates) {
         try {
           const body = readFileSync(path.join(outDir, candidate));
-          res.writeHead(200);
+          res.writeHead(200, {
+            "content-type": mime[path.extname(candidate)] ?? "application/octet-stream",
+          });
           res.end(body);
           return;
         } catch {
@@ -83,6 +97,9 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         page.on("console", (msg) => {
           if (msg.type() === "error") consoleErrors.push(msg.text());
         });
+        // Uncaught page errors never reach the console listener — a broken
+        // worker or module fails silently without this (found live).
+        page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
         page.on("request", (req) => {
           if (!req.url().startsWith("http://localhost:4173")) externalRequests.push(req.url());
         });
@@ -119,10 +136,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
   }, 240_000);
 
   it("dev server hot-reloads a knowledge edit", async () => {
-    const dev = spawn("pnpm", ["dev"], { cwd: project, stdio: "ignore" });
+    // A dedicated port, and proof we reached OUR server: on a machine where
+    // :3000 is already serving some other project, Next silently binds the
+    // next free port and the poll below would green-light a stranger's site
+    // (found live 2026-08-18 — the poll hit a long-running demo server).
+    const dev = spawn("pnpm", ["dev", "--port", "3217"], { cwd: project, stdio: "ignore" });
     try {
       // Wait for the dev server, then confirm the page, then edit and poll.
-      const url = "http://localhost:3000/docs/example/";
+      const url = "http://localhost:3217/docs/example/";
       await expect
         .poll(
           async () => {
@@ -136,6 +157,9 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
           { timeout: 120_000, interval: 1_000 },
         )
         .toBe(200);
+      expect(await (await fetch(url)).text(), "the dev server must be this project's").toContain(
+        "walkthrough",
+      );
       const marker = "hot-reload-proof-4173";
       appendFileSync(path.join(project, "knowledge", "example.md"), `\n${marker}\n`);
       await expect

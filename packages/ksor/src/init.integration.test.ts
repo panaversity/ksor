@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -128,6 +129,27 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
       expect(bytesA.equals(bytesB), `byte difference in ${rel}`).toBe(true);
     }
   });
+
+  it.runIf(process.platform !== "win32")(
+    "gives both init forms the same project-root mode (0755)",
+    () => {
+      // mkdtempSync stages at 0700 and rename carries the mode onto the
+      // project root (review finding, 2026-08-18) — the named form must end
+      // where `init .` ends.
+      const named = workDir();
+      expect(runInit(["mode-check"], named).status).toBe(0);
+      const namedMode = statSync(path.join(named, "mode-check")).mode & 0o777;
+
+      const dotParent = workDir();
+      const dotTarget = path.join(dotParent, "mode-dot");
+      mkdirSync(dotTarget);
+      expect(runInit(["."], dotTarget).status).toBe(0);
+      const dotMode = statSync(dotTarget).mode & 0o777;
+
+      expect(namedMode.toString(8), "named-form root mode").toBe(dotMode.toString(8));
+      expect(namedMode & 0o055, "root must be world-traversable, not 0700").not.toBe(0);
+    },
+  );
 
   it("output matches the shipped templates plus exactly the two stamps", () => {
     // Two names, because a stamp that silently kept its default would pass

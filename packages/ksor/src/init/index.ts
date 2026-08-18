@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import { type ExitCode, exitCodes } from "../index.js";
@@ -261,13 +261,22 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
       }
       throw error;
     }
-    // Whatever still carries the stage prefix once ours is gone was left by an
-    // init that never finished. The dot form stages nothing, and a stale stage
-    // there is named by the `blocked` refusal instead.
-    noteStaleStages(path.dirname(targetDir), io);
+    // mkdtempSync creates the stage 0700 for temp-dir privacy and rename
+    // carries that onto the project root; normalize to match `init .` and
+    // every child directory (review finding, 2026-08-18).
+    chmodSync(targetDir, 0o755);
   }
 
-  gitInit(targetDir, io);
+  // From here the project exists: nothing below may surface as a failed init.
+  // The courtesy note and git are best-effort; only the handoff must print.
+  try {
+    if (!isDot) noteStaleStages(path.dirname(targetDir), io);
+    gitInit(targetDir, io);
+  } catch (error) {
+    if (!isEnvironmentError(error)) throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    io.err(`note: the project was created, but a follow-up step failed: ${detail}\n`);
+  }
   handoff(io, name, isDot);
   return 0;
 }
