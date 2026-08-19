@@ -20,6 +20,7 @@ import type pg from "pg";
 import { runRead } from "../db.js";
 import { aembedIntent, type EmbeddingProvider, type TextGenerator } from "../lib/embedding.js";
 import { topOneScore, VECTOR_TXN_GUCS, type SearchScope } from "../lib/search.js";
+import { DENIED_CTE, DENY } from "../lib/takedown.js";
 import {
   buildReport,
   BUILT_IN_OOC,
@@ -30,10 +31,11 @@ import {
 
 /** Deterministic content-hash spread; comment carried from the oracle. */
 const SAMPLE_SQL = `
-WITH g AS (
+WITH RECURSIVE g AS (
     SELECT COALESCE($4::bigint, active_generation) AS gen
     FROM corpora WHERE tenant_id = $1 AND corpus_id = $2
 ),
+${DENIED_CTE},
 ranked AS (
     SELECT c.content, n.stable_id,
            row_number() OVER (PARTITION BY n.node_id ORDER BY md5(c.content)) AS rn
@@ -45,8 +47,7 @@ ranked AS (
     WHERE c.tenant_id = $1 AND c.embedding_status = 'embedded'
       AND c.labels->>'source_type' = 'prose'
       AND n.status = 'published'
-      AND NOT EXISTS (SELECT 1 FROM takedown_denylist d
-                       WHERE d.tenant_id = $1 AND d.corpus_id = $2 AND d.stable_id = n.stable_id)
+      AND ${DENY}
       AND length(regexp_replace(c.content, '\\s', '', 'g')) >= $3
 )
 SELECT content FROM ranked WHERE rn <= $5`;

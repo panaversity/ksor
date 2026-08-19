@@ -83,8 +83,12 @@ the deploy story — plus the CLI contract: `dev`,
     its suite as the fixture source; acceptance drives the BUILT binary
     with a real MCP client against live Postgres (Neon, pgvector) — cited
     passages, snapshot generation-pinning, byte-exact reads, and the typed
-    abstention. The published `ksor` CLI is untouched: `serve` still exits
-    `2` until the npm packaging question (decision 12) is resolved.
+    abstention. Takedown denial is scoped (decision 14): per-node by default,
+    whole-subtree by explicit opt-in via a serving-time `parent_id` walk —
+    one seam (`lib/takedown.ts`) across search, read, outline, and calibration,
+    proved in `takedown.db.test.ts`. The published `ksor` CLI is untouched:
+    `serve` still exits `2` until the npm packaging question (decision 12) is
+    resolved.
 
 ## Known gaps in the kernel conversion (tracked, not blocking)
 
@@ -96,23 +100,10 @@ the deploy story — plus the CLI contract: `dev`,
   that migrates with the least surgery; it is a one-dependency bump when the
   SDK catches up.
 - **No schema migration runner**: `schema.sql` is one file, versioned in
-  `schema_meta` (2.0). That is correct while no adopter has production data
+  `schema_meta` (2.1). That is correct while no adopter has production data
   (nothing is released). Before adopters do, a forward-migration path
   (versioned plain SQL + a runner keyed on `schema_meta`) is owed —
   recorded as a decision in `research/kernel-conversion.md`.
-- **Takedown denial is PER-NODE, not subtree** — a `takedown_denylist` row
-  hides exactly its listed `stable_id`; a container/section takedown does NOT
-  cascade to descendants (search, read, outline, and the calibrate centroid
-  arm all bind the same `d.stable_id = n.stable_id` predicate). This is a
-  faithful port of the oracle's documented semantic, but it is an OPEN owner
-  decision (surfaced by review 2026-08-19): fail-closed governance argues a
-  section takedown should cover its whole subtree. Left unchanged deliberately
-  — reversing a governance mechanism goes back to a human (working-rule 9).
-  The ratified fix, if taken, is a serving-time recursive `parent_id` walk
-  (NOT a `stable_id` prefix match, which a frontmatter `sor_id` override
-  defeats; and serving-time not write-time, because `takedown_denylist` has no
-  generation column by design, so denial must also cover descendants added by
-  a future re-ingest). Pinned in code at `read.ts` `NODE_DENY`.
 
 ## Designed, not implemented
 

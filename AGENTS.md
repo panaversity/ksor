@@ -251,6 +251,30 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     the three probes, and the whole content kernel. Reversed only if the SDK
     drops the Web-standard transport.
 
+14. **Takedown denial is scoped — per-node by default, subtree by explicit
+    opt-in** (owner, 2026-08-19). A review found the ported denial was
+    per-node only, so a section takedown left its documents served. Rather
+    than flip the whole mechanism to subtree (a governance reversal), scope
+    is a property of the takedown row: `scope = 'node'` (default) denies
+    exactly the listed `stable_id` — identity, immune to reorganization, an
+    auditable frozen list; `scope = 'subtree'` denies the node AND every
+    descendant, resolved at SERVING time by a recursive `parent_id` walk.
+    Serving-time (not write-time expansion) is required because
+    `takedown_denylist` has no generation column by design — a subtree deny
+    must also cover descendants a FUTURE re-ingest adds. The walk is by
+    `parent_id`, NOT a `stable_id` prefix — a frontmatter `sor_id` override
+    decouples stable_id from the path, so a prefix both leaks sor_id children
+    and over-matches prefix-siblings (both proved in `takedown.db.test.ts`).
+    One seam (`lib/takedown.ts`: `DENIED_CTE` + `DENY`) binds search, read,
+    outline, and the calibration sampler; an empty denylist makes the seed
+    empty and the recursion terminate at once, so the hot path pays nothing.
+    Schema: `takedown_denylist.scope` (schema_meta 2.1, additive with a
+    default → a 2.0 reader still reads a 2.1 DB). When the `takedown` write
+    verb lands it must make a container selection an EXPLICIT choice —
+    expand to leaves (identity) or declare a subtree rule — never silently
+    guess. Reversed per-clause with evidence; the `node` default is not
+    reversible without an owner decision (it is the identity guarantee).
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

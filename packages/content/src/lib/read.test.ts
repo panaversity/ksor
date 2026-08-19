@@ -361,7 +361,7 @@ describe("projection width contracts (the prod-crash class, made loud)", () => {
     // denylist + generation pinning on the resolution and outline arms;
     // published-only on every node walk.
     for (const sql of [NODE_BY_SLUG_SQL, NODE_BY_STABLE_ID_SQL, OUTLINE_SQL]) {
-      expect(sql).toContain("takedown_denylist");
+      expect(sql).toContain("takedown_denylist"); // via the shared `denied` CTE
       expect(sql).toContain("COALESCE");
       expect(sql).toContain("active_generation");
       expect(sql).toContain("n.status = 'published'");
@@ -372,7 +372,8 @@ describe("projection width contracts (the prod-crash class, made loud)", () => {
     }
     // the outline walk denies at the anchor seed, on the final rows, AND in
     // the child_count subquery (a section must not advertise a denied child —
-    // review finding, 2026-08-19).
-    expect(OUTLINE_SQL.split("takedown_denylist").length - 1).toBe(3);
+    // review 2026-08-19), all three now through the scoped `denied` set
+    // (decision 14): three `FROM denied` references.
+    expect(OUTLINE_SQL.split("SELECT node_id FROM denied").length - 1).toBe(3);
   });
 });

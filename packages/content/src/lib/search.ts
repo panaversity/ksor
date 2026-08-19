@@ -10,6 +10,7 @@
 import type pg from "pg";
 
 import { MIN_CONTENT_CHARS } from "../config.js";
+import { DENIED_CTE, DENY } from "./takedown.js";
 
 /**
  * Every vector transaction must bind these txn-locally: tenant and
@@ -34,15 +35,9 @@ g AS (
     ) AS gen
 )`;
 
-// PER-NODE denial (exactly the listed stable_id) — the same semantic and the
-// same open subtree-vs-per-node governance decision documented at read.ts
-// NODE_DENY. Applied PRE-fusion so a denied node cannot leak by ranking.
-const DENY = `
-NOT EXISTS (
-    SELECT 1 FROM takedown_denylist d
-    WHERE d.tenant_id = $1 AND d.corpus_id = $2 AND d.stable_id = n.stable_id
-)`;
-
+// Scoped takedown denial (decision 14): the shared `denied` set — per-node by
+// default, whole subtree when a row says so — bound PRE-fusion so a denied node
+// cannot leak by ranking. Definition lives in takedown.ts (one seam).
 const ARM_WHERE = `
         c.tenant_id = $1 AND c.generation = g.gen
           AND c.embedding_status = 'embedded' AND ${SERVABLE}
@@ -58,7 +53,7 @@ const JOINS = `
         JOIN content_nodes n ON n.node_id = s.node_id AND n.tenant_id = s.tenant_id`;
 
 const HYBRID_SQL = `
-WITH ${GEN_CTE},
+WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
     vec AS (
         SELECT c.chunk_id, g.gen,
                row_number() OVER (ORDER BY c.embedding <=> $3::vector, c.chunk_id) AS r,
@@ -89,7 +84,7 @@ WITH ${GEN_CTE},
     ORDER BY f.score DESC, c.chunk_id LIMIT $7`;
 
 const KEYWORD_SQL = `
-WITH ${GEN_CTE.replace("$8", "$6")}
+WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
            c.content,
            ts_rank_cd(c.search_tsv, websearch_to_tsquery('english', $3)) AS score,
@@ -101,7 +96,7 @@ WITH ${GEN_CTE.replace("$8", "$6")}
 
 /** The calibrator's standalone top-1 signal (the read path gets it free from HYBRID_SQL). */
 const TOP_ONE_SQL = `
-WITH ${GEN_CTE.replace("$8", "$5")}
+WITH RECURSIVE ${GEN_CTE.replace("$8", "$5")}, ${DENIED_CTE}
     SELECT 1 - (c.embedding <=> $3::vector) AS score
     ${JOINS}
     WHERE ${ARM_WHERE.replaceAll("$5", "$4")}

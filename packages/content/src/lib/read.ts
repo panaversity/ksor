@@ -15,6 +15,7 @@
 
 import type pg from "pg";
 
+import { DENIED_CTE, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
 const GEN = `
@@ -26,26 +27,14 @@ g AS (
     ) AS gen
 )`;
 
-// Takedown denial is PER-NODE: exactly the listed stable_id is hidden — a
-// container takedown does NOT cascade to its descendants. This is a faithful
-// port of the oracle's documented semantic (takedown_denylist is keyed by a
-// single stable_id, no cascade). Whether a section takedown should cover its
-// whole SUBTREE (fail-closed governance) is an OPEN owner decision, deliberately
-// NOT changed here: reversing a governance mechanism goes back to a human
-// (AGENTS.md working-rule 9). If ratified, the fix is a serving-time recursive
-// parent_id walk — NOT a stable_id prefix match, which a frontmatter sor_id
-// override defeats (review 2026-08-19; docs/status.md Known gaps). The same
-// per-node predicate is `DENY` in search.ts and the centroid arm in
-// calibrate/run.ts — one seam, changed together if the decision lands.
-const NODE_DENY = `
-NOT EXISTS (
-    SELECT 1 FROM takedown_denylist d
-    WHERE d.tenant_id = $1 AND d.corpus_id = $2 AND d.stable_id = n.stable_id
-)`;
+// Takedown denial is SCOPED (decision 14): per-node by default, whole subtree
+// when a row says so — the shared `denied` set from takedown.js, bound on every
+// resolution + outline arm (search.ts and calibrate/run.ts bind the same seam).
 
 /** Candidates by LEAF slug ($4), each with its full root path (for suffix disambiguation). */
 export const NODE_BY_SLUG_SQL: string = `
 WITH RECURSIVE ${GEN},
+${DENIED_CTE},
 tree AS (
     SELECT n.node_id, n.parent_id, n.slug, n.title, n.stable_id, n.generation, n.permalink,
            n.slug::text AS path
@@ -60,7 +49,7 @@ tree AS (
 )
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink
 FROM tree n
-WHERE n.slug = $4 AND ${NODE_DENY}
+WHERE n.slug = $4 AND ${DENY}
 ORDER BY n.path`;
 
 export const ALIAS_SQL: string = `
@@ -76,10 +65,10 @@ WHERE a.tenant_id = $1 AND a.alias_slug = $4`;
  * resolution as well).
  */
 export const NODE_BY_STABLE_ID_SQL: string = `
-WITH ${GEN}
+WITH RECURSIVE ${GEN}, ${DENIED_CTE}
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
 FROM content_nodes n JOIN g ON n.generation = g.gen
-WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${NODE_DENY}`;
+WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}`;
 
 export const DOCUMENT_CHUNKS_SQL: string = `
 WITH ${GEN}
@@ -126,6 +115,7 @@ SELECT path, climbed FROM up WHERE parent_id IS NULL ORDER BY path LIMIT 1`;
 /** Anchor $4 (uuid, NULL = browse roots), depth bound $5, limit $6. */
 export const OUTLINE_SQL: string = `
 WITH RECURSIVE ${GEN},
+${DENIED_CTE},
 walk AS (
     SELECT n.node_id, n.parent_id, n.slug, n.kind, n.title, n.position, n.stable_id,
            n.generation, n.permalink, 0 AS depth, ARRAY[n.position] AS sort_key,
@@ -133,7 +123,7 @@ walk AS (
     FROM content_nodes n JOIN g ON n.generation = g.gen
     WHERE n.tenant_id = $1 AND n.status = 'published'
       AND (($4::uuid IS NULL AND n.parent_id IS NULL)
-           OR ($4::uuid IS NOT NULL AND n.node_id = $4 AND ${NODE_DENY}))
+           OR ($4::uuid IS NOT NULL AND n.node_id = $4 AND ${DENY}))
   UNION ALL
     SELECT n.node_id, n.parent_id, n.slug, n.kind, n.title, n.position, n.stable_id,
            n.generation, n.permalink, w.depth + 1, w.sort_key || n.position,
@@ -146,9 +136,7 @@ SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'
-           AND NOT EXISTS (SELECT 1 FROM takedown_denylist d
-                            WHERE d.tenant_id = $1 AND d.corpus_id = $2
-                              AND d.stable_id = ch.stable_id)) AS child_count,
+           AND ch.node_id NOT IN (SELECT node_id FROM denied)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
                   AND s.node_id = w.node_id) AS has_content,
@@ -156,7 +144,7 @@ SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
 FROM walk w
 JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
-WHERE ${NODE_DENY}
+WHERE ${DENY}
 ORDER BY w.sort_key
 LIMIT $6`;
 

@@ -146,10 +146,17 @@ CREATE TABLE node_centroids (
 );
 
 -- ============================================================================ takedown (NO generation)
+-- scope (decision 14): 'node' denies EXACTLY this stable_id (identity — the
+-- default, immune to reorganization, auditable as a frozen list); 'subtree'
+-- denies this node AND every descendant, resolved at SERVING time by a
+-- recursive parent_id walk (so descendants added by a FUTURE generation are
+-- covered — this table has no generation column BY DESIGN). NO generation
+-- column: denial beats every generation (§6).
 CREATE TABLE takedown_denylist (
     tenant_id  TEXT NOT NULL,
     corpus_id  TEXT NOT NULL,
     stable_id  TEXT NOT NULL,
+    scope      TEXT NOT NULL DEFAULT 'node' CHECK (scope IN ('node','subtree')),
     reason     TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, corpus_id, stable_id)
@@ -186,7 +193,9 @@ CREATE TABLE schema_meta (
     compatible_from TEXT NOT NULL,
     applied_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.0', '2.0');
+-- 2.1 adds takedown_denylist.scope (decision 14); additive with a default, so
+-- a 2.0 reader still reads a 2.1 database — compatible_from stays 2.0.
+INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.1', '2.0');
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
