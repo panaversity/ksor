@@ -19,6 +19,7 @@ jobs:
   lint:
     name: Lint, format, guards, corpus
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,6 +41,7 @@ jobs:
       !startsWith(github.head_ref, 'changeset-release/') &&
       !startsWith(github.head_ref, 'release-')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,6 +57,7 @@ jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,6 +72,7 @@ jobs:
   test-unit:
     name: Unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,6 +85,7 @@ jobs:
   test-integration:
     name: Integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,6 +98,7 @@ jobs:
   build:
     name: Build + publint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,6 +110,10 @@ jobs:
   scaffold-e2e:
     name: Scaffold walkthrough (browser)
     runs-on: ubuntu-latest
+    # ~5 min normally (playwright install + 3 browser suites). A generous cap
+    # so a hung dev-server or browser launch FAILS fast (red, actionable)
+    # instead of running to GitHub's 6-hour default and reading as "stuck".
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -127,6 +137,7 @@ jobs:
   kernel-db:
     name: Kernel acceptance (Postgres)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -159,6 +170,7 @@ jobs:
   init-windows:
     name: Init acceptance (Windows)
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
