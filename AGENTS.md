@@ -224,7 +224,12 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     landed — no package declares it, and guard rule 5 enforces its absence;
     raw `pg` with explicit projection-width guards carries the kernel. If a
     typed-query layer returns, it re-earns its place with the drift test the
-    original proposal named._ `zod` from the catalog
+    original proposal named._ _Revision 2026-08-19 (publish prep): `@types/pg`
+    is a declared `dependency` (not a devDep) of `ksor-platform`,
+    `ksor-content`, and `ksor-content-gateway` — their published `.d.mts`
+    exposes `pg.Pool`/`PoolClient` in the public API, so an external TS
+    consumer needs the types to resolve; enrolled in guard rule 5's per-package
+    allowlist._ `zod` from the catalog
     pin (the reserved "first validated public API" arrived). `@google/genai`
     as the default embedding provider behind the seam — the seam, not the
     vendor, is the contract. `jose` for the gateway kit's public-door JWT

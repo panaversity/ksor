@@ -151,9 +151,12 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     // rests on. Never add to this set without reversing that decision.
     [`${P}ksor`, new Set()],
     // The kernel packages (decision 12). drizzle-orm was dropped as unused —
-    // schema.sql is the DDL source of truth and queries are raw pg.
-    [`${P}ksor-platform`, new Set(["pg"])],
-    [`${P}ksor-content`, new Set(["pg", "zod", "@google/genai", `${P}ksor-platform`])],
+    // schema.sql is the DDL source of truth and queries are raw pg. @types/pg
+    // is a DECLARED dependency (not a devDep) of every package whose published
+    // .d.mts exposes pg.Pool/PoolClient in its public API, so an external TS
+    // consumer resolves those types (decision 12, publish revision 2026-08-19).
+    [`${P}ksor-platform`, new Set(["pg", "@types/pg"])],
+    [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "@google/genai", `${P}ksor-platform`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
     [
       `${P}ksor-content-gateway`,
@@ -167,6 +170,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         "@hono/node-server",
         "zod",
         "pg",
+        "@types/pg",
         `${P}ksor-content`,
         `${P}ksor-gateway-kit`,
         `${P}ksor-platform`,
