@@ -15,9 +15,6 @@ catalogs:
     vitest:
       specifier: ^4.1.10
       version: 4.1.10
-    zod:
-      specifier: ^4.4.3
-      version: 4.4.3
 
 importers:
 
@@ -75,6 +72,9 @@ importers:
 
   packages/content-gateway:
     dependencies:
+      '@hono/node-server':
+        specifier: 2.1.1
+        version: 2.1.1(hono@4.13.2)
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -87,6 +87,9 @@ importers:
       '@panaversity/ksor-platform':
         specifier: workspace:*
         version: link:../platform
+      hono:
+        specifier: 4.13.2
+        version: 4.13.2
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -115,9 +118,6 @@ importers:
       jose:
         specifier: ^6.2.9
         version: 6.2.9
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

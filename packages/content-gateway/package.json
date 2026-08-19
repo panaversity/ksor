@@ -22,10 +22,12 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@hono/node-server": "2.1.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@panaversity/ksor-content": "workspace:*",
     "@panaversity/ksor-gateway-kit": "workspace:*",
     "@panaversity/ksor-platform": "workspace:*",
+    "hono": "4.13.2",
     "pg": "^8.23.0",
     "zod": "catalog:"
   },

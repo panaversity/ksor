@@ -19,8 +19,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "jose": "^6.2.9",
-    "zod": "catalog:"
+    "jose": "^6.2.9"
   },
   "devDependencies": {
     "@types/node": "catalog:",

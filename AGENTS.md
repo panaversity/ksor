@@ -231,6 +231,26 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     npm wiring — the published `ksor` CLI keeps its zero-runtime-deps
     guarantee meanwhile.
 
+13. **The content gateway's HTTP door composes the SDK's Web-standard
+    transport, not a hand-rolled one** (owner-directed, 2026-08-19). The MCP
+    surface IS the product; shipping a door hand-built on `node:http` — which
+    reimplemented routing, body parsing, security headers, and the loopback
+    DNS-rebind default that the SDK already gets right, and in which three
+    security review findings landed — is shipping bad MCP for the one thing
+    that is the point. The door uses
+    `WebStandardStreamableHTTPServerTransport` (`Request → Response`,
+    stateless) behind Hono, with Host validation as middleware (the shape the
+    SDK's deprecation of its transport-level option points to) and
+    `secureHeaders` / `bodyLimit` middleware replacing the hand-rolled
+    hardening. `hono` and `@hono/node-server` are declared runtime deps of
+    the PRIVATE content-gateway — already the MCP SDK's own transitive deps,
+    so zero new install bytes — and never reach the published zero-dep `ksor`
+    CLI (which the gateway can never fold into: the SDK alone drags Express +
+    Hono + cors + ajv, ~5.9MB — a packaging fact for decision 12). What stays
+    ours because it is good: `buildAuth` and the fail-closed boot posture,
+    the three probes, and the whole content kernel. Reversed only if the SDK
+    drops the Web-standard transport.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

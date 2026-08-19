@@ -154,11 +154,17 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     // schema.sql is the DDL source of truth and queries are raw pg.
     [`${P}ksor-platform`, new Set(["pg"])],
     [`${P}ksor-content`, new Set(["pg", "zod", "@google/genai", `${P}ksor-platform`])],
-    [`${P}ksor-gateway-kit`, new Set(["zod", "jose"])],
+    [`${P}ksor-gateway-kit`, new Set(["jose"])],
     [
       `${P}ksor-content-gateway`,
       new Set([
         "@modelcontextprotocol/sdk",
+        // hono + node-server: the SDK's own Web-standard transport shape, and
+        // both are ALREADY the SDK's transitive deps (zero new install bytes)
+        // — declared directly so the door composes them instead of
+        // hand-rolling the HTTP layer three findings landed in (decision 13).
+        "hono",
+        "@hono/node-server",
         "zod",
         "pg",
         `${P}ksor-content`,

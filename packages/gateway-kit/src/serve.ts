@@ -1,13 +1,11 @@
-// The serve glue every KSoR gateway uses, converted from the predecessor's
-// serve.py (decision 6): bind resolution (the loopback auto-gate — serving
-// fails safe, decision 7), required-env refusal, and a small node:http runner
-// with graceful teardown. The Sentry/Redis/uvicorn machinery around the
-// Python original belongs to its deployment and was not carried.
+// Bind resolution and required-env refusal every KSoR gateway uses, converted
+// from the predecessor's serve.py (decision 6): the loopback auto-gate
+// (serving fails safe, decision 7) and a slugged missing-env refusal. The
+// node:http runner and edge hardening were removed when the door moved to the
+// SDK's Web-standard transport behind Hono (decision 13) — that shape does
+// the serving loop and hardening as middleware.
 
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-
-import { defaultWarn, type Env, type WarnLog } from "./env.js";
-import type { HttpHandler } from "./harden.js";
+import type { Env } from "./env.js";
 
 export type Bind = { host: string; port: number };
 
@@ -50,99 +48,4 @@ export function resolveBind(env: Env = process.env): Bind {
     );
   }
   return { host, port: Number(raw) };
-}
-
-export type RunServerOptions = {
-  /**
-   * Best-effort teardowns (pools, stores) run after the listener closes — the
-   * predecessor's issue #310: a SIGTERM that skips teardown abandons every
-   * pooled connection exactly during deploy churn. A failing teardown warns;
-   * it never turns a clean shutdown into a crash loop.
-   */
-  onShutdown?: () => void | Promise<void>;
-  /** Install SIGTERM/SIGINT handlers that run `close()`. Default false. */
-  signals?: boolean;
-  /** Grace window before in-flight connections are force-closed. Default 10s. */
-  forceCloseAfterMs?: number;
-  warn?: WarnLog;
-};
-
-export type RunningServer = {
-  server: Server;
-  host: string;
-  /** The actual bound port (resolves a `port: 0` bind). */
-  port: number;
-  /** Idempotent graceful close: stop accepting, drain, then teardown. */
-  close: () => Promise<void>;
-};
-
-/** Bind a node:http server for `handler` and resolve once it is listening. */
-export async function runServer(
-  handler: HttpHandler,
-  bind: Bind,
-  options: RunServerOptions = {},
-): Promise<RunningServer> {
-  const warn = options.warn ?? defaultWarn;
-  const server = createServer((req: IncomingMessage, res: ServerResponse): void => {
-    Promise.resolve()
-      .then(() => handler(req, res))
-      .catch((err: unknown) => {
-        warn(
-          `request handler failed: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`,
-        );
-        if (!res.headersSent) {
-          res.writeHead(500, { "content-type": "text/plain" });
-          res.end("internal error");
-        } else {
-          res.destroy();
-        }
-      });
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(bind.port, bind.host, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address !== null ? address.port : bind.port;
-
-  let closing: Promise<void> | null = null;
-  const close = (): Promise<void> => {
-    closing ??= (async (): Promise<void> => {
-      await new Promise<void>((resolve) => {
-        const force = setTimeout(
-          () => server.closeAllConnections(),
-          options.forceCloseAfterMs ?? 10_000,
-        );
-        force.unref();
-        server.close(() => {
-          clearTimeout(force);
-          resolve();
-        });
-        server.closeIdleConnections();
-      });
-      if (options.onShutdown !== undefined) {
-        try {
-          await options.onShutdown();
-        } catch (err) {
-          // Shutdown is best-effort by design.
-          warn(`shutdown teardown failed (${err instanceof Error ? err.name : String(err)})`);
-        }
-      }
-    })();
-    return closing;
-  };
-
-  if (options.signals === true) {
-    for (const signal of ["SIGTERM", "SIGINT"] as const) {
-      process.once(signal, () => {
-        void close();
-      });
-    }
-  }
-
-  return { server, host: bind.host, port, close };
 }

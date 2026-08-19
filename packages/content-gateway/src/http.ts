@@ -1,23 +1,28 @@
 /**
- * The hosted door: stateless Streamable HTTP (one server+transport per
- * request — no session state, so any replica answers any request), wrapped
- * in the kit's posture: auth resolved BEFORE listening and fail-closed
- * (public bearer door, or the deliberate KSOR_AUTH_DISABLED=1 opt-out, or
- * refuse to boot), harden headers + body cap, DNS-rebind settings, and the
- * loopback auto-gate (a public bind is a deliberate act).
+ * The MCP door: the SDK's Web-standard transport (Request → Response,
+ * stateless) behind Hono. The MCP surface is the product, so the door
+ * composes the SDK's own HTTP shape instead of hand-rolling routing, body
+ * parsing, and security middleware — the hand-rolled layer is where three
+ * review findings landed (chunked-body replay, unbounded GET body, the
+ * origins-only rebind hole), all of which this shape simply does not have
+ * (decision 13).
  *
- * Probes: /live (process up), /ready (one bounded corpus read; 503 when
- * the store or the space is not servable), /health (the honest state —
- * abstain gate INCLUDED: uncalibrated says so).
+ * What stays ours because it is good: buildAuth and the fail-closed boot
+ * posture, the three probes, the concurrency cap, and the content kernel.
+ *
+ * Posture from the bind: unset PORT → loopback (dev door, Host-validated,
+ * safe with auth off); a public bind is deliberate and fails closed unless
+ * auth is configured or KSOR_AUTH_DISABLED=1 is set.
  */
 
-import type { IncomingMessage, ServerResponse } from "node:http";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { serve, type ServerType } from "@hono/node-server";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { secureHeaders } from "hono/secure-headers";
 import {
   buildAuth,
-  harden,
   resolveBind,
-  runServer,
   runWithIdentity,
   transportSecurityFromEnv,
   TokenVerifyError,
@@ -28,219 +33,147 @@ import { runProbe } from "@panaversity/ksor-content";
 import { buildServer } from "./server.js";
 import type { Composition } from "./compose.js";
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  const text = JSON.stringify(body);
-  res.writeHead(status, { "content-type": "application/json" });
-  res.end(text);
-}
-
-/**
- * POST bodies only. A chunked body arrives PRE-BUFFERED from harden's
- * replay seam (review finding 2026-08-19: dropping that third argument
- * broke every chunked request); a declared-length body is read here, the
- * cap already enforced by harden. Other methods never read — the oracle's
- * ASGI app never read GET bodies, and reading them here let a chunked GET
- * stream unbounded bytes into memory (review finding, same day).
- */
-async function readBody(req: IncomingMessage, preRead?: Buffer): Promise<unknown> {
-  if (req.method !== "POST") return undefined;
-  let text: string;
-  if (preRead !== undefined) {
-    text = preRead.toString("utf8");
-  } else {
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(chunk as Buffer);
-    text = Buffer.concat(chunks).toString("utf8");
-  }
-  if (text === "") return undefined;
-  return JSON.parse(text);
-}
-
-export interface RebindSecurity {
-  readonly enableDnsRebindingProtection: true;
-  readonly allowedHosts: string[];
-}
-
-/**
- * The DNS-rebind default for the loopback door. Every loopback SPELLING
- * arms it — `localhost` was exactly the spelling that escaped a literal
- * 127.0.0.1 check (review round 2, 2026-08-19, proven live: an evil Host
- * header answered 200). A public bind returns null — that door is
- * bearer-gated instead. An explicit KSOR_ALLOWED_HOSTS always wins upstream.
- */
-export function loopbackSecurity(bind: { host: string; port: number }): RebindSecurity | null {
-  const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
-  if (!loopback) return null;
-  return {
-    enableDnsRebindingProtection: true,
-    allowedHosts: [`127.0.0.1:${bind.port}`, `localhost:${bind.port}`, `[::1]:${bind.port}`],
-  };
-}
-
-function bearerToken(req: IncomingMessage): string | null {
-  const header = req.headers.authorization;
-  if (header === undefined) return null;
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return match?.[1] ?? null;
-}
+const MAX_BODY_BYTES: number = Number(process.env["KSOR_MAX_BODY_BYTES"] ?? String(1_000_000));
 
 /** Shed at the door: a bounded number of concurrent /mcp requests, so
  * backpressure is a fast honest 503 + Retry-After rather than an invisible
- * pool queue (review, 2026-08-19). Sized above the DB pool so the pool, not
- * this, is the real limit; this only stops unbounded pile-up. */
+ * pool queue. Sized above the DB pool so the pool is the real limit. */
 const MAX_INFLIGHT: number = Number(process.env["KSOR_MAX_INFLIGHT"] ?? "64");
 
-export async function runHttp(composition: Composition): Promise<void> {
-  let inflight = 0;
+/** The loopback Host allowlist — every loopback SPELLING (127.0.0.1 was not
+ * enough: `localhost` escaped a literal check). An explicit
+ * KSOR_ALLOWED_HOSTS wins; a public bind is bearer-gated, not Host-gated. */
+export function allowedHosts(bind: { host: string; port: number }): Set<string> | null {
+  const explicit = transportSecurityFromEnv(process.env)?.allowedHosts;
+  if (explicit !== undefined && explicit.length > 0) return new Set(explicit);
+  const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
+  if (!loopback) return null;
+  return new Set([
+    `127.0.0.1:${bind.port}`,
+    `localhost:${bind.port}`,
+    `[::1]:${bind.port}`,
+    // A missing/blank Host on a loopback stdio-style client is accepted.
+    "",
+  ]);
+}
+
+export async function runHttp(composition: Composition): Promise<ServerType> {
   const auth: Auth = buildAuth(process.env);
   const bind = resolveBind(process.env);
-  // The SDK does NOT arm rebinding protection on its own (verified in
-  // 1.30.0 — a recorded deviation rested on that false premise; review
-  // finding 2026-08-19). On the loopback door, browsers are the threat
-  // model (DNS rebinding reaches localhost), so unset env defaults to
-  // protection pinned to the bind; an explicit KSOR_ALLOWED_HOSTS/ORIGINS
-  // declaration always wins, and a non-loopback bind is bearer-gated.
-  // Merge, never choose-one: an explicit KSOR_ALLOWED_ORIGINS with no
-  // KSOR_ALLOWED_HOSTS returned a config with allowedHosts:[], and the SDK
-  // SKIPS Host validation when that array is empty — re-opening exactly the
-  // DNS-rebinding hole the loopback default closes (review finding,
-  // 2026-08-19). So on a loopback bind we always ensure allowedHosts is
-  // populated, folding any explicit origins on top.
-  const explicit = transportSecurityFromEnv(process.env);
-  const loopback = loopbackSecurity(bind);
-  let security: {
-    enableDnsRebindingProtection: true;
-    allowedHosts: string[];
-    allowedOrigins?: string[];
-  } | null;
-  if (explicit === null) {
-    security = loopback;
-  } else if (loopback !== null && explicit.allowedHosts.length === 0) {
-    security = { ...explicit, allowedHosts: loopback.allowedHosts };
-  } else {
-    security = explicit;
-  }
-  const { ctx, instance, pool, spaceSkipReason } = composition;
+  const hosts = allowedHosts(bind);
+  const { ctx, instance, pool, spaceSkipReason, version } = composition;
+  let inflight = 0;
 
-  const handleMcp = async (
-    req: IncomingMessage,
-    res: ServerResponse,
-    preRead?: Buffer,
-  ): Promise<void> => {
-    // Stateless: a fresh server + transport per request; nothing survives
-    // the response, so there is no session to fixate or leak.
-    const server = buildServer(ctx, composition.version);
-    const transport = new StreamableHTTPServerTransport({
+  const app = new Hono();
+
+  // Security headers on every response (HSTS + nosniff via secureHeaders).
+  app.use("*", secureHeaders());
+
+  // Host validation as middleware — the shape the SDK points to (its
+  // transport-level rebinding option is deprecated). DNS rebinding reaches
+  // localhost, so the loopback door validates Host; a public door does not
+  // (it is bearer-gated) unless KSOR_ALLOWED_HOSTS is set.
+  app.use("*", async (c, next) => {
+    if (hosts !== null) {
+      const host = c.req.header("host") ?? "";
+      if (!hosts.has(host)) return c.json({ error: "host not allowed" }, 421);
+    }
+    await next();
+  });
+
+  app.get("/live", (c) => c.json({ live: true }));
+
+  app.get("/ready", async (c) => {
+    try {
+      await runProbe(pool, instance.tenantId, (client) =>
+        client.query("SELECT 1 FROM corpora LIMIT 1"),
+      );
+      return c.json({ ready: true });
+    } catch {
+      return c.json({ ready: false, reason: "content store unreachable" }, 503);
+    }
+  });
+
+  app.get("/health", (c) =>
+    c.json({
+      corpus_id: instance.corpusId,
+      abstain_gate:
+        instance.abstain.vectorFloor === null
+          ? "OFF (no floor declared — will not refuse out-of-corpus questions)"
+          : instance.abstain.vectorFloor === "uncalibrated"
+            ? "REFUSING (declared but uncalibrated — run calibrate and paste the floor)"
+            : `floor ${instance.abstain.vectorFloor}`,
+      embedding_space:
+        spaceSkipReason === null
+          ? `${instance.embeddingModel}/d${instance.embeddingDim} ok`
+          : `${instance.embeddingModel}/d${instance.embeddingDim} unverified (check skipped: ${spaceSkipReason})`,
+      auth: auth.mode,
+    }),
+  );
+
+  app.get("/.well-known/oauth-protected-resource/mcp", (c) =>
+    auth.mode === "public"
+      ? c.json({ resource: auth.config.resourceUrl, authorization_servers: [auth.config.ssoUrl] })
+      : c.json({ error: "no public auth door configured" }, 404),
+  );
+
+  // The MCP endpoint: body cap, concurrency cap, auth, then the SDK
+  // transport. Stateless — a fresh server + transport per request.
+  const handleMcp = async (request: Request): Promise<Response> => {
+    const server = buildServer(ctx, version);
+    const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
-      ...security,
-    });
-    res.on("close", () => {
-      void transport.close();
-      void server.close();
     });
     await server.connect(transport);
-    const body = await readBody(req, preRead);
-    await transport.handleRequest(req, res, body);
+    try {
+      return await transport.handleRequest(request);
+    } finally {
+      void transport.close().catch(() => undefined);
+      void server.close().catch(() => undefined);
+    }
   };
 
-  const app = async (
-    req: IncomingMessage,
-    res: ServerResponse,
-    preRead?: Buffer,
-  ): Promise<void> => {
-    const path = (req.url ?? "").split("?", 1)[0] ?? "";
-    if (path === "/live") {
-      sendJson(res, 200, { live: true });
-      return;
-    }
-    if (path === "/ready") {
+  app.all(
+    "/mcp",
+    bodyLimit({
+      maxSize: MAX_BODY_BYTES,
+      onError: (c) => c.json({ error: "request body too large" }, 413),
+    }),
+    async (c) => {
+      if (inflight >= MAX_INFLIGHT) {
+        return c.json({ error: "server busy — retry shortly" }, 503, { "retry-after": "1" });
+      }
+      inflight += 1;
       try {
-        await runProbe(pool, instance.tenantId, (c) => c.query("SELECT 1 FROM corpora LIMIT 1"));
-        sendJson(res, 200, { ready: true });
-      } catch {
-        sendJson(res, 503, { ready: false, reason: "content store unreachable" });
+        if (auth.mode === "public") {
+          const header = c.req.header("authorization") ?? "";
+          const token = /^Bearer\s+(.+)$/i.exec(header)?.[1];
+          if (token === undefined) {
+            return c.json({ error: "bearer token required" }, 401, {
+              "www-authenticate": `Bearer resource_metadata="${auth.config.resourceUrl}"`,
+            });
+          }
+          let identity;
+          try {
+            identity = await auth.verify(token);
+          } catch (error) {
+            const transient = error instanceof TokenVerifyError && error.transient;
+            return c.json(
+              { error: transient ? "token verification temporarily unavailable" : "invalid token" },
+              transient ? 503 : 401,
+            );
+          }
+          return await runWithIdentity(identity, () => handleMcp(c.req.raw));
+        }
+        return await handleMcp(c.req.raw);
+      } finally {
+        inflight -= 1;
       }
-      return;
-    }
-    if (path === "/health") {
-      sendJson(res, 200, {
-        corpus_id: instance.corpusId,
-        abstain_gate:
-          instance.abstain.vectorFloor === null
-            ? "OFF (no floor declared — will not refuse out-of-corpus questions)"
-            : instance.abstain.vectorFloor === "uncalibrated"
-              ? "REFUSING (declared but uncalibrated — run calibrate and paste the floor)"
-              : `floor ${instance.abstain.vectorFloor}`,
-        embedding_space:
-          spaceSkipReason === null
-            ? `${instance.embeddingModel}/d${instance.embeddingDim} ok`
-            : `${instance.embeddingModel}/d${instance.embeddingDim} unverified (check skipped: ${spaceSkipReason})`,
-        auth: auth.mode,
-      });
-      return;
-    }
-    if (path === "/.well-known/oauth-protected-resource/mcp") {
-      if (auth.mode === "public") {
-        sendJson(res, 200, {
-          resource: auth.config.resourceUrl,
-          authorization_servers: [auth.config.ssoUrl],
-        });
-      } else {
-        sendJson(res, 404, { error: "no public auth door configured" });
-      }
-      return;
-    }
-    if (path !== "/mcp") {
-      sendJson(res, 404, { error: "unknown path", paths: ["/mcp", "/live", "/ready", "/health"] });
-      return;
-    }
-    if (inflight >= MAX_INFLIGHT) {
-      res.writeHead(503, { "content-type": "application/json", "retry-after": "1" });
-      res.end(JSON.stringify({ error: "server busy — retry shortly" }));
-      return;
-    }
-    inflight += 1;
-    res.on("close", () => {
-      inflight -= 1;
-    });
-    if (auth.mode === "public") {
-      const token = bearerToken(req);
-      if (token === null) {
-        res.writeHead(401, {
-          "content-type": "application/json",
-          "www-authenticate": `Bearer resource_metadata="${auth.config.resourceUrl}"`,
-        });
-        res.end(JSON.stringify({ error: "bearer token required" }));
-        return;
-      }
-      // The try wraps ONLY the verify: a post-auth fault answered 401
-      // told authenticated clients their token was invalid and sent them
-      // into refresh loops (review finding, 2026-08-19). Transport faults
-      // propagate to the server's 500 path.
-      let identity;
-      try {
-        identity = await auth.verify(token);
-      } catch (error) {
-        const transient = error instanceof TokenVerifyError && error.transient;
-        sendJson(res, transient ? 503 : 401, {
-          error: transient ? "token verification temporarily unavailable" : "invalid token",
-        });
-        return;
-      }
-      await runWithIdentity(identity, () => handleMcp(req, res, preRead));
-      return;
-    }
-    await handleMcp(req, res, preRead);
-  };
+    },
+  );
 
-  await runServer(harden(app), bind, {
-    // Drain the pool on SIGTERM/SIGINT — a container stop that skipped
-    // teardown abandoned every checked-out connection (review finding,
-    // 2026-08-19; runServer already supported this, the gateway never asked).
-    signals: true,
-    onShutdown: () => pool.end(),
-  });
+  const server = serve({ fetch: app.fetch, hostname: bind.host, port: bind.port });
   console.error(
     `ksor gateway serving ${instance.corpusId} on http://${bind.host}:${bind.port}/mcp ` +
       `(auth: ${auth.mode}, abstain gate: ${
@@ -251,4 +184,15 @@ export async function runHttp(composition: Composition): Promise<void> {
             : `floor ${instance.abstain.vectorFloor}`
       })`,
   );
+
+  // Drain on SIGTERM/SIGINT — a container stop must close the listener and
+  // the pool, not abandon in-flight work.
+  const shutdown = (): void => {
+    server.close();
+    void pool.end().catch(() => undefined);
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+
+  return server;
 }
