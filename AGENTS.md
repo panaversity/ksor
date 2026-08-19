@@ -201,7 +201,9 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     dual-mode serving posture — with the Python suite as conversion oracle:
     gold sets, schema contract, and calibration data extract as conformance
     fixtures first, red before any port. The MCP door speaks the MCP
-    TypeScript SDK, stdio + stateless Streamable HTTP. Placement is the
+    TypeScript SDK, stateless Streamable HTTP (one transport — the shape
+    the production gateway ships; a local agent uses the same URL).
+    Placement is the
     ladder: `ksor init` stays database-free (`pnpm dev` unchanged — the
     out-of-the-box claim holds); the kernel lands as framework-owned
     workspace packages behind `ksor serve`, and adopters climb to it.

@@ -46,7 +46,7 @@ Comes whole (line counts from the live tree; the source manifest's ~9.4k src
 | `packages/sor-content/`     | `packages/content/`     | kernel: ingest, chunking, generations, retrieval, calibrate, schema.sql                   |
 | `packages/sor-platform/`    | `packages/platform/`    | trimmed: load_bundle, pooled db endpoint, contracts minus the 6 Learning/Pedagogy classes |
 | `packages/sor-gateway-kit/` | `packages/gateway-kit/` | only auth + serve + harden + transport_security_from_env (~430 of 918 ln)                 |
-| `gateways/sor-content/`     | the `ksor serve` door   | dual-mode fail-closed posture; MCP TS SDK, stdio + stateless Streamable HTTP              |
+| `gateways/sor-content/`     | the `ksor serve` door   | fail-closed posture; MCP TS SDK, stateless Streamable HTTP (one transport)                |
 
 Mirroring the source topology during conversion is deliberate: it keeps the
 Python test suite mappable 1:1 as the oracle. Consolidation (platform folding
@@ -134,8 +134,8 @@ Small PRs, red first; each conversion PR names what its mechanisms are for:
 3. platform trim + kernel core (schema, db, ingest: chunking, generations,
    manifest) with converted tests;
 4. retrieval + calibrate + the abstention envelope;
-5. gateway-kit (auth/serve/harden) + the MCP door (stdio + stateless
-   Streamable HTTP, $mcp-builder loaded) + visibility integration;
+5. gateway-kit (auth/serve/harden) + the MCP door (stateless Streamable
+   HTTP, one transport, $mcp-builder loaded) + visibility integration;
 6. `ksor serve` verb wiring, scaffold rung, ops skills conversion, and the
    behavioural eval gate (AGENTS.md → Testing: the abstention question that
    must pass by abstaining).
@@ -150,7 +150,7 @@ What landed on the kernel-conversion branch, each slice oracle-anchored:
   splitHits drift guard; abstention gates; instance.md adaptation (the
   checker's grammar, fail-closed kernel groups); snapshot HMAC; rlog;
   the service read plane (search/read/outline envelopes); the space
-  guard; the gateway (three tools, stdio + stateless HTTP, kit posture).
+  guard; the gateway (three tools, stateless HTTP one transport, kit posture).
 - **Workers**, fixtures-first with the oracle as judge: chunker (33
   cases/79 chunks, 5-mutation battery, policy string unbumped);
   plain-tree adapter + manifest (golden manifest byte-for-byte);
@@ -205,7 +205,7 @@ ksor-content ingest --instance instance.md --knowledge knowledge/ --flip
 ksor-content calibrate --instance instance.md          # synthesized door, live
 #   → "vector_floor: 0.611   # calibrated on generation None, model gemini-embedding-001/d1536, door: synthesized"
 # paste the line into instance.md (the human ratification act), then:
-ksor-gateway                                            # stdio; --http for the hosted door
+ksor-gateway                                            # stateless HTTP; loopback by default, a public bind is deliberate
 ```
 
 Driven by a real MCP client afterwards: tools search/outline/read listed;

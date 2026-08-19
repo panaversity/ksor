@@ -1,13 +1,23 @@
 /**
  * The composition root (oracle gateways/sor-content/main.py, adapted).
  *
+ * ONE transport: stateless Streamable HTTP — the shape the production
+ * content gateway ships, and the shape modern MCP clients (local coding
+ * agents included) speak against a URL. There is no stdio door: a second
+ * transport forks every skill, test, and recipe for no capability a URL
+ * lacks (AGENTS.md "one obvious way"; owner direction 2026-08-19).
+ *
+ * The bind decides the posture: unset PORT/host → loopback (127.0.0.1),
+ * the dev door, DNS-rebind-protected and safe with auth off; a public bind
+ * is a deliberate act that fails closed unless auth is configured or
+ * KSOR_AUTH_DISABLED=1 is set explicitly.
+ *
  * Env contract (each `KSOR_*` name descends from an oracle `SOR_*` var):
  *   KSOR_INSTANCE                path to instance.md (default ./instance.md)
  *   <instance database.dsn_env>  the DSN — the NAME comes from instance.md
  *   GEMINI_API_KEY               owed iff embedding.provider needs a key
  *   KSOR_SNAPSHOT_KEYS           kid=secret[,...]; unset = ephemeral key
- *   KSOR_MCP_TRANSPORT           stdio | http (default stdio; PORT implies http)
- *   KSOR_MCP_HOST / KSOR_MCP_PORT  http bind (loopback unless PORT — deliberate)
+ *   KSOR_MCP_HOST / KSOR_MCP_PORT  bind (loopback unless PORT — deliberate)
  *   KSOR_SSO_URL + KSOR_MCP_RESOURCE_URL + KSOR_JWT_ALLOWED_AUDIENCES  public door
  *   KSOR_AUTH_DISABLED=1         the deliberate unauthenticated opt-out
  *
@@ -22,25 +32,16 @@ import { AuthConfigError, RequiredEnvError } from "@panaversity/ksor-gateway-kit
 
 import { compose } from "./compose.js";
 import { runHttp } from "./http.js";
-import { runStdio } from "./stdio.js";
 
 export const GATEWAY_VERSION = "0.0.0";
 
-export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
-  const wantHttp =
-    argv.includes("--http") ||
-    process.env["KSOR_MCP_TRANSPORT"] === "http" ||
-    (process.env["PORT"] !== undefined && process.env["KSOR_MCP_TRANSPORT"] !== "stdio");
+export async function main(): Promise<void> {
   try {
     const composition = await compose(
       path.resolve(process.env["KSOR_INSTANCE"] ?? "instance.md"),
       GATEWAY_VERSION,
     );
-    if (wantHttp) {
-      await runHttp(composition);
-    } else {
-      await runStdio(composition);
-    }
+    await runHttp(composition);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`error: ${message}`);

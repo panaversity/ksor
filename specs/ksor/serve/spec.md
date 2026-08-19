@@ -46,8 +46,11 @@ recorded beside the number.
 **Serving fails safe** (decision 7). Local serve binds loopback with auth
 off. A public bind refuses to boot unless auth is configured or
 unauthenticated serving is explicitly flagged — a dropped auth variable must
-never silently ship an open door. Transports: stdio for local agents (the
-scaffold's `.mcp.json` rung) and stateless Streamable HTTP for hosting.
+never silently ship an open door. ONE transport: stateless Streamable
+HTTP — the shape the production gateway ships, spoken by hosted clients
+and local coding agents alike against a URL (no stdio door; one obvious
+way). The bind is the posture: unset PORT → loopback (the dev door,
+rebind-protected, safe with auth off); a public bind is deliberate.
 
 **Visibility.** Serve reads the staged tier of the audience it is built
 for — the same seam and five guarantees as the site shells
@@ -56,8 +59,8 @@ any tool to return.
 
 **Errors are documentation.** Refusals exit 1 with a remedied message;
 environment failures exit 3. The door today is the workspace `ksor-gateway`
-binary (stdio default; `--http`/`PORT` for the hosted door); the published
-`ksor serve` verb keeps exiting 2 honestly until the packaging decision in
+binary (stateless HTTP; loopback by default, a public bind deliberate);
+the published `ksor serve` verb keeps exiting 2 honestly until the packaging decision in
 decision 12 resolves how the kernel ships to npm.
 
 ## Acceptance
@@ -78,7 +81,7 @@ decision 12 resolves how the kernel ships to npm.
 
 ## Status against acceptance (2026-08-19 — the draft's honest ledger)
 
-Proven live: the three tools through a real MCP client over stdio against
+Proven live: the three tools through a real MCP client over stateless HTTP against
 Postgres; the typed abstention under a calibrated floor (including the
 question whose only passing answer is the abstention); snapshot pinning +
 the refresh path; byte-exact read; the HTTP door's fail-closed boot and

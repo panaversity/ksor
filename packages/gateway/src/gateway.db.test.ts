@@ -9,7 +9,7 @@
  * fail-closed boot refusal.
  */
 
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +19,6 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   applySchema,
@@ -63,7 +62,7 @@ const OOC_QUERY = "what does quantum blockchain weather forecasting cost";
 /** Scope-adjacent: shares tokens with the corpus, answered by nothing in it. */
 const NEAR_MISS_QUERY = "what is the zebra parental leave policy in belgium";
 
-describe.runIf(adminDsn !== "")("gateway acceptance (stdio, real MCP client)", () => {
+describe.runIf(adminDsn !== "")("gateway acceptance (HTTP, real MCP client)", () => {
   let admin: pg.Pool;
   let pool: pg.Pool;
   let dbName: string;
@@ -71,8 +70,35 @@ describe.runIf(adminDsn !== "")("gateway acceptance (stdio, real MCP client)", (
   let work: string;
   let instancePath: string;
   let client: Client;
+  let server: ChildProcess;
+  let port: number;
   let floor: number;
   let nearMissScore: number;
+
+  /** Spawn the built gateway as an HTTP server (loopback, auth off) and wait for its boot line. */
+  async function bootHttp(extraEnv: Record<string, string>): Promise<ChildProcess> {
+    const child = spawn(process.execPath, [CLI], {
+      env: { ...process.env, KSOR_INSTANCE: instancePath, KSOR_TEST_DSN: dbUrl, ...extraEnv },
+    });
+    let booted = "";
+    await new Promise<void>((resolve, reject) => {
+      const deadline = setTimeout(
+        () => reject(new Error(`no boot line; stderr: ${booted}`)),
+        30_000,
+      );
+      child.stderr?.on("data", (d: Buffer) => {
+        booted += d.toString();
+        if (booted.includes("serving")) {
+          clearTimeout(deadline);
+          resolve();
+        }
+      });
+      child.on("exit", (code) =>
+        reject(new Error(`gateway exited ${code} before serving: ${booted}`)),
+      );
+    });
+    return child;
+  }
 
   beforeAll(async () => {
     dbName = `ksor_g_${randomBytes(4).toString("hex")}`;
@@ -171,24 +197,19 @@ Answer ONLY from this record. Abstention is a correct answer.
 `,
     );
 
+    // The one transport: stateless Streamable HTTP, on a loopback bind with
+    // auth off (the dev posture). A real MCP client drives it.
+    port = 30000 + Math.floor(Math.random() * 20000);
+    server = await bootHttp({ KSOR_MCP_PORT: String(port), KSOR_AUTH_DISABLED: "1" });
     client = new Client({ name: "ksor-acceptance", version: "0.0.0" });
     await client.connect(
-      new StdioClientTransport({
-        command: process.execPath,
-        args: [CLI],
-        env: {
-          ...process.env,
-          KSOR_INSTANCE: instancePath,
-          KSOR_TEST_DSN: dbUrl,
-          KSOR_MCP_TRANSPORT: "stdio",
-        },
-        stderr: "pipe",
-      }),
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
     );
   }, 180_000);
 
   afterAll(async () => {
     await client?.close();
+    server?.kill();
     await pool?.end();
     if (admin !== undefined) {
       if (dbName !== undefined)
@@ -283,18 +304,58 @@ Answer ONLY from this record. Abstention is a correct answer.
     );
   });
 
-  it("the http door refuses to boot with no auth decision (fail-closed), and boots with the explicit opt-out", async () => {
-    const port = 30000 + Math.floor(Math.random() * 20000);
+  it("the http door: /health names the gate honestly, /ready probes the store, chunked POST replays", async () => {
+    const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
+      abstain_gate: string;
+      auth: string;
+      corpus_id: string;
+    };
+    expect(health.abstain_gate).toContain(`floor ${floor}`);
+    expect(health.auth).toBe("disabled");
+    expect(health.corpus_id).toBe(TENANT);
+    expect((await fetch(`http://127.0.0.1:${port}/ready`)).status).toBe(200);
+
+    // A CHUNKED POST must work through harden's buffered replay seam — the
+    // gateway once dropped the replayed body and every chunked request
+    // failed (review finding, 2026-08-19).
+    const initialize = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "chunked-probe", version: "0" },
+      },
+    });
+    const chunked = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(initialize));
+          controller.close();
+        },
+      }),
+      duplex: "half",
+    } as RequestInit);
+    expect(chunked.status, await chunked.text().catch(() => "")).toBe(200);
+  });
+
+  it("a public bind with no auth decision refuses to boot — fail-closed", async () => {
+    const badPort = 30000 + Math.floor(Math.random() * 20000);
     const env = {
       ...process.env,
       KSOR_INSTANCE: instancePath,
       KSOR_TEST_DSN: dbUrl,
-      KSOR_MCP_TRANSPORT: "http",
-      KSOR_MCP_PORT: String(port),
+      KSOR_MCP_HOST: "0.0.0.0",
+      KSOR_MCP_PORT: String(badPort),
     } as Record<string, string>;
     delete env["KSOR_AUTH_DISABLED"];
     delete env["PORT"];
-
     const refused = spawn(process.execPath, [CLI], { env });
     const refusal = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
       let stderr = "";
@@ -303,84 +364,6 @@ Answer ONLY from this record. Abstention is a correct answer.
     });
     expect(refusal.code, refusal.stderr).toBe(1);
     expect(refusal.stderr.toLowerCase()).toContain("auth");
-
-    const server = spawn(process.execPath, [CLI], {
-      env: { ...env, KSOR_AUTH_DISABLED: "1" },
-    });
-    try {
-      let booted = "";
-      server.stderr.on("data", (d: Buffer) => (booted += d.toString()));
-      await new Promise<void>((resolve, reject) => {
-        const deadline = setTimeout(
-          () => reject(new Error(`no boot line; stderr: ${booted}`)),
-          30_000,
-        );
-        const poll = setInterval(() => {
-          if (booted.includes("serving")) {
-            clearTimeout(deadline);
-            clearInterval(poll);
-            resolve();
-          }
-        }, 100);
-      });
-      const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
-        abstain_gate: string;
-        auth: string;
-      };
-      expect(health.abstain_gate).toContain(`floor ${floor}`);
-      expect(health.auth).toBe("disabled");
-      const ready = await fetch(`http://127.0.0.1:${port}/ready`);
-      expect(ready.status).toBe(200);
-
-      // The full MCP round trip over stateless Streamable HTTP — the same
-      // protocol a hosted client speaks.
-      const httpClient = new Client({ name: "ksor-http-acceptance", version: "0.0.0" });
-      await httpClient.connect(
-        new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
-      );
-      try {
-        const result = await httpClient.callTool({
-          name: "search",
-          arguments: { query: IN_CORPUS_QUERY, k: 3 },
-        });
-        const body = result.structuredContent as { ok: boolean; hits: { slug: string }[] };
-        expect(body.ok, JSON.stringify(body)).toBe(true);
-        expect(body.hits[0]?.slug).toBe("compensation");
-      } finally {
-        await httpClient.close();
-      }
-
-      // A CHUNKED POST must work through harden's buffered replay seam —
-      // the gateway once dropped the replayed body and every chunked
-      // request failed (review finding, 2026-08-19).
-      const initialize = JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: "2025-06-18",
-          capabilities: {},
-          clientInfo: { name: "chunked-probe", version: "0" },
-        },
-      });
-      const chunked = await fetch(`http://127.0.0.1:${port}/mcp`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-        },
-        body: new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode(initialize));
-            controller.close();
-          },
-        }),
-        duplex: "half",
-      } as RequestInit);
-      expect(chunked.status, await chunked.text().catch(() => "")).toBe(200);
-    } finally {
-      server.kill();
-    }
   }, 60_000);
 });
 

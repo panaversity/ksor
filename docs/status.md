@@ -78,8 +78,8 @@ the deploy story — plus the CLI contract: `dev`,
   the kernel-conversion branch): four private workspace packages —
   platform (pool discipline), content (schema + ingest + hybrid retrieval
   - calibrated abstention + read plane), gateway-kit (fail-closed serving
-    postures), gateway (the MCP door: search/outline/read over stdio and
-    stateless Streamable HTTP). Converted from the production oracle with
+    postures), gateway (the MCP door: search/outline/read over stateless
+    Streamable HTTP — one transport, loopback by default). Converted from the production oracle with
     its suite as the fixture source; acceptance drives the BUILT binary
     with a real MCP client against live Postgres (Neon, pgvector) — cited
     passages, snapshot generation-pinning, byte-exact reads, and the typed
