@@ -70,6 +70,7 @@ export function isOperationalError(error: unknown): boolean {
 
 export function neverRetry(error: unknown): boolean {
   if (error instanceof PoolTimeoutError) return true;
+  if (error === null || typeof error !== "object") return false;
   const code = (error as { code?: string }).code;
   return code !== undefined && NEVER_RETRY_SQLSTATE.has(code);
 }

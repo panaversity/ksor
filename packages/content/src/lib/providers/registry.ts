@@ -54,7 +54,10 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
 };
 
 function entryFor(name: string): ProviderEntry {
-  const entry = PROVIDERS[name];
+  // Object.hasOwn, not a bare index: a name like "constructor" or
+  // "toString" would otherwise resolve to a prototype member and bypass the
+  // loud refusal (review, 2026-08-19).
+  const entry = Object.hasOwn(PROVIDERS, name) ? PROVIDERS[name] : undefined;
   if (entry === undefined) {
     throw new Error(
       `unknown embedding provider ${JSON.stringify(name)} — registered: ${Object.keys(PROVIDERS).sort().join(", ")}`,

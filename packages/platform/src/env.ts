@@ -13,11 +13,14 @@ function warn(name: string, raw: string, fallback: number): void {
 export function envInt(name: string, fallback: number, minimum?: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
-  const value = Number.parseInt(raw.trim(), 10);
-  if (Number.isNaN(value)) {
+  const trimmed = raw.trim();
+  // Strict: parseInt accepts "12abc" → 12 (review, 2026-08-19). A malformed
+  // value must fall back to the default, per this function's own contract.
+  if (!/^[+-]?\d+$/.test(trimmed)) {
     warn(name, raw, fallback);
     return fallback;
   }
+  const value = Number(trimmed);
   if (minimum !== undefined && value < minimum) return minimum;
   return value;
 }

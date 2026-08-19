@@ -44,6 +44,9 @@ ranked AS (
     JOIN content_nodes n ON n.node_id = s.node_id AND n.tenant_id = s.tenant_id
     WHERE c.tenant_id = $1 AND c.embedding_status = 'embedded'
       AND c.labels->>'source_type' = 'prose'
+      AND n.status = 'published'
+      AND NOT EXISTS (SELECT 1 FROM takedown_denylist d
+                       WHERE d.tenant_id = $1 AND d.corpus_id = $2 AND d.stable_id = n.stable_id)
       AND length(regexp_replace(c.content, '\\s', '', 'g')) >= $3
 )
 SELECT content FROM ranked WHERE rn <= $5`;

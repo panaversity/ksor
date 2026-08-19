@@ -26,7 +26,13 @@ describe("instructionLike", () => {
   });
 });
 
-import { search, readDocument, UncalibratedFloorError, type ServiceContext } from "./service.js";
+import {
+  search,
+  readDocument,
+  EmptyQueryError,
+  UncalibratedFloorError,
+  type ServiceContext,
+} from "./service.js";
 import { keyRingFromEnv } from "./lib/snapshot.js";
 
 describe("a declared-but-uncalibrated floor refuses to serve (fail closed, representable)", () => {
@@ -55,5 +61,41 @@ describe("a declared-but-uncalibrated floor refuses to serve (fail closed, repre
 
   it("read refuses too", async () => {
     await expect(readDocument(ctx, "any-slug")).rejects.toBeInstanceOf(UncalibratedFloorError);
+  });
+});
+
+import { EmptyQueryError as EmbedEmptyQueryError } from "./lib/query-embed.js";
+
+describe("an empty query from the embed door re-raises as a client error, not a degrade", () => {
+  const base = {
+    pool: {} as never,
+    instance: {
+      name: "c",
+      corpusId: "c",
+      tenantId: "c",
+      dsnEnv: "X",
+      abstain: { vectorFloor: 0.6, keywordFloor: null },
+      maximumResponseCharacters: 120_000,
+      instructions: "",
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: 8,
+    },
+    ring: keyRingFromEnv(undefined),
+    instanceDigest: "d",
+  } as unknown as ServiceContext;
+
+  it("the embed door's own EmptyQueryError class is recognized (not embed_unavailable)", async () => {
+    // The embed pipeline throws query-embed's EmptyQueryError — a DIFFERENT
+    // class than service's — for a query that normalize() empties but trim()
+    // did not. It must surface as EmptyQueryError, never be reclassified as a
+    // provider outage (review, 2026-08-19).
+    const ctx = {
+      ...base,
+      embedQuery: async () => {
+        throw new EmbedEmptyQueryError("query is empty — nothing to embed");
+      },
+    } as unknown as ServiceContext;
+    await expect(search(ctx, "\u200b", 5)).rejects.toBeInstanceOf(EmptyQueryError);
   });
 });

@@ -109,10 +109,9 @@ probes; oracle-fixture parity for chunking, calibration math, windowing,
 manifest. Not yet wired: the visibility-staged tier as serve's source
 (clause above is contract, not behavior), the calibrate CLI's synthesized
 door, behavioural evals as a CI gate, and the `.mcp.json` scaffold rung.
-The "declared-but-uncalibrated refuses" invariant currently has no
-representable state in the instance grammar (a floor is a number or null;
-null = gate off, surfaced) — resolving that wording is part of
-ratification.
+The "declared-but-uncalibrated refuses" invariant is now REPRESENTABLE and
+enforced (`retrieval.vector_floor: uncalibrated` refuses every serve —
+resolved 2026-08-19), so the grammar is no longer a two-state gap.
 
 ## Out of scope
 

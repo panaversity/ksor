@@ -25,6 +25,7 @@ import {
 import { logRead } from "./lib/rlog.js";
 import { documentChunks, findDocument, outline as outlineQuery } from "./lib/read.js";
 import { codePointLength, windowDocument } from "./lib/windowing.js";
+import { EmptyQueryError as EmbedEmptyQueryError } from "./lib/query-embed.js";
 
 export const SEARCH_BUDGET_CHARS: number = 34_000 * CHARS_PER_TOKEN;
 export const MAX_SEARCH_K = 50;
@@ -221,7 +222,12 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   try {
     queryVector = await ctx.embedQuery(query);
   } catch (error) {
-    if (error instanceof EmptyQueryError) throw error;
+    // The embed door throws its OWN EmptyQueryError (a different class): an
+    // empty query must re-raise as a client error, never be reclassified as
+    // a provider outage (review, 2026-08-19).
+    if (error instanceof EmptyQueryError || error instanceof EmbedEmptyQueryError) {
+      throw new EmptyQueryError();
+    }
     queryVector = null;
     degradedReason = "embed_unavailable_keyword_only";
   }
@@ -449,11 +455,27 @@ export async function readDocument(
     throw new Error(`document ${JSON.stringify(slug)} has no readable content`);
   }
 
+  // A continuation cursor carries its OWN scope (SCOPEcursor): the
+  // window is a position in a SCOPED subset, and nothing else on the wire
+  // records that scope, so a follow-up that dropped the heading param would
+  // resolve the index against the full document and serve the wrong window
+  // (review, 2026-08-19). The cursor's scope wins over the heading param.
+  const SEP = "";
+  let heading = options.heading ?? null;
+  let innerCursor = options.fromHeading ?? null;
+  if (innerCursor !== null && innerCursor.includes(SEP)) {
+    const at = innerCursor.indexOf(SEP);
+    const encScope = innerCursor.slice(0, at);
+    heading = encScope === "" ? null : encScope;
+    innerCursor = innerCursor.slice(at + 1);
+  }
+
   // Subtree scoping: exact heading_path or prefix; then the leaf-anchor
   // fallback (an anchor that is the LAST segment of a deeper path).
   let scoped = chunks;
-  const heading = options.heading ?? null;
+  let resolvedScope = "";
   if (heading !== null && heading !== "") {
+    resolvedScope = heading;
     scoped = chunks.filter(
       (c) => c.headingPath === heading || c.headingPath.startsWith(heading + "/"),
     );
@@ -474,10 +496,11 @@ export async function readDocument(
         );
       }
       scoped = chunks.filter((c) => c.headingPath === root || c.headingPath.startsWith(root + "/"));
+      resolvedScope = root;
     }
   }
 
-  const window = windowDocument(scoped, budget, options.fromHeading ?? null);
+  const window = windowDocument(scoped, budget, innerCursor);
   const text = window.chunks.map((c) => c.content).join("");
   const windowed = window.chunks.length < scoped.length;
   const textChars = codePointLength(text);
@@ -512,14 +535,14 @@ export async function readDocument(
       ? {
           window_from: window.windowFrom ?? "",
           window_to: window.windowTo ?? "",
-          next: window.nextHeading,
+          next: window.nextHeading === null ? null : `${resolvedScope}${SEP}${window.nextHeading}`,
           remaining_outline: [...window.remainingSections],
           est_tokens: Math.ceil(textChars / CHARS_PER_TOKEN),
           total_est_tokens: Math.ceil(totalChars / CHARS_PER_TOKEN),
           note:
             window.nextHeading === null
               ? "windowed — this is the last window (next is null)"
-              : "windowed — continue with from_heading=next",
+              : "windowed — continue with from_heading set to this response's next (it carries its own scope; do not also resend heading)",
         }
       : {}),
     ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
@@ -548,8 +571,11 @@ export async function outlineDocuments(
   const inst = ctx.instance;
   const actor = ctx.actor?.() ?? "anonymous";
   const root = options.node ?? null;
-  // Drill-down default: a named node with no explicit depth gets depth=1.
-  const depth = options.depth ?? (root === null ? 0 : 1);
+  // Drill-down default: a named node with no explicit depth gets depth=1. An
+  // EXPLICIT depth:0 on a named node is meaningless (you asked to drill in)
+  // and returned {nodes: []} — which the tool defines as "a leaf" (review,
+  // 2026-08-19); a drill-down shows at least the immediate children.
+  const depth = root === null ? (options.depth ?? 0) : Math.max(1, options.depth ?? 1);
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: null };
   const rows = await runRead(ctx.pool, inst.tenantId, (client) =>
     outlineQuery(client, scope, { root, depth, limit: options.limit ?? 200 }),

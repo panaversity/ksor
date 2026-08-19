@@ -23,7 +23,7 @@ import type pg from "pg";
 
 import { envFloat } from "@panaversity/ksor-platform";
 
-import { runIngest, runRead } from "../db.js";
+import { runIngest } from "../db.js";
 import type { ContentInstance } from "../instance.js";
 import { embedIntent, vlit, type EmbeddingProvider } from "../lib/embedding.js";
 import {
@@ -389,7 +389,11 @@ export async function buildGeneration(
   );
 
   // ---- embed queue (no build txn held; short txns per batch write)
-  const pendingRows = await runRead(pool, tenant, async (c) => {
+  // The pending SELECT runs through runIngest (no statement timeout), NOT
+  // runRead (15s serving timeout): on a large corpus the scan exceeds 15s,
+  // hits 57014 (query_canceled, NEVER_RETRY), and aborts the build after the
+  // generation was committed (review, 2026-08-19).
+  const pendingRows = await runIngest(pool, tenant, async (c) => {
     const res = await c.query({
       text: buildPendingSql(),
       rowMode: "array",
