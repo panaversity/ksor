@@ -77,13 +77,26 @@ describe("the contract layer (through the doors)", () => {
     );
   });
 
-  it("refuses degenerate vectors: all-zero, non-finite, empty", async () => {
-    for (const bad of [[[0, 0]], [[1, Number.NaN]], [[]]] as number[][][]) {
+  it("refuses degenerate vectors: all-zero and non-finite (correct dimension)", async () => {
+    for (const bad of [[[0, 0]], [[1, Number.NaN]]] as number[][][]) {
       const { provider } = stubProvider({ plan: [bad] });
       await expect(
         embedIntent(["x"], { provider, intent: "document" }),
         "bad batch: " + JSON.stringify(bad),
       ).rejects.toThrow("degenerate embedding (empty / all-zero / non-finite)");
+    }
+  });
+
+  it("refuses a wrong-dimension vector at the boundary — a provider ignoring the declared width", async () => {
+    // An empty or wrong-width vector is a DIMENSION mismatch, caught before it
+    // reaches a pgvector query as a deep 500 or a paid-for ingest batch
+    // (review finding #9, 2026-08-19).
+    for (const bad of [[[]], [[1, 2, 3]]] as number[][][]) {
+      const { provider } = stubProvider({ plan: [bad] });
+      await expect(
+        embedIntent(["x"], { provider, intent: "document" }),
+        "bad batch: " + JSON.stringify(bad),
+      ).rejects.toThrow(/embedding dimension mismatch/);
     }
   });
 

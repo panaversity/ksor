@@ -217,3 +217,98 @@ Review round 1 (independent agent, live-verified): 11 findings — 4
 confirmed (chunked-body replay dropped; unbounded chunked-GET read;
 audit actor never wired; a false premise under the DNS-rebind
 deviation) — all fixed fail-closed in 91c1910 with live probes added.
+
+## Post-review hardening and decisions (2026-08-19)
+
+Two adversarial review passes on the served surface (the reviewer executed
+the built code, not only read it) drove a round of fixes and three
+architectural decisions. The correctness fixes are done and green; the
+architecture decisions are recorded here so the owner can act on them.
+
+### Fixed (fail-closed, with regression tests)
+
+- **The config layer fails closed like the gate it configures.** Unknown
+  top-level instance keys are REFUSED (a misspelled `retreival:` silently
+  disabled the abstention gate). The fail-closed invariant is now
+  representable: `vector_floor: uncalibrated` refuses every serve until a
+  number is pasted — three states (number / absent / uncalibrated) where
+  there were two.
+- **Degradation fails closed**: an embed outage with a declared floor
+  abstains; only an undeclared-floor corpus serves keyword-only.
+- **Revocation closes the snapshot window**: a pinned read verifies the
+  generation is still servable (active or rollback pointer); a withdrawn
+  generation's tokens refresh instead of serving it for the TTL.
+- **Node/window identity**: the window cursor is a position index into the
+  scoped chunk list, not an ordinal (unique per source) or a heading (can
+  repeat) — multi-source nodes no longer orphan chunks and repeated
+  headings no longer ping-pong. Tenant is forced 1:1 with the corpus so
+  per-tenant GC never crosses corpora.
+- **DB serving is bounded**: the pool has a native checkout+connect bound
+  (never 0) and `maxLifetimeSeconds`; the read path a hard per-request
+  deadline; the gateway a `/mcp` concurrency cap that sheds `503 +
+Retry-After` instead of queueing invisibly. Proven by a saturation
+  db-test (small pool, many concurrent slow reads → excess sheds fast,
+  nothing hangs, the pool drains) — the axis every other db test left
+  uncontended. The hand-rolled checkout race was replaced by pg's native
+  mechanism.
+- **Correctness batch**: CRLF normalized before chunking (line-ending
+  churn no longer re-embeds the whole corpus); the embedding contract
+  checks dimension; the shrink guard counts nodes not slugs; sibling slug
+  collisions are named before ingest, not surfaced as an opaque DB error;
+  the OUTLINE child_count honors takedown deny; BOM-prefixed frontmatter
+  strips; numeric CLI flags validate; graceful SIGTERM drain wired; the
+  half-applied-schema and missing-DSN paths exit with the right code.
+- **Carried-but-unused, resolved** (rule 9): readcache deleted (dead
+  subsystem), RequiredEnvError and runServer's shutdown machinery are now
+  wired. platform gained its first tests (classification + saturation).
+
+### Decision A — four packages stay (owner-confirmable)
+
+platform, content, gateway-kit, content-gateway are NOT a Python-layout
+mirror; they are the seams the stated multi-record roadmap needs.
+gateway-kit + content = content-gateway; the same kit + a future identity
+or praxis package = identity-gateway / praxis-gateway. Folding gateway-kit
+into content-gateway would force every future gateway to re-implement auth
+and hardening; folding platform into content would force identity to
+depend on content just for a pool. The turbo removal (decision 5) does not
+apply — turbo served no future need; these do. Revisit only if the second
+record never arrives.
+
+### Decision B — move the HTTP door to the SDK's Web-standard transport (recommended, next PR)
+
+The door is hand-rolled on `node:http` (~540 lines across http.ts + the
+kit's harden/serve). Three review findings landed there (chunked-body
+replay, unbounded chunked-GET read, the origins-only rebinding hole). SDK
+1.30.0 ships `WebStandardStreamableHTTPServerTransport` (Request → Response)
+and `createMcpExpressApp` (with the loopback rebinding logic built in and
+correct). Pairing the Web-standard transport with Hono (~14kB, zero deps,
+runs unchanged on Node / Vercel Edge / Workers / Bun — which the deploy
+story wants) deletes readBody, sendJson, the routing if-chain, and most of
+harden, and gets the rebinding default right by using the SDK helper
+instead of re-deriving it. Cost: one runtime dep on the PRIVATE
+content-gateway (a decision-12 entry, not the published CLI's zero-dep
+guarantee) and a rewrite of a currently-tested door. Timing argument: the
+2026-07-28 protocol revision will land in exactly this layer, so land in
+the Web-standard shape once rather than migrate the hand-rolled door twice.
+Not done in the hardening batch to keep a framework swap out of a
+correctness pass.
+
+### Decision C — a migration path is owed before adopters have data
+
+`schema.sql` is one file with no runner (`schema_meta` pinned at 2.0),
+which is correct while nothing is released. Before an adopter runs a live
+corpus at 2.0 and the schema moves to 2.1, a forward path must exist:
+versioned plain-SQL migrations + a runner keyed on `schema_meta` (no
+drizzle-kit needed; the information_schema drift test detects divergence
+but cannot repair it). Deferred deliberately — building the runner before
+the schema stabilizes and before any data exists is premature — but
+tracked here and in docs/status.md so it is not forgotten.
+
+### The integration path (decision 12, sketched)
+
+`pnpm dev` runs the site; `ksor serve` runs the content-gateway. The
+published `ksor` CLI keeps zero runtime deps, so `ksor serve` is a thin
+launcher for the gateway that the scaffold installs under `system/gateways/`
+when a project climbs to the served rung — the kernel packages are its
+dependencies there, not the CLI's. This is the shape that gives the 24k
+lines their first real consumer; wiring it is the serve slice's own PR.

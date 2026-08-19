@@ -34,14 +34,34 @@ token never errors, it serves active and says why (`snapshot:
 generation CTE resolves `COALESCE(pinned, active_generation)` inside every
 statement — the generation is the authorization).
 
-**Abstention is the retrieval gate.** A declared floor below which serve
-answers "not in this corpus" — a correct answer, never an error, never a
-licence to fall back on model knowledge. A declared-but-uncalibrated floor
-refuses to serve; a record that declares no floor has the gate off and the
-surface says so (uncalibrated — will not refuse out-of-corpus questions).
-Floors are calibrated per corpus per embedding space by the converted
-calibrate method, human-ratified into instance.md, measurement and door
-recorded beside the number.
+**Abstention is the retrieval gate**, with THREE representable states
+(the fail-closed invariant made grammar — review, 2026-08-19):
+`retrieval.vector_floor:` a NUMBER gates (abstain below it); ABSENT/`null`
+declares no gate (off, surfaced honestly — "will not refuse out-of-corpus
+questions"); the literal `uncalibrated` is a DECLARED-but-unmeasured floor
+that REFUSES every serve (search and read alike) until a number is pasted —
+a corpus that intends to gate must not serve ungated or on a guess. Floors
+are calibrated per corpus per embedding space by the converted calibrate
+method, human-ratified into instance.md, measurement and door recorded
+beside the number. **The config layer fails closed on the same principle
+as the gate**: unknown top-level keys are refused, never dropped, so a
+misspelled `retreival:` cannot silently disable the gate.
+
+**Degradation fails closed.** If the embedding provider is unreachable and a
+vector floor IS declared, serve ABSTAINS — the gate cannot be evaluated
+without the embed, and keyword search does not separate in- from
+out-of-corpus (a measured negative result), so serving keyword results
+ungated would answer out-of-corpus questions during the outage. Only a
+corpus with no declared floor (gate already off) serves keyword-only under
+an outage, and says so (`degraded_reason`).
+
+**Revocation closes the snapshot window.** A snapshot pins a generation; a
+pinned read is honored only while that generation is still SERVABLE (the
+active pointer or the rollback pointer). A rolled-back (withdrawn)
+generation is neither, so its outstanding tokens refresh to active
+(`snapshot: "refreshed (withdrawn)"`) instead of serving withdrawn content
+for the token's TTL. "The generation is the authorization" holds at read
+time, not only at issue time.
 
 **Serving fails safe** (decision 7). Local serve binds loopback with auth
 off. A public bind refuses to boot unless auth is configured or

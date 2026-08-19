@@ -78,13 +78,33 @@ the deploy story — plus the CLI contract: `dev`,
   the kernel-conversion branch): four private workspace packages —
   platform (pool discipline), content (schema + ingest + hybrid retrieval
   - calibrated abstention + read plane), gateway-kit (fail-closed serving
-    postures), gateway (the MCP door: search/outline/read over stateless
+    postures), content-gateway (the content MCP door: search/outline/read over stateless
     Streamable HTTP — one transport, loopback by default). Converted from the production oracle with
     its suite as the fixture source; acceptance drives the BUILT binary
     with a real MCP client against live Postgres (Neon, pgvector) — cited
     passages, snapshot generation-pinning, byte-exact reads, and the typed
     abstention. The published `ksor` CLI is untouched: `serve` still exits
     `2` until the npm packaging question (decision 12) is resolved.
+
+## Known gaps in the kernel conversion (tracked, not blocking)
+
+- **MCP protocol version**: the gateway is on `@modelcontextprotocol/sdk`
+  1.30.0 (the latest), which implements spec revision **2025-11-25**. The
+  current spec is **2026-07-28** (handshake-free, `server/discover`,
+  per-request version headers) — the SDK does not implement it yet, so the
+  gap is upstream, not in this repo. Stateless Streamable HTTP is the shape
+  that migrates with the least surgery; it is a one-dependency bump when the
+  SDK catches up.
+- **No schema migration runner**: `schema.sql` is one file, versioned in
+  `schema_meta` (2.0). That is correct while no adopter has production data
+  (nothing is released). Before adopters do, a forward-migration path
+  (versioned plain SQL + a runner keyed on `schema_meta`) is owed —
+  recorded as a decision in `research/kernel-conversion.md`.
+- **The HTTP door is hand-rolled on `node:http`** (~540 lines: body
+  read/parse, routing, security middleware) rather than the SDK's
+  Web-standard transport + a request layer. Three review findings landed in
+  that layer. The recommended move (Hono + `WebStandardStreamableHTTPServerTransport`)
+  is written up in `research/kernel-conversion.md` as the next serve PR.
 
 ## Designed, not implemented
 

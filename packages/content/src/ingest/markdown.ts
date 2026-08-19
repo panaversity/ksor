@@ -16,7 +16,9 @@ import { createHash } from "node:crypto";
 
 // Frontmatter must start at byte 0; the pattern consumes at most one newline
 // after the closing --- (oracle: r"^---\r?\n(.*?)\r?\n---[ \t]*\r?\n?", DOTALL).
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+// ^\uFEFF? — a BOM-prefixed file must not serve its YAML as a chunk
+// (review finding, 2026-08-19).
+const FRONTMATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 
 export interface FrontmatterSplit {
   /** The raw text between the --- fences (unparsed YAML), or null when the

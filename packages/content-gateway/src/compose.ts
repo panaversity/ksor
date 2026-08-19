@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type pg from "pg";
 import { pooledEndpointFor } from "@panaversity/ksor-platform";
-import { currentActor } from "@panaversity/ksor-gateway-kit";
+import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   buildShippedProvider,
   checkEmbeddingSpace,
@@ -39,7 +39,10 @@ export async function compose(instancePath: string, version: string): Promise<Co
 
   const dsn = process.env[instance.dsnEnv];
   if (dsn === undefined || dsn.trim() === "") {
-    throw new Error(
+    // A RequiredEnvError so main.ts classifies it as an ENVIRONMENT failure
+    // (exit 3), not a refusal (exit 1) — the CLI exit-code contract (review
+    // finding, 2026-08-19: a plain Error here exited 1).
+    throw new RequiredEnvError(
       `${instance.dsnEnv} is not set — instance.md names it as the database DSN variable ` +
         `(database.dsn_env); export it with the Postgres connection string before serving`,
     );

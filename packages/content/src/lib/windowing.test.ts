@@ -362,8 +362,66 @@ describe("carried invariants (oracle test_windowing.py)", () => {
     expect(() => windowDocument(lesson(), 100, "nope")).toThrowError(/matches no section/);
   });
 
-  it("an unknown ordinal cursor fails loud naming the cursor", () => {
-    expect(() => windowDocument(lesson(), 100, "part-1#99")).toThrowError(/matches no chunk/);
+  it("an out-of-range position cursor fails loud naming the cursor", () => {
+    // The '#N' cursor is a position INDEX into the scoped chunk list (not an
+    // ordinal — unique per source, review findings #4/#11); 99 is past the
+    // end, so it throws naming the cursor.
+    const err = (() => {
+      try {
+        windowDocument(lesson(), 100, "part-1#99");
+        return "";
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+      }
+    })();
+    expect(err).toMatch(/outside this document's chunk range/);
+    expect(err).toContain("part-1#99");
+  });
+
+  it("a repeated heading does not ping-pong: the index cursor resumes past it", () => {
+    // chunks 0:"" 1:example 2:usage 3:example — a bare 'example' cursor would
+    // rewind to index 1 forever (review finding #11); the index cursor lands
+    // on the later occurrence.
+    const doc: DocumentChunk[] = [
+      mk(0, "", "p ".repeat(20)),
+      mk(1, "example", "a".repeat(60)),
+      mk(2, "usage", "b".repeat(60)),
+      mk(3, "example", "c".repeat(60)),
+    ];
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 20; i += 1) {
+      const w = windowDocument(doc, 80, cursor);
+      seen.push(...w.chunks.map((c) => c.content));
+      if (w.nextHeading === null) break;
+      cursor = w.nextHeading;
+    }
+    expect(seen.join(""), "every chunk served exactly once, in order").toBe(
+      doc.map((c) => c.content).join(""),
+    );
+  });
+
+  it("a multi-source node windows every source's chunks, none orphaned", () => {
+    // Two sources under one node share the ordinal space (0..n each); an
+    // ordinal-based `after` filter orphaned the lower-ordinal chunks of the
+    // second source (review finding #4). Position-based paging serves all.
+    const doc: DocumentChunk[] = [
+      mk(0, "a", "a0".repeat(30)),
+      mk(1, "a", "a1".repeat(30)),
+      mk(0, "b", "b0".repeat(30)),
+      mk(1, "b", "b1".repeat(30)),
+    ];
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 20; i += 1) {
+      const w = windowDocument(doc, 70, cursor);
+      seen.push(...w.chunks.map((c) => c.content));
+      if (w.nextHeading === null) break;
+      cursor = w.nextHeading;
+    }
+    expect(seen.join(""), "b's low-ordinal chunks must not be orphaned").toBe(
+      doc.map((c) => c.content).join(""),
+    );
   });
 
   it("an empty document is refused", () => {

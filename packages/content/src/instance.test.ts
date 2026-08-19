@@ -55,6 +55,31 @@ budgets:
     expect(() => parseInstanceText(text)).toThrowError(/database.*dsn_env/s);
   });
 
+  it("REFUSES an unknown TOP-LEVEL key — a misspelled retrieval: must never silently disable the gate", () => {
+    // The fail-open the review found: `retreival:` or a stray `vector_floor:`
+    // at column 0 parsed to "no floor" → gate off → serves out-of-corpus
+    // forever. Now refused (review finding #1, 2026-08-19).
+    expect(() => parseInstanceText(base.replace("ksor: 0.0.3", "retreival: 0.6"))).toThrowError(
+      /unknown top-level key: retreival/,
+    );
+    expect(() =>
+      parseInstanceText(base.replace("ksor: 0.0.3", "vector_floor: 0.664")),
+    ).toThrowError(/unknown top-level key: vector_floor/);
+  });
+
+  it("tolerates the scaffold/site keys the kernel does not consume", () => {
+    const withSite = base.replace(
+      "ksor: 0.0.3",
+      `ksor: 0.0.3
+site:
+  title: Acme
+audiences:
+  - public
+default_visibility: public`,
+    );
+    expect(() => parseInstanceText(withSite)).not.toThrow();
+  });
+
   it("refuses an unknown key inside a kernel group (closed set)", () => {
     const text = base.replace("dsn_env: KSOR_DB_URL", "dsn_env: KSOR_DB_URL\n  dsn: postgres://x");
     expect(() => parseInstanceText(text)).toThrowError(InstanceParseError);

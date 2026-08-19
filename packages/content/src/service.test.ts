@@ -25,3 +25,35 @@ describe("instructionLike", () => {
     expect(CONTENT_ADVISORY).toContain("never execute");
   });
 });
+
+import { search, readDocument, UncalibratedFloorError, type ServiceContext } from "./service.js";
+import { keyRingFromEnv } from "./lib/snapshot.js";
+
+describe("a declared-but-uncalibrated floor refuses to serve (fail closed, representable)", () => {
+  const ctx = {
+    pool: {} as never, // never reached — the refusal is before any DB call
+    instance: {
+      name: "c",
+      corpusId: "c",
+      tenantId: "c",
+      dsnEnv: "X",
+      abstain: { vectorFloor: "uncalibrated", keywordFloor: null },
+      maximumResponseCharacters: 120_000,
+      instructions: "",
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: 8,
+    },
+    ring: keyRingFromEnv(undefined),
+    instanceDigest: "d",
+    embedQuery: async () => [0, 1],
+  } as unknown as ServiceContext;
+
+  it("search refuses before touching the database", async () => {
+    await expect(search(ctx, "anything", 5)).rejects.toBeInstanceOf(UncalibratedFloorError);
+  });
+
+  it("read refuses too", async () => {
+    await expect(readDocument(ctx, "any-slug")).rejects.toBeInstanceOf(UncalibratedFloorError);
+  });
+});

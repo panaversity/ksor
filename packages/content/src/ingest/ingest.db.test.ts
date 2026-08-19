@@ -276,7 +276,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     expect(report.embedded).toBe(report.chunks - 1);
     expect(report.ready, `1/${report.chunks} > 2% must refuse readiness`).toBe(false);
     expect(report.flipped).toBe(false);
-    expect(report.refusal).toBe("NOT READY — no flip (rerun to resume the queue)");
+    expect(report.refusal, report.refusal ?? "").toMatch(/NOT READY — no flip/);
 
     const failedRows = await pool.query(
       "SELECT embed_error FROM chunks WHERE tenant_id = 'poison' AND embedding_status = 'failed'",

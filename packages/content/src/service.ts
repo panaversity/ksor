@@ -132,6 +132,25 @@ export type SearchResult =
 
 const isoSeconds = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
+/**
+ * The generations a pinned read may serve: the active pointer and the
+ * rollback pointer, and nothing else. A rollback restores the prior
+ * generation and does not repoint rollback_generation at the withdrawn
+ * one, so the withdrawn generation falls out of this set (review finding,
+ * 2026-08-19).
+ */
+async function servableGenerations(client: pg.PoolClient, corpusId: string): Promise<number[]> {
+  const r = await client.query(
+    "SELECT active_generation, rollback_generation FROM corpora WHERE corpus_id = $1",
+    [corpusId],
+  );
+  const row = r.rows[0] as { active_generation: unknown; rollback_generation: unknown } | undefined;
+  if (row === undefined) return [];
+  const out: number[] = [Number(row.active_generation)];
+  if (row.rollback_generation !== null) out.push(Number(row.rollback_generation));
+  return out;
+}
+
 function snapshotEnvelope(ctx: ServiceContext, generation: number): SnapshotEnvelope {
   const scope = {
     corpusId: ctx.instance.corpusId,
@@ -154,7 +173,25 @@ export class EmptyQueryError extends Error {
   }
 }
 
+/**
+ * A declared-but-uncalibrated floor REFUSES every serve (the fail-closed
+ * invariant made representable): the corpus intends to gate but has not been
+ * measured, so serving would either leak (no gate) or lie (a guessed gate).
+ * The remedy is to run calibration and paste the floor.
+ */
+export class UncalibratedFloorError extends Error {
+  constructor() {
+    super(
+      "ksor-uncalibrated: retrieval.vector_floor is declared 'uncalibrated' — the abstention gate " +
+        "is not measured yet, so this corpus refuses to serve. Run `ksor-content calibrate` and " +
+        "paste the recommended vector_floor into instance.md.",
+    );
+    this.name = "UncalibratedFloorError";
+  }
+}
+
 export async function search(ctx: ServiceContext, query: string, k = 10): Promise<SearchResult> {
+  if (ctx.instance.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
   if (query.trim() === "") throw new EmptyQueryError();
   // Code points, Python len parity — the two planes must read the same
   // budget contract (review finding, 2026-08-19).
@@ -205,7 +242,19 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     hits = result.hits;
     topCosine = result.topCosine;
     abstained = vectorAbstains(topCosine, inst.abstain) || hits.length === 0;
+  } else if (inst.abstain.vectorFloor !== null) {
+    // A calibrated corpus gates on the VECTOR floor, and an embed outage
+    // means that floor cannot be evaluated at all. Serving keyword results
+    // ungated here would answer out-of-corpus questions during the outage
+    // (ts_rank_cd does not separate in- from out-of-corpus — the recorded
+    // negative result); the only honest answer is to abstain (review
+    // finding, 2026-08-19). A degraded_reason nothing branches on is not
+    // fail-closed.
+    hits = [];
+    abstained = true;
   } else {
+    // No vector floor declared → the gate was already off; the keyword
+    // degrade serves exactly what an uncalibrated corpus always serves.
     hits = await runRead(ctx.pool, inst.tenantId, (client) =>
       keywordSearch(client, scope, query, kb),
     );
@@ -249,10 +298,14 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   const shaped: SearchHit[] = [];
   let spent = 0;
   let truncated = 0;
-  for (const hit of hits) {
+  for (const [rank, hit] of hits.entries()) {
     const content = stripAssetMarkup(hit.content);
     const size = codePointLength(content);
-    if (spent + size > budget) {
+    // The top hit always ships, even over budget — a served answer that
+    // dropped its own best hit and returned an empty list under ok:true
+    // would misreport (review finding, 2026-08-19); the budget sheds only
+    // lower-ranked hits.
+    if (rank > 0 && spent + size > budget) {
       truncated += 1;
       continue;
     }
@@ -347,6 +400,7 @@ export async function readDocument(
   options: ReadOptions = {},
 ): Promise<ReadResult> {
   const inst = ctx.instance;
+  if (inst.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
   const actor = ctx.actor?.() ?? "anonymous";
   // An invalid or expired snapshot NEVER errors: serve active and say why.
   let pinned: number | null = null;
@@ -365,6 +419,23 @@ export async function readDocument(
     DOCUMENT_BUDGET_CHARS,
     inst.maximumResponseCharacters,
   );
+  // A validated token is not enough: the pinned generation must still be
+  // SERVABLE. After a rollback the withdrawn generation is neither the
+  // active nor the rollback pointer, yet its rows linger and its tokens
+  // stay valid for the TTL — honoring the pin would serve content an
+  // operator explicitly withdrew, citing it (review finding, 2026-08-19:
+  // a hole in "the generation is the authorization"). A normally-superseded
+  // generation IS the rollback pointer, so search→read consistency across a
+  // forward flip is preserved.
+  if (pinned !== null) {
+    const servable = await runRead(ctx.pool, inst.tenantId, (client) =>
+      servableGenerations(client, inst.corpusId),
+    );
+    if (!servable.includes(pinned)) {
+      refreshed = "refreshed (withdrawn)";
+      pinned = null;
+    }
+  }
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
 
   const { node, chunks } = await runRead(ctx.pool, inst.tenantId, async (client) => {

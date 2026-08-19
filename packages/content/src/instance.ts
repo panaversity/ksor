@@ -32,6 +32,15 @@ export class InstanceParseError extends Error {
   }
 }
 
+function unknownKey(key: string): never {
+  throw new InstanceParseError(
+    `instance.md declares an unknown top-level key: ${key}`,
+    "the instance key set is closed so a key never means two things — a misspelled retrieval: " +
+      "or a stray value line would otherwise turn the abstention gate off silently",
+    "fix the spelling, nest it under the block it belongs to, or remove it",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The restricted frontmatter grammar (the checker's, exactly): BOM strip,
 // CRLF normalize, lax close (a ---- line closes).
@@ -118,9 +127,21 @@ export function parseFrontmatter(text: string): Frontmatter {
 
 const KERNEL_GROUPS = ["database", "embedding", "retrieval", "budgets"] as const;
 
+// A floor is a NUMBER (calibrated gate), `null`/absent (no gate — honest
+// absence, "will not refuse out-of-corpus questions"), or the literal
+// `uncalibrated` — DECLARED intent to gate that has not been measured yet,
+// which REFUSES every serve until a floor is pasted (the fail-closed
+// invariant, now representable — review, 2026-08-19).
 const floorSchema = z
-  .union([z.literal("null"), z.literal(""), z.string().regex(/^-?\d+(\.\d+)?$/)])
-  .transform((raw) => (raw === "null" || raw === "" ? null : Number(raw)));
+  .union([
+    z.literal("null"),
+    z.literal(""),
+    z.literal("uncalibrated"),
+    z.string().regex(/^-?\d+(\.\d+)?$/),
+  ])
+  .transform((raw): number | null | "uncalibrated" =>
+    raw === "uncalibrated" ? "uncalibrated" : raw === "null" || raw === "" ? null : Number(raw),
+  );
 
 const groupSchemas = {
   database: z.object({
@@ -136,7 +157,12 @@ const groupSchemas = {
   }),
   retrieval: z.object({
     vector_floor: floorSchema.default(null),
-    keyword_floor: floorSchema.default(null),
+    // The keyword floor is a degraded-path number or null only — the
+    // uncalibrated-refuses state is a property of the VECTOR gate.
+    keyword_floor: z
+      .union([z.literal("null"), z.literal(""), z.string().regex(/^-?\d+(\.\d+)?$/)])
+      .transform((raw): number | null => (raw === "null" || raw === "" ? null : Number(raw)))
+      .default(null),
   }),
   budgets: z.object({
     maximum_response_characters: z.coerce.number().int().min(1).default(120_000),
@@ -192,8 +218,40 @@ function bindGroup<K extends (typeof KERNEL_GROUPS)[number]>(
  * optional as a SET — but `database:` is required to serve, and the caller
  * that needs a database refuses without it.
  */
+/**
+ * The kernel's closed top-level key set. A key outside it is REFUSED, never
+ * ignored — because a misspelled `retreival:` (or a `vector_floor:` line
+ * pasted at column 0) that parsed to "no retrieval block" would silently
+ * turn the abstention gate OFF and the corpus would answer out-of-corpus
+ * questions forever, its only signal a /health line nobody reads (review
+ * finding, 2026-08-19). `site`/`audiences`/`default_visibility` are the
+ * scaffold-and-site keys the kernel does not consume but must tolerate;
+ * the format checker owns their grammar.
+ */
+const KERNEL_TOP_LEVEL_KEYS = new Set([
+  "format",
+  "name",
+  "ksor",
+  "database",
+  "embedding",
+  "retrieval",
+  "budgets",
+  "site",
+  "audiences",
+  "default_visibility",
+]);
+
 export function parseInstanceText(text: string): ContentInstance {
   const fm = parseFrontmatter(text);
+  for (const key of fm.scalars.keys()) {
+    if (!KERNEL_TOP_LEVEL_KEYS.has(key)) unknownKey(key);
+  }
+  for (const key of fm.maps.keys()) {
+    if (!KERNEL_TOP_LEVEL_KEYS.has(key)) unknownKey(key);
+  }
+  for (const key of fm.lists.keys()) {
+    if (!KERNEL_TOP_LEVEL_KEYS.has(key)) unknownKey(key);
+  }
   const format = fm.scalars.get("format");
   if (format === undefined || !SUPPORTED_FORMATS.includes(Number(format))) {
     throw new InstanceParseError(
@@ -211,6 +269,17 @@ export function parseInstanceText(text: string): ContentInstance {
     );
   }
   const database = bindGroup(fm, "database");
+  if (database !== null && database.tenant_id !== undefined && database.tenant_id !== name) {
+    // ksor is one corpus per instance, and generation content is scoped by
+    // TENANT only (chunks/sources/nodes carry no corpus_id). Two corpora
+    // sharing a tenant would let GC on one delete the other's live rows
+    // (review finding, 2026-08-19). Forcing tenant == name keeps them 1:1.
+    throw new InstanceParseError(
+      `database.tenant_id (${JSON.stringify(database.tenant_id)}) must equal the instance name (${JSON.stringify(name)})`,
+      "the kernel scopes a corpus by its tenant; a tenant shared across corpora makes GC delete the wrong rows",
+      "remove database.tenant_id (it defaults to the name), or set it equal to the name",
+    );
+  }
   if (database === null) {
     throw new InstanceParseError(
       "instance.md declares no database: block",
@@ -224,7 +293,7 @@ export function parseInstanceText(text: string): ContentInstance {
   return {
     name,
     corpusId: name,
-    tenantId: database.tenant_id ?? name,
+    tenantId: name, // 1:1 with the corpus — see the tenant_id guard above
     dsnEnv: database.dsn_env,
     abstain: { vectorFloor: retrieval.vector_floor, keywordFloor: retrieval.keyword_floor },
     maximumResponseCharacters: budgets.maximum_response_characters,

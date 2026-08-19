@@ -26,7 +26,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   "@panaversity/ksor-platform": [],
   "@panaversity/ksor-content": ["@panaversity/ksor-platform"],
   "@panaversity/ksor-gateway-kit": [],
-  "@panaversity/ksor-gateway": [
+  "@panaversity/ksor-content-gateway": [
     "@panaversity/ksor-content",
     "@panaversity/ksor-gateway-kit",
     "@panaversity/ksor-platform",

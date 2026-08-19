@@ -305,19 +305,23 @@ export async function flipDelta(
   const raw: unknown = pointer.rows[0]?.active_generation ?? null;
   const prior = raw === null ? 0 : Number(raw);
 
-  const slugsOf = async (generation: number): Promise<ReadonlySet<string>> => {
+  // stable_id, NOT slug: the shrink guard counts NODES, and slugs are unique
+  // only per parent (every section's overview.md shares the slug "overview"),
+  // so a slug count collapses them and hides real node loss (review finding
+  // #7, 2026-08-19). stable_id is the durable per-corpus node identity.
+  const nodesOf = async (generation: number): Promise<ReadonlySet<string>> => {
     if (generation < 1) return new Set();
     const res = await client.query(
-      "SELECT slug FROM content_nodes WHERE tenant_id = $1 AND generation = $2",
+      "SELECT stable_id FROM content_nodes WHERE tenant_id = $1 AND generation = $2",
       [opts.tenantId, generation],
     );
-    return new Set(res.rows.map((r): string => String(r.slug)));
+    return new Set(res.rows.map((r): string => String(r.stable_id)));
   };
 
   return {
     priorGeneration: prior,
-    priorSlugs: await slugsOf(prior),
-    newSlugs: await slugsOf(opts.newGeneration),
+    priorSlugs: await nodesOf(prior),
+    newSlugs: await nodesOf(opts.newGeneration),
   };
 }
 

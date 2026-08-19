@@ -22,9 +22,9 @@ export type Gucs = Readonly<Record<string, string>>;
  * a thundering herd aimed at the component already drowning.
  */
 export class PoolTimeoutError extends Error {
-  constructor(timeoutS: number) {
+  constructor(detail = "the configured checkout bound") {
     super(
-      `pool checkout exceeded ${timeoutS}s — the pool is saturated; ` +
+      `pool checkout timed out (${detail}) — the pool is saturated; ` +
         "shedding this request is the recovery path, retrying it is not",
     );
     this.name = "PoolTimeoutError";
@@ -100,6 +100,11 @@ export function pooledEndpointFor(dsn: string): boolean {
 export interface DomainPoolOptions {
   readonly maxSize: number;
   readonly minSize: number;
+  /** Native checkout+connect bound (ms). Default 10s — never 0 (unbounded). */
+  readonly connectionTimeoutMs?: number;
+  /** Recycle a connection after this many seconds so stale sockets behind a
+   *  transaction pooler don't accumulate. Default 900s; 0 disables. */
+  readonly maxLifetimeSeconds?: number;
 }
 
 /**
@@ -110,36 +115,45 @@ export interface DomainPoolOptions {
  * setting, recorded as a divergence).
  */
 export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
+  // The SAFE default is bounded, not unbounded (review, 2026-08-19: a live
+  // black-holed endpoint hung runRead forever with connectionTimeoutMillis:0
+  // — the safe behaviour must be the default, not something each call site
+  // remembers to pass). pg's connectionTimeoutMillis bounds BOTH the connect
+  // handshake AND the wait for a checkout from a full pool (pg-pool only
+  // arms the pending-queue timer when this is non-zero), and it removes the
+  // waiter from the queue instead of the hand-rolled "let the late winner
+  // complete and bounce" — so we use the native mechanism, not a Promise.race.
   return new pg.Pool({
     connectionString: dsn,
     max: options.maxSize,
     min: Math.min(options.minSize, options.maxSize),
     keepAlive: true,
     keepAliveInitialDelayMillis: 30_000,
-    // Checkout timeouts are enforced per-path by scopedTxn (the oracle's
-    // per-runner checkout budgets), not globally here.
-    connectionTimeoutMillis: 0,
+    connectionTimeoutMillis: options.connectionTimeoutMs ?? 10_000,
+    maxLifetimeSeconds: options.maxLifetimeSeconds ?? 900,
   });
 }
 
-async function acquire(pool: pg.Pool, checkoutTimeoutS: number | null): Promise<pg.PoolClient> {
-  if (checkoutTimeoutS === null) return pool.connect();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new PoolTimeoutError(checkoutTimeoutS)),
-      checkoutTimeoutS * 1000,
-    );
-  });
-  const checkout = pool.connect();
+/** pg's checkout/connect timeout messages; mapped to our shedding error.
+ * pg 8 uses both phrasings — the pending-queue timeout and the connect
+ * timeout — so match both (found live in the saturation test, 2026-08-19). */
+function isPgTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /timeout exceeded when trying to connect|connection terminated due to connection timeout/i.test(
+      error.message,
+    )
+  );
+}
+
+async function acquire(pool: pg.Pool): Promise<pg.PoolClient> {
   try {
-    return await Promise.race([checkout, timeout]);
+    return await pool.connect();
   } catch (error) {
-    // A late checkout must go back to the pool, not leak.
-    void checkout.then((client) => client.release()).catch(() => undefined);
+    // A native checkout/connect timeout is a saturation SHED — surface it as
+    // the never-retried PoolTimeoutError so the classification holds.
+    if (isPgTimeout(error)) throw new PoolTimeoutError();
     throw error;
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -151,9 +165,8 @@ export async function scopedTxn<T>(
   pool: pg.Pool,
   gucs: Gucs,
   op: (client: pg.PoolClient) => Promise<T>,
-  checkoutTimeoutS: number | null = null,
 ): Promise<T> {
-  const client = await acquire(pool, checkoutTimeoutS);
+  const client = await acquire(pool);
   try {
     await client.query("BEGIN");
     const entries = Object.entries({ search_path: "public", ...gucs });
@@ -179,7 +192,10 @@ export interface RetryOptions {
   readonly retry?: boolean;
   readonly attempts?: number;
   readonly backoffS?: number;
-  readonly checkoutTimeoutS?: number | null;
+  /** A hard per-request deadline (ms): retries stop once elapsed, so a
+   *  connection dropping mid-statement can't stack N × the statement timeout
+   *  (review, 2026-08-19). Omit for no cap. */
+  readonly deadlineMs?: number;
 }
 
 const sleep = (s: number): Promise<void> => new Promise((r) => setTimeout(r, s * 1000));
@@ -198,14 +214,22 @@ export async function runScopedIn<T>(
   const retry = options.retry ?? true;
   const attempts = retry ? (options.attempts ?? DB_RETRIES) : 1;
   const backoffS = options.backoffS ?? DB_BACKOFF_S;
-  const checkoutTimeoutS = options.checkoutTimeoutS ?? null;
+  const deadline = options.deadlineMs === undefined ? null : Date.now() + options.deadlineMs;
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await scopedTxn(pool, gucs, op, checkoutTimeoutS);
+      return await scopedTxn(pool, gucs, op);
     } catch (error) {
       lastError = error;
-      if (neverRetry(error) || !isOperationalError(error) || attempt === attempts - 1) throw error;
+      const pastDeadline = deadline !== null && Date.now() >= deadline;
+      if (
+        neverRetry(error) ||
+        !isOperationalError(error) ||
+        attempt === attempts - 1 ||
+        pastDeadline
+      ) {
+        throw error;
+      }
       await sleep(backoffS * (attempt + 1));
     }
   }

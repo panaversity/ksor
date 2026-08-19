@@ -123,11 +123,18 @@ describe("sections and indexes", () => {
     expect(() => build(root)).toThrow(/ambiguous section index/);
   });
 
-  it("a file and an index-less dir of the same name coexist via #section", () => {
+  it("a file and a dir of the same name are refused as a sibling slug collision, named", () => {
+    // docs/foo.md and docs/foo/ both want the URL segment 'foo' under docs —
+    // the DB's nodes_sibling_uniq would reject them with an opaque error; the
+    // manifest refuses first, naming both (review finding #13, 2026-08-19).
+    // The canonical "section with an intro" is docs/foo/index.md, not this.
     const root = dir("docs", file("foo.md"), dir("foo", file("child.md")));
-    const sids = build(root).manifest.nodes.map((n) => n.stable_id);
-    expect(sids, "stable_ids: " + JSON.stringify(sids)).toContain("docs/foo");
-    expect(sids).toContain("docs/foo#section");
+    expect(() => build(root)).toThrowError(/sibling slug collision.*foo/s);
+  });
+
+  it("two files that slugify to the same name are refused, named", () => {
+    const root = dir("docs", file("Getting Started.md"), file("getting-started.md"));
+    expect(() => build(root)).toThrowError(/sibling slug collision/);
   });
 
   it("an index-less section humanizes its dir name for the title", () => {

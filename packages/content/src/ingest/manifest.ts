@@ -221,6 +221,30 @@ function validate(nodes: readonly ManifestNode[], files: readonly ManifestFile[]
     if (paths.has(f.path)) throw new ManifestError("duplicate file paths in manifest");
     paths.add(f.path);
   }
+  // Sibling slug collisions BEFORE ingest, named — the DB enforces
+  // nodes_root_slug_uniq (per parent, root included), and left to fire there
+  // it aborts buildStructure with an opaque driver error naming no file
+  // (review finding #13, 2026-08-19). A slug is a node's URL segment among
+  // its siblings; two siblings cannot share one.
+  const siblingSlugs = new Map<string, Map<string, string[]>>();
+  for (const n of nodes) {
+    const parent = n.parent ?? "";
+    const bySlug = siblingSlugs.get(parent) ?? new Map<string, string[]>();
+    const owners = bySlug.get(n.slug) ?? [];
+    owners.push(n.stable_id);
+    bySlug.set(n.slug, owners);
+    siblingSlugs.set(parent, bySlug);
+  }
+  for (const bySlug of siblingSlugs.values()) {
+    for (const [slug, owners] of bySlug) {
+      if (owners.length > 1) {
+        throw new ManifestError(
+          `sibling slug collision: ${owners.map((o) => `'${o}'`).join(", ")} all slug to '${slug}' ` +
+            "under the same parent — rename one (a slug is a node's URL segment and must be unique among siblings)",
+        );
+      }
+    }
+  }
 }
 
 /** Parents before children (insert order for the FK); a cycle fails loudly. */

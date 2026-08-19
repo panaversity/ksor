@@ -9,8 +9,13 @@
  */
 
 export interface AbstainConfig {
-  /** null = uncalibrated → gate OFF and surfaced loudly on /health. */
-  readonly vectorFloor: number | null;
+  /**
+   * A calibrated number gates (abstain below it); `null` = no gate declared,
+   * honest absence surfaced on /health; `"uncalibrated"` = a floor was
+   * DECLARED but not measured, which REFUSES every serve until it is pasted
+   * (the "fail closed once a floor is declared" invariant, representable).
+   */
+  readonly vectorFloor: number | null | "uncalibrated";
   /**
    * Degraded-path ts_rank_cd floor; null = abstain only on zero matches.
    * Recorded negative result (oracle, measured on 416 in-corpus gold + 38
@@ -30,6 +35,7 @@ export interface AbstainConfig {
  */
 export function vectorAbstains(topCosine: number | null, config: AbstainConfig): boolean {
   if (config.vectorFloor === null) return false;
+  if (config.vectorFloor === "uncalibrated") return true; // defensive; search refuses first
   return topCosine === null || topCosine < config.vectorFloor;
 }
 

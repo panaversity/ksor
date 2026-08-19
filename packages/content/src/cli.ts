@@ -159,7 +159,7 @@ async function schemaCommand(args: string[]): Promise<number> {
   let dim: number;
   let instance: ContentInstance | null = null;
   if (values.dim !== undefined) {
-    dim = Number(values.dim);
+    dim = intFlag("--dim", values.dim);
     if (!Number.isInteger(dim) || dim < 1) {
       return fail(
         REFUSED,
@@ -271,8 +271,19 @@ async function ingestCommand(args: string[]): Promise<number> {
 
 function parseGeneration(raw: string | undefined): number | null {
   if (raw === undefined) return null;
-  if (!/^\d+$/.test(raw)) {
-    throw new Error(`--generation must be a generation number, got ${JSON.stringify(raw)}`);
+  return intFlag("--generation", raw);
+}
+
+/** A flag that must be a non-negative integer — a typo is a REFUSAL (exit 1),
+ * not a raw NaN threaded downstream into an opaque "database down" (review
+ * finding, 2026-08-19). */
+function intFlag(name: string, raw: string | undefined): number {
+  if (raw === undefined || !/^\d+$/.test(raw)) {
+    throw new InstanceParseError(
+      `${name} must be a non-negative integer, got ${JSON.stringify(raw ?? null)}`,
+      "a numeric flag typo must fail as a refusal, not surface as a spurious environment error",
+      `pass ${name} <n>`,
+    );
   }
   return Number(raw);
 }
@@ -326,8 +337,10 @@ async function calibrateCommand(args: string[]): Promise<number> {
       queries,
       textGenerator,
       oocProbes: ooc,
-      perNode: values["per-node"] === undefined ? undefined : Number(values["per-node"]),
-      minChars: values["min-chars"] === undefined ? undefined : Number(values["min-chars"]),
+      perNode:
+        values["per-node"] === undefined ? undefined : intFlag("--per-node", values["per-node"]),
+      minChars:
+        values["min-chars"] === undefined ? undefined : intFlag("--min-chars", values["min-chars"]),
     }),
   );
   process.stdout.write(renderReport(report) + "\n");

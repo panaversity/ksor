@@ -136,37 +136,60 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
-// Rule 5 — no workspace package declares a runtime dependency that is not
-// listed here with a decision reference. Keeping the runtime thin is a product
-// guarantee (see AGENTS.md coding principle 3). Extended from packages/ksor to
-// every package when the kernel packages arrived (decision 12).
+// Rule 5 — no workspace package declares a runtime dependency outside its
+// OWN allowlist. Keeping the runtime thin is a product guarantee (AGENTS.md
+// coding principle 3), and it is PER PACKAGE: `@panaversity/ksor` (the
+// published CLI) must stay at ZERO runtime deps, and a shared allowlist
+// would silently retire that (review finding, 2026-08-19 — adding zod to the
+// CLI would have passed). Each package is enrolled explicitly; an
+// unenrolled package with any runtime dep is a violation, and enrolment is a
+// decision with a name on it (decision 12).
 {
-  const allowedRuntimeDeps = new Map([
-    // "package-name": "AGENTS.md Decisions #N — one-line reason",
-    ["pg", "Decisions #12 — the one Postgres driver; Drizzle rides on it"],
-    ["drizzle-orm", "Decisions #12 — typed SQL over pg; schema.sql stays the DDL source of truth"],
-    ["zod", "Decisions #12 — the one validation schema source (primitives proposal §2)"],
-    ["@google/genai", "Decisions #12 — the default embedding provider behind the seam"],
-    ["jose", "Decisions #12 — JWT/JWKS verification for the gateway kit's public door"],
+  const P = "@panaversity/";
+  const perPackageRuntimeDeps = new Map([
+    // The published front door: ZERO runtime deps, the guarantee decision 1/12
+    // rests on. Never add to this set without reversing that decision.
+    [`${P}ksor`, new Set()],
+    // The kernel packages (decision 12). drizzle-orm was dropped as unused —
+    // schema.sql is the DDL source of truth and queries are raw pg.
+    [`${P}ksor-platform`, new Set(["pg"])],
+    [`${P}ksor-content`, new Set(["pg", "zod", "@google/genai", `${P}ksor-platform`])],
+    [`${P}ksor-gateway-kit`, new Set(["zod", "jose"])],
     [
-      "@modelcontextprotocol/sdk",
-      "Decisions #12 — the MCP surface IS the product's second surface",
+      `${P}ksor-content-gateway`,
+      new Set([
+        "@modelcontextprotocol/sdk",
+        "zod",
+        "pg",
+        `${P}ksor-content`,
+        `${P}ksor-gateway-kit`,
+        `${P}ksor-platform`,
+      ]),
     ],
-    ["@panaversity/ksor-platform", "workspace"],
-    ["@panaversity/ksor-content", "workspace"],
-    ["@panaversity/ksor-gateway-kit", "workspace"],
   ]);
   for (const dir of readdirSync(path.join(repoRoot, "packages"))) {
     const manifest = path.join(repoRoot, "packages", dir, "package.json");
     if (!existsSync(manifest)) continue;
     const pkg = JSON.parse(readFileSync(manifest, "utf8"));
-    for (const dep of Object.keys(pkg.dependencies ?? {})) {
-      if (!allowedRuntimeDeps.has(dep)) {
+    const allowed = perPackageRuntimeDeps.get(pkg.name);
+    if (allowed === undefined) {
+      if (Object.keys(pkg.dependencies ?? {}).length > 0) {
         violate(
           5,
-          `packages/${dir} depends on "${dep}" at runtime without a recorded decision`,
+          `packages/${dir} (${pkg.name}) is not enrolled in rule 5's per-package allowlist`,
+          "every package's runtime dependency set is a named decision — a new package with deps must enrol",
+          `add "${pkg.name}" to perPackageRuntimeDeps in this guard with its allowed dep set`,
+        );
+      }
+      continue;
+    }
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      if (!allowed.has(dep)) {
+        violate(
+          5,
+          `${pkg.name} depends on "${dep}" at runtime, which its allowlist does not permit`,
           "every runtime dependency ships to every adopter; each one needs an ADR-level reason",
-          `record the decision in AGENTS.md → Decisions, then add "${dep}" to allowedRuntimeDeps in this guard with that reference`,
+          `record the decision in AGENTS.md → Decisions, then add "${dep}" to ${pkg.name}'s set in this guard`,
         );
       }
     }

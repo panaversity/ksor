@@ -119,11 +119,27 @@ function rejectDegenerate(vecs: readonly (readonly number[])[]): void {
 }
 
 /** The pgvector-cosine contract, applied to whatever the transport returned. */
-function contract(texts: readonly string[], raw: readonly (readonly number[])[]): number[][] {
-  const vecs = raw.map((v) => l2Normalize([...v]));
-  if (vecs.length !== texts.length) {
-    throw new Error(`embedding count mismatch: sent ${texts.length}, got ${vecs.length}`);
+function contract(
+  texts: readonly string[],
+  raw: readonly (readonly number[])[],
+  dim: number,
+): number[][] {
+  if (raw.length !== texts.length) {
+    throw new Error(`embedding count mismatch: sent ${texts.length}, got ${raw.length}`);
   }
+  // Dimension is part of the contract: a provider that ignores
+  // outputDimensionality returns wrong-width vectors that would otherwise
+  // surface as a pgvector error deep in a query (a 500 the search degrade
+  // never catches) or, on ingest, only after the whole batch is paid for
+  // (review finding #9, 2026-08-19). Reject at the boundary, before the DB.
+  for (const v of raw) {
+    if (v.length !== dim) {
+      throw new Error(
+        `embedding dimension mismatch: the declared space is d${dim}, the provider returned d${v.length}`,
+      );
+    }
+  }
+  const vecs = raw.map((v) => l2Normalize([...v]));
   rejectDegenerate(vecs);
   return vecs;
 }
@@ -198,7 +214,7 @@ export async function embedIntent(
     () => provider.reset(),
     () => provider.embed(texts, { intent }),
   );
-  return contract(texts, raw);
+  return contract(texts, raw, provider.dim);
 }
 
 /**
@@ -219,7 +235,7 @@ export async function aembedIntent(
     () => provider.reset(),
     () => provider.embed(texts, { intent }),
   );
-  return contract(texts, raw);
+  return contract(texts, raw, provider.dim);
 }
 
 /**

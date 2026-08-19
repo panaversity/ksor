@@ -67,22 +67,24 @@ function groups(chunks: readonly DocumentChunk[], levels: number): DocumentChunk
 
 function startIndex(chunks: readonly DocumentChunk[], fromHeading: string | null): number {
   if (fromHeading === null || fromHeading === "") return 0;
-  // An ORDINAL-precise cursor (`heading#ordinal`) is emitted when a window
-  // split a heading mid-way, so pagination resumes at the NEXT unserved
-  // chunk, not the heading's first chunk (oracle review #3 loop). Slugs are
-  // kebab-case and never contain '#', so it is an unambiguous delimiter.
+  // The continuation cursor is `heading#<index>`, where <index> is the
+  // POSITION in this scoped chunk list — NOT an ordinal (unique per source,
+  // so two sources under one node collide) and NOT a bare heading (which can
+  // repeat and ping-pong the pager) (review findings #4/#11, 2026-08-19).
+  // Slugs are kebab-case and never contain '#', so it is an unambiguous
+  // delimiter.
   if (fromHeading.includes("#")) {
     const tail = fromHeading.slice(fromHeading.lastIndexOf("#") + 1);
-    if (/^\s*[+-]?\d+\s*$/.test(tail)) {
-      const ordinal = Number.parseInt(tail.trim(), 10);
-      const i = chunks.findIndex((c) => c.ordinal === ordinal);
-      if (i !== -1) return i;
+    if (/^\d+$/.test(tail)) {
+      const index = Number.parseInt(tail, 10);
+      if (index >= 0 && index < chunks.length) return index;
       throw new Error(
-        `from_heading cursor ${JSON.stringify(fromHeading)} matches no chunk in this scope`,
+        `from_heading cursor ${JSON.stringify(fromHeading)} is outside this document's chunk range`,
       );
     }
     // a heading that somehow contains '#' — fall through to the heading match
   }
+  // A bare heading (a hand-written jump, not one of our cursors): first match.
   const i = chunks.findIndex(
     (c) => c.headingPath === fromHeading || c.headingPath.startsWith(fromHeading + "/"),
   );
@@ -97,7 +99,8 @@ export function windowDocument(
   fromHeading: string | null = null,
 ): Window {
   if (chunks.length === 0) throw new Error("cannot window an empty document");
-  const tail = chunks.slice(startIndex(chunks, fromHeading));
+  const start = startIndex(chunks, fromHeading);
+  const tail = chunks.slice(start);
 
   const selected: DocumentChunk[] = [];
   let spent = 0;
@@ -133,7 +136,11 @@ export function windowDocument(
   if (last === undefined || first === undefined) {
     throw new Error("packer must always emit at least one chunk");
   }
-  const after = chunks.filter((c) => c.ordinal > last.ordinal);
+  // By POSITION, not `c.ordinal > last.ordinal` — ordinal is unique per
+  // source, so an ordinal filter across a multi-source node orphans the
+  // lower-ordinal chunks of every OTHER source (review finding #4).
+  const nextIndex = start + selected.length;
+  const after = chunks.slice(nextIndex);
   const remaining: string[] = [];
   for (const c of after) {
     const t = top(c.headingPath);
@@ -144,14 +151,17 @@ export function windowDocument(
   let nextHeading: string | null = null;
   const nxt = after[0];
   if (nxt !== undefined) {
-    // If the window ended MID-heading (the next chunk shares the last served
-    // chunk's heading), a bare heading cursor would rewind to that heading's
-    // FIRST chunk and loop forever — emit an ordinal-precise cursor so the
-    // follow-up resumes at the next unserved chunk (oracle review #3).
-    nextHeading =
-      nxt.headingPath === last.headingPath
-        ? `${nxt.headingPath}#${nxt.ordinal}`
-        : nxt.headingPath || null;
+    // A bare heading cursor is emitted ONLY when it unambiguously resolves to
+    // this exact position — i.e. the first chunk matching that heading IS the
+    // next chunk. Otherwise (the window split a heading mid-way, or the
+    // heading repeats earlier — review findings #4/#11) the position index is
+    // appended so the follow-up resumes exactly here and never ping-pongs.
+    const bareResolves =
+      nxt.headingPath !== "" &&
+      chunks.findIndex(
+        (c) => c.headingPath === nxt.headingPath || c.headingPath.startsWith(nxt.headingPath + "/"),
+      ) === nextIndex;
+    nextHeading = bareResolves ? nxt.headingPath : `${nxt.headingPath}#${nextIndex}`;
   }
   return {
     chunks: selected,

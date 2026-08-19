@@ -33,8 +33,13 @@ export const INGEST_ROLE = "sor_content_ingest";
 export const READ_STATEMENT_TIMEOUT_MS = 15_000;
 export const AUDIT_STATEMENT_TIMEOUT_MS = 5_000;
 export const PROBE_STATEMENT_TIMEOUT_MS = 5_000;
-export const PROBE_CHECKOUT_TIMEOUT_S = 5.0;
-export const AUDIT_CHECKOUT_TIMEOUT_S = 1.0;
+/**
+ * A hard per-request deadline on the read path: with the pool's native
+ * checkout bound handling saturation, this caps the total time across
+ * operational retries so a connection dropping mid-statement can't stack
+ * attempts × the statement timeout (review, 2026-08-19).
+ */
+export const READ_DEADLINE_MS = 30_000;
 
 /**
  * Neon serverless autosuspends; the first read after a wake fails at the
@@ -108,7 +113,15 @@ export async function runRead<T>(
       pool,
       { ...gucsFor(tenantId, RUNTIME_ROLE, READ_STATEMENT_TIMEOUT_MS), ...extraGucs },
       op,
-      { retry: true, attempts: READ_RETRY_ATTEMPTS(), backoffS: READ_RETRY_BACKOFF_S() },
+      {
+        retry: true,
+        attempts: READ_RETRY_ATTEMPTS(),
+        backoffS: READ_RETRY_BACKOFF_S(),
+        // A hard per-request deadline so a connection dropping mid-statement
+        // cannot stack attempts × the 15s statement timeout (review,
+        // 2026-08-19). The pool's native checkout bound handles saturation.
+        deadlineMs: READ_DEADLINE_MS,
+      },
     );
   } catch (error) {
     sanitized(error);
@@ -119,7 +132,6 @@ export async function runRead<T>(
 export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
   return runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, PROBE_STATEMENT_TIMEOUT_MS), op, {
     retry: true,
-    checkoutTimeoutS: PROBE_CHECKOUT_TIMEOUT_S,
   });
 }
 
@@ -130,7 +142,6 @@ export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>):
 export async function runAudit<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
   return runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, AUDIT_STATEMENT_TIMEOUT_MS), op, {
     retry: false,
-    checkoutTimeoutS: AUDIT_CHECKOUT_TIMEOUT_S,
   });
 }
 

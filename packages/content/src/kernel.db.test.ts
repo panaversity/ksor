@@ -254,14 +254,30 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       expect("snapshot" in abstainedResult, "snapshot key is UNIFORM on abstention").toBe(true);
     }
 
-    const degraded: ServiceContext = {
-      ...ctx,
-      embedQuery: async () => {
-        throw new Error("provider down");
-      },
+    // Embed outage WITH a declared floor: the gate cannot be evaluated, so
+    // the only honest answer is to ABSTAIN — serving ungated keyword results
+    // would answer out-of-corpus questions during the outage (review finding
+    // #5, 2026-08-19; ts_rank_cd does not separate in- from out-of-corpus).
+    const down = async (): Promise<never> => {
+      throw new Error("provider down");
     };
-    const kwServed = await search(degraded, "onboarding checklist", 5);
-    expect(kwServed.ok, "embed outage degrades to keyword-only, never a 500").toBe(true);
+    const degraded: ServiceContext = { ...ctx, embedQuery: down };
+    const outage = await search(degraded, "onboarding checklist", 5);
+    expect(outage.ok, "declared floor + embed outage must fail closed").toBe(false);
+    if (!outage.ok) {
+      expect(outage.reason).toBe("abstained");
+      expect(outage.degraded_reason).toBe("embed_unavailable_keyword_only");
+    }
+
+    // Embed outage with NO declared floor (gate already off): the keyword
+    // degrade serves exactly what an uncalibrated corpus always serves.
+    const uncalibrated: ServiceContext = {
+      ...ctx,
+      instance: { ...instance, abstain: { vectorFloor: null, keywordFloor: null } },
+      embedQuery: down,
+    };
+    const kwServed = await search(uncalibrated, "onboarding checklist", 5);
+    expect(kwServed.ok, "uncalibrated + embed outage serves keyword-only").toBe(true);
     if (kwServed.ok) {
       expect(kwServed.degraded_reason).toBe("embed_unavailable_keyword_only");
       expect(kwServed.hits[0]?.slug).toBe("yak");

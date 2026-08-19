@@ -1,12 +1,12 @@
 {
-  "name": "@panaversity/ksor-gateway",
+  "name": "@panaversity/ksor-content-gateway",
   "version": "0.0.0",
   "private": true,
-  "description": "The KSoR MCP gateway: search, outline, read over a governed record — stdio and stateless Streamable HTTP.",
+  "description": "The KSoR content gateway: the MCP door (search, outline, read) over a governed corpus — stateless Streamable HTTP. One gateway per record; this one serves content.",
   "license": "Apache-2.0",
   "author": "Panaversity",
   "bin": {
-    "ksor-gateway": "./dist/cli.mjs"
+    "ksor-content-gateway": "./dist/cli.mjs"
   },
   "type": "module",
   "sideEffects": false,

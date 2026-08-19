@@ -84,7 +84,14 @@ function bearerToken(req: IncomingMessage): string | null {
   return match?.[1] ?? null;
 }
 
+/** Shed at the door: a bounded number of concurrent /mcp requests, so
+ * backpressure is a fast honest 503 + Retry-After rather than an invisible
+ * pool queue (review, 2026-08-19). Sized above the DB pool so the pool, not
+ * this, is the real limit; this only stops unbounded pile-up. */
+const MAX_INFLIGHT: number = Number(process.env["KSOR_MAX_INFLIGHT"] ?? "64");
+
 export async function runHttp(composition: Composition): Promise<void> {
+  let inflight = 0;
   const auth: Auth = buildAuth(process.env);
   const bind = resolveBind(process.env);
   // The SDK does NOT arm rebinding protection on its own (verified in
@@ -93,7 +100,26 @@ export async function runHttp(composition: Composition): Promise<void> {
   // model (DNS rebinding reaches localhost), so unset env defaults to
   // protection pinned to the bind; an explicit KSOR_ALLOWED_HOSTS/ORIGINS
   // declaration always wins, and a non-loopback bind is bearer-gated.
-  const security = transportSecurityFromEnv(process.env) ?? loopbackSecurity(bind);
+  // Merge, never choose-one: an explicit KSOR_ALLOWED_ORIGINS with no
+  // KSOR_ALLOWED_HOSTS returned a config with allowedHosts:[], and the SDK
+  // SKIPS Host validation when that array is empty — re-opening exactly the
+  // DNS-rebinding hole the loopback default closes (review finding,
+  // 2026-08-19). So on a loopback bind we always ensure allowedHosts is
+  // populated, folding any explicit origins on top.
+  const explicit = transportSecurityFromEnv(process.env);
+  const loopback = loopbackSecurity(bind);
+  let security: {
+    enableDnsRebindingProtection: true;
+    allowedHosts: string[];
+    allowedOrigins?: string[];
+  } | null;
+  if (explicit === null) {
+    security = loopback;
+  } else if (loopback !== null && explicit.allowedHosts.length === 0) {
+    security = { ...explicit, allowedHosts: loopback.allowedHosts };
+  } else {
+    security = explicit;
+  }
   const { ctx, instance, pool, spaceSkipReason } = composition;
 
   const handleMcp = async (
@@ -142,8 +168,10 @@ export async function runHttp(composition: Composition): Promise<void> {
         corpus_id: instance.corpusId,
         abstain_gate:
           instance.abstain.vectorFloor === null
-            ? "OFF (uncalibrated — will not refuse out-of-corpus questions)"
-            : `floor ${instance.abstain.vectorFloor}`,
+            ? "OFF (no floor declared — will not refuse out-of-corpus questions)"
+            : instance.abstain.vectorFloor === "uncalibrated"
+              ? "REFUSING (declared but uncalibrated — run calibrate and paste the floor)"
+              : `floor ${instance.abstain.vectorFloor}`,
         embedding_space:
           spaceSkipReason === null
             ? `${instance.embeddingModel}/d${instance.embeddingDim} ok`
@@ -167,6 +195,15 @@ export async function runHttp(composition: Composition): Promise<void> {
       sendJson(res, 404, { error: "unknown path", paths: ["/mcp", "/live", "/ready", "/health"] });
       return;
     }
+    if (inflight >= MAX_INFLIGHT) {
+      res.writeHead(503, { "content-type": "application/json", "retry-after": "1" });
+      res.end(JSON.stringify({ error: "server busy — retry shortly" }));
+      return;
+    }
+    inflight += 1;
+    res.on("close", () => {
+      inflight -= 1;
+    });
     if (auth.mode === "public") {
       const token = bearerToken(req);
       if (token === null) {
@@ -197,9 +234,21 @@ export async function runHttp(composition: Composition): Promise<void> {
     await handleMcp(req, res, preRead);
   };
 
-  await runServer(harden(app), bind);
+  await runServer(harden(app), bind, {
+    // Drain the pool on SIGTERM/SIGINT — a container stop that skipped
+    // teardown abandoned every checked-out connection (review finding,
+    // 2026-08-19; runServer already supported this, the gateway never asked).
+    signals: true,
+    onShutdown: () => pool.end(),
+  });
   console.error(
     `ksor gateway serving ${instance.corpusId} on http://${bind.host}:${bind.port}/mcp ` +
-      `(auth: ${auth.mode}, abstain gate: ${instance.abstain.vectorFloor === null ? "OFF (uncalibrated)" : `floor ${instance.abstain.vectorFloor}`})`,
+      `(auth: ${auth.mode}, abstain gate: ${
+        instance.abstain.vectorFloor === null
+          ? "OFF (no floor)"
+          : instance.abstain.vectorFloor === "uncalibrated"
+            ? "REFUSING (uncalibrated)"
+            : `floor ${instance.abstain.vectorFloor}`
+      })`,
   );
 }

@@ -134,7 +134,10 @@ walk AS (
 SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
-           AND ch.parent_id = w.node_id AND ch.status = 'published') AS child_count,
+           AND ch.parent_id = w.node_id AND ch.status = 'published'
+           AND NOT EXISTS (SELECT 1 FROM takedown_denylist d
+                            WHERE d.tenant_id = $1 AND d.corpus_id = $2
+                              AND d.stable_id = ch.stable_id)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
                   AND s.node_id = w.node_id) AS has_content,
@@ -293,44 +296,6 @@ export async function findDocument(
   }
   const candidates = await arrayQuery(client, { text: NODE_BY_SLUG_SQL, values: [...base, leaf] });
   return resolveDocumentNode(nodeRows(candidates), address);
-}
-
-export interface OutlineVersion {
-  readonly generation: number | null;
-  readonly denyHash: string;
-}
-
-/**
- * The outline cache's HIT version in ONE round-trip: (active_generation, a
- * hash of the denied stable_id SET for this corpus). The hash — not a bare
- * COUNT — makes the version order-sensitive: a count-preserving pair
- * (restore Y, then take down X) leaves the count unchanged and would let
- * the cached tree keep showing a taken-down node for the TTL (oracle
- * review #1, ABA). Any change to the denied SET changes the hash, so a
- * takedown is IMMEDIATE even under the count-preserving case; empty set →
- * ''. Each stable_id is md5'd to fixed-width hex BEFORE the join, so an
- * arbitrary stable_id (author text / filename) that happens to contain the
- * ',' delimiter can't make two different sets serialize alike.
- */
-export async function outlineVersion(
-  client: pg.PoolClient,
-  tenantId: string,
-  corpusId: string,
-): Promise<OutlineVersion> {
-  const result = await arrayQuery(client, {
-    text:
-      "SELECT (SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2)," +
-      " coalesce(md5(string_agg(md5(stable_id), ',' ORDER BY stable_id)), '')" +
-      " FROM takedown_denylist WHERE tenant_id = $1 AND corpus_id = $2",
-    values: [tenantId, corpusId],
-  });
-  const row = result.rows[0] ?? [];
-  const gen = row[0] ?? null;
-  const hash = row[1] ?? null;
-  return {
-    generation: gen === null ? null : toNumber(gen, "active_generation"),
-    denyHash: hash === null ? "" : String(hash),
-  };
 }
 
 export async function documentChunks(

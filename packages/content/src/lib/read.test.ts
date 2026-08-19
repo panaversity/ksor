@@ -370,7 +370,9 @@ describe("projection width contracts (the prod-crash class, made loud)", () => {
       expect(sql).toContain("COALESCE");
       expect(sql).toContain("active_generation");
     }
-    // the outline walk denies BOTH at the anchor seed and on the final rows
-    expect(OUTLINE_SQL.split("takedown_denylist").length - 1).toBe(2);
+    // the outline walk denies at the anchor seed, on the final rows, AND in
+    // the child_count subquery (a section must not advertise a denied child —
+    // review finding, 2026-08-19).
+    expect(OUTLINE_SQL.split("takedown_denylist").length - 1).toBe(3);
   });
 });

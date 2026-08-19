@@ -148,7 +148,13 @@ export async function buildStructure(
     // contentHash captures the change so only files that actually held markup
     // re-embed. Frontmatter meta is DISCARDED — taxonomy/summary/keywords come
     // from the MANIFEST; frontmatter is the adapter's input, not the kernel's.
-    const body = stripPresentationJsx(stripStyleBlocks(rawBody));
+    // Normalize CRLF→LF ONCE, before BOTH the hash and the chunker, so
+    // chunk_hash is line-ending-stable — otherwise a re-checkout with
+    // core.autocrlf=true changes every chunk_hash, carry-forward matches
+    // nothing, and the whole corpus re-embeds while content_hash says
+    // nothing changed (review finding #8, 2026-08-19; the oracle shares
+    // this latent bug — fixed here). A bare \r stays content.
+    const body = stripPresentationJsx(stripStyleBlocks(rawBody)).replaceAll("\r\n", "\n");
     const sid = sourceId(f.path);
     const title = f.title !== null && f.title !== "" ? f.title : titles.get(f.node)!;
     await client.query(
@@ -426,7 +432,11 @@ export async function buildGeneration(
         centroids,
         health,
         flipped: false,
-        refusal: "NOT READY — no flip (rerun to resume the queue)",
+        refusal:
+          "NOT READY — no flip. A rerun starts a FRESH generation and carries " +
+          "forward every vector from the last complete generation, re-embedding " +
+          "only what changed or failed (review finding, 2026-08-19: there is no " +
+          "in-place queue resume — allocateRun always allocates).",
       };
     }
     if (!options.flip) return { ready, centroids, health, flipped: false, refusal: null };

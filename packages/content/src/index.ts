@@ -47,6 +47,7 @@ export { logRead, type ReadAction, type ReadLogEntry } from "./lib/rlog.js";
 export {
   search,
   EmptyQueryError,
+  UncalibratedFloorError,
   CONTENT_ADVISORY,
   MAX_QUERY_CHARS,
   MAX_SEARCH_K,

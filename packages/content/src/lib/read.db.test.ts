@@ -5,7 +5,7 @@
  * resolution (stable_id exact → alias flatten → suffix), document chunks
  * feeding the packer byte-exact, unit tree, outline browse + drill-down
  * re-basing, denial on every resolution arm, and the ABA-proof
- * outlineVersion hash. Gated on KSOR_DB_URL (CI: pgvector service
+ * takedown deny. Gated on KSOR_DB_URL (CI: pgvector service
  * container; dev: local Postgres or a throwaway Neon); self-contained in
  * its own throwaway database.
  */
@@ -20,7 +20,6 @@ import {
   documentChunks,
   findDocument,
   outline,
-  outlineVersion,
   unitTree,
   UnknownSlug,
   type ReadScope,
@@ -305,23 +304,6 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
       // outline arm
       const rows = await runRead(pool, TENANT, (c) => outline(c, scope, { depth: 2 }));
       expect(rows.map((r) => r.headingPath)).not.toContain("handbook/onboarding/setup");
-    } finally {
-      await undeny();
-    }
-  });
-
-  it("outlineVersion pairs the active generation with an ABA-proof deny hash", async () => {
-    const before = await runRead(pool, TENANT, (c) => outlineVersion(c, TENANT, CORPUS));
-    expect(before).toEqual({ generation: 1, denyHash: "" });
-    await deny("handbook/onboarding/setup");
-    try {
-      const withA = await runRead(pool, TENANT, (c) => outlineVersion(c, TENANT, CORPUS));
-      expect(withA.denyHash, "a takedown must change the version").not.toBe("");
-      await undeny();
-      await deny("handbook/security/setup");
-      const withB = await runRead(pool, TENANT, (c) => outlineVersion(c, TENANT, CORPUS));
-      // the ABA case: same COUNT (one denied node), different SET ⇒ different hash
-      expect(withB.denyHash, `A=${withA.denyHash} B=${withB.denyHash}`).not.toBe(withA.denyHash);
     } finally {
       await undeny();
     }
