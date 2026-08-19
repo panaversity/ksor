@@ -24,8 +24,10 @@ instead of their training memory. The corpus grows with each implemented verb.
   at `http://localhost:3000`; `pnpm build` writes a fully static export to
   `system/site/out/`. `KSOR_BASE_PATH=/repo pnpm build` targets sub-path
   hosting.
-- The remaining verbs (`dev`, `build`, `serve`) are designed, not
-  implemented: each prints an honest notice and exits `2`.
+- `ksor serve` runs the MCP server over a built record (with
+  `ingest`/`schema`/`calibrate`/`gc`) — the climbed rung, needing Postgres and
+  a provider key. Only `dev` and `build` remain designed, not implemented:
+  each prints an honest notice and exits `2`.
 - Exit codes are a contract: `1` refused (first stderr line is a stable
   slug such as `error: bad-name`, followed by a remedy), `2` designed but
   not implemented, `3` the environment cannot run ksor
