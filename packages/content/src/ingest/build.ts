@@ -26,13 +26,7 @@ import { envFloat } from "@panaversity/ksor-platform";
 import { runIngest } from "../db.js";
 import type { ContentInstance } from "../instance.js";
 import { embedIntent, vlit, type EmbeddingProvider } from "../lib/embedding.js";
-import {
-  chunkText,
-  CHUNK_POLICY,
-  headingPathText,
-  stripPresentationJsx,
-  stripStyleBlocks,
-} from "./chunking.js";
+import { chunkText, cleanBody, CHUNK_POLICY, headingPathText } from "./chunking.js";
 import {
   addedSlugs,
   allocateRun,
@@ -143,18 +137,13 @@ export async function buildStructure(
     }
     const raw = await readFile(target, "utf8");
     const { body: rawBody } = splitFrontmatter(raw);
-    // Strip presentation BEFORE the skip-gate hash + chunking (oracle field
-    // test #3): the served chunks reassemble the CLEANED body byte-exact, and
-    // contentHash captures the change so only files that actually held markup
-    // re-embed. Frontmatter meta is DISCARDED — taxonomy/summary/keywords come
-    // from the MANIFEST; frontmatter is the adapter's input, not the kernel's.
-    // Normalize CRLF→LF ONCE, before BOTH the hash and the chunker, so
-    // chunk_hash is line-ending-stable — otherwise a re-checkout with
-    // core.autocrlf=true changes every chunk_hash, carry-forward matches
-    // nothing, and the whole corpus re-embeds while content_hash says
-    // nothing changed (review finding #8, 2026-08-19; the oracle shares
-    // this latent bug — fixed here). A bare \r stays content.
-    const body = stripPresentationJsx(stripStyleBlocks(rawBody)).replaceAll("\r\n", "\n");
+    // Normalize + strip as ONE ordered unit (cleanBody): CRLF→LF first, then
+    // style/presentation stripping, so the skip-gate hash and every chunk_hash
+    // are line-ending-stable and served chunks reassemble the CLEANED body
+    // byte-exact. Frontmatter meta is DISCARDED — taxonomy/summary/keywords
+    // come from the MANIFEST; frontmatter is the adapter's input, not the
+    // kernel's. (Why the order is load-bearing: see cleanBody, review 2026-08-19.)
+    const body = cleanBody(rawBody);
     const sid = sourceId(f.path);
     const title = f.title !== null && f.title !== "" ? f.title : titles.get(f.node)!;
     await client.query(

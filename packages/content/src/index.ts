@@ -59,7 +59,12 @@ export {
   type ServiceContext,
   type SnapshotEnvelope,
 } from "./service.js";
-export { buildShippedProvider, providerNeedsApiKey, PROVIDERS } from "./lib/providers/registry.js";
+export {
+  buildShippedProvider,
+  providerNeedsApiKey,
+  PROVIDERS,
+  MissingProviderKeyError,
+} from "./lib/providers/registry.js";
 export type { EmbeddingProvider, Intent, TextGenerator } from "./lib/embedding.js";
 export {
   embedQueryVlit,

@@ -405,6 +405,21 @@ export function stripPresentationJsx(text: string): string {
   return out.join("");
 }
 
+/**
+ * The body-cleaning pipeline every ingest runs BEFORE the skip-gate hash and
+ * chunking, as ONE ordered unit so the order cannot regress. CRLF→LF is
+ * normalized FIRST — the strippers are \n-anchored (BLANK_RUN_G = /\n{3,}/),
+ * so normalizing AFTER them left a CRLF checkout's blank runs un-collapsed and
+ * every chunk_hash + content_hash diverged from an LF checkout, re-embedding
+ * the whole file while content_hash claimed nothing changed (review,
+ * 2026-08-19). Then style blocks and presentation JSX are stripped so served
+ * chunks reassemble the CLEANED body byte-exact. A bare \r (no following \n)
+ * stays content.
+ */
+export function cleanBody(rawBody: string): string {
+  return stripPresentationJsx(stripStyleBlocks(rawBody.replaceAll("\r\n", "\n")));
+}
+
 /** Heading text never counts toward the nav/prose size test — the
  * "content-only" in the policy name. Note: joins on \n, so exotic line
  * boundaries are normalized before the length is taken (as in the oracle). */

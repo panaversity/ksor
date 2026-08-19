@@ -437,6 +437,16 @@ describe("code-point counting (Python len parity)", () => {
     expect(codePointLength("")).toBe(0);
   });
 
+  it("counts an UNPAIRED surrogate as one (Python len parity — review 2026-08-19)", () => {
+    // The old index loop skipped the unit after ANY high surrogate; "\uD800x"
+    // then read as 1 where Python len (and chunking's cpLen) return 2.
+    expect(codePointLength("\uD800x")).toBe(2); // lone high surrogate + letter
+    expect(codePointLength("\uD800\uD800")).toBe(2); // two lone highs
+    expect(codePointLength("\uDC00")).toBe(1); // lone low surrogate
+    expect(codePointLength("a\uD800")).toBe(2); // trailing lone high
+    expect(codePointLength("\u{1f3af}x")).toBe(2); // a valid pair still counts as one + x
+  });
+
   it("estTokens is ceil(chars / 4)", () => {
     expect(estTokens(0)).toBe(0);
     expect(estTokens(1)).toBe(1);

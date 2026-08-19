@@ -100,11 +100,19 @@ the deploy story — plus the CLI contract: `dev`,
   (nothing is released). Before adopters do, a forward-migration path
   (versioned plain SQL + a runner keyed on `schema_meta`) is owed —
   recorded as a decision in `research/kernel-conversion.md`.
-- **The HTTP door is hand-rolled on `node:http`** (~540 lines: body
-  read/parse, routing, security middleware) rather than the SDK's
-  Web-standard transport + a request layer. Three review findings landed in
-  that layer. The recommended move (Hono + `WebStandardStreamableHTTPServerTransport`)
-  is written up in `research/kernel-conversion.md` as the next serve PR.
+- **Takedown denial is PER-NODE, not subtree** — a `takedown_denylist` row
+  hides exactly its listed `stable_id`; a container/section takedown does NOT
+  cascade to descendants (search, read, outline, and the calibrate centroid
+  arm all bind the same `d.stable_id = n.stable_id` predicate). This is a
+  faithful port of the oracle's documented semantic, but it is an OPEN owner
+  decision (surfaced by review 2026-08-19): fail-closed governance argues a
+  section takedown should cover its whole subtree. Left unchanged deliberately
+  — reversing a governance mechanism goes back to a human (working-rule 9).
+  The ratified fix, if taken, is a serving-time recursive `parent_id` walk
+  (NOT a `stable_id` prefix match, which a frontmatter `sor_id` override
+  defeats; and serving-time not write-time, because `takedown_denylist` has no
+  generation column by design, so denial must also cover descendants added by
+  a future re-ingest). Pinned in code at `read.ts` `NODE_DENY`.
 
 ## Designed, not implemented
 

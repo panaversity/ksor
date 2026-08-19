@@ -18,6 +18,7 @@ import {
   embedQueryVlit,
   EmbeddingSpaceMismatch,
   keyRingFromEnv,
+  MissingProviderKeyError,
   parseInstanceText,
   type ContentInstance,
   type ServiceContext,
@@ -57,9 +58,10 @@ export async function compose(instancePath: string, version: string): Promise<Co
     });
   } catch (error) {
     // A missing API key is an ENVIRONMENT failure (exit 3), not a refusal —
-    // the ksor-content CLI classifies it that way and the gateway must agree
-    // (review, 2026-08-19).
-    if (error instanceof Error && /needs an API key/.test(error.message)) {
+    // the ksor-content CLI classifies it that way and the gateway must agree.
+    // Matched by TYPE, never by message prose: a reworded message must not
+    // silently revert this to exit 1 (review, 2026-08-19).
+    if (error instanceof MissingProviderKeyError) {
       throw new RequiredEnvError(error.message);
     }
     throw error;

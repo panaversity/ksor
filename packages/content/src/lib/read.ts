@@ -26,6 +26,17 @@ g AS (
     ) AS gen
 )`;
 
+// Takedown denial is PER-NODE: exactly the listed stable_id is hidden — a
+// container takedown does NOT cascade to its descendants. This is a faithful
+// port of the oracle's documented semantic (takedown_denylist is keyed by a
+// single stable_id, no cascade). Whether a section takedown should cover its
+// whole SUBTREE (fail-closed governance) is an OPEN owner decision, deliberately
+// NOT changed here: reversing a governance mechanism goes back to a human
+// (AGENTS.md working-rule 9). If ratified, the fix is a serving-time recursive
+// parent_id walk — NOT a stable_id prefix match, which a frontmatter sor_id
+// override defeats (review 2026-08-19; docs/status.md Known gaps). The same
+// per-node predicate is `DENY` in search.ts and the centroid arm in
+// calibrate/run.ts — one seam, changed together if the decision lands.
 const NODE_DENY = `
 NOT EXISTS (
     SELECT 1 FROM takedown_denylist d

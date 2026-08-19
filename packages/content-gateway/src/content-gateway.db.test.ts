@@ -379,6 +379,49 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(refusal.code, refusal.stderr).toBe(1);
     expect(refusal.stderr.toLowerCase()).toContain("auth");
   }, 60_000);
+
+  it("a missing provider API key is an ENVIRONMENT failure — exit 3, classified by type", async () => {
+    // A gemini-provider instance with GEMINI_API_KEY absent: compose builds the
+    // provider, buildShippedProvider throws the TYPED MissingProviderKeyError,
+    // and compose maps it to exit 3 (not a refusal's exit 1) — classified by
+    // type, never by message prose (review finding 6, 2026-08-19).
+    const geminiInstance = path.join(work, "instance.gemini.md");
+    writeFileSync(
+      geminiInstance,
+      `---
+format: 1
+name: ${TENANT}
+database:
+  dsn_env: KSOR_TEST_DSN
+embedding:
+  provider: gemini
+  model: gemini-embedding-001
+  dim: ${DIM}
+---
+
+# Acme Handbook
+
+Answer ONLY from this record.
+`,
+    );
+    const env = {
+      ...process.env,
+      KSOR_INSTANCE: geminiInstance,
+      KSOR_TEST_DSN: dbUrl,
+      KSOR_AUTH_DISABLED: "1",
+    } as Record<string, string>;
+    delete env["GEMINI_API_KEY"];
+    delete env["PORT"];
+    delete env["KSOR_MCP_HOST"];
+    const spawned = spawn(process.execPath, [CLI], { env });
+    const result = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
+      let stderr = "";
+      spawned.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
+      spawned.on("exit", (code) => resolve({ code, stderr }));
+    });
+    expect(result.code, result.stderr).toBe(3);
+    expect(result.stderr.toLowerCase()).toContain("api key");
+  }, 60_000);
 });
 
 describe.runIf(adminDsn === "")("gateway acceptance (gated)", () => {

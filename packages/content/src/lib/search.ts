@@ -34,6 +34,9 @@ g AS (
     ) AS gen
 )`;
 
+// PER-NODE denial (exactly the listed stable_id) — the same semantic and the
+// same open subtree-vs-per-node governance decision documented at read.ts
+// NODE_DENY. Applied PRE-fusion so a denied node cannot leak by ranking.
 const DENY = `
 NOT EXISTS (
     SELECT 1 FROM takedown_denylist d

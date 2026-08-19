@@ -39,6 +39,24 @@ export interface ProviderEntry {
   needsApiKey: boolean;
 }
 
+/**
+ * A key-needing provider was built without an API key. A TYPED error (mirrors
+ * EmbeddingSpaceMismatch) so a composition root classifies the missing-key case
+ * by TYPE, not by string-matching this message — the exact prose-coupling scar
+ * read.ts:152 records (review, 2026-08-19). The message stays stable, but the
+ * exit-code mapping no longer breaks when it is reworded.
+ */
+export class MissingProviderKeyError extends Error {
+  readonly providerName: string;
+  constructor(providerName: string) {
+    super(
+      `embedding provider ${JSON.stringify(providerName)} needs an API key and none was supplied`,
+    );
+    this.name = "MissingProviderKeyError";
+    this.providerName = providerName;
+  }
+}
+
 export const PROVIDERS: Record<string, ProviderEntry> = {
   gemini: {
     build: (opts: ProviderBuildOptions): EmbeddingProvider => new GeminiEmbeddingProvider(opts),
@@ -89,9 +107,7 @@ export function buildShippedProvider(
 ): EmbeddingProvider {
   const entry = entryFor(name);
   if (entry.needsApiKey && !opts.apiKey) {
-    throw new Error(
-      `embedding provider ${JSON.stringify(name)} needs an API key and none was supplied`,
-    );
+    throw new MissingProviderKeyError(name);
   }
   return entry.build({
     apiKey: opts.apiKey ?? "",

@@ -8,7 +8,12 @@ import {
 } from "../../config.js";
 import { FAKE_EMBED_MODEL, FakeEmbeddingProvider } from "./fake.js";
 import { GeminiEmbeddingProvider } from "./gemini.js";
-import { buildShippedProvider, PROVIDERS, providerNeedsApiKey } from "./registry.js";
+import {
+  buildShippedProvider,
+  MissingProviderKeyError,
+  PROVIDERS,
+  providerNeedsApiKey,
+} from "./registry.js";
 
 describe("the registry rows", () => {
   it("ships exactly the two entries with the right key posture", () => {
@@ -40,6 +45,19 @@ describe("buildShippedProvider — the one door", () => {
         () => buildShippedProvider("gemini", { apiKey }),
         "apiKey: " + JSON.stringify(apiKey),
       ).toThrow('embedding provider "gemini" needs an API key and none was supplied');
+    }
+  });
+
+  it("throws a TYPED MissingProviderKeyError so callers classify by type, not prose", () => {
+    // The gateway maps THIS type → exit 3 (compose.ts); a reworded message
+    // must not silently revert that to exit 1 (review 2026-08-19).
+    expect(() => buildShippedProvider("gemini", { apiKey: null })).toThrow(MissingProviderKeyError);
+    try {
+      buildShippedProvider("gemini", { apiKey: null });
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MissingProviderKeyError);
+      expect((error as MissingProviderKeyError).providerName).toBe("gemini");
     }
   });
 

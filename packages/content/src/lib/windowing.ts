@@ -32,14 +32,17 @@ export interface Window {
   readonly remainingSections: readonly string[];
 }
 
-/** Python `len` parity: code points, not UTF-16 code units. */
+/** Python `len` parity: code points, not UTF-16 code units. A `for..of` walk
+ * (the same one chunking.ts's cpLen uses — one obvious way) counts each code
+ * point once and, crucially, treats an UNPAIRED surrogate as one unit, exactly
+ * as Python len does. The earlier index loop skipped the unit after ANY high
+ * surrogate without checking it was a low surrogate, so codePointLength("\uD800x")
+ * returned 1 where Python len (and cpLen) return 2 — a divergence on the value
+ * that feeds MAX_QUERY_CHARS, the search budget, and window packing (review,
+ * 2026-08-19). */
 export function codePointLength(text: string): number {
   let n = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    const unit = text.charCodeAt(i);
-    if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) i += 1;
-    n += 1;
-  }
+  for (const _cp of text) n += 1;
   return n;
 }
 

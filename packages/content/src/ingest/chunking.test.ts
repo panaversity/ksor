@@ -9,6 +9,7 @@ import {
   CHUNK_POLICY,
   HARD_MAX_CHARS,
   chunkText,
+  cleanBody,
   headingPathText,
   stripPresentationJsx,
   stripStyleBlocks,
@@ -95,5 +96,45 @@ describe("contentHash over cleaned bodies", () => {
     for (const c of chunkingFixtures.cases) {
       expect(contentHash(c.cleaned), c.name).toBe(c.contentHash);
     }
+  });
+});
+
+describe("cleanBody — CRLF normalized BEFORE the strippers (review 2026-08-19)", () => {
+  // A doc that takes the STRIPPER slow path (a className'd layout wrapper) AND
+  // leaves a blank-line run once the bare <div>/<\/div> are dropped. The
+  // blank-run collapse is /\n{3,}/, which never matches \r\n\r\n\r\n — so
+  // normalizing AFTER the strip (the bug) left a CRLF checkout un-collapsed and
+  // every chunk_hash diverged from an LF checkout. cleanBody normalizes first.
+  const lf = [
+    "# Title",
+    "",
+    '<div className="af-hero">',
+    "",
+    "The Third Era of AI Tools",
+    "",
+    "</div>",
+    "",
+    "Body paragraph after the wrapper, long enough to be its own chunk.",
+    "",
+  ].join("\n");
+  const crlf = lf.replaceAll("\n", "\r\n");
+
+  it("produces a byte-identical cleaned body for an LF doc and its CRLF twin", () => {
+    const a = cleanBody(lf);
+    const b = cleanBody(crlf);
+    expect(b, `CRLF cleaned body: ${JSON.stringify(b)}`).toBe(a);
+    // and it genuinely collapsed the blank run (guards against the test passing
+    // because neither path stripped anything)
+    expect(a, `cleaned: ${JSON.stringify(a)}`).not.toMatch(/\n{3,}/);
+  });
+
+  it("yields identical chunk hashes across the two line endings", () => {
+    const hLf = chunkText(cleanBody(lf)).map((c) => c.chunkHash);
+    const hCrlf = chunkText(cleanBody(crlf)).map((c) => c.chunkHash);
+    expect(hCrlf, `LF hashes ${JSON.stringify(hLf)}`).toEqual(hLf);
+  });
+
+  it("leaves a bare \\r (no following \\n) as content", () => {
+    expect(cleanBody("line1\rline2")).toBe("line1\rline2");
   });
 });

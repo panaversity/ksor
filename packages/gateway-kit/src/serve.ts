@@ -41,10 +41,16 @@ export function resolveBind(env: Env = process.env): Bind {
   const host = env.KSOR_MCP_HOST || (env.PORT ? "0.0.0.0" : "127.0.0.1");
   const source = env.KSOR_MCP_PORT ? "KSOR_MCP_PORT" : "PORT";
   const raw = (env.KSOR_MCP_PORT || env.PORT || "8080").trim();
-  if (!/^\d+$/.test(raw) || Number(raw) > 65535) {
+  // Reject port 0 as well as out-of-range: port 0 asks the OS for an EPHEMERAL
+  // port, the one input where requested != actual-bound. A URL-addressed MCP
+  // server needs a fixed known port (clients dial its URL) AND the loopback
+  // Host allowlist is built from this number — with 0 it freezes at ":0" and
+  // 421s every request against the real ephemeral port (review, 2026-08-19).
+  if (!/^\d+$/.test(raw) || Number(raw) < 1 || Number(raw) > 65535) {
     throw new Error(
-      `${source}=${JSON.stringify(raw)} is not a valid port — set an integer 0..65535 ` +
-        "(the container platform's contract is $PORT; KSOR_MCP_PORT overrides for local/dev)",
+      `${source}=${JSON.stringify(raw)} is not a valid port — set an integer 1..65535 ` +
+        "(port 0 asks the OS for an ephemeral port, which an MCP server addressed by URL " +
+        "cannot use; the container platform's contract is $PORT; KSOR_MCP_PORT overrides for local/dev)",
     );
   }
   return { host, port: Number(raw) };

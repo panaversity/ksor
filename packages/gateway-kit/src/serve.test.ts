@@ -36,6 +36,13 @@ describe("resolveBind — the loopback auto-gate", () => {
     expect(() => resolveBind({ KSOR_MCP_PORT: "eight" })).toThrowError(/KSOR_MCP_PORT/);
     expect(() => resolveBind({ PORT: "70000" })).toThrowError(/PORT/);
   });
+
+  it("rejects port 0 — an ephemeral port breaks URL addressing + the Host allowlist", () => {
+    // Port 0 asks the OS for an ephemeral port; the loopback Host allowlist
+    // would freeze at ":0" and 421 every request (review 2026-08-19).
+    expect(() => resolveBind({ KSOR_MCP_PORT: "0" })).toThrowError(/KSOR_MCP_PORT/);
+    expect(() => resolveBind({ PORT: "0" })).toThrowError(/1\.\.65535/);
+  });
 });
 
 describe("requireEnv — fail loud, never half-boot", () => {

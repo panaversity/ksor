@@ -106,6 +106,28 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   const maxInflight = envInt(process.env, "KSOR_MAX_INFLIGHT", 64, { minimum: 1 });
   let inflight = 0;
 
+  // /ready is UNAUTHENTICATED and touches the DB — left uncapped it is a
+  // pool-exhaustion amplifier: a flood checks out a connection per probe,
+  // starving authenticated /mcp with PoolTimeout while the attacker spends no
+  // credentials, and /mcp's inflight cap does not cover it (review,
+  // 2026-08-19). Coalesce to at most ONE probe in flight with its verdict
+  // cached ~1s: a load balancer still gets a fresh-enough answer, and a flood
+  // shares the single in-flight probe instead of multiplying pool checkouts.
+  const READY_TTL_MS = 1000;
+  let readyProbe: { at: number; verdict: Promise<boolean> } | null = null;
+  const readiness = (): Promise<boolean> => {
+    const now = Date.now();
+    if (readyProbe !== null && now - readyProbe.at < READY_TTL_MS) return readyProbe.verdict;
+    const verdict = runProbe(pool, instance.tenantId, (client) =>
+      client.query("SELECT 1 FROM corpora LIMIT 1"),
+    ).then(
+      () => true,
+      () => false,
+    );
+    readyProbe = { at: now, verdict };
+    return verdict;
+  };
+
   const app = new Hono();
 
   // The exact hardening contract, not a framework default: HSTS
@@ -136,16 +158,11 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
 
   app.get("/live", (c) => c.json({ live: true }));
 
-  app.get("/ready", async (c) => {
-    try {
-      await runProbe(pool, instance.tenantId, (client) =>
-        client.query("SELECT 1 FROM corpora LIMIT 1"),
-      );
-      return c.json({ ready: true });
-    } catch {
-      return c.json({ ready: false, reason: "content store unreachable" }, 503);
-    }
-  });
+  app.get("/ready", async (c) =>
+    (await readiness())
+      ? c.json({ ready: true })
+      : c.json({ ready: false, reason: "content store unreachable" }, 503),
+  );
 
   app.get("/health", (c) =>
     c.json({
