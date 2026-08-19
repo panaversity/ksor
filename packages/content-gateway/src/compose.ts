@@ -48,11 +48,22 @@ export async function compose(instancePath: string, version: string): Promise<Co
     );
   }
 
-  const provider = buildShippedProvider(instance.embeddingProvider, {
-    apiKey: process.env["GEMINI_API_KEY"] ?? null,
-    modelId: instance.embeddingModel,
-    dim: instance.embeddingDim,
-  });
+  let provider;
+  try {
+    provider = buildShippedProvider(instance.embeddingProvider, {
+      apiKey: process.env["GEMINI_API_KEY"] ?? null,
+      modelId: instance.embeddingModel,
+      dim: instance.embeddingDim,
+    });
+  } catch (error) {
+    // A missing API key is an ENVIRONMENT failure (exit 3), not a refusal —
+    // the ksor-content CLI classifies it that way and the gateway must agree
+    // (review, 2026-08-19).
+    if (error instanceof Error && /needs an API key/.test(error.message)) {
+      throw new RequiredEnvError(error.message);
+    }
+    throw error;
+  }
 
   // Classification only — logged with the REASON, never the DSN.
   console.error(

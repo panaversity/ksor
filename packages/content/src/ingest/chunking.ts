@@ -30,14 +30,22 @@
 
 import { createHash } from "node:crypto";
 
-// TODO(coordinator): move to config.ts — values verbatim from the oracle's
+// (constants now live in config.ts — see the re-export below; the oracle's
 // config.py (eval-locked constants; changing any is a deliberate, measured
 // decision, never a refactor).
-export const CHUNK_POLICY: string = "heading-aware-1500-content-only-v5";
-export const MAX_CHARS: number = 1500;
-export const NAV_MAX_CHARS: number = 250;
-export const HARD_MAX_CHARS: number = 4000; // < Gemini's 2048-token embed input
-export const MIN_CONTENT_CHARS: number = 24; // servable floor (read plane; unused by the chunker)
+// ONE source of truth for the eval-locked constants: config.ts. Re-exported
+// here so ingest imports read naturally, but a policy bump edits config.ts
+// alone — two copies once stamped sources.chunk_policy and
+// retrieval_log.chunk_policy_version from DIFFERENT files, drifting the
+// provenance the carry-forward skip-gate rests on (review, 2026-08-19).
+export {
+  CHUNK_POLICY,
+  MAX_CHARS,
+  NAV_MAX_CHARS,
+  HARD_MAX_CHARS,
+  MIN_CONTENT_CHARS,
+} from "../config.js";
+import { MAX_CHARS, NAV_MAX_CHARS, HARD_MAX_CHARS } from "../config.js";
 
 // --- Python text semantics, reproduced exactly ------------------------------
 

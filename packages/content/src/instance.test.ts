@@ -95,6 +95,15 @@ default_visibility: public`,
     expect(() => parseInstanceText(text)).toThrowError(/embedding\.dim/);
   });
 
+  it("a fake provider forces the fake model id, so a fake instance cannot wedge", () => {
+    // provider: fake with no model would default embeddingModel to the gemini
+    // id, but ingest persists fake-embed-001 → the space guard mismatches
+    // forever (review, 2026-08-19). The parse forces them consistent.
+    const text = base.replace("---\n\n", "embedding:\n  provider: fake\n---\n\n");
+    expect(parseInstanceText(text).embeddingModel).toBe("fake-embed-001");
+    expect(parseInstanceText(text).embeddingProvider).toBe("fake");
+  });
+
   it("refuses format 2 and a bad name", () => {
     expect(() => parseInstanceText(base.replace("format: 1", "format: 2"))).toThrowError(
       /format.*unsupported/,

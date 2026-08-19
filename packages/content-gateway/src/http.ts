@@ -21,6 +21,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import {
+  AuthConfigError,
   buildAuth,
   envInt,
   resolveBind,
@@ -34,23 +35,67 @@ import { runProbe } from "@panaversity/ksor-content";
 import { buildServer } from "./server.js";
 import type { Composition } from "./compose.js";
 
-/** The loopback Host allowlist — every loopback SPELLING (127.0.0.1 alone was
- * not enough: `localhost` escaped a literal check). An explicit
- * KSOR_ALLOWED_HOSTS wins; a public bind is bearer-gated, not Host-gated. A
- * real HTTP client always sends a Host header, so a blank one is not
- * allowlisted. */
-export function allowedHosts(bind: { host: string; port: number }): Set<string> | null {
-  const explicit = transportSecurityFromEnv(process.env)?.allowedHosts;
-  if (explicit !== undefined && explicit.length > 0) return new Set(explicit);
+export interface Security {
+  /** Allowed Host header values; null = do not Host-gate (public, bearer-gated). */
+  readonly hosts: Set<string> | null;
+  /** Allowed Origin header values; null = do not Origin-gate. */
+  readonly origins: Set<string> | null;
+}
+
+/**
+ * Both DNS-rebinding gates, resolved together — the Host allowlist AND the
+ * Origin allowlist. transportSecurityFromEnv parses both from
+ * KSOR_ALLOWED_HOSTS/ORIGINS; dropping either (or letting an origins-only
+ * config fall through to the loopback Host branch, re-opening the Host hole)
+ * is the bug this closes (review, 2026-08-19). Every loopback SPELLING arms
+ * the Host default; a real HTTP client always sends Host, so a blank one is
+ * never allowlisted.
+ */
+export function resolveSecurity(bind: { host: string; port: number }): Security {
+  const explicit = transportSecurityFromEnv(process.env);
   const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
-  if (!loopback) return null;
-  return new Set([`127.0.0.1:${bind.port}`, `localhost:${bind.port}`, `[::1]:${bind.port}`]);
+  const loopbackHosts = new Set([
+    `127.0.0.1:${bind.port}`,
+    `localhost:${bind.port}`,
+    `[::1]:${bind.port}`,
+  ]);
+  if (explicit === null) {
+    return { hosts: loopback ? loopbackHosts : null, origins: null };
+  }
+  // Explicit config: honor its Host set; honor its Origin set; and on a
+  // loopback bind, if only origins were given, STILL Host-gate on loopback
+  // (an empty Host allowlist would skip Host validation entirely).
+  const hosts =
+    explicit.allowedHosts.length > 0
+      ? new Set(explicit.allowedHosts)
+      : loopback
+        ? loopbackHosts
+        : null;
+  const origins = explicit.allowedOrigins.length > 0 ? new Set(explicit.allowedOrigins) : null;
+  return { hosts, origins };
 }
 
 export async function runHttp(composition: Composition): Promise<ServerType> {
   const auth: Auth = buildAuth(process.env);
   const bind = resolveBind(process.env);
-  const hosts = allowedHosts(bind);
+  const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
+  // #3: the flag a dev needs to run loopback (KSOR_AUTH_DISABLED) must not,
+  // on its own, permit an UNAUTHENTICATED PUBLIC bind — decision 7's "a
+  // public bind fails closed unless explicitly flagged". A public bind with
+  // auth off needs a SECOND deliberate acknowledgement (review, 2026-08-19).
+  if (
+    auth.mode === "disabled" &&
+    !loopback &&
+    process.env["KSOR_ALLOW_PUBLIC_UNAUTHENTICATED"] !== "1"
+  ) {
+    throw new AuthConfigError(
+      `refusing an UNAUTHENTICATED PUBLIC bind (${bind.host}) — KSOR_AUTH_DISABLED is the ` +
+        "loopback-dev flag, not a licence to serve the corpus to the internet with no auth. " +
+        "Configure the SSO door (KSOR_SSO_URL + KSOR_MCP_RESOURCE_URL + KSOR_JWT_ALLOWED_AUDIENCES), " +
+        "bind loopback, or set KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1 to accept the risk deliberately.",
+    );
+  }
+  const security = resolveSecurity(bind);
   const { ctx, instance, pool, spaceSkipReason, version } = composition;
 
   // Fail-soft env (envInt), never Number(env ?? default): a set-but-empty
@@ -72,13 +117,19 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     c.res.headers.set("x-content-type-options", "nosniff");
   });
 
-  // Host validation as middleware — the shape the SDK points to (its
-  // transport-level rebinding option is deprecated). DNS rebinding reaches
-  // localhost, so the loopback door validates Host; a public door does not
-  // (bearer-gated) unless KSOR_ALLOWED_HOSTS is set.
+  // DNS-rebinding validation as middleware — Host AND Origin (the shape the
+  // SDK points to; its transport-level option is deprecated).
   app.use("*", async (c, next) => {
-    if (hosts !== null && !hosts.has(c.req.header("host") ?? "")) {
+    if (security.hosts !== null && !security.hosts.has(c.req.header("host") ?? "")) {
       return c.json({ error: "host not allowed" }, 421);
+    }
+    if (security.origins !== null) {
+      const origin = c.req.header("origin");
+      // A same-origin/non-browser request carries no Origin; a cross-origin
+      // request carries one and must be on the allowlist.
+      if (origin !== undefined && !security.origins.has(origin)) {
+        return c.json({ error: "origin not allowed" }, 403);
+      }
     }
     await next();
   });

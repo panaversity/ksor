@@ -457,7 +457,17 @@ export async function outline(
 
   const result = await arrayQuery(client, {
     text: OUTLINE_SQL,
-    values: [scope.tenantId, scope.corpusId, pinned, anchor, depth, limit],
+    // A drill-down's result includes the depth-0 anchor row, which
+    // rebaseOutlineRows strips — so fetch limit+1 to return up to `limit`
+    // CHILDREN, not limit-1 (review, 2026-08-19).
+    values: [
+      scope.tenantId,
+      scope.corpusId,
+      pinned,
+      anchor,
+      depth,
+      root === null ? limit : limit + 1,
+    ],
   });
   const rows = outlineRows(result);
   if (root === null) return rows;

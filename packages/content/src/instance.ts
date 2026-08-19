@@ -288,6 +288,12 @@ export function parseInstanceText(text: string): ContentInstance {
     );
   }
   const embedding = bindGroup(fm, "embedding") ?? groupSchemas.embedding.parse({});
+  // The fake provider's persisted space is ALWAYS "fake-embed-001" (it
+  // hard-overrides any model id), so an instance declaring provider: fake
+  // must reflect that or the first ingest writes fake-embed-001 while the
+  // space guard checks the gemini default — a permanently wedged corpus from
+  // config that never looked wrong (review, 2026-08-19).
+  const embeddingModel = embedding.provider === "fake" ? "fake-embed-001" : embedding.model;
   const retrieval = bindGroup(fm, "retrieval") ?? groupSchemas.retrieval.parse({});
   const budgets = bindGroup(fm, "budgets") ?? groupSchemas.budgets.parse({});
   return {
@@ -299,7 +305,7 @@ export function parseInstanceText(text: string): ContentInstance {
     maximumResponseCharacters: budgets.maximum_response_characters,
     instructions: fm.body.trim(),
     embeddingProvider: embedding.provider,
-    embeddingModel: embedding.model,
+    embeddingModel,
     embeddingDim: embedding.dim,
   };
 }
