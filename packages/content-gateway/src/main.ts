@@ -51,7 +51,16 @@ export async function main(): Promise<void> {
     // compose() may have opened would otherwise hold the event loop open
     // and a refused boot would hang instead of exiting (found live,
     // 2026-08-19).
-    const code = error instanceof ContentStoreError || error instanceof RequiredEnvError ? 3 : 1;
-    process.exit(error instanceof AuthConfigError ? 1 : code);
+    // A listen/bind failure (EADDRINUSE, EACCES, EADDRNOTAVAIL) is an
+    // ENVIRONMENT failure (exit 3), not a refusal — the port/permission is
+    // the operator's environment, not a bad config (review, 2026-08-19).
+    const bindFailure =
+      error !== null &&
+      typeof error === "object" &&
+      typeof (error as { code?: unknown }).code === "string" &&
+      /^E(ADDRINUSE|ACCES|ADDRNOTAVAIL)$/.test((error as { code: string }).code);
+    const environment =
+      error instanceof ContentStoreError || error instanceof RequiredEnvError || bindFailure;
+    process.exit(error instanceof AuthConfigError ? 1 : environment ? 3 : 1);
   }
 }
