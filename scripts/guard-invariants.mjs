@@ -147,9 +147,26 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
 {
   const P = "@panaversity/";
   const perPackageRuntimeDeps = new Map([
-    // The published front door: ZERO runtime deps, the guarantee decision 1/12
-    // rests on. Never add to this set without reversing that decision.
-    [`${P}ksor`, new Set()],
+    // The ONE published package (decision 12, publish revision 2026-08-20,
+    // owner): the kernel is BUNDLED into the CLI (platform/content/gateway-kit/
+    // content-gateway inlined via tsdown noExternal), so their external runtime
+    // deps surface HERE. This reverses the decision-1/13 zero-dep guarantee by
+    // owner call — every `npx @panaversity/ksor init` now pulls this set, and
+    // `ksor serve` runs the gateway in-process. Never add BEYOND the kernel's
+    // externals without a recorded decision.
+    [
+      `${P}ksor`,
+      new Set([
+        "@modelcontextprotocol/sdk",
+        "hono",
+        "@hono/node-server",
+        "zod",
+        "pg",
+        "@types/pg",
+        "@google/genai",
+        "jose",
+      ]),
+    ],
     // The kernel packages (decision 12). drizzle-orm was dropped as unused —
     // schema.sql is the DDL source of truth and queries are raw pg. @types/pg
     // is a DECLARED dependency (not a devDep) of every package whose published

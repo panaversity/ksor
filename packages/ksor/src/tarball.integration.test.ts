@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -138,6 +139,16 @@ describe("published tarball", () => {
     const name = "proof-sor";
     const fromTarball = workDir();
     const fromCheckout = workDir();
+    // The tarball ships dist/templates/schema but not node_modules; ksor now
+    // bundles the kernel and carries runtime deps, so the ESM cli.mjs needs a
+    // node_modules to resolve them (NODE_PATH does NOT apply to import). A
+    // junction to the checkout's node_modules stands in for `npm install`, so
+    // this test still verifies the tarball's OWN files scaffold identically.
+    symlinkSync(
+      path.join(pkgDir, "node_modules"),
+      path.join(extracted, "package", "node_modules"),
+      "junction",
+    );
     const packedRun = spawnSync(
       process.execPath,
       [path.join(extracted, "package", "dist", "cli.mjs"), "init", name],

@@ -14,3 +14,4 @@ workbench/shells/*/.generated/
 workbench/shells/*/.staged-knowledge/
 workbench/shells/*/out/
 packages/content-gateway/schema/
+packages/ksor/schema/

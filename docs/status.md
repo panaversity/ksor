@@ -79,10 +79,12 @@ the deploy story — plus the CLI contract: `dev`,
   discipline), content (schema + ingest + hybrid retrieval
   - calibrated abstention + read plane), gateway-kit (fail-closed serving
     postures), content-gateway (the content MCP door: search/outline/read over stateless
-    Streamable HTTP — one transport, loopback by default). Ships as ONE npm
-    package (decision 12, publish revision): `content-gateway` bundles the
-    other three and exposes both bins (`ksor-content` corpus setup +
-    `ksor-content-gateway` serve); the three stay `private` (dev/test).
+    Streamable HTTP — one transport, loopback by default). BUNDLED into
+    `@panaversity/ksor` (decision 12, publish revision 2026-08-20): the CLI
+    inlines all four and exposes ONE `ksor` binary with every verb —
+    `init`/`dev`/`build`, `serve` (the MCP server, in-process), and
+    `ingest`/`schema`/`calibrate`/`gc`; the four kernel packages stay
+    `private` (dev/test), never published. The CLI is no longer zero-dep.
     Converted from the production oracle with
     its suite as the fixture source; acceptance drives the BUILT binary
     with a real MCP client against live Postgres (Neon, pgvector) — cited
@@ -111,13 +113,14 @@ the deploy story — plus the CLI contract: `dev`,
 
 ## Designed, not implemented
 
-- `ksor dev` / `build` — the CLI verbs still exit `2` with an honest notice;
-  the scaffold's own `pnpm dev` / `pnpm build` work today without them.
-  `ksor serve` IS implemented: the zero-dep CLI resolves and spawns the
-  installed kernel gateway bin (`@panaversity/ksor-content-gateway`),
-  forwarding args/env/stdio; it exits `3` with a remedy when the kernel is
-  not installed. Wired but not yet released (the kernel package is
-  `private` pending the publish flip + npm bootstrap).
+- `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
+  own `pnpm dev` / `pnpm build` work today without them.
+  `ksor serve`, `ingest`, `schema`, `calibrate`, `gc` ARE implemented — the
+  bundled kernel provides them from the one `ksor` binary. `serve` runs the
+  MCP server in-process (reads `./instance.md`; exits `3` with a remedy when
+  it is missing). Verified via a real `pnpm pack` → `npm install`. Not yet
+  released (pending the changesets release; the existing `@panaversity/ksor`
+  publish setup covers it — no new package to bootstrap).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).

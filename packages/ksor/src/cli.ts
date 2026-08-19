@@ -8,10 +8,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { main as runGateway } from "@panaversity/ksor-content-gateway";
+import { runContentCli } from "@panaversity/ksor-content";
+
 import { exitCodes, resolveCommand, verbs } from "./index.js";
 import { runInit } from "./init/index.js";
 import { unsupportedPlatform } from "./init/platform.js";
-import { runServe } from "./serve/index.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   name: string;
@@ -32,16 +34,20 @@ const usage =
   "\n" +
   "Usage: ksor <verb>\n" +
   "\n" +
-  `Verbs (init and serve are implemented; dev and build exit 2 until they ship):\n` +
-  "  init    create a new KSoR project (implemented)\n" +
-  "  dev     run the human surface locally, watching\n" +
-  "  build   validate and build both surfaces\n" +
-  "  serve   expose the MCP agent surface (spawns the installed kernel gateway)\n" +
+  `Verbs (dev and build exit 2 until they ship; the rest are implemented):\n` +
+  "  init       create a new KSoR project\n" +
+  "  dev        run the human surface locally, watching\n" +
+  "  build      validate and build both surfaces\n" +
+  "  serve      start the MCP agent surface (reads ./instance.md)\n" +
+  "  ingest     load / refresh the corpus into the database\n" +
+  "  calibrate  measure the abstention floor\n" +
+  "  schema     apply the database schema\n" +
+  "  gc         collect superseded generations\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
   `Docs: node_modules/${pkg.name}/docs · ${pkg.homepage}\n`;
 
-function main(args: readonly string[]): number {
+async function main(args: readonly string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
     process.stdout.write(usage);
     return 0;
@@ -78,13 +84,20 @@ function main(args: readonly string[]): number {
   }
 
   if (verb === "serve") {
-    // The CLI stays zero-dep: serve SPAWNS the installed kernel gateway, never
-    // imports it (decision 12 publish revision). It reads ./instance.md from
-    // the project root, so run it there.
-    return runServe(args.slice(args.indexOf("serve") + 1), process.cwd(), {
-      out: (text) => process.stdout.write(text),
-      err: (text) => process.stderr.write(text),
-    });
+    // The kernel is bundled INTO this package (decision 12 publish revision),
+    // so serve runs the gateway IN-PROCESS: this process becomes the MCP
+    // server. runGateway reads ./instance.md + the DSN env it names, runs its
+    // own fail-closed boot and exit contract (it process.exit()s on error and
+    // holds the event loop while serving), and drains on SIGTERM/SIGINT.
+    await runGateway();
+    return 0;
+  }
+
+  // The corpus operations the bundled kernel provides — delegated to its write-
+  // plane dispatcher (schema --apply / ingest / calibrate / gc). It owns the
+  // same exit contract (1 refused, 3 environment).
+  if (verb === "ingest" || verb === "schema" || verb === "calibrate" || verb === "gc") {
+    return runContentCli(args.slice(args.indexOf(verb)));
   }
 
   // A word that is not in the design is refused (exit 1), never conflated with
@@ -104,4 +117,4 @@ function main(args: readonly string[]): number {
   return exitCodes.notImplemented;
 }
 
-process.exitCode = main(process.argv.slice(2));
+process.exitCode = await main(process.argv.slice(2));

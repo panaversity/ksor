@@ -49,29 +49,19 @@ describe("ksor CLI (built artifact)", () => {
       const result = runCli([flag]);
       expect(result.status, `${flag} exit code`).toBe(0);
       expect(result.stdout).toContain("Usage: ksor <verb>");
-      expect(result.stdout).toContain("init and serve are implemented");
+      expect(result.stdout).toContain("ingest");
     }
   });
 
-  it("serve exits 3 with a remedy when the kernel gateway is not installed", () => {
-    // A temp cwd with no node_modules: the CLI is zero-dep and SPAWNS the
-    // kernel gateway, so an uninstalled kernel is an environment failure (3),
-    // not a refusal or "unimplemented". The remedy names the package to add.
+  it("serve runs the bundled gateway in-process; a missing instance.md is exit 3", () => {
+    // The kernel is bundled into the CLI, so serve runs the gateway in-process
+    // (no spawn, no install). With no instance.md in cwd the gateway's own
+    // compose fails closed — an environment error (3), not a crash.
     const cwd = mkdtempSync(path.join(tmpdir(), "ksor-serve-"));
-    // Clear NODE_PATH: the test runner (pnpm/vitest) sets it to the workspace
-    // node_modules, which WOULD resolve the workspace kernel from any cwd — a
-    // test-env artifact. A real adopter's empty project has no such NODE_PATH.
-    const env = { ...process.env };
-    delete env["NODE_PATH"];
     try {
-      const result = spawnSync(process.execPath, [distCli, "serve"], {
-        cwd,
-        encoding: "utf8",
-        env,
-      });
+      const result = spawnSync(process.execPath, [distCli, "serve"], { cwd, encoding: "utf8" });
       expect(result.status, result.stderr).toBe(3);
-      expect(result.stderr.split("\n")[0]).toBe("error: serve-not-installed");
-      expect(result.stderr).toContain("pnpm add @panaversity/ksor-content-gateway");
+      expect(result.stderr).toContain("instance.md");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

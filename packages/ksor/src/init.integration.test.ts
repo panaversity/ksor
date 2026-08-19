@@ -10,6 +10,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,6 +23,11 @@ import { afterEach, describe, expect, it } from "vitest";
 // exercises the BUILT artifact (dist/cli.mjs), exactly what an adopter runs.
 const distDir = fileURLToPath(new URL("../dist", import.meta.url));
 const distCli = path.join(distDir, "cli.mjs");
+// @panaversity/ksor bundles the kernel and is no longer zero-dep, so a
+// copied-out CLI (fakeInstall, which omits node_modules) needs its runtime
+// deps resolvable to even load — NODE_PATH stands in for the install npm would
+// do, so these tests exercise the init FAULT paths, not a missing-module crash.
+const ksorNodeModules = path.join(distDir, "..", "node_modules");
 const pkgManifest = fileURLToPath(new URL("../package.json", import.meta.url));
 const templatesDir = fileURLToPath(new URL("../templates/scaffold", import.meta.url));
 const pkgVersion = (JSON.parse(readFileSync(pkgManifest, "utf8")) as { version: string }).version;
@@ -76,6 +82,11 @@ function fakeInstall(options: { readonly templates: boolean }): string {
   const home = workDir();
   cpSync(distDir, path.join(home, "dist"), { recursive: true });
   copyFileSync(pkgManifest, path.join(home, "package.json"));
+  // ksor bundles the kernel and is no longer zero-dep; the ESM cli.mjs resolves
+  // its runtime deps (zod, pg, …) via node_modules (NODE_PATH does NOT apply to
+  // import). A junction to the checkout's node_modules stands in for `npm
+  // install` so these tests hit the init FAULT paths, not a missing-module crash.
+  symlinkSync(ksorNodeModules, path.join(home, "node_modules"), "junction");
   if (options.templates) {
     cpSync(templatesDir, path.join(home, "templates", "scaffold"), {
       recursive: true,

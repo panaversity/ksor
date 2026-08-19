@@ -36,7 +36,20 @@ export interface Composition {
 }
 
 export async function compose(instancePath: string, version: string): Promise<Composition> {
-  const instanceText = readFileSync(instancePath, "utf8");
+  let instanceText: string;
+  try {
+    instanceText = readFileSync(instancePath, "utf8");
+  } catch (error) {
+    // A missing instance.md is an ENVIRONMENT precondition (exit 3), not a
+    // crash — the operator is not in a KSoR project or has not run `ksor init`.
+    if ((error as { code?: unknown }).code === "ENOENT") {
+      throw new RequiredEnvError(
+        `instance.md not found at ${instancePath} — run \`ksor init\`, or run \`ksor serve\` ` +
+          "from your KSoR project root (it reads ./instance.md).",
+      );
+    }
+    throw error;
+  }
   const instanceDigest = createHash("sha256").update(instanceText).digest("hex");
   const instance = parseInstanceText(instanceText);
 

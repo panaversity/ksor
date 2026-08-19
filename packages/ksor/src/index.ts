@@ -21,8 +21,18 @@ export const exitCodes = {
 
 export type ExitCode = (typeof exitCodes)[keyof typeof exitCodes];
 
-/** The CLI vocabulary. Deliberately small; see the README. */
-export const verbs = ["init", "dev", "build", "serve"] as const;
+/** The CLI vocabulary. Lifecycle verbs plus the corpus operations the bundled
+ * kernel provides (one binary — decision 12 publish revision). */
+export const verbs = [
+  "init",
+  "dev",
+  "build",
+  "serve",
+  "ingest",
+  "schema",
+  "calibrate",
+  "gc",
+] as const;
 
 export type Verb = (typeof verbs)[number];
 
