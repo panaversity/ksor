@@ -1,19 +1,27 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — Knowledge System of Record: authoritative knowledge for humans and AI agents" width="100%">
+  <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — authoritative knowledge infrastructure for AI-native organizations" width="100%">
 </p>
 
 # KSoR
 
-**The Knowledge System of Record for humans and AI agents.**
+**The authoritative knowledge infrastructure for AI-native organizations.**
 
-KSoR turns governed knowledge into a single authoritative source that both people and AI agents can use.
+A **Knowledge System of Record (KSoR)** turns an organization's governed knowledge into infrastructure that humans, AI agents, and software can reliably operate from.
 
-Write and govern your knowledge once. KSoR publishes it through two synchronized surfaces:
+Traditional Systems of Record establish what is true about the current state of a business. A KSoR establishes **what the organization knows and how it should operate**.
 
-- a **human-readable knowledge site**, and
-- an **agent-readable interface** through MCP.
+Write and govern that knowledge once. KSoR makes the same institutional truth available through multiple synchronized projections:
 
-Both come from the same source, so humans and agents operate from the same institutional truth.
+- a **human experience** for reading, learning, reviewing, and sharing,
+- an **agent interface** through MCP for search, retrieval, citation, reasoning, and action,
+- **machine-readable representations** such as governed Markdown and `llms.txt`, and
+- an **agent-first maintenance context** that helps coding agents validate, evolve, test, and publish the record.
+
+All derive from the same authoritative source.
+
+The result is not merely a documentation site, knowledge base, vector database, RAG system, or MCP wrapper.
+
+> **KSoR is knowledge infrastructure for the AI-native organization.**
 
 ---
 
@@ -93,7 +101,7 @@ KSoR exists to solve that problem.
 
 # What Is a Knowledge System of Record?
 
-A **Knowledge System of Record — KSoR — is the authoritative, governed source of knowledge that humans and AI agents use to understand, decide, and act.**
+A **Knowledge System of Record — KSoR — is the authoritative, governed knowledge layer that humans, AI agents, and software use to understand, decide, and act.**
 
 It can contain:
 
@@ -132,7 +140,7 @@ A traditional System of Record and a Knowledge System of Record solve different 
 | Typical contents | Transactions, balances, customers, employees, inventory | Rules, policies, methods, procedures, standards, definitions |
 | Typical systems  | ERP, CRM, HRIS, accounting system                       | KSoR                                                         |
 | Core question    | **What is true right now?**                             | **What do we know and how should we operate?**               |
-| Optimized for    | Applications and business processes                     | Humans and AI agents                                         |
+| Optimized for    | Applications and business processes                     | Humans, AI agents, and software                              |
 | Authority        | Operational data                                        | Governed knowledge                                           |
 | Change mechanism | Transactions                                            | Review, governance, versioning                               |
 | AI role          | Tool consumer                                           | First-class knowledge consumer                               |
@@ -194,43 +202,71 @@ KSoR therefore treats **governance, provenance, citations, versioning, and abste
 
 ---
 
-# One Source. Two Surfaces.
+# Retrieval Is Not the Product
+
+KSoR may use search, indexing, embeddings, full-text retrieval, structured lookup, or other retrieval techniques.
+
+Those mechanisms are implementation details.
+
+KSoR is not fundamentally:
+
+- a vector database,
+- an embedding service,
+- a RAG framework,
+- a chatbot,
+- a document search engine,
+- or an MCP wrapper.
+
+Those technologies can help deliver a KSoR.
+
+They do not make something a KSoR.
+
+The defining property is **authoritative governed knowledge**.
+
+
+---
+
+# One Source. Multiple Projections.
 
 KSoR follows a simple principle:
 
-> **Humans and AI agents should not operate from different versions of organizational knowledge.**
+> **Humans, AI agents, and software should not operate from different versions of organizational knowledge.**
 
-Your governed source produces two surfaces.
+The governed record is the authority. Human, agent, and machine-facing experiences are **projections** of that record rather than separately maintained knowledge stores.
 
 ```text
-                     Governed Knowledge
-                           Markdown
-                              │
-                              │
-                        ┌─────┴─────┐
-                        │   KSoR    │
-                        └─────┬─────┘
-                              │
-               ┌──────────────┴──────────────┐
-               │                             │
-               ▼                             ▼
-        Human Surface                  Agent Surface
-        Knowledge Site                      MCP
-               │                             │
-        Search / Browse               Search / Retrieve
-        Read / Learn                  Cite / Reason
-        Review / Share                Abstain / Act
-               │                             │
-               └──────────────┬──────────────┘
-                              │
-                         Same Truth
+                         Governed Knowledge
+                              Markdown
+                                 │
+                                 ▼
+                            ┌─────────┐
+                            │  KSoR   │
+                            └────┬────┘
+                                 │
+          ┌──────────────────────┼──────────────────────┐
+          │                      │                      │
+          ▼                      ▼                      ▼
+   Human Projection       Agent Projection      Machine Projection
+   Next.js + Fumadocs          MCP              Markdown / llms.txt
+          │                      │                      │
+   Search / Browse        Search / Retrieve       Consume / Index
+   Read / Learn           Cite / Reason           Integrate / Build
+   Review / Share         Abstain / Act                 │
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                              Same Truth
 ```
 
-The website is not maintained separately from the agent corpus.
+A KSoR can also carry an **agent-first maintenance context** — for example `AGENTS.md` and reusable skills — so coding agents can work on the governed record without turning their own model context into a competing source of truth.
 
-The agent corpus is not an invisible copy of the website.
+The human experience is not maintained as a separate knowledge source.
 
-They are projections of the **same governed source**.
+The MCP interface is not an invisible copy of the website.
+
+Machine-readable outputs are not a third knowledge store.
+
+They are different projections of the **same governed source**.
 
 ---
 
@@ -244,7 +280,7 @@ Different consumers may receive different representations, but those representat
 
 ---
 
-## 2. Humans and Agents Are Both First-Class Consumers
+## 2. Humans, Agents, and Software Are First-Class Consumers
 
 Knowledge architecture can no longer assume that only people will read documentation.
 
@@ -254,7 +290,10 @@ Every important piece of institutional knowledge should be usable by:
 - AI assistants,
 - autonomous agents,
 - agent workflows,
-- and applications.
+- applications,
+- and machine-readable tooling.
+
+Different consumers may require different representations, but those representations should derive from the same governed record.
 
 ---
 
@@ -267,7 +306,7 @@ An answer is much more useful when you can determine:
 - when it was built,
 - and what source supported the claim.
 
-KSoR preserves the chain from source knowledge to generated surface.
+KSoR preserves the chain from source knowledge to generated projections.
 
 ---
 
@@ -462,8 +501,8 @@ pnpm dev
 ```
 
 The local knowledge site serves at `http://localhost:3000` and hot-reloads as
-you edit the Markdown source — the same corpus that will ultimately serve
-agents.
+you edit the Markdown source — the same governed corpus that will ultimately
+serve humans, agents, and machine-readable consumers.
 
 ---
 
@@ -485,7 +524,7 @@ provenance — is a future verb; see [`docs/status.md`](docs/status.md).)
 npx @panaversity/ksor serve
 ```
 
-The agent surface will expose the governed KSoR through MCP. This verb is
+The agent projection will expose the governed KSoR through MCP. This verb is
 designed, not implemented — the prose you write in your scaffold's
 `instance.md` is reserved as its future system prompt.
 
@@ -556,13 +595,17 @@ used by Example Corporation.
 
 ## `system/site/`
 
-The human-readable surface — a real Next.js + Fumadocs app that renders the
+The reference **human projection** — a real Next.js + Fumadocs app that renders the
 record, shipped as ordinary source code you own outright rather than an
 opaque hosted service. It is replaceable behind a five-clause surface
 contract (`specs/ksor/init/spec.md`): any shell that renders the record,
 degrades directives to readable text, serves `llms.txt`, passes the browser
 smoke, and never emits a document outside the audience it was built for is
 equally conformant.
+
+The reference site also exposes machine-readable output such as `llms.txt`.
+That output is another projection of the same governed record, not a separately
+maintained AI corpus.
 
 ---
 
@@ -571,6 +614,8 @@ equally conformant.
 Instructions and reusable skills for AI coding agents working on the KSoR.
 
 KSoR is designed to be **agent-first**.
+
+The agent-maintenance context is not itself authoritative knowledge. It tells coding agents **how to work on the authoritative record safely**.
 
 Instead of forcing users to manually perform repetitive repository operations, the project can carry the instructions an AI coding agent needs for recurring tasks such as:
 
@@ -674,9 +719,11 @@ the architecture should make the answer discoverable.
 
 ---
 
-# The Agent Surface
+# The Agent Projection
 
-KSoR uses the **Model Context Protocol (MCP)** as the interoperability boundary between governed knowledge and AI runtimes.
+KSoR uses the **Model Context Protocol (MCP)** as the reference interoperability boundary between governed knowledge and AI runtimes.
+
+MCP is an interface to the KSoR, not the KSoR itself.
 
 The goal is not to create another model-specific knowledge plugin.
 
@@ -704,28 +751,25 @@ The model or runtime becomes replaceable.
 
 ---
 
-# Retrieval Is Not the Product
+# The Machine Projection
 
-KSoR may use search, indexing, embeddings, full-text retrieval, structured lookup, or other retrieval techniques.
+AI-native systems increasingly need knowledge in forms that software can consume directly, without scraping a human documentation interface.
 
-Those mechanisms are implementation details.
+A KSoR can therefore expose representations such as:
 
-KSoR is not fundamentally:
+- canonical governed Markdown,
+- `llms.txt`,
+- structured metadata,
+- build manifests,
+- indexes,
+- and other machine-readable artifacts.
 
-- a vector database,
-- an embedding service,
-- a RAG framework,
-- a chatbot,
-- a document search engine,
-- or an MCP wrapper.
+These outputs are derived from the same governed record. They do not become independent sources of truth.
 
-Those technologies can help deliver a KSoR.
-
-They do not make something a KSoR.
-
-The defining property is **authoritative governed knowledge**.
+The durable asset remains the governed knowledge; each representation is replaceable.
 
 ---
+
 
 # KSoR and RAG
 
@@ -735,7 +779,7 @@ RAG answers:
 
 KSoR answers a broader question:
 
-> What knowledge is authoritative enough that an organization permits humans and AI agents to operate from it?
+> What knowledge is authoritative enough that an organization permits humans, AI agents, and software to operate from it?
 
 A useful relationship is:
 
@@ -748,8 +792,10 @@ KSoR
 ├── Versioning
 ├── Review
 ├── Scope
-├── Human Surface
-├── Agent Surface
+├── Human Projection
+├── Agent Projection
+├── Machine Projection
+├── Agent-First Maintenance Context
 │
 └── Retrieval
      ├── Search
@@ -772,7 +818,7 @@ A Content Management System asks:
 
 A KSoR asks:
 
-> Which knowledge is authoritative, governed, traceable, and safe for humans and agents to rely upon?
+> Which knowledge is authoritative, governed, traceable, and safe for humans, agents, and software to rely upon?
 
 Content is an input.
 
@@ -803,9 +849,11 @@ Approved
   ▼
 Authoritative KSoR
   │
-  ├──────────────► Human Surface
+  ├──────────────► Human Projection
   │
-  └──────────────► Agent Surface
+  ├──────────────► Agent Projection
+  │
+  └──────────────► Machine Projection
   │
   ▼
 Superseded / Retired
@@ -861,7 +909,9 @@ This distinction is essential for trustworthy agentic systems.
 
 # KSoR in an AI-Native Architecture
 
-KSoR becomes especially useful when AI agents begin performing real organizational work.
+An AI-native organization cannot rely on model memory, scattered documents, or an ungoverned RAG index as its institutional knowledge layer.
+
+KSoR becomes especially important when AI agents begin performing real organizational work because it gives humans, agents, and software a shared, governed basis for interpretation and action.
 
 ```text
                    Human / AI Worker
@@ -1008,7 +1058,9 @@ A KSoR should not require an organization to publish its institutional knowledge
 
 ## Agent Factory KSoR
 
-An Agent Factory KSoR can define the shared methodology used across many AI-native implementations:
+Agent Factory illustrates the transition KSoR is designed to support: from a human-readable book plus retrieval service toward an **AI-native knowledge platform** where humans and AI agents learn, reason, and operate from the same governed source of truth.
+
+The Agent Factory KSoR can define the shared methodology used across many AI-native implementations:
 
 ```text
 Agent Factory KSoR
@@ -1155,7 +1207,7 @@ The predecessor (vsor) implementation — reference material for this rebuild, n
 - automated testing,
 - and deployment workflows.
 
-The MCP-based agent surface is designed, not implemented — see [`docs/status.md`](docs/status.md).
+The MCP-based agent projection is designed, not implemented — see [`docs/status.md`](docs/status.md).
 
 See:
 
@@ -1197,7 +1249,7 @@ ksor dev
 
 ### `ksor build`
 
-Validate and build the deployable KSoR surfaces.
+Validate and build the deployable KSoR projections.
 
 ```bash
 ksor build
@@ -1305,14 +1357,14 @@ See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 # The Idea in One Sentence
 
-> **A traditional System of Record tells an AI agent what is true about the business; a Knowledge System of Record tells it what the organization knows and how it should operate.**
+> **A traditional System of Record tells an AI system what is true about the business; a Knowledge System of Record tells humans, agents, and software what the organization knows and how it should operate.**
 
-KSoR makes that knowledge **authoritative, governed, traceable, human-readable, agent-readable, and vendor-neutral**.
+KSoR makes that knowledge **authoritative, governed, traceable, human-readable, agent-readable, machine-readable, and vendor-neutral**.
 
 ---
 
 ## KSoR
 
-**Knowledge you can govern. Answers you can trace. Boundaries agents can respect.**
+**Govern knowledge once. Let humans and AI operate from the same truth.**
 
 ---
