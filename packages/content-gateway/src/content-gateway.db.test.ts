@@ -209,7 +209,21 @@ Answer ONLY from this record. Abstention is a correct answer.
 
   afterAll(async () => {
     await client?.close();
-    server?.kill();
+    // AWAIT the spawned gateway's exit before dropping the database: its
+    // SIGTERM handler drains its own pool, so DROP ... WITH (FORCE) has no
+    // live connection to terminate. Killing without waiting raced the drop
+    // into a 57P01 on the gateway's connections (found live in CI,
+    // 2026-08-19). SIGKILL is the fallback if graceful shutdown stalls.
+    if (server !== undefined) {
+      await new Promise<void>((resolve) => {
+        const hard = setTimeout(() => server.kill("SIGKILL"), 5_000);
+        server.once("exit", () => {
+          clearTimeout(hard);
+          resolve();
+        });
+        server.kill("SIGTERM");
+      });
+    }
     await pool?.end();
     if (admin !== undefined) {
       if (dbName !== undefined)
