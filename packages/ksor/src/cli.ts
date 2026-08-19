@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { exitCodes, resolveCommand, verbs } from "./index.js";
 import { runInit } from "./init/index.js";
 import { unsupportedPlatform } from "./init/platform.js";
+import { runServe } from "./serve/index.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   name: string;
@@ -31,11 +32,11 @@ const usage =
   "\n" +
   "Usage: ksor <verb>\n" +
   "\n" +
-  `Verbs (init is implemented; the rest exit 2 until they ship):\n` +
+  `Verbs (init and serve are implemented; dev and build exit 2 until they ship):\n` +
   "  init    create a new KSoR project (implemented)\n" +
   "  dev     run the human surface locally, watching\n" +
   "  build   validate and build both surfaces\n" +
-  "  serve   expose the MCP agent surface\n" +
+  "  serve   expose the MCP agent surface (spawns the installed kernel gateway)\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
   `Docs: node_modules/${pkg.name}/docs · ${pkg.homepage}\n`;
@@ -74,6 +75,16 @@ function main(args: readonly string[]): number {
         templatesDir: fileURLToPath(new URL("../templates/scaffold", import.meta.url)),
       },
     );
+  }
+
+  if (verb === "serve") {
+    // The CLI stays zero-dep: serve SPAWNS the installed kernel gateway, never
+    // imports it (decision 12 publish revision). It reads ./instance.md from
+    // the project root, so run it there.
+    return runServe(args.slice(args.indexOf("serve") + 1), process.cwd(), {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+    });
   }
 
   // A word that is not in the design is refused (exit 1), never conflated with

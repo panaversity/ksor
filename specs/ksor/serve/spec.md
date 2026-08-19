@@ -78,10 +78,14 @@ for — the same seam and five guarantees as the site shells
 any tool to return.
 
 **Errors are documentation.** Refusals exit 1 with a remedied message;
-environment failures exit 3. The door today is the workspace `ksor-gateway`
-binary (stateless HTTP; loopback by default, a public bind deliberate);
-the published `ksor serve` verb keeps exiting 2 honestly until the packaging decision in
-decision 12 resolves how the kernel ships to npm.
+environment failures exit 3. The kernel ships as ONE npm package —
+`@panaversity/ksor-content-gateway` (bins `ksor-content` + `ksor-content-gateway`;
+stateless HTTP, loopback by default, a public bind deliberate), decision 12
+publish revision. The published `ksor serve` verb no longer exits 2: it
+RESOLVES that package's bin from the project and SPAWNS it (the zero-dep CLI
+never imports the kernel), forwarding args, env, and stdio and returning its
+exit code. When the kernel is not installed, serve exits 3 with a remedy
+naming the package to add.
 
 ## Acceptance
 

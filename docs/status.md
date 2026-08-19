@@ -111,10 +111,13 @@ the deploy story — plus the CLI contract: `dev`,
 
 ## Designed, not implemented
 
-- `ksor dev` / `build` / `serve` — the CLI verbs (each still exits `2`
-  with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
-  work today without them, and the kernel's `ksor-content` /
-  `ksor-content-gateway` workspace binaries carry the serve slice in-repo).
+- `ksor dev` / `build` — the CLI verbs still exit `2` with an honest notice;
+  the scaffold's own `pnpm dev` / `pnpm build` work today without them.
+  `ksor serve` IS implemented: the zero-dep CLI resolves and spawns the
+  installed kernel gateway bin (`@panaversity/ksor-content-gateway`),
+  forwarding args/env/stdio; it exits `3` with a remedy when the kernel is
+  not installed. Wired but not yet released (the kernel package is
+  `private` pending the publish flip + npm bootstrap).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
