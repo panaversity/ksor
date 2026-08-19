@@ -110,7 +110,7 @@ the deploy story — plus the CLI contract: `dev`,
 - `ksor dev` / `build` / `serve` — the CLI verbs (each still exits `2`
   with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
   work today without them, and the kernel's `ksor-content` /
-  `ksor-gateway` workspace binaries carry the serve slice in-repo).
+  `ksor-content-gateway` workspace binaries carry the serve slice in-repo).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).

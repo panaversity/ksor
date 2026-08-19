@@ -16,7 +16,7 @@
 
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import type pg from "pg";
+import pg from "pg";
 
 import { contentPool, ContentStoreError } from "./db.js";
 import { parseInstance, InstanceParseError, type ContentInstance } from "./instance.js";
@@ -122,6 +122,12 @@ function isFsError(exc: unknown): boolean {
 /** Failures past the explicit branches: refusals are data problems; codes mean the world broke. */
 function classifyFailure(exc: unknown): number {
   if (exc instanceof InstanceParseError || exc instanceof ManifestError) return REFUSED;
+  // A pg SQL error (a 23514 CHECK, a 23505 unique violation during ingest) is a
+  // DATA problem the operator fixes in the corpus — REFUSED (exit 1), not
+  // ENVIRONMENT. Its SQLSTATE `code` is a string, which isFsError below would
+  // otherwise mis-read as an OS/fs failure (review 2026-08-19). Checked before
+  // isFsError; a genuine connection failure is not a DatabaseError.
+  if (exc instanceof pg.DatabaseError) return REFUSED;
   if (exc instanceof ContentStoreError || isFsError(exc)) return ENVIRONMENT;
   return REFUSED;
 }

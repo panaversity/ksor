@@ -81,7 +81,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // column while /health reports healthy. An UNREACHABLE store is not this
   // gate's concern — it is a warning, handled by the space check below.
   try {
-    await assertSchemaCompatible(pool, instance.tenantId);
+    await assertSchemaCompatible(pool);
   } catch (error) {
     if (error instanceof SchemaVersionError) throw error;
     console.error(

@@ -295,14 +295,16 @@ correctness pass.
 
 ### Decision C — a migration path is owed before adopters have data
 
-`schema.sql` is one file with no runner (`schema_meta` pinned at 2.0),
-which is correct while nothing is released. Before an adopter runs a live
-corpus at 2.0 and the schema moves to 2.1, a forward path must exist:
-versioned plain-SQL migrations + a runner keyed on `schema_meta` (no
-drizzle-kit needed; the information_schema drift test detects divergence
-but cannot repair it). Deferred deliberately — building the runner before
-the schema stabilizes and before any data exists is premature — but
-tracked here and in docs/status.md so it is not forgotten.
+`schema.sql` is one file with no runner (`schema_meta` at 2.1), which is
+correct while nothing is released. Before an adopter runs a live corpus and
+the schema moves forward, a path must exist: versioned plain-SQL migrations
+
+- a runner keyed on `schema_meta` (raw `pg`, no ORM — decision 12's
+  `drizzle-orm` was dropped as unused). Until then the gateway fails closed at
+  boot on a too-old or unapplied schema (`assertSchemaCompatible`), rather than
+  erroring per-request. Deferred deliberately — building the runner before the
+  schema stabilizes and before any data exists is premature — but tracked here
+  and in docs/status.md so it is not forgotten.
 
 ### The integration path (decision 12, sketched)
 

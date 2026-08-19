@@ -38,7 +38,7 @@ denied AS (
       AND EXISTS (SELECT 1 FROM takedown_denylist d
                    WHERE d.tenant_id = n.tenant_id AND d.corpus_id = $2
                      AND d.stable_id = n.stable_id)
-  UNION ALL
+  UNION
     SELECT c.node_id, TRUE
     FROM content_nodes c
     JOIN g ON c.generation = g.gen

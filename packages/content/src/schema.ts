@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import type pg from "pg";
 
 import { EMBED_DIM } from "./config.js";
-import { ContentStoreError, runProbe } from "./db.js";
+import { ContentStoreError } from "./db.js";
 
 /** pgvector vector + HNSW ceiling. */
 export const EMBED_DIM_MAX = 2000;
@@ -40,27 +40,51 @@ function compareVersion(a: string, b: string): number {
   return 0;
 }
 
-/** A database whose schema is older than this build requires. Subclasses
- * ContentStoreError so the gateway's exit contract classifies it exit 3. */
+/**
+ * A database whose schema is missing or older than this build requires.
+ * Subclasses ContentStoreError so the gateway's exit contract classifies it
+ * exit 3, but with its OWN constructor: ContentStoreError wraps its argument in
+ * "content store temporarily unavailable (…)", which would tell the operator to
+ * chase connectivity for a schema problem (review 2026-08-19). This sets the
+ * remediation message verbatim.
+ */
 export class SchemaVersionError extends ContentStoreError {
   override readonly name: string = "SchemaVersionError";
+  constructor(message: string) {
+    super("schema");
+    this.message = message;
+  }
 }
 
 /**
- * Refuse to serve against a database older than this build needs — fail closed
- * at boot with a legible message. There is no migration runner (a recorded
- * gap): a newer gateway on an older database would otherwise error PER-REQUEST
- * on a missing column (e.g. takedown `scope`, decision 14) while /health still
- * reported healthy. A connection failure is NOT this error's concern (the
- * caller treats an unreachable store as a warning) — only a reachable,
- * too-old schema refuses.
+ * Refuse to serve against a database that is missing the schema OR older than
+ * this build needs — fail closed at boot with a legible message. There is no
+ * migration runner (a recorded gap): a newer gateway on an older/absent schema
+ * would otherwise answer /live and /health while erroring PER-REQUEST on a
+ * missing table or column. Queried with the pool's OWN role (schema_meta has no
+ * RLS) so the raw SQLSTATE is visible: a missing schema_meta table (42P01) or
+ * database (3D000) is "reachable but uninitialized" — the COMMON case, and it
+ * refuses. A genuine connection failure is NOT this error's concern; it
+ * propagates, and the caller treats an unreachable store as a warning.
  */
-export async function assertSchemaCompatible(pool: pg.Pool, tenantId: string): Promise<void> {
+export async function assertSchemaCompatible(pool: pg.Pool): Promise<void> {
   const required = schemaVersion();
-  const r = await runProbe(pool, tenantId, (c) =>
-    c.query("SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1"),
-  );
-  const dbVersion = (r.rows[0] as { schema_version?: string } | undefined)?.schema_version;
+  let dbVersion: string | undefined;
+  try {
+    const r = await pool.query(
+      "SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1",
+    );
+    dbVersion = (r.rows[0] as { schema_version?: string } | undefined)?.schema_version;
+  } catch (error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === "42P01" || code === "3D000") {
+      throw new SchemaVersionError(
+        "the content schema was never applied to this database — run the schema step " +
+          "(ksor-content schema --apply) before serving.",
+      );
+    }
+    throw error; // a genuine connection failure — the caller treats it as unreachable
+  }
   if (dbVersion === undefined) {
     throw new SchemaVersionError(
       "schema_meta is empty — this database was not initialized by the schema step.",

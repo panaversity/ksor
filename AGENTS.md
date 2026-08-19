@@ -216,10 +216,15 @@ reverse it, and a reversed decision keeps its entry with a revision note.
 
 12. **The kernel's dependency set** (2026-08-19, with decision 11; each
     entry individually reversible by a better tool winning a recorded
-    comparison). One Postgres driver: `pg`, with `drizzle-orm` for typed
-    queries — **`schema.sql` stays the DDL source of truth** (converted from
-    the oracle; a drift test asserts the Drizzle table objects match the
-    live information_schema — two truths, one test). `zod` from the catalog
+    comparison). One Postgres driver: `pg`, queried **raw** —
+    **`schema.sql` stays the DDL source of truth** (converted from the
+    oracle; a rendered-SQL test in `schema.integration.test.ts` pins it).
+    _Revision 2026-08-19: `drizzle-orm` was proposed here for typed queries
+    with an information_schema drift test, then DROPPED as unused before it
+    landed — no package declares it, and guard rule 5 enforces its absence;
+    raw `pg` with explicit projection-width guards carries the kernel. If a
+    typed-query layer returns, it re-earns its place with the drift test the
+    original proposal named._ `zod` from the catalog
     pin (the reserved "first validated public API" arrived). `@google/genai`
     as the default embedding provider behind the seam — the seam, not the
     vendor, is the contract. `jose` for the gateway kit's public-door JWT

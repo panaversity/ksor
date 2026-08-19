@@ -307,19 +307,41 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     ).rejects.toThrowError();
   });
 
-  it("assertSchemaCompatible refuses a database OLDER than this build (fail-closed boot)", async () => {
+  it("assertSchemaCompatible refuses a STALE schema, with a raw (unwrapped) message", async () => {
     // At the applied version it passes.
-    await expect(assertSchemaCompatible(pool, TENANT)).resolves.toBeUndefined();
-    // Simulate a stale database: an older schema_version. A newer gateway must
-    // refuse to boot (SchemaVersionError → exit 3) rather than error
-    // per-request on the missing takedown scope column (review 2026-08-19).
+    await expect(assertSchemaCompatible(pool)).resolves.toBeUndefined();
+    // A stale database: an older schema_version. A newer gateway must refuse to
+    // boot (SchemaVersionError → exit 3) rather than error per-request on the
+    // missing takedown scope column (review 2026-08-19).
     await pool.query("UPDATE schema_meta SET schema_version = '2.0'");
     try {
-      const err = await assertSchemaCompatible(pool, TENANT).catch((e: unknown) => e);
+      const err = await assertSchemaCompatible(pool).catch((e: unknown) => e);
       expect(err, "must refuse the stale schema").toBeInstanceOf(SchemaVersionError);
       expect((err as Error).message).toMatch(/2\.0.*requires >= /s);
+      // #4: the message is the remediation itself, NOT wrapped in
+      // ContentStoreError's "content store temporarily unavailable (…)".
+      expect((err as Error).message).not.toContain("temporarily unavailable");
     } finally {
       await pool.query(`UPDATE schema_meta SET schema_version = '${schemaVersion()}'`);
+    }
+  });
+
+  it("assertSchemaCompatible refuses an UNAPPLIED schema — the common uninitialized-DB case", async () => {
+    // A reachable database with no schema at all (schema_meta absent → 42P01)
+    // must REFUSE, not fall through to the caller's "unreachable" warning and
+    // then error per-request (review 2026-08-19).
+    const emptyName = `ksor_empty_${randomBytes(4).toString("hex")}`;
+    await admin.query(`CREATE DATABASE ${emptyName}`);
+    const emptyUrl = new URL(adminDsn);
+    emptyUrl.pathname = `/${emptyName}`;
+    const emptyPool = contentPool(emptyUrl.toString(), 1);
+    try {
+      const err = await assertSchemaCompatible(emptyPool).catch((e: unknown) => e);
+      expect(err, "unapplied schema must refuse").toBeInstanceOf(SchemaVersionError);
+      expect((err as Error).message).toMatch(/never applied/);
+    } finally {
+      await emptyPool.end();
+      await admin.query(`DROP DATABASE IF EXISTS ${emptyName} WITH (FORCE)`).catch(() => undefined);
     }
   });
 });

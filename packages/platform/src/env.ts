@@ -28,7 +28,15 @@ export function envInt(name: string, fallback: number, minimum?: number): number
 export function envFloat(name: string, fallback: number, minimum?: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
-  const value = Number.parseFloat(raw.trim());
+  const trimmed = raw.trim();
+  // Strict: Number.parseFloat("15%") → 15 and "15abc" → 15 (review,
+  // 2026-08-19). A malformed value must fall back to the default, matching
+  // envInt — a lax parse here silently disabled the KSOR_MAX_SHRINK guard.
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(trimmed)) {
+    warn(name, raw, fallback);
+    return fallback;
+  }
+  const value = Number(trimmed);
   if (!Number.isFinite(value)) {
     warn(name, raw, fallback);
     return fallback;

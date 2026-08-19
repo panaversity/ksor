@@ -446,8 +446,20 @@ export async function buildGeneration(
     );
     if (removed.length > 0) log(`  removed: ${JSON.stringify(removed.slice(0, 20))}`);
     if (added.length > 0) log(`  added:   ${JSON.stringify(added.slice(0, 20))}`);
-    // oracle env names: SOR_MAX_SHRINK / SOR_ALLOW_SHRINK.
-    const maxShrink = envFloat("KSOR_MAX_SHRINK", 0.15, 0.0);
+    // oracle env names: SOR_MAX_SHRINK / SOR_ALLOW_SHRINK. KSOR_MAX_SHRINK is a
+    // FRACTION in [0,1]. A value above 1 — "15" meant as a percentage — would
+    // silently DISABLE this catastrophic-drop guard (shrinkFraction is always
+    // <= 1, so a threshold > 1 never fires), flipping a build that lost every
+    // node straight to production. Reject it and keep the safe default rather
+    // than un-guard the flip (review 2026-08-19).
+    const configuredShrink = envFloat("KSOR_MAX_SHRINK", 0.15, 0.0);
+    const maxShrink = configuredShrink <= 1 ? configuredShrink : 0.15;
+    if (configuredShrink > 1) {
+      log(
+        `KSOR_MAX_SHRINK=${configuredShrink} is not a fraction in [0,1]; using ${maxShrink} ` +
+          `(did you mean ${configuredShrink / 100}?)`,
+      );
+    }
     const allowed = options.force === true || process.env["KSOR_ALLOW_SHRINK"] === "1";
     if (shrinkUnsafe(delta.priorSlugs.size, delta.newSlugs.size, maxShrink) && !allowed) {
       const fraction = shrinkFraction(delta.priorSlugs.size, delta.newSlugs.size);

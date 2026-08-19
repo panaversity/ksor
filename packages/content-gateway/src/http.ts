@@ -96,6 +96,15 @@ export function resolveSecurity(bind: { host: string; port: number }): Security 
 
 export async function runHttp(composition: Composition): Promise<ServerType> {
   const auth: Auth = buildAuth(process.env);
+  // RFC 9728 / MCP auth: WWW-Authenticate's `resource_metadata` must be the URL
+  // of the metadata DOCUMENT (served at /.well-known/oauth-protected-resource/mcp
+  // below), NOT the resource identifier — a client that follows the resource URL
+  // hits GET /mcp → 405 and never finds the authorization server (review
+  // 2026-08-19). Derived from the resource URL's origin so it matches the route.
+  const resourceMetadataUrl =
+    auth.mode === "public"
+      ? new URL("/.well-known/oauth-protected-resource/mcp", auth.config.resourceUrl).toString()
+      : "";
   const bind = resolveBind(process.env);
   const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
   // #3: the flag a dev needs to run loopback (KSOR_AUTH_DISABLED) must not,
@@ -192,7 +201,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
       if (token === undefined) {
         return c.json({ error: "bearer token required" }, 401, {
-          "www-authenticate": `Bearer resource_metadata="${auth.config.resourceUrl}"`,
+          "www-authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
         });
       }
       try {
@@ -263,7 +272,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
         if (token === undefined) {
           return c.json({ error: "bearer token required" }, 401, {
-            "www-authenticate": `Bearer resource_metadata="${auth.config.resourceUrl}"`,
+            "www-authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
           });
         }
         let identity;
@@ -323,6 +332,11 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     server.close(() => {
       void pool.end().catch(() => undefined);
     });
+    // close() waits for EXISTING connections to end; an idle keep-alive MCP
+    // client (between requests) would keep its callback from ever firing — and
+    // thus pool.end() from running — until SIGKILL. Close idle sockets so the
+    // drain actually completes (review 2026-08-19).
+    (server as { closeIdleConnections?: () => void }).closeIdleConnections?.();
   };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
