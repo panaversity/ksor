@@ -17,6 +17,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildScaffold } from "./e2e-build.js";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The shell swap seam, proven the only way a seam can be: one suite, two
@@ -228,7 +230,10 @@ describe.runIf(enabled).each(SHELLS)(
         // exist, so it typechecks here (review finding, 2026-08-18).
         run("pnpm", ["--dir", path.join("system", "site"), "exec", "tsc", "--noEmit"], project);
       }
-      run("pnpm", ["build"], project);
+      const built = buildScaffold(project);
+      expect(built.status, `${built.stdout ?? ""}\n${built.stderr ?? ""}`.trim().slice(-2000)).toBe(
+        0,
+      );
       outDir = path.join(project, "system", "site", "out");
     }, 600_000);
 
@@ -369,11 +374,7 @@ describe.runIf(enabled).each(SHELLS)(
     }, 240_000);
 
     it("sub-path hosting: a KSOR_BASE_PATH build prefixes llms.txt and page links", () => {
-      const result = spawnSync("pnpm", ["build"], {
-        cwd: project,
-        encoding: "utf8",
-        env: { ...process.env, KSOR_BASE_PATH: "/repo" },
-      });
+      const result = buildScaffold(project, { KSOR_BASE_PATH: "/repo" });
       expect(
         result.status,
         (result.stderr ?? String(result.error ?? "spawn failed")).slice(-2000),

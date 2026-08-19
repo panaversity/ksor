@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildScaffold } from "./e2e-build.js";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Spec acceptance (4)+(5): the scaffolded site serves the example document in
@@ -40,7 +42,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
   });
 
   it("static build serves the record: llms.txt index, distinct themes, no console errors, no external requests", async () => {
-    const build = spawnSync("pnpm", ["build"], { cwd: project, encoding: "utf8" });
+    const build = buildScaffold(project);
     expect(build.status, (build.stderr ?? String(build.error ?? "spawn failed")).slice(-2000)).toBe(
       0,
     );

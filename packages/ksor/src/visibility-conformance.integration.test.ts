@@ -13,6 +13,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildScaffold } from "./e2e-build.js";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The visibility spec's acceptance (specs/ksor/visibility/spec.md), run
@@ -150,9 +152,7 @@ describe.runIf(enabled).each(SHELLS)(
       // 2026-08-18: the suite's own pre-wipe made that structurally
       // invisible).
       if (!opts?.keepOut) rmSync(outDir, { recursive: true, force: true });
-      return run(
-        "pnpm",
-        ["build"],
+      return buildScaffold(
         project,
         audience === undefined ? { KSOR_AUDIENCE: "" } : { KSOR_AUDIENCE: audience },
       );
