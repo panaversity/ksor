@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "pnpm -C system/site dev",
     "build": "pnpm -C system/site build",
-    "check": "node .agents/skills/format-checker/check.mjs"
+    "check": "node .agents/skills/format-checker/check.mjs",
+    "serve": "ksor serve",
+    "ingest": "ksor ingest"
+  },
+  "dependencies": {
+    "@panaversity/ksor": "KSOR-STAMP-VERSION"
   },
   "engines": {
     "node": ">=24"

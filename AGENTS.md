@@ -212,7 +212,23 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     `research/kernel-conversion.md`; contract: `specs/ksor/serve/spec.md`.
     Each crossing mechanism still answers decision 6's gate individually;
     the database-free-init clause is reversed only by an explicit owner
-    decision recorded here.
+    decision recorded here. _Revision 2026-08-20 (owner): MCP serving is a
+    CORE surface of every KSoR, not an optional rung, so the served tool ships
+    as a FIRST-CLASS scaffold dependency — `ksor init` writes
+    `@panaversity/ksor` into the scaffold's `package.json` dependencies, pinned
+    to the EXACT CLI version that scaffolded the project (via the existing
+    `KSOR-STAMP-VERSION` stamp), plus `serve`/`ingest` convenience scripts, so
+    `pnpm serve` is a local, version-pinned command rather than an `npx`
+    afterthought. This does NOT reverse the database-free-init clause:
+    installing the dependency needs no database, and `pnpm dev` still runs the
+    site without one — the "climb" to serving is now only standing up Postgres
+    and a provider key, not acquiring the tool. The committed scaffold lockfile
+    stays site-only (a stamped version cannot be pre-resolved into a committed
+    lock), so the adopter's FIRST `pnpm install` is non-frozen and writes the
+    lock; their shipped `validate.yml` runs no install, so their CI is
+    unaffected. Verified live: an emitted scaffold's `pnpm install` resolves the
+    pinned dep, links the `ksor` bin, and `pnpm exec ksor` runs. Reversed only
+    by an explicit owner decision recorded here._
 
 12. **The kernel's dependency set** (2026-08-19, with decision 11; each
     entry individually reversible by a better tool winning a recorded
@@ -271,13 +287,17 @@ gateway` package, serve-by-spawn) is superseded._
     SDK's deprecation of its transport-level option points to) and
     `secureHeaders` / `bodyLimit` middleware replacing the hand-rolled
     hardening. `hono` and `@hono/node-server` are declared runtime deps of
-    the PRIVATE content-gateway — already the MCP SDK's own transitive deps,
-    so zero new install bytes — and never reach the published zero-dep `ksor`
-    CLI (which the gateway can never fold into: the SDK alone drags Express +
-    Hono + cors + ajv, ~5.9MB — a packaging fact for decision 12). What stays
-    ours because it is good: `buildAuth` and the fail-closed boot posture,
-    the three probes, and the whole content kernel. Reversed only if the SDK
-    drops the Web-standard transport.
+    the content-gateway — already the MCP SDK's own transitive deps, so zero
+    new install bytes. What stays ours because it is good: `buildAuth` and the
+    fail-closed boot posture, the three probes, and the whole content kernel.
+    Reversed only if the SDK drops the Web-standard transport. _Revision
+    2026-08-20: the transport choice stands unchanged. The packaging
+    sub-claim that these deps "never reach the published zero-dep `ksor` CLI"
+    and "the gateway can never fold into it" is SUPERSEDED by decision 12's
+    2026-08-20 revision: the gateway IS bundled into `@panaversity/ksor`, which
+    now carries `hono` + `@hono/node-server` (guard rule 5 enrolls them) and is
+    no longer zero-dep. The SDK's dependency weight is now install weight of the
+    one published package, not a reason to keep two._
 
 14. **Takedown denial is scoped — per-node by default, subtree by explicit
     opt-in** (owner, 2026-08-19). A review found the ported denial was

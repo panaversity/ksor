@@ -8,6 +8,14 @@ packages:
 # `pnpm install` here never picks up a day-zero compromised release.
 minimumReleaseAge: 2880
 
+# The one exception is the tool that scaffolded this project: `ksor init` pins
+# `@panaversity/ksor` to the EXACT version the adopter deliberately ran, so the
+# quarantine (a defense against unknown third-party releases) must not block the
+# first install for 48 hours after every ksor release. Remove this line only if
+# you unpin the dependency.
+minimumReleaseAgeExclude:
+  - "@panaversity/ksor"
+
 # Dependency install scripts are denied by default. Flip an entry to true
 # only with a comment naming what breaks without it. esbuild and sharp are
 # reviewed and stay denied: both ship prebuilt platform binaries as

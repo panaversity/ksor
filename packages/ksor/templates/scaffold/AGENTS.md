@@ -37,10 +37,18 @@ everything that matters about it is the prose below that frontmatter;
 ## Commands (run at the repo root)
 
 ```sh
-pnpm install     # once, after cloning or scaffolding
+pnpm install     # once, after cloning or scaffolding (also fetches the pinned `ksor` tool)
 pnpm dev         # the site, hot-reloading, at http://localhost:3000
 pnpm build       # static site into system/site/out/
 pnpm check       # the format checker — run before handing off any knowledge change
+```
+
+The MCP surface (the agent-facing rung) needs a Postgres store with pgvector
+and an embedding provider key — not required for `pnpm dev`:
+
+```sh
+pnpm ingest      # embed knowledge/ into the store (ksor ingest)
+pnpm serve       # run the MCP server over the record (ksor serve); any other verb: pnpm exec ksor <verb>
 ```
 
 ## Publishing

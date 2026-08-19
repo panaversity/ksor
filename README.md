@@ -20,10 +20,13 @@ Both come from the same source, so humans and agents operate from the same insti
 > ### ⚠️ Early-stage software — [`docs/status.md`](docs/status.md) is the authority on what works.
 >
 > **`ksor init` is implemented**: one command scaffolds a complete governed knowledge
-> project — the record, a working site, and the agent kit. The remaining verbs
-> (`dev`, `build`, `serve`) are designed, not implemented; running them prints an
-> honest notice and exits 2. Inside a scaffolded project, `pnpm dev` and
-> `pnpm build` work today without them.
+> project — the record, a working site, and the agent kit. `ksor serve` runs the
+> MCP server over your built record (plus `ingest`/`schema`/`calibrate`/`gc`) —
+> the climbed rung, needing Postgres and a provider key. Only `dev` and `build`
+> remain designed, not implemented; running them prints an honest notice and
+> exits 2. Inside a scaffolded project, `pnpm dev` and `pnpm build` work today
+> without them. See [`docs/status.md`](docs/status.md) for the exact released
+> version — some of this lands the release after the one you install.
 
 ---
 
@@ -424,10 +427,12 @@ If the capitalization policy does not address the situation, the system should n
 
 # Quick Start
 
-> **Status:** `ksor init` works. The `dev`, `build`, and `serve` verbs are
-> designed, not yet implemented — each prints an honest notice and exits `2`
-> today; the scaffold's own `pnpm dev` / `pnpm build` cover local work until
-> they land. [`docs/status.md`](docs/status.md) is authoritative.
+> **Status:** `ksor init` works, and `ksor serve` runs the MCP server over a
+> built record (with `ingest`/`schema`/`calibrate`/`gc` — the climbed rung,
+> needing Postgres and a provider key). Only `dev` and `build` remain designed,
+> not yet implemented — each prints an honest notice and exits `2` today; the
+> scaffold's own `pnpm dev` / `pnpm build` cover local work until they land.
+> [`docs/status.md`](docs/status.md) is authoritative on the released version.
 
 ## Requirements
 
@@ -485,9 +490,14 @@ provenance — is a future verb; see [`docs/status.md`](docs/status.md).)
 npx @panaversity/ksor serve
 ```
 
-The agent surface will expose the governed KSoR through MCP. This verb is
-designed, not implemented — the prose you write in your scaffold's
-`instance.md` is reserved as its future system prompt.
+The agent surface exposes the governed KSoR through MCP: `search`, `outline`,
+and `read` over stateless Streamable HTTP, with cited passages, snapshot
+generation-pinning, and honest abstention. `serve` reads `./instance.md` and
+runs the MCP server in-process — the climbed rung, so it needs a Postgres store
+(pgvector) and an embedding provider key, ingested with `ksor ingest`. It binds
+loopback with auth off by default; a public bind fails closed unless auth is
+configured. (Landing the release after the one you install — see
+[`docs/status.md`](docs/status.md).)
 
 ---
 
@@ -1155,7 +1165,9 @@ The predecessor (vsor) implementation — reference material for this rebuild, n
 - automated testing,
 - and deployment workflows.
 
-The MCP-based agent surface is designed, not implemented — see [`docs/status.md`](docs/status.md).
+The MCP-based agent surface (`ksor serve`) is implemented — the climbed rung,
+needing Postgres and a provider key; see [`docs/status.md`](docs/status.md) for
+the released version.
 
 See:
 
@@ -1177,6 +1189,11 @@ ksor init
 ksor dev
 ksor build
 ksor serve
+# corpus operations for the served rung:
+ksor ingest
+ksor schema
+ksor calibrate
+ksor gc
 ```
 
 ### `ksor init` — implemented
@@ -1203,15 +1220,23 @@ Validate and build the deployable KSoR surfaces.
 ksor build
 ```
 
-### `ksor serve`
+### `ksor serve` — implemented (the climbed rung)
 
-Expose the agent-readable KSoR interface.
+Expose the agent-readable KSoR interface: the MCP server over your built record,
+reading `./instance.md`. Needs a Postgres store (pgvector) and an embedding
+provider key; ingest with `ksor ingest` first.
 
 ```bash
 ksor serve
 ```
 
-The installed release's help will list the commands it supports:
+### `ksor ingest` / `schema` / `calibrate` / `gc` — implemented
+
+The corpus operations behind the served rung: apply the schema, ingest
+`knowledge/` into a generation, calibrate the abstention floor, and collect
+withdrawn generations. Each needs the same Postgres store.
+
+The installed release's help lists the commands it supports:
 
 ```bash
 ksor --help

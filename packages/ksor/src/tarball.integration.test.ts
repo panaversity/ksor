@@ -6,7 +6,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -129,7 +128,14 @@ describe("published tarball", () => {
     const [tarball] = readdirSync(packDir).filter((f) => f.endsWith(".tgz"));
     expect(tarball, `npm pack produced no tarball in ${packDir}`).toBeDefined();
 
-    const extracted = path.join(packDir, "extracted");
+    // Extract UNDER packages/ksor so Node's upward module resolution finds the
+    // real node_modules from extracted/package/dist/cli.mjs (ksor bundles the
+    // kernel and is no longer zero-dep; ESM import ignores NODE_PATH and a
+    // node_modules junction does not resolve on Windows). No copy, no symlink —
+    // this still verifies the tarball's OWN files scaffold identically.
+    const stage = mkdtempSync(path.join(pkgDir, "ksor-tarball-run-"));
+    workDirs.push(stage);
+    const extracted = path.join(stage, "extracted");
     mkdirSync(extracted);
     const untar = spawnSync("tar", ["-xzf", path.join(packDir, tarball ?? ""), "-C", extracted], {
       encoding: "utf8",
@@ -139,16 +145,6 @@ describe("published tarball", () => {
     const name = "proof-sor";
     const fromTarball = workDir();
     const fromCheckout = workDir();
-    // The tarball ships dist/templates/schema but not node_modules; ksor now
-    // bundles the kernel and carries runtime deps, so the ESM cli.mjs needs a
-    // node_modules to resolve them (NODE_PATH does NOT apply to import). A
-    // junction to the checkout's node_modules stands in for `npm install`, so
-    // this test still verifies the tarball's OWN files scaffold identically.
-    symlinkSync(
-      path.join(pkgDir, "node_modules"),
-      path.join(extracted, "package", "node_modules"),
-      "junction",
-    );
     const packedRun = spawnSync(
       process.execPath,
       [path.join(extracted, "package", "dist", "cli.mjs"), "init", name],

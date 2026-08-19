@@ -30,7 +30,16 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     });
     expect(init.status, init.stderr).toBe(0);
     project = path.join(work, "walkthrough");
-    const install = spawnSync("pnpm", ["install"], { cwd: project, encoding: "utf8" });
+    // A fresh scaffold's FIRST install is non-frozen by design: the served tool
+    // `@panaversity/ksor` is pinned in package.json to the exact CLI version
+    // (KSOR-STAMP-VERSION), which the committed site-only lockfile cannot
+    // pre-resolve — so pnpm adds it and writes the lock. `--no-frozen-lockfile`
+    // is required here because pnpm defaults to frozen under CI=true; it models
+    // the adopter's real first `pnpm install`, which then commits the lock.
+    const install = spawnSync("pnpm", ["install", "--no-frozen-lockfile"], {
+      cwd: project,
+      encoding: "utf8",
+    });
     expect(
       install.status,
       (install.stderr ?? String(install.error ?? "spawn failed")).slice(-2000),

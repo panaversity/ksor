@@ -18,7 +18,24 @@ pnpm dev        # browse the knowledge at http://localhost:3000
 ```
 
 No pnpm? Run `npm install -g pnpm` — or `corepack enable pnpm` on Node
-versions that bundle corepack.
+versions that bundle corepack. The first `pnpm install` also fetches the
+`ksor` tool (pinned in `package.json`) and writes it into your lockfile —
+commit the updated lockfile.
+
+### Serving to agents
+
+The record's other surface is an MCP server for AI agents — the same
+knowledge, cited, with honest abstention. It is the climbed rung: it needs a
+Postgres store (with pgvector) and an embedding provider key, so it is not
+part of `pnpm dev`. Once those are set:
+
+```sh
+pnpm ingest     # embed knowledge/ into the store (ksor ingest)
+pnpm serve      # run the MCP server over the record (ksor serve)
+```
+
+`pnpm serve` binds loopback with auth off for local use; a public bind fails
+closed unless auth is configured. Any other operation is `pnpm exec ksor <verb>`.
 
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you
@@ -43,7 +60,7 @@ different coding agent's way of finding the same working contract.
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands, and the pnpm version this project pins.                                                                                                                                   |
+| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` / `pnpm serve` / `pnpm ingest` commands, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
 

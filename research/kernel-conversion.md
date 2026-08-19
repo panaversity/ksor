@@ -308,6 +308,15 @@ the schema moves forward, a path must exist: versioned plain-SQL migrations
 
 ### The integration path (decision 12, sketched)
 
+> **Superseded 2026-08-20 (decision 12 publish/bundling revision).** This
+> section sketched a spawn design — a zero-dep CLI launching a separately
+> installed gateway under `system/gateways/`. What shipped instead: the kernel
+> is BUNDLED into `@panaversity/ksor` (tsdown `noExternal`), `ksor serve` runs
+> the gateway's `main` IN-PROCESS (a direct import, not a launcher), and the
+> CLI carries the kernel's runtime deps (no longer zero-dep). The paragraph
+> below is kept for the reasoning trail; the shipped shape is decision 12 and
+> `specs/ksor/serve/spec.md`.
+
 `pnpm dev` runs the site; `ksor serve` runs the content-gateway. The
 published `ksor` CLI keeps zero runtime deps, so `ksor serve` is a thin
 launcher for the gateway that the scaffold installs under `system/gateways/`

@@ -92,9 +92,14 @@ the deploy story — plus the CLI contract: `dev`,
     abstention. Takedown denial is scoped (decision 14): per-node by default,
     whole-subtree by explicit opt-in via a serving-time `parent_id` walk —
     one seam (`lib/takedown.ts`) across search, read, outline, and calibration,
-    proved in `takedown.db.test.ts`. The published `ksor` CLI is untouched:
-    `serve` still exits `2` until the npm packaging question (decision 12) is
-    resolved.
+    proved in `takedown.db.test.ts`. The npm packaging question (decision 12)
+    is resolved 2026-08-20: the kernel is bundled into `@panaversity/ksor` and
+    `ksor serve` runs the MCP server in-process (see "Designed, not
+    implemented" for the exact per-verb state). Because MCP serving is a core
+    surface (decision 11 revision 2026-08-20), `ksor init` now declares
+    `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
+    version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
+    first-class in every new project. Not yet released.
 
 ## Known gaps in the kernel conversion (tracked, not blocking)
 
