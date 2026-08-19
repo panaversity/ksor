@@ -106,3 +106,5 @@ export {
   type ScoredQuery,
 } from "./calibrate/math.js";
 export { GeminiTextGenerator } from "./lib/providers/gemini.js";
+
+export { runContentCli } from "./commands.js";

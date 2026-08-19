@@ -158,6 +158,10 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     [`${P}ksor-platform`, new Set(["pg", "@types/pg"])],
     [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "@google/genai", `${P}ksor-platform`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
+    // The ONE published kernel package (decision 12, publish revision
+    // 2026-08-19): platform/content/gateway-kit are BUNDLED in (workspace
+    // devDeps, noExternal in tsdown) — never separate npm packages — so their
+    // external runtime deps surface HERE as this package's own dependencies.
     [
       `${P}ksor-content-gateway`,
       new Set([
@@ -171,9 +175,8 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         "zod",
         "pg",
         "@types/pg",
-        `${P}ksor-content`,
-        `${P}ksor-gateway-kit`,
-        `${P}ksor-platform`,
+        "@google/genai", // bundled content's embedding provider
+        "jose", // bundled gateway-kit's JWT verification
       ]),
     ],
   ]);

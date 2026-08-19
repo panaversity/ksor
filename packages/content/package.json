@@ -5,18 +5,9 @@
   "description": "The KSoR content kernel: ingest, chunking, generations, retrieval with calibrated abstention — converted from the production sor-content.",
   "license": "Apache-2.0",
   "author": "Panaversity",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/panaversity/ksor.git",
-    "directory": "packages/content"
-  },
   "bin": {
     "ksor-content": "./dist/cli.mjs"
   },
-  "files": [
-    "dist",
-    "schema"
-  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -25,10 +16,6 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "scripts": {
     "build": "tsdown",

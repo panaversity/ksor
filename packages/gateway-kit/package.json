@@ -5,14 +5,6 @@
   "description": "Fail-closed serving kit for KSoR gateways: auth postures, hardening, transport security — converted from the production sor-gateway-kit slice.",
   "license": "Apache-2.0",
   "author": "Panaversity",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/panaversity/ksor.git",
-    "directory": "packages/gateway-kit"
-  },
-  "files": [
-    "dist"
-  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -21,10 +13,6 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "scripts": {
     "build": "tsdown",

@@ -75,11 +75,15 @@ the deploy story — plus the CLI contract: `dev`,
 ## In this repository, not yet released
 
 - **The content kernel and the MCP gateway** (decision 11, in progress on
-  the kernel-conversion branch): four private workspace packages —
-  platform (pool discipline), content (schema + ingest + hybrid retrieval
+  the kernel-conversion branch): four workspace packages — platform (pool
+  discipline), content (schema + ingest + hybrid retrieval
   - calibrated abstention + read plane), gateway-kit (fail-closed serving
     postures), content-gateway (the content MCP door: search/outline/read over stateless
-    Streamable HTTP — one transport, loopback by default). Converted from the production oracle with
+    Streamable HTTP — one transport, loopback by default). Ships as ONE npm
+    package (decision 12, publish revision): `content-gateway` bundles the
+    other three and exposes both bins (`ksor-content` corpus setup +
+    `ksor-content-gateway` serve); the three stay `private` (dev/test).
+    Converted from the production oracle with
     its suite as the fixture source; acceptance drives the BUILT binary
     with a real MCP client against live Postgres (Neon, pgvector) — cited
     passages, snapshot generation-pinning, byte-exact reads, and the typed

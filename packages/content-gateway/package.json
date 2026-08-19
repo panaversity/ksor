@@ -11,10 +11,12 @@
     "directory": "packages/content-gateway"
   },
   "bin": {
+    "ksor-content": "./dist/content-cli.mjs",
     "ksor-content-gateway": "./dist/cli.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "schema"
   ],
   "type": "module",
   "sideEffects": false,
@@ -30,21 +32,23 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && node copy-schema.mjs",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@google/genai": "^2.17.1",
     "@hono/node-server": "2.1.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@panaversity/ksor-content": "workspace:*",
-    "@panaversity/ksor-gateway-kit": "workspace:*",
-    "@panaversity/ksor-platform": "workspace:*",
     "@types/pg": "^8.21.0",
     "hono": "4.13.2",
+    "jose": "^6.2.9",
     "pg": "^8.23.0",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@panaversity/ksor-content": "workspace:*",
+    "@panaversity/ksor-gateway-kit": "workspace:*",
+    "@panaversity/ksor-platform": "workspace:*",
     "@types/node": "catalog:",
     "tsdown": "0.22.14",
     "typescript": "catalog:",

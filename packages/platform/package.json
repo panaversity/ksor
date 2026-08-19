@@ -5,14 +5,6 @@
   "description": "Shared contracts and database plumbing for the KSoR content kernel — converted from the production sor-platform trim.",
   "license": "Apache-2.0",
   "author": "Panaversity",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/panaversity/ksor.git",
-    "directory": "packages/platform"
-  },
-  "files": [
-    "dist"
-  ],
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -21,10 +13,6 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "scripts": {
     "build": "tsdown",

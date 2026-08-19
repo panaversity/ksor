@@ -13,3 +13,4 @@ workbench/shells/*/.docusaurus/
 workbench/shells/*/.generated/
 workbench/shells/*/.staged-knowledge/
 workbench/shells/*/out/
+packages/content-gateway/schema/
