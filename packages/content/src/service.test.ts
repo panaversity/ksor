@@ -29,6 +29,7 @@ describe("instructionLike", () => {
 import {
   search,
   readDocument,
+  outlineDocuments,
   EmptyQueryError,
   UncalibratedFloorError,
   type ServiceContext,
@@ -61,6 +62,10 @@ describe("a declared-but-uncalibrated floor refuses to serve (fail closed, repre
 
   it("read refuses too", async () => {
     await expect(readDocument(ctx, "any-slug")).rejects.toBeInstanceOf(UncalibratedFloorError);
+  });
+
+  it("outline refuses too — it is a serve (leaks the whole record shape otherwise)", async () => {
+    await expect(outlineDocuments(ctx, {})).rejects.toBeInstanceOf(UncalibratedFloorError);
   });
 });
 

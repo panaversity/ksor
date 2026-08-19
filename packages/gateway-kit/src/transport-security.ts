@@ -3,10 +3,12 @@
 // piece of wiring.py that crosses; the product/bundle plane around it was
 // dropped). The result is the settings shape the MCP SDK's streamable-HTTP
 // transport accepts, and it must be passed wherever that transport is
-// configured so a set var is never a silent no-op. Known recorded deviation:
-// the MCP spec's Origin-validation MUST is met only when these are set (or on
-// a loopback bind, where the SDK arms its own gate); the public doors are
-// bearer-gated, so an evil Origin gains nothing without a token.
+// configured so a set var is never a silent no-op. The MCP spec's
+// Origin-validation MUST is met by the DOOR, not the SDK: the content
+// gateway's resolveSecurity arms a default loopback Origin allowlist on every
+// loopback bind (the SDK's own DNS-rebinding gate is NOT enabled by that
+// composition) and honors these explicit lists on a public bind — where the
+// doors are also bearer-gated, so an evil Origin gains nothing without a token.
 
 import type { Env } from "./env.js";
 

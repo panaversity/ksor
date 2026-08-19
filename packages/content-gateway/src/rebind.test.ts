@@ -24,6 +24,19 @@ describe("resolveSecurity — the loopback rebind allowlist (Host + Origin)", ()
     expect(resolveSecurity({ host: "0.0.0.0", port: 8080 }).hosts).toBeNull();
   });
 
+  it("arms a DEFAULT Origin gate on loopback even with no KSOR_ALLOWED_ORIGINS (MCP Origin MUST)", () => {
+    const { origins } = resolveSecurity({ host: "127.0.0.1", port: 8080 });
+    expect(origins, "loopback Origin gate must be armed by default").not.toBeNull();
+    expect(origins?.has("http://127.0.0.1:8080")).toBe(true);
+    expect(origins?.has("http://localhost:8080")).toBe(true);
+    expect(origins?.has("http://[::1]:8080")).toBe(true);
+    expect(origins?.has("http://evil.example.com:8080")).toBe(false);
+  });
+
+  it("a public bind with no explicit origins is NOT Origin-gated (bearer-gated instead)", () => {
+    expect(resolveSecurity({ host: "0.0.0.0", port: 8080 }).origins).toBeNull();
+  });
+
   it("an origins-only config STILL Host-gates on loopback (no empty-allowlist bypass)", () => {
     process.env["KSOR_ALLOWED_ORIGINS"] = "https://claude.ai";
     try {

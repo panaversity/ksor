@@ -278,6 +278,11 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       actor,
       action: "search_abstained",
       instanceDigest: ctx.instanceDigest,
+      // A floor abstention pinned a generation on the wire (snapshotEnvelope
+      // below); record it so the §7 row joins to what it abstained over —
+      // matched-nothing (generation undefined) records NULL, correctly
+      // (review 2026-08-19).
+      ...(generation === undefined ? {} : { generation }),
       detail: {
         query_chars: queryChars,
         k,
@@ -569,6 +574,12 @@ export async function outlineDocuments(
   options: { node?: string | null; depth?: number | null; limit?: number } = {},
 ): Promise<{ nodes: OutlineNodeWire[] }> {
   const inst = ctx.instance;
+  // A declared-but-uncalibrated floor REFUSES every serve — outline is a
+  // serve (it hands out the whole record structure: slugs, titles, root-
+  // absolute heading paths). search and readDocument already refuse; outline
+  // must too, or an uncalibrated corpus that says REFUSING still leaks its
+  // shape (review 2026-08-19).
+  if (inst.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
   const actor = ctx.actor?.() ?? "anonymous";
   const root = options.node ?? null;
   // Drill-down default: a named node with no explicit depth gets depth=1. An

@@ -21,7 +21,15 @@ export {
   INGEST_ROLE,
   type DbOp,
 } from "./db.js";
-export { applySchema, renderSchema, renderSchemaText, schemaSqlPath } from "./schema.js";
+export {
+  applySchema,
+  assertSchemaCompatible,
+  renderSchema,
+  renderSchemaText,
+  schemaSqlPath,
+  schemaVersion,
+  SchemaVersionError,
+} from "./schema.js";
 export { keywordAbstains, vectorAbstains, type AbstainConfig } from "./lib/abstain.js";
 export {
   hybridSearch,

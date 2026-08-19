@@ -2,7 +2,16 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { renderSchema, renderSchemaText, schemaSqlPath } from "./schema.js";
+import { renderSchema, renderSchemaText, schemaSqlPath, schemaVersion } from "./schema.js";
+
+describe("schemaVersion parses the DDL's declared version (one source, no drift)", () => {
+  it("returns a semver-ish version that the schema.sql INSERT actually declares", () => {
+    const v = schemaVersion();
+    expect(v, "schema version shape").toMatch(/^\d+\.\d+$/);
+    // the parsed version is exactly what the applied DDL writes into schema_meta
+    expect(readFileSync(schemaSqlPath(), "utf8")).toContain(`VALUES ('${v}', `);
+  });
+});
 
 describe("renderSchema against the shipped DDL", () => {
   it("returns the shipped file byte-for-byte at the shipped dimension", () => {

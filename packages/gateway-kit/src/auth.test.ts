@@ -53,6 +53,23 @@ describe("buildAuth postures (the smoke-test list)", () => {
     expect(auth.config.ssoUrl).toBe("https://auth.example.org");
   });
 
+  it("refuses a scheme-less KSOR_SSO_URL at boot — never a per-request 503", () => {
+    // Without this the TypeError from new URL(...) only escapes on the first
+    // bearer, misclassified transient → permanent 503 (review 2026-08-19).
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_SSO_URL: "auth.example.org" })).toThrowError(
+      AuthConfigError,
+    );
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_SSO_URL: "auth.example.org" })).toThrowError(
+      /KSOR_SSO_URL/,
+    );
+  });
+
+  it("refuses a malformed KSOR_MCP_RESOURCE_URL at boot", () => {
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_MCP_RESOURCE_URL: "not a url" })).toThrowError(
+      AuthConfigError,
+    );
+  });
+
   it("runs unauthenticated ONLY with the explicit opt-out", () => {
     expect(buildAuth({ KSOR_AUTH_DISABLED: "1" })).toEqual({ mode: "disabled" });
   });

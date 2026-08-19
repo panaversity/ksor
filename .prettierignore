@@ -1,0 +1,7 @@
+# oxfmt reads this file by default. README.md carries a centered HTML banner
+# block (<p align="center"><img ...></p>, a ~189-char line); oxfmt 0.63.0's
+# markdown formatter is NONDETERMINISTIC on it — byte-identical README passed
+# `fmt:ci` on one CI run (d17d682) and failed the next (0c01685), same oxfmt
+# 0.63.0, same linux runner. Exclude the prose banner file from format-checking
+# until oxfmt's markdown support stabilizes; it is documentation, not code.
+README.md

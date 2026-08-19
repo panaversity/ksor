@@ -59,19 +59,38 @@ export function resolveSecurity(bind: { host: string; port: number }): Security 
     `localhost:${bind.port}`,
     `[::1]:${bind.port}`,
   ]);
+  // On a loopback bind, ORIGIN is gated by default — not only when
+  // KSOR_ALLOWED_ORIGINS is set. This is the exact target of the MCP spec's
+  // Origin-validation MUST (a local server, auth off), and the SDK's own gate
+  // is NOT armed by this composition. A non-browser client (a coding agent)
+  // sends no Origin and passes; a DNS-rebinding browser request carries a
+  // cross-origin Origin and is refused (review 2026-08-19).
+  const loopbackOrigins = new Set([
+    `http://127.0.0.1:${bind.port}`,
+    `http://localhost:${bind.port}`,
+    `http://[::1]:${bind.port}`,
+  ]);
   if (explicit === null) {
-    return { hosts: loopback ? loopbackHosts : null, origins: null };
+    return {
+      hosts: loopback ? loopbackHosts : null,
+      origins: loopback ? loopbackOrigins : null,
+    };
   }
   // Explicit config: honor its Host set; honor its Origin set; and on a
-  // loopback bind, if only origins were given, STILL Host-gate on loopback
-  // (an empty Host allowlist would skip Host validation entirely).
+  // loopback bind, if either was omitted, STILL gate it with the loopback
+  // default (an empty allowlist would skip that gate entirely).
   const hosts =
     explicit.allowedHosts.length > 0
       ? new Set(explicit.allowedHosts)
       : loopback
         ? loopbackHosts
         : null;
-  const origins = explicit.allowedOrigins.length > 0 ? new Set(explicit.allowedOrigins) : null;
+  const origins =
+    explicit.allowedOrigins.length > 0
+      ? new Set(explicit.allowedOrigins)
+      : loopback
+        ? loopbackOrigins
+        : null;
   return { hosts, origins };
 }
 
@@ -164,8 +183,29 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       : c.json({ ready: false, reason: "content store unreachable" }, 503),
   );
 
-  app.get("/health", (c) =>
-    c.json({
+  // /health discloses corpus internals AND the calibrated floor VALUE — the
+  // measured gate constant an attacker would tune probes against. On a PUBLIC
+  // bind it therefore requires the bearer, same as /mcp; /live (below) stays
+  // open for the load balancer (review 2026-08-19).
+  app.get("/health", async (c) => {
+    if (auth.mode === "public") {
+      const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
+      if (token === undefined) {
+        return c.json({ error: "bearer token required" }, 401, {
+          "www-authenticate": `Bearer resource_metadata="${auth.config.resourceUrl}"`,
+        });
+      }
+      try {
+        await auth.verify(token);
+      } catch (error) {
+        const transient = error instanceof TokenVerifyError && error.transient;
+        return c.json(
+          { error: transient ? "token verification temporarily unavailable" : "invalid token" },
+          transient ? 503 : 401,
+        );
+      }
+    }
+    return c.json({
       corpus_id: instance.corpusId,
       abstain_gate:
         instance.abstain.vectorFloor === null
@@ -178,8 +218,8 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
           ? `${instance.embeddingModel}/d${instance.embeddingDim} ok`
           : `${instance.embeddingModel}/d${instance.embeddingDim} unverified (check skipped: ${spaceSkipReason})`,
       auth: auth.mode,
-    }),
-  );
+    });
+  });
 
   app.get("/.well-known/oauth-protected-resource/mcp", (c) =>
     auth.mode === "public"
@@ -255,7 +295,15 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // CLI exit contract in main(), not escape as an uncaught 'error' event and
   // a stack trace (review, 2026-08-19). The boot line prints AFTER binding.
   const server = await new Promise<ServerType>((resolve, reject) => {
-    const s = serve({ fetch: app.fetch, hostname: bind.host, port: bind.port }, () => resolve(s));
+    const s = serve({ fetch: app.fetch, hostname: bind.host, port: bind.port }, () => {
+      // Bind succeeded: detach the bind-time rejecter (a settled promise
+      // swallows it) and attach a PERSISTENT handler, so a post-bind server
+      // error (EMFILE, a socket fault) is logged instead of vanishing
+      // (review 2026-08-19).
+      s.off("error", reject);
+      s.on("error", (err: Error) => console.error(`gateway server error: ${err.message}`));
+      resolve(s);
+    });
     s.once("error", reject);
   });
   console.error(

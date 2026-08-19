@@ -111,6 +111,29 @@ export function audOk(aud: unknown, allowed: readonly string[]): boolean {
   return auds.some((a) => typeof a === "string" && allowed.includes(a));
 }
 
+/**
+ * A configured URL var must PARSE as an absolute http(s) URL at boot. Without
+ * this, KSOR_SSO_URL=sso.example.com (no scheme) boots in public mode and the
+ * TypeError from `new URL(...)` only escapes on the FIRST bearer, deep inside
+ * verifyJwt — where isBadToken says false, so it is misclassified transient
+ * and every request gets a permanent 503 while /health reports auth: public.
+ * Fail closed at boot instead (review 2026-08-19).
+ */
+function assertHttpUrl(name: string, value: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new AuthConfigError(
+      `${name}=${JSON.stringify(value)} is not a valid URL — set an absolute https:// URL ` +
+        "(a scheme-less value would boot the public door and then 503 every request).",
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new AuthConfigError(`${name}=${JSON.stringify(value)} must be an http(s) URL.`);
+  }
+}
+
 function configFromEnv(env: Env): AuthConfig | null {
   // rstrip the SSO URL: a trailing slash makes the derived issuer
   // `https://sso/` mismatch the token's `iss` (`https://sso`) → total, silent
@@ -118,6 +141,11 @@ function configFromEnv(env: Env): AuthConfig | null {
   const ssoUrl = (env.KSOR_SSO_URL ?? "").trim().replace(/\/+$/, "");
   const resourceUrl = (env.KSOR_MCP_RESOURCE_URL ?? "").trim();
   if (ssoUrl === "" || resourceUrl === "") return null;
+  // Both are used to build a `new URL(...)` later (the JWKS fetch and the
+  // resource-metadata document); validate them HERE so a malformed value
+  // refuses to boot, never 503s per-request.
+  assertHttpUrl("KSOR_SSO_URL", ssoUrl);
+  assertHttpUrl("KSOR_MCP_RESOURCE_URL", resourceUrl);
   const allowedAudiences = (env.KSOR_JWT_ALLOWED_AUDIENCES ?? "")
     .split(",")
     .map((a) => a.trim())

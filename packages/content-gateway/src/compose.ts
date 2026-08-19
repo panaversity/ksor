@@ -12,6 +12,7 @@ import type pg from "pg";
 import { pooledEndpointFor } from "@panaversity/ksor-platform";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
+  assertSchemaCompatible,
   buildShippedProvider,
   checkEmbeddingSpace,
   contentPool,
@@ -20,6 +21,7 @@ import {
   keyRingFromEnv,
   MissingProviderKeyError,
   parseInstanceText,
+  SchemaVersionError,
   type ContentInstance,
   type ServiceContext,
 } from "@panaversity/ksor-content";
@@ -72,6 +74,20 @@ export async function compose(instancePath: string, version: string): Promise<Co
     `db endpoint: ${pooledEndpointFor(dsn) ? "transaction-pooled" : "direct"} (classified from the DSN shape)`,
   );
   const pool = contentPool(dsn);
+
+  // Fail closed on a database OLDER than this build needs (there is no
+  // migration runner): a reachable, too-old schema refuses to boot with a
+  // legible exit-3 message, instead of erroring per-request on a missing
+  // column while /health reports healthy. An UNREACHABLE store is not this
+  // gate's concern — it is a warning, handled by the space check below.
+  try {
+    await assertSchemaCompatible(pool, instance.tenantId);
+  } catch (error) {
+    if (error instanceof SchemaVersionError) throw error;
+    console.error(
+      `schema version check skipped: content store unreachable (${error instanceof Error ? error.name : "Error"})`,
+    );
+  }
 
   // A proven mismatch refuses to boot; an unreachable database is a warning
   // — serving starts and /health carries the unverified state.

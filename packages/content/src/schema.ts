@@ -12,9 +12,68 @@ import { fileURLToPath } from "node:url";
 import type pg from "pg";
 
 import { EMBED_DIM } from "./config.js";
+import { ContentStoreError, runProbe } from "./db.js";
 
 /** pgvector vector + HNSW ceiling. */
 export const EMBED_DIM_MAX = 2000;
+
+/** The schema version schema.sql declares — parsed from the DDL so code and
+ * the applied database share ONE source (a drift test pins the coupling). */
+export function schemaVersion(): string {
+  const text = readFileSync(schemaSqlPath(), "utf8");
+  const m = /INSERT INTO schema_meta\s*\([^)]*\)\s*VALUES\s*\(\s*'([^']+)'/i.exec(text);
+  if (m === null) {
+    throw new Error(
+      "schema.sql declares no schema_meta version — cannot determine the required version",
+    );
+  }
+  return m[1]!;
+}
+
+function compareVersion(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/** A database whose schema is older than this build requires. Subclasses
+ * ContentStoreError so the gateway's exit contract classifies it exit 3. */
+export class SchemaVersionError extends ContentStoreError {
+  override readonly name: string = "SchemaVersionError";
+}
+
+/**
+ * Refuse to serve against a database older than this build needs — fail closed
+ * at boot with a legible message. There is no migration runner (a recorded
+ * gap): a newer gateway on an older database would otherwise error PER-REQUEST
+ * on a missing column (e.g. takedown `scope`, decision 14) while /health still
+ * reported healthy. A connection failure is NOT this error's concern (the
+ * caller treats an unreachable store as a warning) — only a reachable,
+ * too-old schema refuses.
+ */
+export async function assertSchemaCompatible(pool: pg.Pool, tenantId: string): Promise<void> {
+  const required = schemaVersion();
+  const r = await runProbe(pool, tenantId, (c) =>
+    c.query("SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1"),
+  );
+  const dbVersion = (r.rows[0] as { schema_version?: string } | undefined)?.schema_version;
+  if (dbVersion === undefined) {
+    throw new SchemaVersionError(
+      "schema_meta is empty — this database was not initialized by the schema step.",
+    );
+  }
+  if (compareVersion(dbVersion, required) < 0) {
+    throw new SchemaVersionError(
+      `database schema is ${dbVersion}; this build requires >= ${required}. ` +
+        "Re-apply schema.sql (dev: drop and recreate the database) or run a migration — " +
+        "a newer gateway on an older database errors per-request on missing columns.",
+    );
+  }
+}
 
 export function schemaSqlPath(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "schema", "schema.sql");

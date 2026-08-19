@@ -12,7 +12,12 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runIngest, runRead } from "./db.js";
-import { applySchema } from "./schema.js";
+import {
+  applySchema,
+  assertSchemaCompatible,
+  schemaVersion,
+  SchemaVersionError,
+} from "./schema.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type SearchScope } from "./lib/search.js";
 import { vectorAbstains } from "./lib/abstain.js";
 import { keyRingFromEnv, validate } from "./lib/snapshot.js";
@@ -300,6 +305,22 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         );
       }),
     ).rejects.toThrowError();
+  });
+
+  it("assertSchemaCompatible refuses a database OLDER than this build (fail-closed boot)", async () => {
+    // At the applied version it passes.
+    await expect(assertSchemaCompatible(pool, TENANT)).resolves.toBeUndefined();
+    // Simulate a stale database: an older schema_version. A newer gateway must
+    // refuse to boot (SchemaVersionError → exit 3) rather than error
+    // per-request on the missing takedown scope column (review 2026-08-19).
+    await pool.query("UPDATE schema_meta SET schema_version = '2.0'");
+    try {
+      const err = await assertSchemaCompatible(pool, TENANT).catch((e: unknown) => e);
+      expect(err, "must refuse the stale schema").toBeInstanceOf(SchemaVersionError);
+      expect((err as Error).message).toMatch(/2\.0.*requires >= /s);
+    } finally {
+      await pool.query(`UPDATE schema_meta SET schema_version = '${schemaVersion()}'`);
+    }
   });
 });
 
