@@ -11,6 +11,7 @@ export {
 } from "./instance.js";
 export {
   contentPool,
+  contentPoolMin,
   runRead,
   runProbe,
   runAudit,

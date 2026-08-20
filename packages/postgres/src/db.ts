@@ -138,6 +138,13 @@ export interface DomainPoolOptions {
   /** Recycle a connection after this many seconds so stale sockets behind a
    *  transaction pooler don't accumulate. Default 900s; 0 disables. */
   readonly maxLifetimeSeconds?: number;
+  /**
+   * How long an idle connection is kept before it is closed. STATED, never
+   * inherited: pg-pool defaults this to 10s but only reaps while the pool is
+   * ABOVE `minSize`, so the two settings together decide whether a quiet
+   * server holds open connections at all. Default 10s; 0 disables reaping.
+   */
+  readonly idleTimeoutMs?: number;
 }
 
 /**
@@ -164,6 +171,11 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
     keepAliveInitialDelayMillis: 30_000,
     connectionTimeoutMillis: options.connectionTimeoutMs ?? 10_000,
     maxLifetimeSeconds: options.maxLifetimeSeconds ?? 900,
+    // Stated explicitly. pg-pool reaps an idle connection only when the pool
+    // is ABOVE `min` (index.js:409), so `min` and this value together decide
+    // whether an idle server keeps sockets open. With min 0 — the default — a
+    // quiet server drops to ZERO open connections after this long.
+    idleTimeoutMillis: options.idleTimeoutMs ?? 10_000,
   });
   // pg REQUIRES an error listener on the Pool. An IDLE client that the server
   // terminates — a restart, a failover, `pg_terminate_backend`, a
@@ -179,6 +191,42 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
     console.error(`db pool: idle client error (${error.name}${code}) — connection discarded`);
   });
   return pool;
+}
+
+/**
+ * Open `count` connections now, rather than on the first requests.
+ *
+ * `min` does NOT do this in pg-pool: it only suppresses idle reaping
+ * (verified — a pool built with min 5 sits at totalCount 0 until something
+ * queries it). The predecessor's psycopg pool DID prewarm, and its recorded
+ * reason was that a cold or scaled-out instance otherwise "opened up to 19
+ * connections ON DEMAND, each a fresh TCP+TLS+auth" on a user's request. ksor
+ * inherited the NUMBER without the MECHANISM, so it got neither the prewarm
+ * nor an idle floor it chose — decision 6's warning, exactly.
+ *
+ * Opt-in and off by default: a KSoR that holds no idle connections is the
+ * shape most adopters want against a managed endpoint. Failures are warnings,
+ * never fatal — an unreachable database at boot is already tolerated, and a
+ * prewarm that could refuse to start the server would be worse than a cold
+ * first request.
+ */
+export async function prewarmPool(pool: pg.Pool, count: number): Promise<number> {
+  if (count <= 0) return 0;
+  const clients = await Promise.allSettled(Array.from({ length: count }, () => pool.connect()));
+  let opened = 0;
+  for (const result of clients) {
+    if (result.status === "fulfilled") {
+      opened += 1;
+      result.value.release();
+    }
+  }
+  if (opened < count) {
+    console.error(
+      `db pool: prewarm opened ${opened}/${count} connections — serving anyway, ` +
+        "the rest open on demand",
+    );
+  }
+  return opened;
 }
 
 /** pg's checkout/connect timeout messages; mapped to our shedding error.

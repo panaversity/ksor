@@ -21,7 +21,6 @@ import {
   isOperationalError,
   PoolTimeoutError,
   runScopedIn,
-  pooledEndpointFor,
   type Gucs,
 } from "@panaversity/ksor-postgres";
 import { envFloat, envInt } from "./env.js";
@@ -85,20 +84,32 @@ export function contentPool(dsn: string, maxSize?: number): pg.Pool {
   // oracle's old platform default of 10 sat 8x below the admitted
   // concurrency of its host).
   const max = maxSize ?? envInt("KSOR_CONTENT_POOL_MAX", 20, 1);
-  // 0 is a legal prewarm floor — a dial that silently floors at 1 lies to
-  // the operator.
+  // ZERO idle connections by default. Two settings decide this together, so
+  // both are stated here rather than inherited:
   //
-  // The DEFAULT is endpoint-shaped. pg-pool 3.14 does not establish minimum
-  // connections eagerly, so a non-zero `min` buys no prewarm at all — it only
-  // suppresses pg-pool's idle reaping. Against a serverless endpoint that
-  // means ksor never closes its own idle sockets, so the POOLER is always the
-  // party that closes one, and every such close surfaces as
-  // "db pool: idle client error" on an otherwise healthy server (review
-  // 2026-08-20, reproduced). On a pooled endpoint the honest floor is 0: let
-  // the idle timeout reap our own connections before the remote drops them.
-  const pooled = pooledEndpointFor(dsn);
-  const min = envInt("KSOR_CONTENT_POOL_MIN", pooled ? 0 : 2, 0);
-  return createPool(dsn, { maxSize: max, minSize: min });
+  //   min = 0  -> pg-pool reaps idle connections (it only reaps while ABOVE
+  //               min, so any non-zero min pins that many open FOREVER)
+  //   idle 10s -> how long after last use one is closed
+  //
+  // A quiet `ksor serve` therefore holds NO open connection to the record's
+  // database, and a busy one still reuses connections across requests — the
+  // handshake is ~26x the cost of a pooled query even on localhost, and far
+  // more over TLS to a managed endpoint.
+  //
+  // The predecessor defaulted min to 2 as a PREWARM (its psycopg pool opened
+  // them eagerly, so a cold instance did not open a connection per request on
+  // a user's first query). pg-pool does not prewarm, so ksor inherited the
+  // number without the mechanism: no prewarm, and sockets held open anyway.
+  // The dial now means what it says — set KSOR_CONTENT_POOL_MIN above 0 and
+  // the composition root prewarms exactly that many (prewarmPool).
+  const min = envInt("KSOR_CONTENT_POOL_MIN", 0, 0);
+  const idleMs = envInt("KSOR_CONTENT_POOL_IDLE_MS", 10_000, 0);
+  return createPool(dsn, { maxSize: max, minSize: min, idleTimeoutMs: idleMs });
+}
+
+/** The prewarm floor this deployment asked for — 0 (hold nothing) unless set. */
+export function contentPoolMin(): number {
+  return envInt("KSOR_CONTENT_POOL_MIN", 0, 0);
 }
 
 function gucsFor(tenantId: string, role: string, statementTimeoutMs: number | null): Gucs {

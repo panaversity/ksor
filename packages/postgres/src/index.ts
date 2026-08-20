@@ -7,6 +7,7 @@ export {
   pooledEndpointFor,
   PoolTimeoutError,
   runScopedIn,
+  prewarmPool,
   scopedTxn,
   tlsAdvisory,
   withGuardedClient,

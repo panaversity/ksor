@@ -9,13 +9,14 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type pg from "pg";
-import { pooledEndpointFor, tlsAdvisory } from "@panaversity/ksor-postgres";
+import { pooledEndpointFor, prewarmPool, tlsAdvisory } from "@panaversity/ksor-postgres";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertSchemaCompatible,
   buildShippedProvider,
   checkEmbeddingSpace,
   contentPool,
+  contentPoolMin,
   embedQueryVlit,
   EmbeddingSpaceMismatch,
   keyRingFromEnv,
@@ -124,6 +125,16 @@ export async function compose(instancePath: string, version: string): Promise<Co
 
   const advisory = tlsAdvisory(dsn);
   if (advisory !== null) console.error(advisory);
+
+  // Prewarm is OPT-IN (KSOR_CONTENT_POOL_MIN, default 0). `min` alone cannot
+  // do this — pg-pool never opens connections eagerly — so the dial is honoured
+  // HERE or it is a lie. Default 0 means a quiet server holds no open
+  // connection at all; set it above 0 to trade that for a warm first request.
+  const floor = contentPoolMin();
+  if (floor > 0) {
+    const opened = await prewarmPool(pool, floor);
+    console.error(`db pool: prewarmed ${opened} connection(s)`);
+  }
 
   const ctx: ServiceContext = {
     pool,

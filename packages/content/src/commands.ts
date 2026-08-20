@@ -319,6 +319,11 @@ async function ingestCommand(args: string[]): Promise<number> {
       "source-commit": { type: "string" },
     },
   });
+  // Resolved once and REPORTED: this is the last link in the provenance chain
+  // (answer -> passage -> document -> generation -> commit -> reviewed source).
+  // Leaving it silent is how every adopter shipped "unspecified" without
+  // noticing the chain terminated one link early.
+  const sourceCommit = values["source-commit"] ?? detectSourceCommit(values.knowledge);
   if (values.knowledge === undefined) {
     return fail(REFUSED, "--knowledge DIR is required (the folder of Markdown to ingest)");
   }
@@ -358,7 +363,7 @@ async function ingestCommand(args: string[]): Promise<number> {
         knowledgeDir: values.knowledge!,
         // Provenance is recorded honestly: without --source-commit the sources
         // rows say so rather than carrying a guessed SHA.
-        sourceCommit: values["source-commit"] ?? detectSourceCommit(values.knowledge),
+        sourceCommit,
         flip: values.flip ?? false,
         provider,
         onLog: (line) => process.stdout.write(line + "\n"),
@@ -385,6 +390,12 @@ async function ingestCommand(args: string[]): Promise<number> {
     );
     return 0;
   }
+  process.stdout.write(
+    sourceCommit === "unspecified"
+      ? "source: unspecified — knowledge/ is not in a git repository, so this generation " +
+          "cannot be traced back to a reviewed commit\n"
+      : `source: ${sourceCommit}\n`,
+  );
   process.stdout.write(
     `ingest: generation ${report.generation} — ${report.nodes} nodes, ${report.chunks} chunks; ` +
       `embedded ${report.embedded}, carried ${report.carried}, failed ${report.failed}\n`,
