@@ -96,12 +96,25 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    pnpm up      # schema → grant → ingest → serve
    ```
 
-   Every step is re-runnable, so this is also how you refresh after editing
-   `knowledge/`: an applied schema reports "already applied", an existing grant
-   reports "already granted", and ingest builds a fresh generation. Run the
-   steps individually (`pnpm schema`, `pnpm grant`, `pnpm ingest`, `pnpm serve`)
-   when you want them separate — for instance when a DBA holds the credentials
-   that authorize ingest.
+   Every step is re-runnable, so this is also how you **refresh after editing
+   `knowledge/`**: an applied schema reports "already applied", an existing
+   grant reports "already granted", and ingest builds a fresh generation.
+
+   **`pnpm up` ingests every time — but it re-EMBEDS nothing that has not
+   changed.** Chunks carry forward by content hash, so a rerun on an untouched
+   corpus makes zero provider calls (`embedded 0, carried N` in the output).
+   What it does spend is a generation: each run creates and activates a new one,
+   and they accumulate. So:
+
+   | You want to                      | Run                                        |
+   | -------------------------------- | ------------------------------------------ |
+   | set up, or refresh after an edit | `pnpm up`                                  |
+   | just restart the server          | `pnpm serve` — no new generation           |
+   | reap superseded generations      | `pnpm exec ksor gc --instance instance.md` |
+
+   Run the steps individually (`pnpm schema`, `pnpm grant`, `pnpm ingest`)
+   when the acts belong to different people — a DBA holding the credentials
+   that authorize ingest, for instance.
 
 4. **Turn the abstention gate on — deliberately, once it serves.** This is the
    step that makes "not in this corpus" a real answer, and it is measured, never
