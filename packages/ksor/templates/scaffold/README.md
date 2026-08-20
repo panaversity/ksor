@@ -38,9 +38,12 @@ pnpm ingest     # embed knowledge/ into a generation and activate it
 pnpm serve      # run the MCP server over the record
 ```
 
-One setup step comes before this — adding the `database:`/`embedding:` blocks
-to `instance.md` — and there is more to know about the generation model and the
-fail-closed security posture. `AGENTS.md` → "Serving to agents" is the
+One setup step comes first: add a `database:` block to `instance.md` naming the
+env var that holds your DSN (`dsn_env: KSOR_DB_URL`). That single block is
+enough — `embedding:` already defaults to Gemini at 1536 dimensions, and
+leaving `retrieval:` out starts you with the abstention gate off and honest
+about it. Turn the gate on afterwards with `ksor calibrate`, once the record is
+actually serving. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` binds loopback
 with auth off for local use; a public bind fails closed unless auth is
 configured. Any other operation is `pnpm exec ksor <verb>`.

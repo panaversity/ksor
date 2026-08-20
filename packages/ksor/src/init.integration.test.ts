@@ -180,6 +180,17 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(workspace, "the tool is excluded from the release-age quarantine").toMatch(
       /minimumReleaseAgeExclude:[\s\S]*@panaversity\/ksor/,
     );
+    // The scaffold declares a root dependency that the COMMITTED lockfile
+    // cannot record (the version is stamped per-install), so the deploy's
+    // install must not be frozen — otherwise an adopter's very first Vercel
+    // import dies on ERR_PNPM_OUTDATED_LOCKFILE before any build (review,
+    // 2026-08-20). The repo's own e2e suites already had to make this switch.
+    const vercel = JSON.parse(
+      readFileSync(path.join(dir, "served-sor", "vercel.json"), "utf8"),
+    ) as { installCommand?: string };
+    expect(vercel.installCommand, "the deploy install must tolerate the stamped dep").toContain(
+      "--no-frozen-lockfile",
+    );
     // The kernel's build-scripted deps must be explicitly denied, or pnpm 11
     // exits 1 on the adopter's first install (found live 2026-08-20).
     expect(workspace, "@google/genai build denied").toMatch(/"@google\/genai":\s*false/);
