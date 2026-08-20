@@ -7,8 +7,9 @@
     "dev": "pnpm -C system/site dev",
     "build": "pnpm -C system/site build",
     "check": "node .agents/skills/format-checker/check.mjs",
-    "serve": "ksor serve",
-    "ingest": "ksor ingest"
+    "schema": "ksor schema --instance instance.md --apply",
+    "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip",
+    "serve": "ksor serve"
   },
   "dependencies": {
     "@panaversity/ksor": "KSOR-STAMP-VERSION"

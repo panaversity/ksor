@@ -2,15 +2,15 @@
 name: intake-interview
 description: The first conversation with the owner of this Knowledge System of Record — six questions that define what it is authoritative for and who may read it, then write instance.md together. Use when the owner asks to set up, configure, or "get started with" this project, when instance.md still contains its scaffold placeholder text, or when the scope of the corpus is unclear.
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 # Intake interview
 
 `instance.md` is the identity of this Knowledge System of Record, and its
-prose will one day be the agent surface's system prompt. Do not draft it from
-guesses — interview the owner, one question at a time, and write down what
-they actually say.
+prose IS the agent surface's system prompt (`ksor serve` wires it into the MCP
+server's instructions). Do not draft it from guesses — interview the owner, one
+question at a time, and write down what they actually say.
 
 ## The six questions
 
@@ -49,10 +49,15 @@ act on:
   record's **display title**, the human name every page will lead with
   ("Acme Operations Handbook", not the slug) — then the authority sentence,
   boundary, audience, and strictness — plain prose, written for a reader
-  who must act on it. Leave the frontmatter keys alone, with one exception:
-  an audience model from question 6 is written there as `audiences:` (a
-  list) and `default_visibility:`, and `pnpm check` will hold the record to
-  it from that moment on.
+  who must act on it. Leave the identity frontmatter keys alone; two things
+  are written there when they apply: an audience model from question 6, as
+  `audiences:` (a list) and `default_visibility:` (`pnpm check` holds the
+  record to it from that moment on); and — only when the owner stands up the
+  served MCP rung — the `database:`/`embedding:`/`retrieval:` blocks (see
+  `AGENTS.md` → "Serving to agents"; that is a later climb, not part of this
+  interview). The strictness answer from question 5 is the intent behind the
+  `retrieval.vector_floor` on that climb, measured by `ksor calibrate` — capture
+  it in the prose now so it is ready.
 - Restart `pnpm dev` afterwards so the site picks the new title up, and
   show the owner their name on the page.
 - Offer to capture the source list from question 4 as the first real

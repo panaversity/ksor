@@ -27,15 +27,22 @@ commit the updated lockfile.
 The record's other surface is an MCP server for AI agents — the same
 knowledge, cited, with honest abstention. It is the climbed rung: it needs a
 Postgres store (with pgvector) and an embedding provider key, so it is not
-part of `pnpm dev`. Once those are set:
+part of `pnpm dev`. The ordered path is:
 
 ```sh
-pnpm ingest     # embed knowledge/ into the store (ksor ingest)
-pnpm serve      # run the MCP server over the record (ksor serve)
+export KSOR_DB_URL='postgresql://…'   # the DSN var your instance.md names
+export GEMINI_API_KEY='…'             # the embedding provider key
+pnpm schema     # apply the database schema (once)
+pnpm ingest     # embed knowledge/ into a generation and activate it
+pnpm serve      # run the MCP server over the record
 ```
 
-`pnpm serve` binds loopback with auth off for local use; a public bind fails
-closed unless auth is configured. Any other operation is `pnpm exec ksor <verb>`.
+There are two setup steps before this — adding the `database:`/`embedding:`
+blocks to `instance.md`, and authorizing ingest — plus the generation model
+and the fail-closed security posture. `AGENTS.md` → "Serving to agents" is the
+full runbook; your coding agent reads it first. `pnpm serve` binds loopback
+with auth off for local use; a public bind fails closed unless auth is
+configured. Any other operation is `pnpm exec ksor <verb>`.
 
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you

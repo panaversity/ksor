@@ -18,3 +18,15 @@ scripts, so the served tool is a first-class, version-pinned command rather
 than an `npx` afterthought. The scaffold's first `pnpm install` is non-frozen
 (it resolves the tool and writes the lockfile); `pnpm dev` still needs no
 database.
+
+Scaffold serve-rung fixes (from a multi-agent operability review): the
+scaffolded format checker (`pnpm check`) now accepts the `database:`/`embedding:`/
+`retrieval:`/`budgets:` blocks that `ksor serve`/`ingest` require, so a project
+climbing to serving is no longer rejected by its own CI; the scaffold's
+`pnpm ingest` script now `--flip`s (a first ingest without it left the server
+answering from an unactivated generation); the kernel's build-scripted deps
+(`@google/genai`, `protobufjs`) are denied under `allowBuilds` so the first
+install does not exit 1; and the scaffold `AGENTS.md`/`README.md` now carry the
+full serve runbook — the ordered `schema` → grant → `ingest` → `serve` pipeline,
+the `instance.md` block shapes, the env contract, the generation model, and the
+fail-closed security posture.

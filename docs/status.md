@@ -2,19 +2,19 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-19.
+updated: 2026-08-20.
 
 ## Published package
 
 `@panaversity/ksor` **0.0.3** on npm (trusted publishing, provenance
-attached — published by the release merging this page). It ships the
-working `ksor init` described below — including the visibility model and
-the deploy story — plus the CLI contract: `dev`,
-`build` and `serve` still report "designed but not implemented" and exit
-`2`; an unknown verb is refused with exit `1` and a stable
-`error: unknown-verb` stderr slug. The package root exports `exitCodes`,
-`verbs`, and `resolveCommand`, and docs ship inside the tarball under
-`docs/`.
+attached). **In the currently published 0.0.3** it ships the working
+`ksor init` described below — including the visibility model and the deploy
+story — plus the CLI contract where `dev`, `build` AND `serve` still report
+"designed but not implemented" and exit `2`; an unknown verb is refused with
+exit `1` and a stable `error: unknown-verb` stderr slug. The package root
+exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the
+tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`/
+`calibrate`/`gc` real — that lands in the NEXT release, 0.0.4, not 0.0.3.)
 
 ## Implemented (released in 0.0.3)
 
@@ -103,6 +103,17 @@ the deploy story — plus the CLI contract: `dev`,
 
 ## Known gaps in the kernel conversion (tracked, not blocking)
 
+- **Serve-rung ergonomics, deferred to a fast-follow** (surfaced by a
+  four-agent operability review, 2026-08-20; the blockers it found — the
+  format-checker rejecting kernel `instance.md` keys, the release-CI
+  self-reference, the missing `--flip`, the undocumented setup path — are
+  FIXED here). Still owed, each additive and independently specced: a
+  first-class **`ksor grant`** verb (today the ingest authorization is a
+  documented manual `INSERT`); a dedicated **`serve-setup` skill** in the
+  scaffold agent kit (today the runbook lives in the scaffold `AGENTS.md`);
+  and a **serve deploy recipe** (Dockerfile / managed-Postgres guide — today
+  serve runs anywhere Node runs, with the env contract and fail-closed posture
+  documented, but no packaged deploy).
 - **MCP protocol version**: the gateway is on `@modelcontextprotocol/sdk`
   1.30.0 (the latest), which implements spec revision **2025-11-25**. The
   current spec is **2026-07-28** (handshake-free, `server/discover`,
@@ -152,7 +163,7 @@ tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 - **`GEMINI_API_KEY`** is configured as a repository Actions secret (owner,
   confirmed 2026-08-20) — the kernel conversion's gated live tiers (retrieval
-  + calibration evals) embed for real (decision 11).
+  - calibration evals) embed for real (decision 11).
 - Flip the org setting **"Allow GitHub Actions to create and approve pull
   requests"** — until then every release's Version-PR needs the manual
   rescue documented in the `$release` skill. (The npm Trusted Publisher is

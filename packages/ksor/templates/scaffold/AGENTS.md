@@ -5,22 +5,25 @@ here; every coding agent reads this file first.
 
 ## The two worlds
 
-| Path          | What it is                                                                                                                                                                                                                                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                                                                                                                          |
-| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                                                                                                                            |
-| `instance.md` | what this SoR is authoritative for; its prose is the future agent surface's system prompt. Its `name:` is the machine identity (llms.txt, future citations) and its body `# H1` is the DISPLAY TITLE every page leads with — both read when the server or build STARTS, so restart `pnpm dev` after changing either (found live 2026-08-18) |
+| Path          | What it is                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                                                                                                                                                                             |
+| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                                                                                                                                                                               |
+| `instance.md` | what this SoR is authoritative for; its prose IS the agent surface's system prompt (`ksor serve` wires the body into the MCP server's instructions). Its `name:` is the machine identity (llms.txt, citations) and its body `# H1` is the DISPLAY TITLE every page leads with — both read when the server or build STARTS, so restart `pnpm dev` after changing either (found live 2026-08-18) |
 
 The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
 record; the record never references the system.
 
 `instance.md` carries a closed key set — `format`, `name`, `ksor`, `site`,
-and the optional pair `audiences` + `default_visibility` (the record's reader
+the optional pair `audiences` + `default_visibility` (the record's reader
 audiences, ordered least- to most-restricted with `public` first, and the one
-a document takes when it names none — declared together or not at all) — and
-everything that matters about it is the prose below that frontmatter;
-`pnpm check` names any other key rather than ignoring it.
+a document takes when it names none — declared together or not at all), and
+the four serve-config blocks `database` / `embedding` / `retrieval` / `budgets`
+(present only once you climb to the served MCP rung — see "Serving to agents"
+below; a `pnpm dev`-only project declares none). Everything else that matters
+about the instance is the prose below the frontmatter; `pnpm check` names any
+other key rather than ignoring it.
 
 ## Critical rules
 
@@ -43,13 +46,86 @@ pnpm build       # static site into system/site/out/
 pnpm check       # the format checker — run before handing off any knowledge change
 ```
 
-The MCP surface (the agent-facing rung) needs a Postgres store with pgvector
-and an embedding provider key — not required for `pnpm dev`:
+## Serving to agents — the MCP rung (needs Postgres + a provider key)
+
+`ksor serve` runs an MCP server over the record so agents get cited retrieval
+with honest abstention. It is the climbed rung — not required for `pnpm dev`.
+Stand it up in this order (each step's errors explain how to fix themselves):
+
+1. **Configure `instance.md`.** Add the serve blocks to the frontmatter
+   (`pnpm check` accepts them; the kernel validates their values):
+
+   ```yaml
+   database:
+     dsn_env: KSOR_DB_URL # the NAME of the env var holding the DSN — never the DSN itself
+   embedding:
+     provider: gemini # default; the seam, not the vendor, is the contract
+     model: gemini-embedding-001
+     dim: 1536 # ≤ 2000 for the pgvector HNSW index
+   retrieval:
+     vector_floor: uncalibrated # see step 6; `uncalibrated` REFUSES every serve until you paste a number
+   ```
+
+2. **Provision Postgres** with the `vector` extension (`CREATE EXTENSION vector`),
+   e.g. a Neon database. Export the DSN under the name `dsn_env` chose, plus the
+   provider key:
+
+   ```sh
+   export KSOR_DB_URL='postgresql://…'   # the var instance.md names
+   export GEMINI_API_KEY='…'             # the embedding provider key
+   ```
+
+3. **Apply the schema:** `pnpm schema` (creates tables, indexes, and the
+   ingest role).
+
+4. **Authorize ingest** — one row, once (row-level security refuses ingest
+   without it; a future `ksor grant` verb will fold this in):
+
+   ```sh
+   psql "$KSOR_DB_URL" -c "INSERT INTO ingest_tenant_grants (role_name, tenant_id) VALUES ('sor_content_ingest', '<name>')"
+   ```
+
+   `<name>` is `instance.md`'s `name:`. Apply the schema and ingest as the SAME
+   Postgres login (the ingest role is granted to whoever applied the DDL).
+
+5. **Ingest:** `pnpm ingest` — embeds `knowledge/` into a fresh generation and
+   activates it (`--flip`). Safe to re-run (see the generation model below).
+
+6. **Calibrate the abstention floor** (only if `vector_floor: uncalibrated`):
+   `pnpm exec ksor calibrate --instance instance.md` prints a recommended
+   `vector_floor` measurement; paste the number into `instance.md`'s `retrieval:`
+   block and re-run. A corpus that declares no `retrieval:` block serves with the
+   gate OFF (honest: it will not refuse out-of-corpus questions).
+
+7. **Serve:** `pnpm serve`.
 
 ```sh
-pnpm ingest      # embed knowledge/ into the store (ksor ingest)
-pnpm serve       # run the MCP server over the record (ksor serve); any other verb: pnpm exec ksor <verb>
+pnpm schema      # apply the DDL (once)
+pnpm ingest      # embed knowledge/ into a generation and activate it
+pnpm serve       # run the MCP server; any other verb: pnpm exec ksor <verb>
 ```
+
+### How serving updates work (the generation model)
+
+Each `ksor ingest` builds a **fresh generation** (invisible until activated) and
+carries every unchanged embedding forward from the last complete generation —
+so **re-ingest is safe and cheap**; only changed or failed chunks re-embed.
+`--flip` swaps the active pointer, guarded by a catastrophic-shrink check
+(`KSOR_MAX_SHRINK`, default `0.15` — a flip that drops more than 15% of nodes
+refuses; override with `KSOR_ALLOW_SHRINK=1` when the shrink is intended). The
+previous generation stays as a rollback target; `pnpm exec ksor gc` collects
+abandoned ones.
+
+### Serving safely (fail-closed posture)
+
+`pnpm serve` binds **loopback with auth off** — safe for local use. A **public**
+bind refuses to boot unless auth is configured (`KSOR_SSO_URL` +
+`KSOR_MCP_RESOURCE_URL` + `KSOR_JWT_ALLOWED_AUDIENCES`, making it an OAuth
+Resource Server) OR you deliberately set `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`.
+Never let a dropped auth variable silently ship an open door. On a non-loopback
+bind, set `KSOR_ALLOWED_HOSTS` / `KSOR_ALLOWED_ORIGINS`; on more than one
+replica, set a shared `KSOR_SNAPSHOT_KEYS` (unset ⇒ a per-process key, so a
+search token minted by one replica fails on another).
 
 ## Publishing
 

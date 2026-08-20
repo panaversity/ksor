@@ -159,15 +159,26 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
       pkgVersion,
     );
     expect(pkg.scripts?.["serve"], "a local serve command").toBe("ksor serve");
-    expect(pkg.scripts?.["ingest"], "a local ingest command").toBe("ksor ingest");
+    // First ingest must --flip or serve answers from an unactivated generation
+    // (empty server); ingest needs --instance + --knowledge (no CLI defaults).
+    expect(pkg.scripts?.["ingest"], "a local ingest command that activates").toBe(
+      "ksor ingest --instance instance.md --knowledge knowledge --flip",
+    );
+    expect(pkg.scripts?.["schema"], "a local schema command").toBe(
+      "ksor schema --instance instance.md --apply",
+    );
+    const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     // The pinned tool MUST be excluded from the scaffold's 48h release-age
     // quarantine, or the first install of a freshly-published ksor breaks for
     // two days after every release (found live 2026-08-20: minimumReleaseAge
     // rejected the just-published version).
-    const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     expect(workspace, "the tool is excluded from the release-age quarantine").toMatch(
       /minimumReleaseAgeExclude:[\s\S]*@panaversity\/ksor/,
     );
+    // The kernel's build-scripted deps must be explicitly denied, or pnpm 11
+    // exits 1 on the adopter's first install (found live 2026-08-20).
+    expect(workspace, "@google/genai build denied").toMatch(/"@google\/genai":\s*false/);
+    expect(workspace, "protobufjs build denied").toMatch(/protobufjs:\s*false/);
   });
 
   it.runIf(process.platform !== "win32")(

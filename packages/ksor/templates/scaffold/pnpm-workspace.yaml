@@ -17,11 +17,19 @@ minimumReleaseAgeExclude:
   - "@panaversity/ksor"
 
 # Dependency install scripts are denied by default. Flip an entry to true
-# only with a comment naming what breaks without it. esbuild and sharp are
-# reviewed and stay denied: both ship prebuilt platform binaries as
-# optionalDependencies, so their install scripts are download fallbacks the
-# site never needs — but pnpm 11 exits 1 on every install/dev until each is
-# explicitly decided. (found live: fresh-scaffold pnpm dev, 2026-08-18)
+# only with a comment naming what breaks without it. pnpm 11 exits 1 on every
+# install until each build script is explicitly decided (found live:
+# fresh-scaffold pnpm dev, 2026-08-18). All four below are reviewed and stay
+# denied:
+#   esbuild, sharp — prebuilt platform binaries ship as optionalDependencies,
+#     so their install scripts are download fallbacks the site never needs.
+#   @google/genai, protobufjs — pulled in by the `@panaversity/ksor` serve
+#     tool. genai's flagged script is its own dev `prepare` (nothing the
+#     published tarball needs built); protobufjs's postinstall is a
+#     version-compat warning, nothing built. (Same review as the root
+#     workspace, 2026-08-19; serve works with both denied — verified live.)
 allowBuilds:
   esbuild: false
   sharp: false
+  "@google/genai": false
+  protobufjs: false

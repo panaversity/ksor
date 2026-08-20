@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
+import { injectLocalKsor } from "./e2e-local-ksor.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -198,6 +199,9 @@ describe.runIf(enabled).each(SHELLS)(
       );
 
       swap?.(project);
+      // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build
+      // (the pinned exact version is unpublished in CI/dev).
+      injectLocalKsor(project);
       // Non-frozen by design: the scaffold pins `@panaversity/ksor` to the exact
       // CLI version, absent from the committed site-only lockfile, so the first
       // install adds it (decision 11 revision 2026-08-20); a shell swap changes
