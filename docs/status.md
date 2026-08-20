@@ -150,16 +150,13 @@ tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 ## Pending owner actions
 
-- Add **`GEMINI_API_KEY`** as a repository Actions secret — the kernel
-  conversion's gated live tiers (retrieval + calibration evals) embed for
-  real (decision 11); until the secret exists those tiers skip.
+- **`GEMINI_API_KEY`** is configured as a repository Actions secret (owner,
+  confirmed 2026-08-20) — the kernel conversion's gated live tiers (retrieval
+  + calibration evals) embed for real (decision 11).
 - Flip the org setting **"Allow GitHub Actions to create and approve pull
   requests"** — until then every release's Version-PR needs the manual
   rescue documented in the `$release` skill. (The npm Trusted Publisher is
   configured — 0.0.1 published through it.)
-- Decide the version signal for the init release: the changeset is `patch`
-  (0.0.2) per the constitution's pre-1.0 rule; flip to `minor` (0.1.0) if
-  the milestone should read in the version.
 - Repoint the **`vsor` PyPI Trusted Publisher** — it still names
   `panaversity/zia-vertical-system-of-record`, which no longer resolves; a
   release tag today passes every gate and fails at upload.

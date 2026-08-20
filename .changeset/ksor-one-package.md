@@ -1,5 +1,5 @@
 ---
-"@panaversity/ksor": minor
+"@panaversity/ksor": patch
 ---
 
 feat: `@panaversity/ksor` now ships the whole Knowledge System of Record as ONE
