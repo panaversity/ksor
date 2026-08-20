@@ -11,7 +11,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -423,6 +423,64 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(legacy.status, body.slice(0, 200)).toBe(200);
     expect(body, "the legacy handshake still negotiates its own revision").toContain("2025-11-25");
   });
+
+  it("the BUNDLED ksor binary reports its published version, not 0.0.0", async () => {
+    // The regression this pins shipped in 0.0.4: the gateway read its version
+    // from an env var at MODULE scope, and the CLI's static import had already
+    // evaluated that module before the CLI could set the variable, so every
+    // client saw serverInfo.version "0.0.0". Nothing asserted it, which is why
+    // it slipped. The version now travels as an ARGUMENT — and the assertion
+    // has to drive the BUNDLED binary, because the private gateway package is
+    // itself 0.0.0 and could never tell the two apart.
+    const ksorPkg = JSON.parse(
+      readFileSync(path.resolve(CLI, "..", "..", "..", "ksor", "package.json"), "utf8"),
+    ) as { version: string };
+    const ksorCli = path.resolve(CLI, "..", "..", "..", "ksor", "dist", "cli.mjs");
+    const port2 = 30000 + Math.floor(Math.random() * 20000);
+    const child = spawn(process.execPath, [ksorCli, "serve"], {
+      env: {
+        ...process.env,
+        KSOR_INSTANCE: instancePath,
+        KSOR_TEST_DSN: dbUrl,
+        KSOR_MCP_PORT: String(port2),
+        KSOR_AUTH_DISABLED: "1",
+      },
+    });
+    try {
+      let booted = "";
+      await new Promise<void>((resolve, reject) => {
+        const deadline = setTimeout(() => reject(new Error(`no boot: ${booted}`)), 30_000);
+        child.stderr?.on("data", (d: Buffer) => {
+          booted += d.toString();
+          if (booted.includes("serving")) {
+            clearTimeout(deadline);
+            resolve();
+          }
+        });
+        child.on("exit", (c) => reject(new Error(`ksor serve exited ${c}: ${booted}`)));
+      });
+      const probe = new Client({ name: "version-probe", version: "0.0.0" });
+      await probe.connect(
+        new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port2}/mcp`)),
+      );
+      const reported = probe.getServerVersion()?.version;
+      await probe.close();
+      expect(reported, `serverInfo.version from the bundled binary`).toBe(ksorPkg.version);
+      expect(reported, "the hardcoded fallback must not reach a client").not.toBe("0.0.0");
+    } finally {
+      child.kill("SIGTERM");
+      await new Promise<void>((r) => {
+        const h = setTimeout(() => {
+          child.kill("SIGKILL");
+          r();
+        }, 5000);
+        child.once("exit", () => {
+          clearTimeout(h);
+          r();
+        });
+      });
+    }
+  }, 120_000);
 
   it("serves the instance body as the server's instructions", () => {
     expect(client.getInstructions(), "instance.md body is the agent-surface prompt").toContain(

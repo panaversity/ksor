@@ -102,9 +102,12 @@ async function main(args: readonly string[]): Promise<number> {
       return exitCodes.refused;
     }
     if (instance !== undefined) process.env["KSOR_INSTANCE"] = instance;
-    // The served version is the PUBLISHED one; the gateway cannot know it.
-    process.env["KSOR_GATEWAY_VERSION"] = pkg.version;
-    await runGateway();
+    // Pass the PUBLISHED version as an ARGUMENT. An env var set here would be
+    // too late: this module's static import of the gateway (top of file) has
+    // already evaluated its module body, so a module-level env read there is
+    // baked before this line runs — which is exactly how the first attempt at
+    // this shipped inert in 0.0.4 (review, 2026-08-20).
+    await runGateway(pkg.version);
     return 0;
   }
 
