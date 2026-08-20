@@ -30,20 +30,20 @@ Postgres store (with pgvector) and an embedding provider key, so it is not
 part of `pnpm dev`. The ordered path is:
 
 ```sh
-export KSOR_DB_URL='postgresql://…'   # the DSN var your instance.md names
-export GEMINI_API_KEY='…'             # the embedding provider key
-pnpm schema     # apply the database schema (once)
-pnpm grant      # authorize ingest for this corpus (once)
-pnpm ingest     # embed knowledge/ into a generation and activate it
-pnpm serve      # run the MCP server over the record
+# .env (gitignored; ksor reads it automatically — nothing to export)
+#   KSOR_DB_URL=postgresql://…
+#   GEMINI_API_KEY=…
+pnpm up      # schema → grant → ingest → serve
 ```
 
-One setup step comes first: add a `database:` block to `instance.md` naming the
-env var that holds your DSN (`dsn_env: KSOR_DB_URL`). That single block is
-enough — `embedding:` already defaults to Gemini at 1536 dimensions, and
-leaving `retrieval:` out starts you with the abstention gate off and honest
-about it. Turn the gate on afterwards with `ksor calibrate`, once the record is
-actually serving. `AGENTS.md` → "Serving to agents" is the
+Add one block to `instance.md` first — `database: { dsn_env: KSOR_DB_URL }`,
+the NAME of the variable, never the DSN. That is the whole required config:
+`embedding:` already defaults to Gemini at 1536 dimensions, and leaving
+`retrieval:` out starts you with the abstention gate off and honest about it
+(turn it on afterwards with `ksor calibrate`, once the record is serving).
+
+`pnpm up` is re-runnable — it is also how you refresh after editing
+`knowledge/`. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` binds loopback
 with auth off for local use; a public bind fails closed unless auth is
 configured. Any other operation is `pnpm exec ksor <verb>`.
@@ -71,7 +71,7 @@ different coding agent's way of finding the same working contract.
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` / `pnpm schema` / `pnpm grant` / `pnpm ingest` / `pnpm serve` commands, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
+| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands and the served rung's `pnpm up` (schema → grant → ingest → serve, or run them separately), the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
 

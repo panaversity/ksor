@@ -172,6 +172,11 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(pkg.scripts?.["grant"], "a local grant command").toBe(
       "ksor grant --instance instance.md",
     );
+    // One command for the whole served rung. Every step it chains is
+    // re-runnable, so it is also the refresh-after-editing command.
+    expect(pkg.scripts?.["up"], "one command brings the rung up").toBe(
+      "pnpm schema && pnpm grant && pnpm ingest && pnpm serve",
+    );
     const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     // The pinned tool MUST be excluded from the scaffold's 48h release-age
     // quarantine, or the first install of a freshly-published ksor breaks for

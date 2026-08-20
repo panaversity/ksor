@@ -48,7 +48,23 @@ const usage =
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
   `Docs: node_modules/${pkg.name}/docs · ${pkg.homepage}\n`;
 
+/**
+ * Load `./.env` when one exists, so the served rung's variables (the DSN the
+ * instance names, the provider key) live in a file the adopter already
+ * gitignores instead of being exported by hand into every shell. Node does
+ * this natively — no dependency — and a REAL environment variable still wins
+ * over the file, so CI and production overrides behave as they should.
+ */
+function loadDotEnv(): void {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // No .env, or unreadable: exporting the variables directly still works.
+  }
+}
+
 async function main(args: readonly string[]): Promise<number> {
+  loadDotEnv();
   if (args.includes("--help") || args.includes("-h")) {
     process.stdout.write(usage);
     return 0;

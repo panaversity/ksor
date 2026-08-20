@@ -67,39 +67,35 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    later means re-embedding the whole corpus. Keep `dim` at or below 2000: the
    pgvector HNSW index refuses more, and `gemini-embedding-001` can emit 3072.
 
-   Leave `retrieval:` out for now — the abstention gate is off, and the server
-   says so honestly. Turning it on is step 6, AFTER the record is serving.
+   Leave `retrieval:` out for now — the gate is off and the server says so.
+   Turning it on is step 4, AFTER the record is serving.
 
-2. **Provision Postgres** with the `vector` extension (`CREATE EXTENSION vector`),
-   e.g. a Neon database. Export the DSN under the name `dsn_env` chose, plus the
-   provider key:
+2. **Put the secrets in `.env`** (already gitignored — never commit it).
+   `ksor` reads it automatically, so nothing needs exporting; a real
+   environment variable still wins over the file, so CI and production
+   overrides behave normally.
 
    ```sh
-   export KSOR_DB_URL='postgresql://…'   # the var instance.md names
-   export GEMINI_API_KEY='…'             # the embedding provider key
+   KSOR_DB_URL=postgresql://…
+   GEMINI_API_KEY=…
    ```
 
-3. **Apply the schema:** `pnpm schema` (creates tables, indexes, and the
-   ingest role).
+   The database needs the pgvector extension: `CREATE EXTENSION vector`.
 
-4. **Authorize ingest:** `pnpm grant` — writes the one row row-level security
-   requires before any write to this corpus is allowed. Idempotent, and
-   `pnpm exec ksor grant --instance instance.md --revoke` withdraws it.
+3. **Bring it up — one command:**
 
-   This is a separate, named act on purpose: applying the schema and
-   authorizing writes are different decisions, and a schema step that granted
-   itself write access would make the tool its own authorizer. Apply the schema
-   and ingest as the SAME Postgres login (the ingest role is granted to whoever
-   applied the DDL).
+   ```sh
+   pnpm up      # schema → grant → ingest → serve
+   ```
 
-5. **Ingest:** `pnpm ingest` — embeds `knowledge/` into a fresh generation and
-   activates it (`--flip`). Safe to re-run (see the generation model below).
+   Every step is re-runnable, so this is also how you refresh after editing
+   `knowledge/`: an applied schema reports "already applied", an existing grant
+   reports "already granted", and ingest builds a fresh generation. Run the
+   steps individually (`pnpm schema`, `pnpm grant`, `pnpm ingest`, `pnpm serve`)
+   when you want them separate — for instance when a DBA holds the credentials
+   that authorize ingest.
 
-6. **Serve:** `pnpm serve`. Ask it something your record covers, and something
-   it does not — with no `retrieval:` block the gate is off, so it will answer
-   both, and `/health` says the gate is uncalibrated rather than pretending.
-
-7. **Turn the abstention gate on — deliberately, once it serves.** This is the
+4. **Turn the abstention gate on — deliberately, once it serves.** This is the
    step that makes "not in this corpus" a real answer, and it is measured, never
    guessed:
 
