@@ -68,8 +68,11 @@ builtin `up`.
   (`specs/ksor/site-governance/spec.md`, issue #29) — the record enforces
   `status` / `owner` / `provenance` / `effective` / `superseded_by` on every
   document, and the site rendered none of them. Now each document shows the
-  governance it declares: a status chip, owner and effective date under the
-  title, one entry per `provenance` source at the foot, and — above the title,
+  governance it declares: owner and effective date under the title, one entry
+  per `provenance` source at the foot, a status chip **only when the status is
+  a caveat** (`draft` / `review` / `superseded` — an `approved` document shows
+  none, because that is what a reader already assumes and a label that never
+  varies stops being read), and — above the title,
   where it cannot be missed — a supersession notice naming the successor and
   linking to its route. This closed a correctness gap, not only a cosmetic
   one: a `status: superseded` document was served looking identical to an

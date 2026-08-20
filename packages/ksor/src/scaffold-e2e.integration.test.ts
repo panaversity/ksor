@@ -309,6 +309,13 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       ),
     ).toContain("Refund policy v5");
 
+    // An approved document carries no status chip: that is what a reader
+    // already assumes, and a label that never varies stops being read. What
+    // the author DID declare still shows.
+    const approved = visible("docs/refund-policy-v5");
+    expect(approved).toMatch(/Owner Finance/);
+    expect(approved).not.toContain("Status");
+
     // Nothing inferred: the shipped example declares only title/status/order,
     // so it renders its status and NO other governance furniture — never an
     // "unknown" owner, which would read as governed.

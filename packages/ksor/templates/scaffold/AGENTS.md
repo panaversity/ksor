@@ -215,11 +215,15 @@ Details in README → Deploying.
   (a legacy marker — prefer `status`) are available. No other keys; never
   `id:` or `name:` — the path is the identity.
 - **The governance keys are rendered, so they are worth filling in.** Each
-  page shows its status, owner and effective date under the title, lists every
+  page shows its owner and effective date under the title, lists every
   `provenance` entry separately at the foot, and — for a superseded document —
   carries a notice above the title naming its successor and linking to it. A
   key you leave off renders nothing at all: the site never invents a value, so
   a missing owner reads as missing rather than as unowned.
+- **`status` is shown only when it is a caveat.** `draft`, `review` and
+  `superseded` appear as a small label; `approved` shows nothing, because a
+  reader already assumes a document in the record is current — so the label
+  stays rare enough to be noticed on the pages where it matters.
 - `visibility:` names the one audience a document belongs to — a single value
   from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
   (an approved document can be restricted, and a draft is not hidden). Leave

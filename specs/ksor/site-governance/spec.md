@@ -47,13 +47,23 @@ them as "tolerated … so a governed document always renders".
 
 ## The observable contract
 
-`status` is a **required** key, so every document renders it — that is the
-cheapest governance signal the ladder offers at level 0, and a reader who
-cannot tell a draft from an approved document has been told nothing.
+`status` renders **only when it is a caveat** — `draft`, `review`,
+`superseded`. An `approved` document shows no chip, because that is what a
+reader already assumes of a document in a system of record; a label that
+appears on every page and always says the same thing carries no information,
+and a reader who learns to ignore it will also ignore it on the page where it
+matters. _(Revision 2026-08-20, owner: this clause first read "every document
+renders it". Reversed on the ladder argument — a level-0 record where every
+document is `draft` would carry governance furniture on every page, which is
+level-4 dress on a level-0 project.)_
 
 The rest render **only when the document declares them**: `owner`; every
 `provenance` entry, each separately visible; `effective`; and `superseded_by`
 **as a working link to the successor's rendered page**.
+
+Suppression is a **presentation** decision and lives in the component. The
+projection keeps reporting the record faithfully — it never hides what a
+document declared.
 
 A document with `status: superseded` carries an unmistakable marker naming
 its successor. A reader must not have to notice a subtle badge to learn that
@@ -107,8 +117,9 @@ Red first, in this order:
    document per governance shape (bare `draft`; fully-populated `approved`; a
    `superseded` document pointing at its successor). Assert the built HTML
    carries every declared value, the successor link resolves to a real built
-   page, and a document declaring only `title` + `status` renders its status
-   and no other governance furniture.
+   page, an `approved` document renders no status chip while still showing
+   what it declared, and a document declaring only `title` + `status: draft`
+   renders that caveat and no other governance furniture.
 3. **Browser smoke** — the existing both-themes, zero-console-error walk
    covers the new furniture; the successor link is clicked and lands.
 4. **Positive control** — the assertions fail against the current build.

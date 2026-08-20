@@ -10,10 +10,14 @@ title, description and body. The sharpest consequence was not cosmetic: a
 `status: superseded` document was served looking identical to an approved one,
 with the successor pointer the checker requires swallowed.
 
-Each document now shows its status, owner and effective date under the title,
-one entry per `provenance` source at the foot, and — above the title, where it
-cannot be missed — a supersession notice that names the successor and links to
-its page.
+Each document now shows its owner and effective date under the title, one entry
+per `provenance` source at the foot, and — above the title, where it cannot be
+missed — a supersession notice that names the successor and links to its page.
+
+The status appears only when it is a caveat: `draft`, `review` and `superseded`
+are shown, `approved` is not. A reader already assumes a document in a system of
+record is current, and a label that appears on every page saying the same thing
+trains people to skip it — including on the page where it mattered.
 
 Nothing is inferred. A key a document does not declare renders nothing at all:
 a placeholder would read as governed, which is worse than a visible gap. It is

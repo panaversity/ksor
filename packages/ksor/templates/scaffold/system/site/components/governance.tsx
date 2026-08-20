@@ -73,19 +73,34 @@ function Fact({
 }
 
 /**
- * The one-line governance strip under the document's title: where it sits in
- * the lifecycle, who stands behind it, and when it took effect.
+ * A document in a system of record is ASSUMED current and approved, so saying
+ * "approved" tells the reader nothing they had not already assumed. Only a
+ * caveat earns the space: draft and review say this is not settled yet,
+ * superseded says stop trusting it.
  *
- * `status` is a required key, so it is the one fact almost every document
- * shows — the cheapest signal the governance ladder offers at level 0, where a
- * reader otherwise cannot tell a draft from an approved document.
+ * This keeps the chip rare enough to be read. A label on every page that
+ * always says the same thing trains the reader to skip it — and then it is
+ * skipped on the page where it mattered. It also keeps a level-0 record (where
+ * every document is `draft`) from wearing governance furniture it has not
+ * climbed to yet.
+ *
+ * A presentation rule, deliberately here and not in readGovernance: the
+ * projection reports what the record says, and the page decides what is worth
+ * showing.
+ */
+const ASSUMED_STATUS = "approved";
+
+/**
+ * The one-line governance strip under the document's title: any caveat on its
+ * status, who stands behind it, and when it took effect.
  */
 export function GovernanceMeta({
   governance,
 }: {
   governance: DocumentGovernance;
 }): ReactElement | null {
-  const { status, owner, effective } = governance;
+  const { owner, effective } = governance;
+  const status = governance.status === ASSUMED_STATUS ? null : governance.status;
   if (status === null && owner === null && effective === null) return null;
 
   return (
