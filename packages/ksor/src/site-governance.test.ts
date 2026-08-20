@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   governanceVisible,
+  isCalendarDate,
   readGovernance,
   resolveSuccessorUrl,
 } from "../templates/scaffold/system/site/lib/governance.js";
@@ -297,5 +298,28 @@ describe("governanceVisible — whitespace YAML allows", () => {
     expect(governanceVisible("site:\n  governance : false")).toBe(false);
     expect(governanceVisible("site :\n  governance: false")).toBe(false);
     expect(governanceVisible("site :\n  governance : false")).toBe(false);
+  });
+});
+
+describe("isCalendarDate", () => {
+  it("accepts a real day", () => {
+    expect(isCalendarDate("2026-04-01")).toBe(true);
+    expect(isCalendarDate("2024-02-29")).toBe(true); // a real leap day
+  });
+
+  it("rejects a date-SHAPED string that is not a day", () => {
+    // These reach the renderer through the checker's own remedy — it refuses
+    // them unquoted and tells the author to quote them. Stamped into
+    // <time datetime> they are invalid HTML, and a consumer reading
+    // "2026-06-31" gets July 1st: the rollover the whole rule exists to stop.
+    for (const value of ["2026-06-31", "2026-13-45", "2026-02-30", "2026-00-10"]) {
+      expect(isCalendarDate(value), value).toBe(false);
+    }
+  });
+
+  it("rejects anything that is not a plain date at all", () => {
+    for (const value of ["Q1 2026", "2026-4-1", "2026", "", "2026-04-01T00:00:00Z"]) {
+      expect(isCalendarDate(value), value).toBe(false);
+    }
   });
 });

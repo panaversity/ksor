@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import type { DocumentGovernance } from "@/lib/governance";
+import { isCalendarDate, type DocumentGovernance } from "@/lib/governance";
 
 /**
  * What the record says about the document you are reading.
@@ -120,10 +120,13 @@ export function GovernanceMeta({
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
       {effective === null ? null : (
         <Fact label="Effective">
-          {/* `effective` is free text in the record ("Q1 2026" is legal), and
-              an unparseable datetime="" is invalid HTML — so the machine
-              attribute is stamped only when the value really is a date. */}
-          {/^\d{4}-\d{2}-\d{2}$/.test(effective) ? (
+          {/* The machine attribute is stamped only for a real day on the
+              calendar. A SHAPE test was not enough: the checker's own remedy
+              for `2026-06-31` is to QUOTE it, and quoted text arrives here — so
+              a shape test published `<time dateTime="2026-06-31">`, which is
+              invalid HTML and which a consumer reads as July 1st. That is the
+              precise hazard the record's date rule exists to prevent. */}
+          {isCalendarDate(effective) ? (
             <time dateTime={effective}>{effective}</time>
           ) : (
             <span>{effective}</span>

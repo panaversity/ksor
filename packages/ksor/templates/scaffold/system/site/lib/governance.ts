@@ -154,6 +154,27 @@ export function resolveSuccessorUrl(
 }
 
 /**
+ * Whether a string is a real day on the calendar, not merely date-SHAPED.
+ *
+ * `2026-06-31` and `2026-13-45` both match a `\d{4}-\d{2}-\d{2}` shape, and
+ * stamping either into `<time datetime>` publishes a day that does not exist:
+ * invalid HTML, and a consumer parsing it gets July 1st. The record's checker
+ * refuses those unquoted and offers QUOTING as the escape hatch — which is
+ * exactly how one reaches this function (found 2026-08-21).
+ */
+export function isCalendarDate(value: string): boolean {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (parts === null) return false;
+  const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
+}
+
+/**
  * Whether this record's site shows the governance it declares — the
  * `site.governance` key in instance.md, default **on**:
  *
