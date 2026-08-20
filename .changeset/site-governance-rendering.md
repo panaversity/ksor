@@ -40,3 +40,12 @@ timestamp reads back in a timezone and could render the day before the one
 written; and a grouped `instance.md` key written inline (`site: { … }`) is
 refused instead of being silently dropped, which also restores the closed-key-set
 guarantee for every nested group.
+
+A second adversarial pass hardened the rules again: the `effective` check now
+matches YAML's real timestamp grammar rather than a padded-date shape (so
+`2026-4-1 00:00:00 +05:00` is caught and `2026-04-01 for new customers` is left
+alone); a YAML comment on an `instance.md` group key and a capitalised `False`
+are accepted, both having been refused by a checker stricter than the parsers it
+protects; a supersession that points back at itself or forms a cycle is refused,
+because the notice was sending readers in a circle; and a long source URL now
+wraps instead of being clipped away on a phone.

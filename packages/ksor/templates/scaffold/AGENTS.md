@@ -220,8 +220,9 @@ Details in README → Deploying.
   position), `effective` (the date the document takes effect — write the date
   alone, `2026-04-01`, or quote it; an unquoted date WITH a time is a YAML
   timestamp and reads back in a timezone, so the page can show the day before
-  the one you wrote) and `superseded` (a legacy marker — prefer `status`) are
-  available. No other keys; never
+  the one you wrote — free text that merely starts with a date, like
+  `2026-04-01 for new customers`, is fine) and `superseded` (a legacy marker —
+  prefer `status`) are available. No other keys; never
   `id:` or `name:` — the path is the identity.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every
@@ -257,7 +258,9 @@ Details in README → Deploying.
   successor pointer left on a document you have set back to `approved` would
   publish a "Superseded" banner over a live document. The pointer must name a
   markdown document (`./<successor>.md`), exactly as it is capitalised under
-  `knowledge/`.
+  `knowledge/`, and it must lead somewhere: a document that supersedes itself,
+  or a pair that supersede each other, sends the reader in a circle and is
+  refused.
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
