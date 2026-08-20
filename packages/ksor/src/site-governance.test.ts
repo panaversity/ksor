@@ -10,7 +10,10 @@
 // Contract: specs/ksor/site-governance/spec.md
 import { describe, expect, it } from "vitest";
 
-import { readGovernance } from "../templates/scaffold/system/site/lib/governance.js";
+import {
+  readGovernance,
+  resolveSuccessorUrl,
+} from "../templates/scaffold/system/site/lib/governance.js";
 
 const WHERE = "knowledge/policy.md";
 
@@ -118,5 +121,64 @@ describe("readGovernance", () => {
     // status is required and `pnpm check` enforces it; an absent one is a
     // checker finding, not a reason to break an adopter's preview build.
     expect(readGovernance({ title: "Note" }, WHERE)).toMatchObject({ status: null });
+  });
+});
+
+describe("resolveSuccessorUrl", () => {
+  const KNOWN = [
+    "/docs/refund-policy",
+    "/docs/refund-policy-v5",
+    "/docs/legal/terms",
+    "/docs/legal",
+  ];
+
+  it("resolves a sibling pointer to the successor's route", () => {
+    expect(resolveSuccessorUrl("./refund-policy-v5.md", "/docs/refund-policy", KNOWN)).toBe(
+      "/docs/refund-policy-v5",
+    );
+  });
+
+  it("resolves a pointer written without the ./ prefix", () => {
+    expect(resolveSuccessorUrl("refund-policy-v5.md", "/docs/refund-policy", KNOWN)).toBe(
+      "/docs/refund-policy-v5",
+    );
+  });
+
+  it("walks up out of a folder", () => {
+    expect(resolveSuccessorUrl("../refund-policy-v5.md", "/docs/legal/terms", KNOWN)).toBe(
+      "/docs/refund-policy-v5",
+    );
+  });
+
+  it("descends into a folder", () => {
+    expect(resolveSuccessorUrl("./legal/terms.md", "/docs/refund-policy", KNOWN)).toBe(
+      "/docs/legal/terms",
+    );
+  });
+
+  it("maps a folder index to the folder's own route", () => {
+    // knowledge/legal/index.md renders at /docs/legal, not /docs/legal/index.
+    expect(resolveSuccessorUrl("./legal/index.md", "/docs/refund-policy", KNOWN)).toBe(
+      "/docs/legal",
+    );
+  });
+
+  it("carries an anchor through", () => {
+    expect(resolveSuccessorUrl("./refund-policy-v5.md#scope", "/docs/refund-policy", KNOWN)).toBe(
+      "/docs/refund-policy-v5#scope",
+    );
+  });
+
+  it("yields null rather than a dead link when the route is unknown", () => {
+    // `pnpm check` proves the TARGET FILE exists, so reaching this means our
+    // url arithmetic disagreed with the loader's — our bug, and the honest
+    // answer is to show the pointer as text, never to ship a 404 link.
+    expect(resolveSuccessorUrl("./nowhere.md", "/docs/refund-policy", KNOWN)).toBeNull();
+  });
+
+  it("yields null for a pointer that leaves the record", () => {
+    expect(
+      resolveSuccessorUrl("https://example.com/v5.md", "/docs/refund-policy", KNOWN),
+    ).toBeNull();
   });
 });

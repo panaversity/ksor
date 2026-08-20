@@ -53,12 +53,16 @@ function declared(value: unknown): string | null {
  *
  * `where` names the document in the one error this can raise.
  */
-export function readGovernance(
-  data: Readonly<Record<string, unknown>>,
-  where: string,
-): DocumentGovernance {
-  const status = declared(data["status"]);
-  const supersededBy = declared(data["superseded_by"]);
+export function readGovernance(data: unknown, where: string): DocumentGovernance {
+  // `unknown` rather than the loader's page-data type: the projection reads
+  // frontmatter, which is whatever the author wrote, and a shell that crashes
+  // on a shape the checker would have named is worse than one that renders
+  // what it can.
+  const record: Record<string, unknown> =
+    typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
+
+  const status = declared(record["status"]);
+  const supersededBy = declared(record["superseded_by"]);
 
   // Defense in depth: `pnpm check` refuses this, so reaching it means the
   // adopter skipped the checker. Failing the build is the honest outcome —
@@ -74,16 +78,67 @@ export function readGovernance(
 
   // A scalar provenance is a checker finding, not a crash: turning one into an
   // unexplained build failure hides the real message `pnpm check` would print.
-  const raw: unknown = data["provenance"];
+  const raw: unknown = record["provenance"];
   const provenance = Array.isArray(raw)
     ? raw.map(declared).filter((entry): entry is string => entry !== null)
     : [];
 
   return {
     status,
-    owner: declared(data["owner"]),
+    owner: declared(record["owner"]),
     provenance,
-    effective: declared(data["effective"]),
+    effective: declared(record["effective"]),
     supersededBy,
   };
+}
+
+/** Resolve a `./successor.md` pointer against a base route. */
+function joinRoute(base: string, relative: string): string {
+  const segments = base.split("/").filter((segment) => segment !== "");
+  for (const part of relative.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") segments.pop();
+    else segments.push(part);
+  }
+  // knowledge/legal/index.md renders at /docs/legal — the folder's own route.
+  if (segments[segments.length - 1] === "index") segments.pop();
+  return `/${segments.join("/")}`;
+}
+
+/**
+ * The route a `superseded_by` pointer names, or null.
+ *
+ * `pnpm check` has already proved the pointer resolves to a real document
+ * inside `knowledge/`, so a null here means OUR arithmetic disagreed with the
+ * loader — and the honest answer is to render the pointer as text. A dead link
+ * on a supersession notice is the worst of both: it says stop trusting this,
+ * and then strands the reader.
+ *
+ * A route cannot say whether `/docs/legal` came from `legal.md` or from
+ * `legal/index.md`, and the two give different meanings to `./terms.md`. Both
+ * readings are resolved and one must survive: an ambiguous pointer (both
+ * readings name real pages) yields null rather than a coin-flip link.
+ */
+export function resolveSuccessorUrl(
+  pointer: string,
+  currentUrl: string,
+  knownUrls: readonly string[],
+): string | null {
+  // Leaves the record: an absolute URL or a site-absolute path is not a
+  // pointer into knowledge/ at all.
+  if (pointer.includes("://") || pointer.startsWith("/")) return null;
+
+  const [target = "", anchor] = pointer.split("#", 2);
+  if (!target.endsWith(".md")) return null;
+  const withoutExtension = target.slice(0, -".md".length);
+
+  const asPage = currentUrl.split("/").slice(0, -1).join("/");
+  const readings = [joinRoute(asPage, withoutExtension), joinRoute(currentUrl, withoutExtension)];
+
+  const known = new Set(knownUrls);
+  const resolved = [...new Set(readings)].filter((route) => known.has(route));
+  if (resolved.length !== 1) return null;
+
+  const route = resolved[0] ?? "";
+  return anchor === undefined ? route : `${route}#${anchor}`;
 }
