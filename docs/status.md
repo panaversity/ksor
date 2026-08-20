@@ -202,6 +202,7 @@ builtin `up`.
   separation margin rather than asserting it — separation is a property of the
   corpus and its embedding space, and `ksor calibrate` already names this exact
   state "NOT separable" and refuses to hand out a floor for it.
+
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry
   import fences worth verifying.
 
