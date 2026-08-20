@@ -80,7 +80,7 @@ export async function assertSchemaCompatible(pool: pg.Pool): Promise<void> {
     if (code === "42P01" || code === "3D000") {
       throw new SchemaVersionError(
         "the content schema was never applied to this database — run the schema step " +
-          "(ksor-content schema --apply) before serving.",
+          "(ksor schema --apply) before serving.",
       );
     }
     throw error; // a genuine connection failure — the caller treats it as unreachable

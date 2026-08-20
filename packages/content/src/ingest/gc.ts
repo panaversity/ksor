@@ -1,7 +1,7 @@
 /**
  * Reap retired generations past the token grace — converted from the oracle
  * (sor-agentfactory @ b554f91, sor_content/ingest/gc.py), the CLI shell
- * replaced by a library function the `ksor-content gc` verb composes.
+ * replaced by a library function the `ksor gc` verb composes.
  *
  * DELIBERATE, never implicit: a refresh pipeline calls this as its last step;
  * it can also run by hand. The §5 algebra (`collectableGenerations`)

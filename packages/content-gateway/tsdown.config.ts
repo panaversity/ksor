@@ -1,7 +1,7 @@
 import { defineConfig, type UserConfig } from "tsdown";
 
 const config: UserConfig = defineConfig({
-  entry: ["src/index.ts", "src/cli.ts", "src/content-cli.ts"],
+  entry: ["src/index.ts", "src/cli.ts"],
   platform: "node",
   dts: true,
   // Bundle the sibling kernel workspace packages INTO this one — decision 12

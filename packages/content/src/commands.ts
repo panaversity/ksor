@@ -34,23 +34,23 @@ import { runGc } from "./ingest/gc.js";
 const REFUSED = 1;
 const ENVIRONMENT = 3;
 
-const USAGE = `ksor-content — the KSoR content kernel's write plane
+const USAGE = `ksor — the KSoR content kernel's write plane
 
 Usage:
-  ksor-content schema (--dim N | --instance PATH) [--apply]
+  ksor schema (--dim N | --instance PATH) [--apply]
       Print the rendered DDL for the embedding dimension to stdout.
       --instance reads the dimension from instance.md; --apply (with
       --instance) applies the DDL to the instance's database instead.
-  ksor-content ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
-  ksor-content calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
+  ksor ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
+  ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
                          [--generation N] [--per-node N] [--min-chars N]
       Build one generation from the knowledge tree: structure atomically,
       embed resumably, finalize behind the ready gate. --flip activates it
       (never implicit).
-  ksor-content grant --instance PATH [--revoke]
+  ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
-  ksor-content gc --instance PATH [--dry-run]
+  ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
 
@@ -237,7 +237,7 @@ async function ingestCommand(args: string[]): Promise<number> {
       throw new Error(
         `the schema is half-applied (missing: ${space.missingTables.join(", ")}) — ` +
           "ingesting now would embed the whole corpus and then fail in finalize, after the spend.\n" +
-          `  fix: finish applying the DDL (ksor-content schema --instance ... --apply), then ingest`,
+          `  fix: finish applying the DDL (ksor schema --instance ... --apply), then ingest`,
       );
     }
     if (space.reason !== null) {

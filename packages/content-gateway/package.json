@@ -10,10 +10,6 @@
     "url": "git+https://github.com/panaversity/ksor.git",
     "directory": "packages/content-gateway"
   },
-  "bin": {
-    "ksor-content": "./dist/content-cli.mjs",
-    "ksor-content-gateway": "./dist/cli.mjs"
-  },
   "files": [
     "dist",
     "schema"
@@ -33,7 +29,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsdown && node copy-schema.mjs",
+    "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

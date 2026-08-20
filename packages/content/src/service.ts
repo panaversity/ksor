@@ -184,7 +184,7 @@ export class UncalibratedFloorError extends Error {
   constructor() {
     super(
       "ksor-uncalibrated: retrieval.vector_floor is declared 'uncalibrated' — the abstention gate " +
-        "is not measured yet, so this corpus refuses to serve. Run `ksor-content calibrate` and " +
+        "is not measured yet, so this corpus refuses to serve. Run `ksor calibrate` and " +
         "paste the recommended vector_floor into instance.md.",
     );
     this.name = "UncalibratedFloorError";
