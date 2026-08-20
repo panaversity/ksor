@@ -1506,6 +1506,9 @@ export const fixture: MathFixture = {
           answer_precision: 1.0,
         },
         paste: 0.637,
+        separable: true,
+        target: 0.95,
+        measured_at: "2026-08-21",
         paste_why: "separable: max OOC 0.610 < min in-corpus 0.664; midpoint has margin both ways",
         low_tail: [
           {
@@ -1588,7 +1591,7 @@ export const fixture: MathFixture = {
         ],
       },
       rendered:
-        "\nmeasured on generation 3 (served), model gemini-embedding-001, door: synthesized\nAURC = 0.0926  (lower = better separation)\nzero-FA floor (never refuse a real question): 0.664 -> coverage 0.600, ooc leak 0.000\nALT (0.95-precision): floor = 0.664 -> coverage 0.600\nweakest in-corpus queries (these set the floor):\n  0.664  what pins a citation to a generation\n  0.680  how is the corpus version derived\n  0.690  how are chunks kept overlap-free\n  0.710  how does the abstention gate decide\n  0.730  what does the build lock record\n\nseparable: max OOC 0.610 < min in-corpus 0.664; midpoint has margin both ways\nPaste into instance.md:\n  vector_floor: 0.637   # calibrated on generation 3, model gemini-embedding-001/d1536, door: synthesized\n",
+        "\nmeasured on generation 3 (served), model gemini-embedding-001, door: synthesized\nAURC = 0.0926  (lower = better separation)\nzero-FA floor (never refuse a real question): 0.664 -> coverage 0.600, ooc leak 0.000\nALT (0.95-precision): floor = 0.664 -> coverage 0.600\nweakest in-corpus queries (these set the floor):\n  0.664  what pins a citation to a generation\n  0.680  how is the corpus version derived\n  0.690  how are chunks kept overlap-free\n  0.710  how does the abstention gate decide\n  0.730  what does the build lock record\n\nseparable: max OOC 0.610 < min in-corpus 0.664; midpoint has margin both ways\nPaste into instance.md:\n  vector_floor: 0.637   # calibrated 2026-08-21 on generation 3, model gemini-embedding-001/d1536, door: synthesized\n",
     },
     {
       name: "queries-file door, generation None, not separable, no alt floor",
@@ -1646,6 +1649,9 @@ export const fixture: MathFixture = {
           answer_precision: 1.0,
         },
         paste: 0.58,
+        separable: false,
+        target: 0.95,
+        measured_at: "2026-08-21",
         paste_why: "NOT separable: max OOC 0.620 >= min in-corpus 0.580; zero-FA floor leaks 0.333",
         low_tail: [
           {
@@ -1683,7 +1689,7 @@ export const fixture: MathFixture = {
         ],
       },
       rendered:
-        "\nmeasured on generation None (served), model some-model@768, door: queries-file\nCAVEAT: --queries-file floors are measured on human/gold-derived queries — section-weighted eval targets, NOT per-node passage samples — so this floor's low tail is a different distribution than the synthesized door's; record 'door: queries-file' beside the number and never compare the two doors' floors as interchangeable.\nAURC = 0.2708  (lower = better separation)\nzero-FA floor (never refuse a real question): 0.580 -> coverage 0.750, ooc leak 0.333\nALT (0.95-precision): floor = 0.720 -> coverage 0.250\nweakest in-corpus queries (these set the floor):\n  0.580  what is a governed corpus\n  0.720  how does serving fail safe\n\nNOT separable: max OOC 0.620 >= min in-corpus 0.580; zero-FA floor leaks 0.333\nPaste into instance.md:\n  vector_floor: 0.580   # calibrated on generation None, model some-model@768/d768, door: queries-file\n",
+        "\nmeasured on generation unknown (no generation pinned) (served), model some-model@768, door: queries-file\nCAVEAT: --queries-file floors are measured on human/gold-derived queries — section-weighted eval targets, NOT per-node passage samples — so this floor's low tail is a different distribution than the synthesized door's; record 'door: queries-file' beside the number and never compare the two doors' floors as interchangeable.\nAURC = 0.2708  (lower = better separation)\nzero-FA floor (never refuse a real question): 0.580 -> coverage 0.750, ooc leak 0.333\nALT (0.95-precision): floor = 0.720 -> coverage 0.250\nweakest in-corpus queries (these set the floor):\n  0.580  what is a governed corpus\n  0.720  how does serving fail safe\n\nNOT separable: max OOC 0.620 >= min in-corpus 0.580; zero-FA floor leaks 0.333\nNOT pasting a floor: this measurement did not separate, so any number here would be one that is known to leak.\nPut the record in the fail-closed state and fix the measurement:\n  retrieval:\n    vector_floor: uncalibrated\nThen widen the probe set (scope-adjacent near-misses, not only far-domain questions), add in-corpus questions, and re-run.\n",
     },
     {
       name: "pinned candidate generation, low tail truncates at five",
@@ -1766,6 +1772,9 @@ export const fixture: MathFixture = {
           answer_precision: 1.0,
         },
         paste: 0.475,
+        separable: true,
+        target: 1,
+        measured_at: "2026-08-21",
         paste_why: "separable: max OOC 0.350 < min in-corpus 0.600; midpoint has margin both ways",
         low_tail: [
           {
@@ -1843,7 +1852,7 @@ export const fixture: MathFixture = {
         ],
       },
       rendered:
-        "\nmeasured on generation 7 (PINNED), model gemini-embedding-001, door: synthesized\nAURC = 0.0262  (lower = better separation)\nzero-FA floor (never refuse a real question): 0.600 -> coverage 0.778, ooc leak 0.000\nALT (0.95-precision): floor = 0.600 -> coverage 0.778\nweakest in-corpus queries (these set the floor):\n  0.600  q-weak-1\n  0.600  q-weak-2\n  0.641  q-weak-3\n  0.650  q-weak-4\n  0.660  q-weak-5\n\nseparable: max OOC 0.350 < min in-corpus 0.600; midpoint has margin both ways\nPaste into instance.md:\n  vector_floor: 0.475   # calibrated on generation 7, model gemini-embedding-001/d1536, door: synthesized\n",
+        "\nmeasured on generation 7 (PINNED), model gemini-embedding-001, door: synthesized\nAURC = 0.0262  (lower = better separation)\nzero-FA floor (never refuse a real question): 0.600 -> coverage 0.778, ooc leak 0.000\nALT (1.0-precision): floor = 0.600 -> coverage 0.778\nweakest in-corpus queries (these set the floor):\n  0.600  q-weak-1\n  0.600  q-weak-2\n  0.641  q-weak-3\n  0.650  q-weak-4\n  0.660  q-weak-5\n\nseparable: max OOC 0.350 < min in-corpus 0.600; midpoint has margin both ways\nPaste into instance.md:\n  vector_floor: 0.475   # calibrated 2026-08-21 on generation 7, model gemini-embedding-001/d1536, door: synthesized\n",
     },
   ],
   format_cases: [

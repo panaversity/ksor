@@ -25,6 +25,17 @@ security, an INSERT policy, and no SELECT policy or grant, so the provenance
 ledger the governance story rests on was write-only under every credential ksor
 ships.
 
+**The calibrator no longer hands out a floor it just measured as leaking.** When
+a measurement does not separate in-corpus from out-of-corpus, the report says so
+and names the fail-closed state (`vector_floor: uncalibrated`) instead of
+printing a paste-ready number — the intended operator is a coding agent, and it
+will paste what it is given. Two reporting bugs replicated from the Python
+predecessor are also fixed: a missing generation printed Python's `None` literal
+into the provenance comment, and the alternate-floor line always claimed
+0.95-precision whatever precision was actually measured. Byte-fidelity to the
+oracle is for algorithms, never for reports. The paste line now carries the
+measurement DATE, which the invariant asked for and it never had.
+
 **Forward migrations.** `schema/migrations/<from>-<to>__<slug>.sql` with a runner
 that walks the chain rather than sorting it, so a missing step refuses instead of
 being skipped. `ksor schema --apply` now compares versions instead of checking
