@@ -16,6 +16,7 @@ import {
   readDocument,
   search,
   EmptyQueryError,
+  MAX_OUTLINE_LIMIT,
   MAX_SEARCH_K,
   UnknownSlug,
   type ServiceContext,
@@ -252,7 +253,7 @@ read tool.`,
           .optional()
           .describe("Slug or '/'-path to drill into; omit to browse the top level"),
         depth: z.number().int().min(0).max(5).optional().describe("Extra levels below the anchor"),
-        limit: z.number().int().min(1).max(5000).default(200).describe("Maximum rows"),
+        limit: z.number().int().min(1).max(MAX_OUTLINE_LIMIT).default(200).describe("Maximum rows"),
       }),
       annotations: {
         readOnlyHint: true,

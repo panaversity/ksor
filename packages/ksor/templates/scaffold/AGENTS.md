@@ -95,7 +95,8 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 
    ```sh
    pnpm setup   # schema (or migrate) + grant — the privileged acts, run once
-   pnpm serve   # ingest → collect → serve
+   pnpm refresh # ingest the record, collect retired generations
+   pnpm serve   # the MCP server (one supervised process)
    ```
 
    `setup` is separate on purpose: applying DDL and granting ingest are acts an

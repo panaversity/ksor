@@ -408,6 +408,23 @@ export function rebaseOutlineRows(
     .map((r) => ({ ...r, headingPath: prefix + r.headingPath, depth: absDepth + r.depth }));
 }
 
+/**
+ * The largest outline a caller may ASK for. The tool schema and the service
+ * both derive from it, so the ceiling is one number rather than three
+ * hand-copied ones.
+ */
+export const MAX_OUTLINE_LIMIT = 5000;
+
+/**
+ * The ceiling this function actually clamps to, which is deliberately HIGHER.
+ * Callers add probe rows on top of the caller's limit — `service.ts` asks for
+ * `limit + 1` to DETECT truncation, and a drill-down adds one more for the
+ * anchor row `rebaseOutlineRows` strips. Clamping those away made `has_more`
+ * always false at exactly the maximum, which is where truncation is most
+ * likely and least visible (round-3 review of #43).
+ */
+const OUTLINE_CEILING = MAX_OUTLINE_LIMIT + 2;
+
 export interface OutlineOptions {
   readonly root?: string | null;
   readonly depth?: number;
@@ -428,7 +445,7 @@ export async function outline(
 ): Promise<OutlineRow[]> {
   const root = options.root ?? null;
   const depth = Math.max(0, options.depth ?? 0);
-  const limit = Math.max(1, Math.min(options.limit ?? 200, 5000));
+  const limit = Math.max(1, Math.min(options.limit ?? 200, OUTLINE_CEILING));
   let pinned = scope.pinnedGeneration;
   let anchor: string | null = null;
   if (root !== null) {

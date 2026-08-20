@@ -173,6 +173,15 @@ export async function runMigrations(
         const current = await client.query(
           "SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1",
         );
+        // Carried forward with the NUMERIC comparison this module exists to
+        // provide: SQL's min() on TEXT is lexicographic, so 10.0 would sort
+        // below 2.0 — the exact bug compareSchemaVersion is here to avoid
+        // (round-3 review of #43).
+        const seen = await client.query("SELECT compatible_from FROM schema_meta");
+        const compatibleFrom = seen.rows
+          .map((r: { compatible_from: string }) => String(r.compatible_from))
+          .filter((v) => v !== "")
+          .reduce((lowest, v) => (compareSchemaVersion(v, lowest) < 0 ? v : lowest), step.from);
         const at = String(
           (current.rows[0] as { schema_version?: string } | undefined)?.schema_version ?? "",
         );
@@ -187,9 +196,8 @@ export async function runMigrations(
           // narrower range than a freshly provisioned one, so the two were no
           // longer equivalent (review of PR #43). Carry forward what the
           // database already records.
-          "INSERT INTO schema_meta (schema_version, compatible_from)" +
-            " SELECT $1, coalesce(min(compatible_from), $2) FROM schema_meta",
-          [step.to, step.from],
+          "INSERT INTO schema_meta (schema_version, compatible_from) VALUES ($1, $2)",
+          [step.to, compatibleFrom],
         );
         await client.query("COMMIT");
         return "applied";

@@ -32,7 +32,8 @@ part of `pnpm dev`. The ordered path is:
 ```sh
 cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
 pnpm setup             # once: apply the schema, authorize ingest
-pnpm serve             # ingest → collect → serve
+pnpm refresh           # ingest the record, collect retired generations
+pnpm serve             # the MCP server
 ```
 
 `ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
@@ -48,8 +49,9 @@ config:
 
 `pnpm setup` runs once — it applies the schema (or migrates it forward) and
 authorizes ingest, the two privileged acts that should not happen on every
-boot. After that `pnpm serve` is the only command this rung needs — after
-editing `knowledge/`, or just to bring the server back. A rerun on an unchanged record
+boot. After that: `pnpm refresh` publishes what you have edited, and `pnpm serve`
+runs the server. They are separate because publishing is an act, not a side
+effect of starting a process. A rerun on an unchanged record
 costs nothing: no new generation, no embedding, no rows. Edit a document and
 the next run picks up exactly that change. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` refuses to boot

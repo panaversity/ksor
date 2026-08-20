@@ -305,3 +305,39 @@ describe("per-request identity resolvers (M-2)", () => {
     expect(currentIdentity()).toBeNull();
   });
 });
+
+/**
+ * Cleartext is refused where the CONTENT of the URL is trusted, and only
+ * there. The distinction is the whole finding: the JWKS behind the SSO base is
+ * the bearer gate's trust root, while the resource URL is an identifier that
+ * gets string-compared against a token's `aud` and echoed in a challenge.
+ */
+describe("cleartext http:// — refused for what is fetched, allowed for what is compared", () => {
+  it("refuses a remote cleartext SSO base (its JWKS is the trust root)", () => {
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_SSO_URL: "http://sso.example.org" })).toThrowError(
+      /trust root|cleartext/i,
+    );
+  });
+
+  it("refuses a remote cleartext KSOR_JWKS_URL for the same reason", () => {
+    expect(() =>
+      buildAuth({ ...SSO_ENV, KSOR_JWKS_URL: "http://keys.example.org/jwks" }),
+    ).toThrowError(/trust root|cleartext/i);
+  });
+
+  it("ALLOWS a cleartext resource URL — it is compared, never fetched", () => {
+    // The real deployment this blocked: a gateway behind a TLS-terminating
+    // proxy whose canonical resource identifier is the internal http:// URL.
+    const auth = buildAuth({
+      ...SSO_ENV,
+      KSOR_MCP_RESOURCE_URL: "http://content.internal:8080/mcp",
+    });
+    expect(auth.mode).toBe("public");
+  });
+
+  it("still refuses a resource URL that is not a URL at all", () => {
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_MCP_RESOURCE_URL: "not a url" })).toThrowError(
+      /valid URL/i,
+    );
+  });
+});

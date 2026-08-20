@@ -24,7 +24,12 @@ import {
   type SnapshotToken,
 } from "./lib/snapshot.js";
 import { logRead } from "./lib/rlog.js";
-import { documentChunks, findDocument, outline as outlineQuery } from "./lib/read.js";
+import {
+  documentChunks,
+  findDocument,
+  MAX_OUTLINE_LIMIT,
+  outline as outlineQuery,
+} from "./lib/read.js";
 import { codePointLength, windowDocument } from "./lib/windowing.js";
 import { EmptyQueryError as EmbedEmptyQueryError } from "./lib/query-embed.js";
 
@@ -510,8 +515,15 @@ export async function readDocument(
   // generation IS the rollback pointer, so search→read consistency across a
   // forward flip is preserved.
   if (pinned !== null) {
-    const servable = await runRead(ctx.pool, inst.tenantId, (client) =>
-      servableGenerations(client, inst.corpusId),
+    // Scoped like every other read in this door, though it touches only the
+    // generation pointers. The rule "every serving read narrows" is one an
+    // `audience-binding.test.ts` can hold; "every read except the metadata
+    // ones" is a list someone has to keep correct (round-3 review of #43).
+    const servable = await runRead(
+      ctx.pool,
+      inst.tenantId,
+      (client) => servableGenerations(client, inst.corpusId),
+      audienceScope(ctx),
     );
     if (!servable.includes(pinned)) {
       refreshed = "refreshed (withdrawn)";
@@ -667,7 +679,9 @@ export async function outlineDocuments(
   // 2026-08-19); a drill-down shows at least the immediate children.
   const depth = root === null ? (options.depth ?? 0) : Math.max(1, options.depth ?? 1);
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: null };
-  const limit = options.limit ?? 200;
+  // Clamp HERE, where the caller's request is, not inside the query where the
+  // truncation probe would be clamped away with it.
+  const limit = Math.max(1, Math.min(options.limit ?? 200, MAX_OUTLINE_LIMIT));
   // One MORE than asked for, so truncation is DETECTED rather than inferred.
   // A silently cut outline manufactures a false "not in the record" — the
   // agent asks for the structure, gets a partial list with no signal, and

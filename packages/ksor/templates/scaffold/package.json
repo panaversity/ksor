@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "pnpm -C system/site dev",
     "build": "pnpm export-denylist && pnpm -C system/site build",
-    "export-denylist": "node -e \"require('fs').rmSync('.ksor-denylist.json',{force:true})\" && (ksor takedown --instance instance.md --export .ksor-denylist.json || true)",
+    "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
     "check": "node .agents/skills/format-checker/check.mjs",
     "setup": "pnpm schema && pnpm grant",
-    "serve": "pnpm ingest && pnpm gc && exec ksor serve",
+    "serve": "ksor serve",
+    "refresh": "pnpm ingest && pnpm gc",
     "schema": "ksor schema --instance instance.md --apply",
     "grant": "ksor grant --instance instance.md",
     "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip",

@@ -126,3 +126,17 @@ describe("visibility is read from the TEXT, never from a map a sibling can empty
     expect(read(doc(["title: T", "tags: [hr]"].join("\n"))).visibility).toBeNull();
   });
 });
+
+describe("one frontmatter grammar, not two", () => {
+  // Two regexes disagreeing about where a block ENDS is how the leak found a
+  // fourth door: a `----` or `--- ` close satisfied the adapter (poisoning its
+  // map) and not this reader (so both guards went silent).
+  const poisoned = (close: string): string =>
+    `---\ntitle: T\ntags: [hr, payroll]\nvisibility: internal\n${close}\n\nBody.\n`;
+
+  for (const close of ["---", "----", "--- "]) {
+    it(`REFUSES a poisoned map whatever closes the block: ${JSON.stringify(close)}`, () => {
+      expect(() => read(poisoned(close))).toThrow(/could not resolve it/i);
+    });
+  }
+});

@@ -253,11 +253,12 @@ export function denylistManifest(
   corpusId: string,
   stableIds: readonly string[],
   now: Date,
+  source: DenylistManifest["source"] = "database",
 ): DenylistManifest {
   return {
     format: 1,
     corpus_id: corpusId,
-    source: "database",
+    source,
     exported_at: now.toISOString(),
     // Already EXPANDED: every id here is denied outright, so the consumer
     // matches exact strings and never has to interpret scope.

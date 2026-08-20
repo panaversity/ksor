@@ -34,6 +34,8 @@ export const AUDITOR_ROLE = "sor_content_auditor";
 export const READ_STATEMENT_TIMEOUT_MS = 15_000;
 export const AUDIT_STATEMENT_TIMEOUT_MS = 5_000;
 export const PROBE_STATEMENT_TIMEOUT_MS = 5_000;
+/** Total budget for a readiness answer, retries included. */
+export const PROBE_DEADLINE_MS = 8_000;
 /**
  * A hard per-request deadline on the read path: with the pool's native
  * checkout bound handling saturation, this caps the total time across
@@ -165,6 +167,12 @@ export async function runRead<T>(
 export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
   return runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, PROBE_STATEMENT_TIMEOUT_MS), op, {
     retry: true,
+    // A readiness probe must ANSWER, not persist. Once a connect timeout became
+    // retryable (right for a request, wrong for a probe), /ready took ~30s to
+    // report 503 against an unreachable database — past the timeout of every
+    // default readiness probe, so a container reads "no response" instead of
+    // "not ready" (round-3 review of #43).
+    deadlineMs: PROBE_DEADLINE_MS,
   });
 }
 

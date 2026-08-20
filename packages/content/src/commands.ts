@@ -53,11 +53,15 @@ Usage:
       --instance) provisions the instance's database, or migrates an
       existing one forward through schema/migrations/.
   ksor ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
-  ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
-                         [--generation N] [--per-node N] [--min-chars N]
       Build one generation from the knowledge tree: structure atomically,
       embed resumably, finalize behind the ready gate. --flip activates it
-      (never implicit).
+      (never implicit). The source commit is read from git when the tree is in
+      a repository; --source-commit overrides it.
+  ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
+                 [--generation N] [--per-node N] [--min-chars N]
+      Measure the abstention floor for this corpus and report it. A
+      measurement that does not separate in-corpus from out-of-corpus prints
+      the diagnosis and NO floor: there is no safe number to paste.
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
@@ -82,13 +86,18 @@ Exit codes: 0 ok · 1 refused · 3 environment
  */
 export function usageFor(command: string): string {
   const lines = USAGE.split("\n");
-  const start = lines.findIndex((l) => l.trimStart().startsWith(`ksor ${command} `));
+  // A verb's block starts at its own `  ksor <verb>` heading and runs to the
+  // NEXT such heading — including any continuation of the usage line itself,
+  // which the previous slice cut off, so `ingest --help` printed no
+  // description and `calibrate --help` printed ingest's (round-3 review).
+  const isHeading = (l: string): boolean => /^ {2}ksor \S/.test(l);
+  const start = lines.findIndex((l) => isHeading(l) && l.trimStart().startsWith(`ksor ${command}`));
   if (start === -1) return USAGE;
   const rest = lines.slice(start + 1);
-  const end = rest.findIndex((l) => /^ {2}ksor \S/.test(l));
+  const end = rest.findIndex(isHeading);
   return [lines[start], ...(end === -1 ? rest : rest.slice(0, end))]
     .join("\n")
-    .replace(/\n+$/, "\n");
+    .replace(/\s+$/, "\n");
 }
 
 function fail(code: number, message: string): number {
@@ -586,6 +595,26 @@ async function takedownCommand(args: string[]): Promise<number> {
   const loaded = loadInstance(values.instance);
   if (typeof loaded === "number") return loaded;
   const instance = loaded;
+
+  // --export runs inside `pnpm build`, so it is the ONE takedown mode that has
+  // to answer honestly on a record with no database rather than refuse. It
+  // writes `source: "none"` — the shape the site reads as "no database
+  // declared, nothing can be denied" — and exits 0. Every OTHER failure
+  // (database configured but unreachable, permission denied) still exits
+  // non-zero, which is what the scaffold's `|| true` used to swallow: the
+  // export "succeeded", wrote nothing, and the site build then refused with a
+  // remedy that pointed back at the command that had just silently failed
+  // (round-3 review of #43).
+  if (values.export !== undefined && (process.env[instance.dsnEnv] ?? "") === "") {
+    const manifest = denylistManifest(instance.corpusId, [], new Date(), "none");
+    writeFileSync(values.export, JSON.stringify(manifest, null, 2) + "\n");
+    process.stdout.write(
+      `takedown: ${instance.dsnEnv} is unset, so this record has no database to ask. ` +
+        `Wrote source="none" (nothing denied) to ${values.export}.\n`,
+    );
+    return 0;
+  }
+
   const dsn = resolveDsn(instance);
   if (typeof dsn === "number") return dsn;
   // Who performed the act. Governance governs ACTS: the ledger row has to name

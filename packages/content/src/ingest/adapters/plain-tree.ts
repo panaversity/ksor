@@ -375,7 +375,8 @@ function codePointCompare(a: string, b: string): number {
 
 // ^\uFEFF? — a BOM-prefixed file must not serve its YAML as a chunk
 // (review finding, 2026-08-19).
-const FRONTMATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+/** Re-exported so every reader of a document agrees where its frontmatter ENDS. */
+export const FRONTMATTER: RegExp = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 
 const YAML_BOOLS: Record<string, boolean> = {
   yes: true,

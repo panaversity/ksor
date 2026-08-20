@@ -66,12 +66,22 @@ export function visibleTiers(model: AudienceModel, viewer: string | null): strin
  * The sentinel for "this record declares no audience model".
  *
  * It is a VALUE, not the absence of one, and that is the whole point. The
- * predicate used to read an UNBOUND GUC as "no model" and evaluate TRUE, so any
- * serving path that forgot to bind the scope served every tier — fail-open, in
- * the seam whose entire job is to withhold. `lib/takedown.ts` cannot fail that
- * way because it is a CTE join. Now an unbound GUC matches nothing and the path
- * returns no rows: a forgotten binding is a visible outage, never a silent leak
- * (review of PR #43).
+ * predicate used to read an UNBOUND GUC as "no model" and evaluate TRUE, so a
+ * statement running with no scope bound served every tier.
+ *
+ * Two layers, and it matters which is which:
+ *
+ *   SQL      an unbound `app.audience_tiers` matches NOTHING. A statement that
+ *            somehow runs outside `runRead` returns no rows rather than the
+ *            whole record.
+ *   runRead  binds this sentinel by DEFAULT, so a library caller that does not
+ *            narrow gets the whole record — stated, not inherited from an
+ *            unbound GUC.
+ *
+ * So the serving DOOR is what must be right: `service.ts` overrides the default
+ * on every path with the caller's tier, and `audience-binding.test.ts` asserts
+ * that none of them can lose it. The SQL is the backstop, not the guarantee
+ * (round-3 review of #43 corrected the earlier, overstated claim).
  */
 const NO_MODEL: string = "*";
 

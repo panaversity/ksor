@@ -15,6 +15,8 @@
  * here would put the audience model in two places again.
  */
 
+import { FRONTMATTER } from "./adapters/plain-tree.js";
+
 /** The authored governance keys. `null` means "the document said nothing". */
 export interface NodeGovernance {
   /** Audience tier; null = the instance's default_visibility. */
@@ -52,7 +54,12 @@ function scalar(meta: Record<string, unknown>, key: string): string | null {
 const BLOCK_LIST = (key: string): RegExp =>
   new RegExp(`^${key}:[ \\t]*\\r?\\n((?:[ \\t]*-[ \\t]+.*\\r?\\n?)+)`, "m");
 
-const FRONTMATTER = /^﻿?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+// ONE definition, imported from the adapter. Two regexes disagreeing about
+// where a frontmatter block ENDS is how the visibility leak found its fourth
+// door: this one required `\n---\n` while the adapter closes on `----` or
+// `--- `, so a document using either closed the adapter's block, poisoned its
+// map, and slipped past BOTH guards here into the default tier (round-3 review
+// of #43).
 
 /**
  * Values of a simple `key:` block list, the one nested shape the record's

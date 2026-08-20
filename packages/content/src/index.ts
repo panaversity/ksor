@@ -99,7 +99,13 @@ export {
   type ReadOptions,
   type ReadResult,
 } from "./service.js";
-export { UnknownSlug, findDocument, outline, documentChunks } from "./lib/read.js";
+export {
+  UnknownSlug,
+  findDocument,
+  outline,
+  documentChunks,
+  MAX_OUTLINE_LIMIT,
+} from "./lib/read.js";
 export { windowDocument, codePointLength, cleanCut, estTokens } from "./lib/windowing.js";
 export {
   normalizeQueries,
