@@ -337,6 +337,19 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
           ? walkFiles(path.join(dir, e.name), base)
           : [path.relative(base, path.join(dir, e.name))],
       );
+    // BOTH directions: walking only .agents let a .claude-only file pass here
+    // and then fail the emitted project's own `pnpm check`, which compares the
+    // two trees (found 2026-08-20).
+    for (const rel of walkFiles(claude)) {
+      if (!existsSync(path.join(agents, rel))) {
+        violate(
+          9,
+          `packages/ksor/templates/scaffold/.claude/skills/${rel} has no .agents/skills twin`,
+          "the scaffold ships both copies byte-identical; a file in only one of them emits a project whose own checker fails",
+          `add the same file under .agents/skills/${rel}, or delete the .claude copy`,
+        );
+      }
+    }
     for (const rel of walkFiles(agents)) {
       const twin = path.join(claude, rel);
       if (!existsSync(twin)) {
