@@ -101,6 +101,15 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    `setup` is separate on purpose: applying DDL and granting ingest are acts an
    operator performs, not side effects of starting a server.
 
+   **`pnpm serve` is the local loop, not the container command.** It re-ingests
+   the whole record before the port opens, which is what you want at your desk
+   and not what you want as a cold start — and it would demand ingest
+   privileges at runtime. When you deploy, run `pnpm setup` and `pnpm ingest`
+   as DEPLOY steps and run bare `ksor serve` in the container; it honours
+   `$PORT` and binds `0.0.0.0` there. Set `KSOR_SNAPSHOT_KEYS` too: without it
+   a cold start mints a new signing key, so citations pinned before a
+   scale-down stop validating after it.
+
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing
    grant reports "already granted", and ingest builds a fresh generation.

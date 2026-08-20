@@ -202,8 +202,16 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(pkg.scripts?.["setup"], "the privileged acts, run once by a human").toBe(
       "pnpm schema && pnpm grant",
     );
+    // `exec` on the tail, not a plain `&&`. Without it the server runs UNDER
+    // the shell pnpm spawned, so anything that signals that shell — a stop
+    // button, a `kill`, a pane closing — returns the prompt while the server
+    // keeps running and holding the port; the next `pnpm serve` then dies with
+    // EADDRINUSE. `exec` replaces the shell with the server, so there is no
+    // wrapper to orphan it and signals reach it directly. Verified both ways:
+    // the plain chain leaves a live pid after the shell is signalled, the exec
+    // form leaves none.
     expect(pkg.scripts?.["serve"], "one command serves the agent surface").toBe(
-      "pnpm ingest && pnpm gc && ksor serve",
+      "pnpm ingest && pnpm gc && exec ksor serve",
     );
     // gc in the loop: a refused flip leaves a complete generation behind, and
     // nothing in the default path ever collected them.
