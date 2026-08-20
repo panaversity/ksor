@@ -170,6 +170,9 @@ interface DenylistManifest {
   denied?: { stable_id?: string; scope?: string }[];
 }
 
+/** No database, or a dev server without an export: nothing is denied. */
+const NOTHING_DENIED: DenylistManifest = { source: "none", denied: [] };
+
 /** Where `ksor takedown --export` writes, relative to the project root. */
 const DENYLIST_FILE = ".ksor-denylist.json";
 
@@ -190,7 +193,7 @@ function deniedStableIds(recordDir: string): DenylistManifest {
   try {
     raw = readFileSync(manifestPath, "utf8");
   } catch {
-    if (!declaresDatabase()) return new Set();
+    if (!declaresDatabase()) return NOTHING_DENIED;
     // `pnpm dev` never runs the export (it needs a live DSN), so refusing here
     // stopped the site running locally at all for any record with a database —
     // a governance guard that broke the everyday loop (round-1 review of #43).
@@ -202,7 +205,7 @@ function deniedStableIds(recordDir: string): DenylistManifest {
           `takedowns. Run \`ksor takedown --instance instance.md --export ${DENYLIST_FILE}\` ` +
           "to see what a build would publish.",
       );
-      return new Set();
+      return NOTHING_DENIED;
     }
     refuse(
       "ksor-denylist-missing",

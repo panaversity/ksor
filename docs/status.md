@@ -191,6 +191,17 @@ builtin `up`.
   provider), plus in/out-of-corpus separation and abstention across a
   scope-adjacent near-miss, measured in a real embedding space where a key is
   configured.
+
+  **What the first real run measured, and it matters**: against
+  `gemini-embedding-001`, the near-miss "what is the approval threshold for
+  hiring a contractor" scores **0.683** on the example corpus, ABOVE the weaker
+  in-corpus question at **0.671**. No single cosine floor both answers
+  "what happens if a purchase is split" and declines the hiring question. The
+  eval therefore GATES the mechanism (given a floor, everything below it
+  abstains and everything above still answers) and REPORTS the corpus's
+  separation margin rather than asserting it — separation is a property of the
+  corpus and its embedding space, and `ksor calibrate` already names this exact
+  state "NOT separable" and refuses to hand out a floor for it.
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry
   import fences worth verifying.
 
