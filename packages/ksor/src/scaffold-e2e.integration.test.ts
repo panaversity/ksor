@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
-import { injectLocalKsor } from "./e2e-local-ksor.js";
+import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -33,7 +33,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     project = path.join(work, "walkthrough");
     // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build,
     // not the registry: the pin is the exact (unpublished-in-CI) CLI version.
-    injectLocalKsor(project);
+    const localKsor = injectLocalKsor(project);
     // A fresh scaffold's FIRST install is non-frozen by design: the served tool
     // is pinned to the exact CLI version, which the committed site-only lockfile
     // cannot pre-resolve — so pnpm adds it and writes the lock.
@@ -47,6 +47,9 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       install.status,
       (install.stderr ?? String(install.error ?? "spawn failed")).slice(-2000),
     ).toBe(0);
+    // …and prove it was OUR build, not the published package of the same version.
+    expectLocalKsorResolved(project, localKsor);
+    cleanupLocalKsor(localKsor);
   }, 300_000);
 
   afterAll(() => {

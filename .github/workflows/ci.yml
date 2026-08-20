@@ -159,9 +159,10 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm build
       # The kernel's database tier (decision 11): ingest → retrieve round
-      # trips against real Postgres + pgvector. The Gemini-live suites gate
-      # separately on GEMINI_API_KEY and skip while the secret is pending
-      # (docs/status.md → Pending owner actions).
+      # trips against real Postgres + pgvector. The Gemini-live suite
+      # (gemini.live.db.test.ts — the one real embedding call, proving the
+      # provider seam and catching vendor API drift) gates separately on
+      # GEMINI_API_KEY and skips without it; the secret is configured.
       - run: pnpm test:db
         env:
           KSOR_DB_URL: postgresql://ksor:ksor@localhost:5432/ksor

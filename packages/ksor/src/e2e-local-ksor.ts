@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,15 +13,26 @@ const ksorPkgDir = fileURLToPath(new URL("..", import.meta.url));
  * (`KSOR-STAMP-VERSION`), which is NOT published during the release Version PR
  * or any local dev build — a registry install would fail
  * `ERR_PNPM_NO_MATCHING_VERSION`. This also makes the e2e suites exercise the
- * real built code instead of whatever happens to be published. Requires the
- * package to be built first (`pnpm build`); call before `pnpm install`.
+ * real built code instead of whatever happens to be published.
+ *
+ * Returns the tarball path so the caller can prove the install resolved it
+ * (see `expectLocalKsorResolved`) — without that check a silently-unapplied
+ * override falls back to the published version and the suite greens against
+ * code this branch never built.
  */
-export function injectLocalKsor(projectDir: string): void {
+export function injectLocalKsor(projectDir: string): string {
+  // A `pnpm pack` with no prior build produces a dist-less tarball and status
+  // 0; the failure would surface later as a confusing module error. Say so here.
+  const builtCli = path.join(ksorPkgDir, "dist", "cli.mjs");
+  if (!existsSync(builtCli)) {
+    throw new Error(`${builtCli} is missing — run \`pnpm build\` before the e2e suites`);
+  }
   const packDir = mkdtempSync(path.join(tmpdir(), "ksor-pack-"));
   const packed = spawnSync("pnpm", ["--dir", ksorPkgDir, "pack", "--pack-destination", packDir], {
     encoding: "utf8",
   });
   if (packed.status !== 0) {
+    rmSync(packDir, { recursive: true, force: true });
     throw new Error(`pnpm pack failed: ${packed.stderr || packed.stdout}`);
   }
   const tgz = readdirSync(packDir).find((file) => file.endsWith(".tgz"));
@@ -35,4 +46,28 @@ export function injectLocalKsor(projectDir: string): void {
     workspacePath,
     `${workspace}\noverrides:\n  "@panaversity/ksor": "file:${tarball}"\n`,
   );
+  return tarball;
+}
+
+/**
+ * Prove the install resolved the LOCAL tarball rather than the registry. The
+ * pinned version is a real published version, so a silently-ignored override
+ * would install pre-fold-in code and still green a site-only e2e (review
+ * finding, 2026-08-20). The lockfile records the resolution, so it is the
+ * evidence.
+ */
+export function expectLocalKsorResolved(projectDir: string, tarball: string): void {
+  const lock = path.join(projectDir, "pnpm-lock.yaml");
+  const text = existsSync(lock) ? readFileSync(lock, "utf8") : "";
+  if (!text.includes(path.basename(tarball)) && !text.includes("file:")) {
+    throw new Error(
+      `@panaversity/ksor did not resolve to the local tarball (${path.basename(tarball)}) — ` +
+        `the pnpm-workspace override was ignored, so this suite would test the PUBLISHED package`,
+    );
+  }
+}
+
+/** Remove a tarball staging directory created by `injectLocalKsor`. */
+export function cleanupLocalKsor(tarball: string): void {
+  rmSync(path.dirname(tarball), { recursive: true, force: true });
 }

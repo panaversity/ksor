@@ -30,6 +30,12 @@ const REQUIRED_IN_TARBALL = [
   "dist/cli.mjs",
   "dist/index.mjs",
   "dist/index.d.mts",
+  // The bundled kernel's DDL: build-copied beside dist/ and gitignored, so
+  // ONLY the build plus the `files` manifest put it in the tarball. Without
+  // it, `ksor schema`/`ingest`/`serve` crash at runtime in the adopter's
+  // install (review finding, 2026-08-20 — decision 12's fold-in verified this
+  // by hand only).
+  "schema/schema.sql",
   "docs/index.md",
   "templates/LICENSE",
   "templates/scaffold/package.json",
@@ -151,6 +157,22 @@ describe("published tarball", () => {
       { cwd: fromTarball, encoding: "utf8" },
     );
     expect(packedRun.status, packedRun.stderr).toBe(0);
+
+    // The bundled kernel must be reachable from the PUBLISHED layout, not only
+    // from the checkout: `schema/schema.sql` is build-copied and gitignored, so
+    // a `files`-manifest or relative-path drift only shows up here. Rendering
+    // real DDL from the extracted tarball is that proof.
+    const packedSchema = spawnSync(
+      process.execPath,
+      [path.join(extracted, "package", "dist", "cli.mjs"), "schema", "--dim", "8"],
+      { cwd: fromTarball, encoding: "utf8" },
+    );
+    expect(packedSchema.status, packedSchema.stderr).toBe(0);
+    expect(packedSchema.stdout, "DDL rendered from the tarball's own schema.sql").toContain(
+      "CREATE TABLE",
+    );
+    expect(packedSchema.stdout, "the dimension reaches the vector column").toContain("VECTOR(8)");
+
     const checkoutRun = spawnSync(process.execPath, [distCli, "init", name], {
       cwd: fromCheckout,
       encoding: "utf8",

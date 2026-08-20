@@ -127,6 +127,15 @@ bind, set `KSOR_ALLOWED_HOSTS` / `KSOR_ALLOWED_ORIGINS`; on more than one
 replica, set a shared `KSOR_SNAPSHOT_KEYS` (unset ⇒ a per-process key, so a
 search token minted by one replica fails on another).
 
+Two things worth being deliberate about:
+
+- **`KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` serves your whole record to anyone
+  who can reach the port.** It exists for deployments fronted by your own
+  gateway or network policy. If nothing else is in front, do not set it.
+- **Set `KSOR_SSO_ISSUER` when your SSO stamps a stable `iss`.** Audience is
+  always enforced against `KSOR_JWT_ALLOWED_AUDIENCES`; naming the issuer adds
+  one more check for the cost of one variable.
+
 ## Publishing
 
 `pnpm build` emits a fully static site (`system/site/out/`) deployable to

@@ -72,4 +72,48 @@ describe("ksor CLI (built artifact)", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/^\d+\.\d+\.\d+\n$/);
   });
+
+  // The corpus verbs are DELEGATED to the bundled content CLI (cli.ts dispatch).
+  // Without these, dropping a verb from that dispatch silently demotes it to
+  // "designed but not implemented" (exit 2) and the scaffold's `pnpm ingest` /
+  // `pnpm schema` break with no red test (review finding, 2026-08-20).
+  it("routes every corpus verb to the bundled kernel — never exit 2", () => {
+    for (const verb of ["ingest", "schema", "calibrate", "gc"]) {
+      const result = runCli([verb]);
+      expect(result.status, `ksor ${verb} exit (stdout: ${result.stdout})`).not.toBe(2);
+      expect(
+        `${result.stdout}${result.stderr}`,
+        `ksor ${verb} must not report itself unimplemented`,
+      ).not.toContain("designed but not implemented");
+    }
+  });
+
+  it("names the missing flag when a corpus verb is under-specified (exit 1)", () => {
+    // The exact flags the scaffold's package.json scripts pass — a rename in
+    // the content CLI's parser must fail HERE, not in an adopter's project.
+    const ingest = runCli(["ingest", "--instance", "instance.md"]);
+    expect(ingest.status, ingest.stdout).toBe(1);
+    expect(`${ingest.stdout}${ingest.stderr}`).toContain("--knowledge");
+
+    for (const verb of ["calibrate", "gc"]) {
+      const result = runCli([verb]);
+      expect(result.status, `${verb}: ${result.stdout}`).toBe(1);
+      expect(`${result.stdout}${result.stderr}`, `${verb} names --instance`).toContain(
+        "--instance",
+      );
+    }
+  });
+
+  it("renders the DDL from the bundled schema.sql — proving it resolves at runtime", () => {
+    // `schema/schema.sql` is build-copied beside dist/ and resolved via
+    // import.meta.url; it is gitignored, so only the build + `files` manifest
+    // put it there. Rendering real DDL is the proof it is reachable from the
+    // shipped layout (review finding, 2026-08-20: previously manual-only).
+    const result = runCli(["schema", "--dim", "8"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout, "rendered DDL").toContain("CREATE TABLE");
+    expect(result.stdout, "the dimension reaches the rendered vector column").toContain(
+      "VECTOR(8)",
+    );
+  });
 });

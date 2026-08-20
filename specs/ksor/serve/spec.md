@@ -109,9 +109,12 @@ Postgres; the typed abstention under a calibrated floor (including the
 question whose only passing answer is the abstention); snapshot pinning +
 the refresh path; byte-exact read; the HTTP door's fail-closed boot and
 probes; oracle-fixture parity for chunking, calibration math, windowing,
-manifest. Not yet wired: the visibility-staged tier as serve's source
-(clause above is contract, not behavior), the calibrate CLI's synthesized
-door, behavioural evals as a CI gate, and the `.mcp.json` scaffold rung.
+manifest; and the calibrate CLI's synthesized door (`calibrateCommand` builds
+the text generator and passes it into `runCalibration` — corrected 2026-08-20:
+this spec listed it as unwired after the code landed; the code wins). Not yet
+wired: the visibility-staged tier as serve's source (clause above is contract,
+not behavior), behavioural evals as a CI gate, and the `.mcp.json` scaffold
+rung.
 The "declared-but-uncalibrated refuses" invariant is now REPRESENTABLE and
 enforced (`retrieval.vector_floor: uncalibrated` refuses every serve —
 resolved 2026-08-19), so the grammar is no longer a two-state gap.

@@ -20,8 +20,8 @@ import {
 } from "./schema.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type SearchScope } from "./lib/search.js";
 import { vectorAbstains } from "./lib/abstain.js";
-import { keyRingFromEnv, validate } from "./lib/snapshot.js";
-import { search, type ServiceContext } from "./service.js";
+import { keyRingFromEnv, mint, validate } from "./lib/snapshot.js";
+import { readDocument, search, type ServiceContext } from "./service.js";
 import type { ContentInstance } from "./instance.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
@@ -44,6 +44,9 @@ function unit(hot: number): number[] {
 }
 
 const PAD = " filler content well beyond the twenty-four character servable floor.";
+// Distinct enough that finding it in a served body is unambiguous evidence.
+const WITHDRAWN_TEXT =
+  "Withdrawn zebra bands nobody may cite." + " filler content well beyond the servable floor.";
 
 describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   let admin: pg.Pool;
@@ -295,6 +298,83 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const byAction = Object.fromEntries(rows.rows.map((r) => [r.action, r.n]));
     expect(byAction["similarity_searched"], JSON.stringify(byAction)).toBeGreaterThanOrEqual(2);
     expect(byAction["search_abstained"], JSON.stringify(byAction)).toBeGreaterThanOrEqual(1);
+  });
+
+  // "The generation is the authorization" must hold at READ time, not only at
+  // issue time: a token pinned to a WITHDRAWN generation must refresh to active
+  // rather than serve content an operator rolled back. A rollback does not
+  // repoint rollback_generation at the withdrawn one, so gen 2 below is neither
+  // the active nor the rollback pointer while its rows linger — exactly the
+  // post-withdrawal state. (Review finding 2026-08-20: proven live, never in CI.)
+  it("a snapshot pinned to a withdrawn generation refreshes instead of serving it", async () => {
+    await runIngest(pool, TENANT, async (c) => {
+      const r = await c.query(
+        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status)
+         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published') RETURNING node_id`,
+        [TENANT],
+      );
+      const nodeId = String(r.rows[0].node_id);
+      await c.query(
+        `INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path,
+                              content_hash, embedding_model, chunk_policy)
+         VALUES ($1, 2, 'zebra:prose', $2, 'zebra', 'zebra', 'hash2', 'fake-embed-001',
+                 'heading-aware-1500-content-only-v5')`,
+        [TENANT, nodeId],
+      );
+      await c.query(
+        `INSERT INTO chunks (tenant_id, generation, source_id, ordinal, content, chunk_hash,
+                             labels, embedding, embedding_status, embedding_model)
+         VALUES ($1, 2, 'zebra:prose', 0, $2, md5($2), '{"source_type": "prose"}', $3, 'embedded',
+                 'fake-embed-001')`,
+        [TENANT, WITHDRAWN_TEXT, `[${unit(0).join(",")}]`],
+      );
+    });
+
+    const ring = keyRingFromEnv("k1=test-secret");
+    const instance: ContentInstance = {
+      name: CORPUS,
+      corpusId: CORPUS,
+      tenantId: TENANT,
+      dsnEnv: "KSOR_DB_URL",
+      abstain: { vectorFloor: 0.9, keywordFloor: null },
+      maximumResponseCharacters: 120_000,
+      instructions: "Answer only from the record.",
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: DIM,
+    };
+    const ctx: ServiceContext = {
+      pool,
+      instance,
+      ring,
+      instanceDigest: "digest-1",
+      embedQuery: async () => unit(0),
+    };
+    const scope = { corpusId: CORPUS, tenantId: TENANT, instanceDigest: "digest-1" };
+
+    // The withdrawn pin: a cryptographically VALID token for generation 2.
+    const withdrawn = mint(ring, scope, 2);
+    expect(
+      validate(ring, withdrawn.token, scope),
+      "the token itself must still be valid — the refusal is the SERVABILITY check, not the crypto",
+    ).toEqual({ generation: 2, reason: null });
+
+    const read = await readDocument(ctx, "zebra", { snapshotToken: withdrawn.token });
+    expect(read.snapshot, "a withdrawn pin must say why it refreshed").toBe(
+      "refreshed (withdrawn)",
+    );
+    expect(read.provenance.generation, "served from the ACTIVE generation").toBe(1);
+    expect(read.text, "withdrawn content must never reach the caller").not.toContain(
+      WITHDRAWN_TEXT,
+    );
+
+    // Positive control: a pin to the ACTIVE generation is honored, no refresh —
+    // so the assertion above cannot pass merely because refresh always fires.
+    const active = await readDocument(ctx, "zebra", {
+      snapshotToken: mint(ring, scope, 1).token,
+    });
+    expect(active.snapshot, "an active pin is honored silently").toBeUndefined();
+    expect(active.provenance.generation).toBe(1);
   });
 
   it("ingest without a grant row is refused by the database, not by convention", async () => {

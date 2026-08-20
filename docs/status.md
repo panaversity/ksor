@@ -107,7 +107,12 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
   four-agent operability review, 2026-08-20; the blockers it found — the
   format-checker rejecting kernel `instance.md` keys, the release-CI
   self-reference, the missing `--flip`, the undocumented setup path — are
-  FIXED here). Still owed, each additive and independently specced: a
+  FIXED here, as are a second round's: the tarball now asserts the bundled
+  `schema/schema.sql` ships and renders DDL from the PACKED layout, the corpus
+  verbs have binary-level dispatch coverage, the withdrawn-generation snapshot
+  refresh has a db test with a positive control, and one gated live Gemini call
+  proves the real embedding space). Still owed, each additive and
+  independently specced: a
   first-class **`ksor grant`** verb (today the ingest authorization is a
   documented manual `INSERT`); a dedicated **`serve-setup` skill** in the
   scaffold agent kit (today the runbook lives in the scaffold `AGENTS.md`);

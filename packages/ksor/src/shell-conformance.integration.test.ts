@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
-import { injectLocalKsor } from "./e2e-local-ksor.js";
+import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -223,7 +223,7 @@ describe.runIf(enabled).each(SHELLS)(
       swap?.(project);
       // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build
       // (the pinned exact version is unpublished in CI/dev).
-      injectLocalKsor(project);
+      const localKsor = injectLocalKsor(project);
       // The scaffold's first install is non-frozen by design: the served tool
       // is pinned to the exact CLI version, which the committed site-only
       // lockfile cannot pre-resolve, so pnpm adds it and writes the lock
@@ -231,6 +231,8 @@ describe.runIf(enabled).each(SHELLS)(
       // set the same way. CI defaults frozen-lockfile on (found live 2026-08-18:
       // ERR_PNPM_OUTDATED_LOCKFILE under CI=true), so it must be disabled here.
       run("pnpm", ["install", "--no-frozen-lockfile"], project);
+      expectLocalKsorResolved(project, localKsor);
+      cleanupLocalKsor(localKsor);
       if (swap) {
         // The workbench shell is not a repo workspace member, so nothing else
         // ever typechecks its ~1,900 TS/TSX lines; here its dependencies

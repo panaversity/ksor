@@ -287,7 +287,10 @@ story wants) deletes readBody, sendJson, the routing if-chain, and most of
 harden, and gets the rebinding default right by using the SDK helper
 instead of re-deriving it. Cost: one runtime dep on the PRIVATE
 content-gateway (a decision-12 entry, not the published CLI's zero-dep
-guarantee) and a rewrite of a currently-tested door. Timing argument: the
+guarantee — _superseded 2026-08-20: the kernel is bundled into
+`@panaversity/ksor`, which now carries `hono` + `@hono/node-server` and is no
+longer zero-dep; see AGENTS.md decision 13's revision_) and a rewrite of a
+currently-tested door. Timing argument: the
 2026-07-28 protocol revision will land in exactly this layer, so land in
 the Web-standard shape once rather than migrate the hand-rolled door twice.
 Not done in the hardening batch to keep a framework swap out of a
