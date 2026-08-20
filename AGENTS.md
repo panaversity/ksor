@@ -387,7 +387,7 @@ settled "stays Python" 2026-08-17, reversed to "either" 2026-08-18). PyPI
 floor package; neither blocks the content SoR, both must be answered before
 `ksor-identity` exists, and neither is a naming question):
 
-1. **Which half of `schema.sql` is governance, not content.** The schema owns
+1. **Which half of `schema.sql` is governance, not content** (issue #17). The schema owns
    two kinds of table. Content-shaped: `content_nodes`, `chunks`, `sources`,
    `node_centroids`, `slug_aliases`. Generic to ANY record: `corpora`,
    `ingestion_runs`, `schema_meta`, `takedown_denylist`,
@@ -399,7 +399,7 @@ floor package; neither blocks the content SoR, both must be answered before
    already namespaced `sor_content_*`, so the split is half-anticipated. Decide
    before duplicating, because duplicated governance is the one duplication
    this project cannot afford.
-2. **The bundling ceiling.** Decision 12 inlines the whole kernel into the one
+2. **The bundling ceiling** (issue #18). Decision 12 inlines the whole kernel into the one
    published CLI — ~60MB with ONE record. Three records put content + identity
    - praxis and their dependencies into every `npx @panaversity/ksor init`,
      including for adopters who will never climb to a served rung at all. The
