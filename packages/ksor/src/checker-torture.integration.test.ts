@@ -481,6 +481,24 @@ describe("scaffolded format-checker — torture", () => {
       expect(nextLine.status, nextLine.output).toBe(1);
     });
 
+    it("names a source that YAML would cut short at a #", () => {
+      // `- Invoice #4471 from Acme Ltd` publishes as "Invoice": a citation is
+      // supposed to point at exactly one source, and most of this one is gone.
+      const cut = probe({
+        "knowledge/inv.md":
+          "---\ntitle: Inv\nstatus: approved\nprovenance:\n  - Invoice #4471 from Acme Ltd\n---\n\nBody.\n",
+      });
+      expect(cut.status, cut.output).toBe(1);
+      expect(cut.output).toContain("cut short at a #");
+
+      // Quoted keeps the whole thing.
+      const quoted = probe({
+        "knowledge/inv.md":
+          '---\ntitle: Inv\nstatus: approved\nprovenance:\n  - "Invoice #4471 from Acme Ltd"\n---\n\nBody.\n',
+      });
+      expect(quoted.status, quoted.output).toBe(0);
+    });
+
     it("validates EVERY superseded_by, not only ones shaped like a path", () => {
       // `legal/terms` matched neither shape test, so it skipped existence, the
       // escape-the-record rule AND the cross-audience leak rule — and the

@@ -115,6 +115,7 @@ function parseFrontmatter(text) {
   const malformedQuote = new Map();
   const malformed = [];
   const duplicates = [];
+  const truncated = [];
   const tightColons = [];
   const tabIndents = [];
   let current = null;
@@ -164,7 +165,16 @@ function parseFrontmatter(text) {
       // entry, and reading it as one refuses the documents instead of the
       // list (found live 2026-08-18: `- public # the default` made every
       // public document's visibility undeclared).
-      const value = /^["']/.test(item[1]) ? item[1] : item[1].replace(/\s+#.*$/, "");
+      const quotedItem = /^["']/.test(item[1]);
+      const value = quotedItem ? item[1] : item[1].replace(/\s+#.*$/, "");
+      // A `#` is a comment to YAML and an invoice or issue number to a person.
+      // In `provenance` — free text naming a real source — the truncation is
+      // silent data loss: `- Invoice #4471 from Acme Ltd` publishes as
+      // "Invoice" (found 2026-08-20). NOT flagged for `audiences`, where a
+      // trailing comment is an intended and documented use.
+      if (!quotedItem && current === "provenance" && value !== item[1]) {
+        truncated.push({ key: current, raw: item[1].trim(), kept: value.trim() });
+      }
       lists.get(current).push(unquote(value));
       continue;
     }
@@ -193,6 +203,7 @@ function parseFrontmatter(text) {
     quoted,
     malformedQuote,
     duplicates,
+    truncated,
     malformed,
     tightColons,
     tabIndents,
@@ -668,6 +679,14 @@ if (!existsSync(knowledgeDir)) {
         } else {
           crossings.push({ kind: "superseded_by", rel, from: p, to: resolved, target: successor });
         }
+      }
+      for (const cut of fm.truncated) {
+        problem(
+          rel,
+          `a ${cut.key} entry is cut short at a #: ${cut.raw}`,
+          `YAML ends an unquoted value at " #", so the record stores only "${cut.kept}" and that is what the page publishes as the source — the rest is lost without a word`,
+          `quote it to keep the whole thing: - "${cut.raw.replace(/"/g, "'")}"`,
+        );
       }
       // `effective` is the DAY a document takes effect. Written unquoted with a
       // time, YAML makes it a timestamp, and normalizing that to a UTC day
