@@ -17,13 +17,13 @@ corrected in the same commit.
 `ALLOWED_KEYS` (format-checker) governs eleven keys. `title`, `description`
 and `order` reach the reader. These do not:
 
-| Key | What the record means by it | Rendered today |
-| --- | --- | --- |
-| `status` | where the document sits in the governance lifecycle — `draft` / `review` / `approved` / `superseded`. **Required on every document.** | no |
-| `owner` | who stands behind it | no |
-| `provenance` | the sources it came from — **a list**, one entry per source, so a citation can point at exactly one of them | no |
-| `effective` | when it took effect | no |
-| `superseded_by` | its successor — **required** when `status: superseded`, validated to resolve inside `knowledge/` | no |
+| Key             | What the record means by it                                                                                                           | Rendered today |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `status`        | where the document sits in the governance lifecycle — `draft` / `review` / `approved` / `superseded`. **Required on every document.** | no             |
+| `owner`         | who stands behind it                                                                                                                  | no             |
+| `provenance`    | the sources it came from — **a list**, one entry per source, so a citation can point at exactly one of them                           | no             |
+| `effective`     | when it took effect                                                                                                                   | no             |
+| `superseded_by` | its successor — **required** when `status: superseded`, validated to resolve inside `knowledge/`                                      | no             |
 
 `source.config.ts` already parses `status`, `owner`, `provenance` and
 `superseded_by` into page data and throws them away; the comment there records
@@ -47,10 +47,13 @@ them as "tolerated … so a governed document always renders".
 
 ## The observable contract
 
-For each rendered document the shell displays, **when the document declares
-it**: `status`; `owner`; every `provenance` entry, each separately visible;
-`effective`; and `superseded_by` **as a working link to the successor's
-rendered page**.
+`status` is a **required** key, so every document renders it — that is the
+cheapest governance signal the ladder offers at level 0, and a reader who
+cannot tell a draft from an approved document has been told nothing.
+
+The rest render **only when the document declares them**: `owner`; every
+`provenance` entry, each separately visible; `effective`; and `superseded_by`
+**as a working link to the successor's rendered page**.
 
 A document with `status: superseded` carries an unmistakable marker naming
 its successor. A reader must not have to notice a subtle badge to learn that
@@ -70,23 +73,25 @@ what they are reading has been replaced.
 - **`llms.txt` and the per-page markdown artifacts are unchanged** — the
   markdown artifact already carries the document's own frontmatter.
 
-## Where it binds: a sixth clause of the surface contract
+## Where it binds: the Fumadocs reference shell
 
-Governance rendering belongs in the **pinned surface contract**
-(`specs/ksor/init/spec.md` §surface contract), not in the reference shell —
-so swapping shells cannot silently drop it. The precedent is clause 5: the
-visibility guarantee is specified once and conformance-tested against both
-shells, because it is a product guarantee rather than shell chrome. The same
-reasoning applies here, and applies more sharply: a shell that renders the
-record while hiding who stands behind it is not rendering the record.
+This lands in the shell core ships (`system/site/`, decision 9) and **not** as
+a clause of the pinned surface contract.
 
-Clause 6 therefore reads: *a shell renders each document's declared
-governance — status, owner, provenance entries, effective date, and a
-resolving link to a successor when superseded — inferring nothing.*
+That is a deliberate narrowing, recorded because the alternative was drafted
+first: binding it as surface-contract clause 6 on the clause-5 precedent —
+visibility is specified once and conformance-tested against both shells
+because it is a product guarantee rather than chrome — would have obliged the
+Docusaurus conformance shell to implement it too. **Set aside by the owner
+(2026-08-20)**: that shell is explicitly "never feature parity", and the
+governance a reader sees is presentation of data the record already carries,
+not a promise a shell swap can violate silently the way a visibility leak can.
 
-**Scope consequence, stated plainly:** the Docusaurus conformance shell
-implements it too. That shell is explicitly "never feature parity", but a
-contract clause is not a feature — it is the bar.
+What that costs, stated plainly so nobody rediscovers it as a surprise: a
+project that swaps shells loses governance rendering until its shell adds it,
+and no conformance suite will say so. Reversed — promoted to a contract clause
+— if a second shell ever ships to adopters, or if the swap recipe starts being
+used for anything but conformance.
 
 ## Acceptance
 
@@ -94,19 +99,20 @@ Red first, in this order:
 
 1. **Unit** — the governance projection from page data: present keys in,
    rendered values out; absent keys yield nothing; `provenance` of one entry
-   and of many; a `superseded` document without `superseded_by` (which the
-   checker refuses, so the shell must fail loudly rather than render a
-   dangling supersession).
-2. **Conformance, both shells** — a fixture record containing one document
-   per governance shape (bare `draft`; fully-populated `approved`; a
-   `superseded` document pointing at its successor). Assert the rendered
-   HTML of each shell contains every declared value, the successor link
-   resolves to a real built page, and a document declaring nothing extra
-   renders no governance furniture at all.
+   and of many; blank and whitespace-only values treated as absent; a
+   `superseded` document without `superseded_by` (which the checker refuses,
+   so the shell fails the build loudly rather than render a dangling
+   supersession — defense in depth for the adopter who skipped `pnpm check`).
+2. **Integration, against a built scaffold** — a fixture record with one
+   document per governance shape (bare `draft`; fully-populated `approved`; a
+   `superseded` document pointing at its successor). Assert the built HTML
+   carries every declared value, the successor link resolves to a real built
+   page, and a document declaring only `title` + `status` renders its status
+   and no other governance furniture.
 3. **Browser smoke** — the existing both-themes, zero-console-error walk
    covers the new furniture; the successor link is clicked and lands.
 4. **Positive control** — the assertions fail against the current build.
-   A conformance test that cannot go red proves nothing.
+   A test that cannot go red proves nothing.
 
 ## Out of scope
 
