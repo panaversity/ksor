@@ -123,6 +123,7 @@ function handoff(io: InitIo, name: string, targetWasDot: boolean): void {
       enter +
       "  pnpm install\n" +
       "  pnpm dev        # the site, live at http://localhost:3000\n" +
+      "  pnpm serve      # the MCP server for agents (needs Postgres + a key — see .env.example)\n" +
       "\n" +
       "no pnpm? run: npm install -g pnpm — or `corepack enable pnpm` on Nodes that bundle corepack\n" +
       "\n" +

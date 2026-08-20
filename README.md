@@ -547,8 +547,11 @@ The agent projection exposes the governed KSoR through MCP: `search`, `outline`,
 and `read` over stateless Streamable HTTP, with cited passages, snapshot
 generation-pinning, and honest abstention. `serve` reads `./instance.md` and
 runs the MCP server in-process — the climbed rung, so it needs a Postgres store
-(pgvector) and an embedding provider key. It binds loopback with auth off by
-default; a public bind fails closed unless auth is configured.
+(pgvector) and an embedding provider key. It **refuses to boot
+unauthenticated** — a local run declares `KSOR_AUTH_DISABLED=1` (which
+`.env.example` already carries) and binds loopback, where auth off is the
+intended development shape. A public bind needs a configured SSO door instead,
+or an explicit `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`.
 
 `pnpm serve` is the only command this rung needs: run it the first time, after
 editing `knowledge/`, or to bring the server back. Every step reports the state
@@ -570,12 +573,7 @@ A scaffolded project looks like:
 my-ksor/
 │
 ├── knowledge/            ← the record: governed CommonMark, the product
-│   ├── example.md
-│   ├── policies/
-│   │   ├── policy-a.md
-│   │   └── policy-b.md
-│   └── procedures/
-│       └── procedure-a.md
+│   └── example.md         (one document; subdirectories organize it as it grows)
 │
 ├── system/
 │   └── site/             ← the reference site (Next.js + Fumadocs)
@@ -1063,7 +1061,8 @@ That makes it suitable for hosts such as:
 - nginx,
 - and private infrastructure.
 
-Before production deployment, configure the canonical site URL in the site configuration.
+Hosting under a sub-path (like `user.github.io/repo`) is the one build-time
+setting: `KSOR_BASE_PATH=/repo pnpm build`.
 
 Detailed deployment guidance can live with each generated project so the instructions remain version-aligned with the KSoR release being used.
 

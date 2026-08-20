@@ -575,6 +575,9 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
     expect(result.stdout).toContain("cd my-sor");
     expect(result.stdout).toContain("pnpm install");
     expect(result.stdout).toContain("pnpm dev");
+    // BOTH surfaces, or the agent projection — the core surface of every KSoR
+    // — stays unnamed at the one moment the adopter is reading the screen.
+    expect(result.stdout).toContain("pnpm serve");
     // A handoff that assumes pnpm is a dead end for whoever lacks it.
     expect(result.stdout).toContain("corepack enable pnpm");
   });
