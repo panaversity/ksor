@@ -961,8 +961,18 @@ if (!existsSync(instanceMd)) {
     // set included — silently skips it: the owner's setting is dropped without
     // a word (found 2026-08-20). The groups are block mappings, always.
     for (const parent of ["ksor", "site", "database", "embedding", "retrieval", "budgets"]) {
-      const inline = fm.keys.get(parent);
-      if (inline !== undefined && inline !== "") {
+      // A trailing ` #` comment is part of this checker's own grammar — it is
+      // stripped for values and for list items, and `audiences: # who may read`
+      // passes on the same file. Reading the raw value called `site: # notes` an
+      // inline mapping and refused a well-formed record, with a why that was
+      // factually false: the surfaces read that file perfectly (found
+      // 2026-08-20).
+      const rawGroup = fm.keys.get(parent);
+      const inline =
+        rawGroup === undefined || rawGroup.trim().startsWith("#")
+          ? ""
+          : rawGroup.replace(/\s+#.*$/, "").trim();
+      if (inline !== "") {
         problem(
           "instance.md",
           `${parent}: has an inline value: ${inline}`,

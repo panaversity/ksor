@@ -368,6 +368,17 @@ describe("scaffolded format-checker — torture", () => {
       expect(misspelledInside.status, misspelledInside.output).toBe(1);
     });
 
+    it("accepts a YAML comment on a group key — the site's own reader allows it", () => {
+      // `governanceVisible()` matches /^site:[ \t]*(?:#.*)?$/ explicitly, and
+      // `audiences: # …` already passed here. Refusing it made the checker
+      // stricter than the surface it protects, and told the owner their
+      // settings were being dropped when they were not.
+      const commented = probe({
+        "instance.md": instanceWith("site: # publication settings\n  governance: false"),
+      });
+      expect(commented.status, commented.output).toBe(0);
+    });
+
     it("refuses a duplicated NESTED key: the map kept the last, the site reads the first", () => {
       const dup = probe({
         "instance.md": instanceWith("site:\n  governance: true\n  governance: false"),
