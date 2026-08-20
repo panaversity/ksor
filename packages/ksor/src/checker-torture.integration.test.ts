@@ -487,6 +487,36 @@ describe("scaffolded format-checker — torture", () => {
       expect(stale.output).toContain("superseded_by on a document that is status: approved");
     });
 
+    it("refuses a supersession that leads back to itself", () => {
+      const itself = probe({
+        "knowledge/self.md":
+          "---\ntitle: Self\nstatus: superseded\nsuperseded_by: ./self.md\n---\n\nBody.\n",
+      });
+      expect(itself.status, itself.output).toBe(1);
+      expect(itself.output).toContain("points at this document itself");
+
+      const cycle = probe({
+        "knowledge/cyc-a.md":
+          "---\ntitle: A\nstatus: superseded\nsuperseded_by: ./cyc-b.md\n---\n\nBody.\n",
+        "knowledge/cyc-b.md":
+          "---\ntitle: B\nstatus: superseded\nsuperseded_by: ./cyc-a.md\n---\n\nBody.\n",
+      });
+      expect(cycle.status, cycle.output).toBe(1);
+      expect(cycle.output).toContain("supersession cycle");
+    });
+
+    it("accepts a supersession CHAIN, which ends at a current document", () => {
+      // a → b → c is not a cycle: the reader arrives somewhere real.
+      const chain = probe({
+        "knowledge/ch-a.md":
+          "---\ntitle: A\nstatus: superseded\nsuperseded_by: ./ch-b.md\n---\n\nBody.\n",
+        "knowledge/ch-b.md":
+          "---\ntitle: B\nstatus: superseded\nsuperseded_by: ./ch-c.md\n---\n\nBody.\n",
+        "knowledge/ch-c.md": "---\ntitle: C\nstatus: approved\n---\n\nCurrent.\n",
+      });
+      expect(chain.status, chain.output).toBe(0);
+    });
+
     it("still accepts a fully governed document — the rules must not fight the record", () => {
       const good = probe({
         "knowledge/successor.md": "---\ntitle: Successor\nstatus: approved\n---\n\nNew.\n",

@@ -728,6 +728,39 @@ if (!existsSync(knowledgeDir)) {
     );
   }
 
+  // A supersession must lead somewhere. A document that supersedes ITSELF, or a
+  // pair that supersede each other, published a notice telling the reader this
+  // page is replaced — by a link back to a page saying the same thing. The
+  // reader is sent in a circle and never reaches a current document (found
+  // 2026-08-20).
+  {
+    const successorOf = new Map();
+    for (const { kind, from, to } of crossings) {
+      if (kind === "superseded_by" && !successorOf.has(from)) successorOf.set(from, to);
+    }
+    const reported = new Set();
+    for (const start of successorOf.keys()) {
+      if (reported.has(start)) continue;
+      const chain = new Set([start]);
+      let cursor = successorOf.get(start);
+      while (cursor !== undefined && !chain.has(cursor)) {
+        chain.add(cursor);
+        cursor = successorOf.get(cursor);
+      }
+      if (cursor === undefined) continue; // the chain ends at a current document
+      for (const node of chain) reported.add(node);
+      const names = [...chain].map((file) => path.relative(root, file));
+      problem(
+        path.relative(root, start),
+        chain.size === 1
+          ? "superseded_by points at this document itself"
+          : `supersession cycle: ${names.join(" → ")} → ${names[0]}`,
+        "a supersession sends the reader to the successor that replaced this one — a pointer that comes back here sends them in a circle and never reaches a current document",
+        "point superseded_by at the document that actually replaces this one, or set status back if nothing does",
+      );
+    }
+  }
+
   // Pointers across audiences: the leak no single build can catch, because the
   // build that publishes the pointer has already dropped its target and cannot
   // know it ever existed. Only the whole record sees both ends.
