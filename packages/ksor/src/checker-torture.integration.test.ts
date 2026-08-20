@@ -431,6 +431,31 @@ describe("scaffolded format-checker — torture", () => {
       }
     });
 
+    it("refuses a one-value key written as a list or a nested block", () => {
+      // Both passed the check and then rendered NOTHING: the record declared an
+      // effective date and the page silently omitted it (round 4).
+      const asList = probe({
+        "knowledge/le.md":
+          "---\ntitle: LE\nstatus: approved\neffective:\n  - 2026-04-01\n---\n\nBody.\n",
+      });
+      expect(asList.status, asList.output).toBe(1);
+      expect(asList.output).toContain("effective is written as a list");
+
+      const asMap = probe({
+        "knowledge/me.md":
+          "---\ntitle: ME\nstatus: approved\nowner:\n  team: Finance\n---\n\nBody.\n",
+      });
+      expect(asMap.status, asMap.output).toBe(1);
+      expect(asMap.output).toContain("owner is written as a nested block");
+
+      // provenance IS a list, and must stay one.
+      const list = probe({
+        "knowledge/pe.md":
+          "---\ntitle: PE\nstatus: approved\nprovenance:\n  - Board minute 2026-02-11\n---\n\nBody.\n",
+      });
+      expect(list.status, list.output).toBe(0);
+    });
+
     it("accepts a real date, and any text the author QUOTES", () => {
       // Quoted is the escape hatch: it is published verbatim and never parsed
       // as a date, so "Q1 2026" and a legal-sounding phrase both work.

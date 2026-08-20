@@ -693,6 +693,33 @@ if (!existsSync(knowledgeDir)) {
           `quote it to keep the whole thing: - "${cut.raw.replace(/"/g, "'")}"`,
         );
       }
+      // Every governed key except `provenance` is ONE value. Written as a
+      // block sequence or a nested map it parses to an array or an object, and
+      // the page — which asks for text — renders nothing at all: the record
+      // declares the fact and the surface silently omits it (found 2026-08-21
+      // with `effective:` followed by `  - 2026-04-01`). `visibility` has its
+      // own list rule with a better message, so it is left to it.
+      for (const scalarKey of [
+        "title",
+        "description",
+        "status",
+        "owner",
+        "effective",
+        "superseded",
+        "superseded_by",
+        "order",
+      ]) {
+        const asList = (fm.lists.get(scalarKey) ?? []).length > 0;
+        const asMap = (fm.children.get(scalarKey)?.size ?? 0) > 0;
+        if (asList || asMap) {
+          problem(
+            rel,
+            `${scalarKey} is written as ${asList ? "a list" : "a nested block"}, not a value`,
+            "the surfaces read this key as one piece of text; as a list or a map it reaches them as neither, so the page publishes nothing where the record declares something",
+            `put the value on the key's own line: ${scalarKey}: <value>`,
+          );
+        }
+      }
       // `effective` is the DAY a document takes effect. Written unquoted with a
       // time, YAML makes it a timestamp, and normalizing that to a UTC day
       // prints the day before the record's for any positive offset (found
