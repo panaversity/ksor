@@ -240,3 +240,94 @@ export function governanceVisible(instanceFrontmatterBlock: string): boolean {
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// The AGENT surface's projection of the same record.
+//
+// The page shows a superseded document under an unmissable notice; llms.txt and
+// llms-full.txt used to serve that same document as ordinary prose — no status,
+// no successor, no owner — so an agent answered from a policy the reader had
+// been warned about, and could not know (measured on shipped bytes,
+// research/site-design.md F1). Two surfaces, two truths, which product
+// principle 2 forbids.
+//
+// Deliberately NOT gated on `site.governance`: that key decides what the PAGES
+// publish. The record keeps every key for the agent surface and the audit trail
+// (specs/ksor/site-governance/spec.md), so gating this on it would rebuild the
+// defect above on purpose.
+
+/** What a reader already assumes of a document in a system of record. */
+const ASSUMED_STATUS = "approved";
+
+/**
+ * A YAML scalar a consumer can parse back to exactly what the record said. The
+ * shapes below are the ones the record's own checker refuses unquoted, for the
+ * same reason: unquoted, YAML reads them as something else.
+ */
+function yamlScalar(value: string): string {
+  const risky =
+    value.includes(": ") ||
+    value.endsWith(":") ||
+    value.includes(" #") ||
+    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value) ||
+    value !== value.trim();
+  return risky ? JSON.stringify(value) : value;
+}
+
+/**
+ * The suffix for one line of the compact index (`llms.txt`), or "" when the
+ * document carries no caveat.
+ *
+ * Caveats only, unlike the full block below: the index is one line per
+ * document, and a marker on every line is noise an agent learns to skip — the
+ * same argument that keeps the page's status chip rare.
+ *
+ * `successorUrl` is the successor's RESOLVED route (the caller owns
+ * resolution, including any base path), or null when it is not in this build —
+ * a per-audience build stages a subset. A missing successor never suppresses
+ * the SUPERSEDED marker: dropping the warning with the link would serve the
+ * withdrawn document looking clean, which is the whole defect.
+ */
+export function agentIndexSuffix(
+  governance: DocumentGovernance,
+  successorUrl: string | null,
+): string {
+  const { status } = governance;
+  if (status === null || status === ASSUMED_STATUS) return "";
+  const replaced =
+    status === "superseded" && successorUrl !== null ? `, replaced by ${successorUrl}` : "";
+  return ` — ${status.toUpperCase()}${replaced}`;
+}
+
+/**
+ * The governance block that precedes a document's body in `llms-full.txt`,
+ * written as frontmatter — the record's own grammar, so a consumer parses the
+ * corpus the way the corpus is authored.
+ *
+ * `status` is emitted even when it is `approved`, which is the opposite call to
+ * the page's. A reader assumes a document in a record is current; a consumer
+ * assumes nothing, and that silence is exactly what F1 was.
+ *
+ * Nothing is inferred: an undeclared key is absent, never an empty one, and a
+ * document declaring no governance at all yields "".
+ */
+export function agentFrontmatter(
+  governance: DocumentGovernance,
+  successorUrl: string | null,
+): string {
+  const { status, owner, effective, supersededBy, provenance } = governance;
+  const lines: string[] = [];
+  if (status !== null) lines.push(`status: ${yamlScalar(status)}`);
+  if (owner !== null) lines.push(`owner: ${yamlScalar(owner)}`);
+  if (effective !== null) lines.push(`effective: ${yamlScalar(effective)}`);
+  // The resolved route, never the raw `./successor.md` pointer: a consumer that
+  // never sees the record's file tree cannot follow one.
+  if (status === "superseded" && supersededBy !== null) {
+    lines.push(`superseded_by: ${yamlScalar(successorUrl ?? supersededBy)}`);
+  }
+  if (provenance.length > 0) {
+    lines.push("provenance:");
+    for (const entry of provenance) lines.push(`  - ${yamlScalar(entry)}`);
+  }
+  return lines.length === 0 ? "" : `---\n${lines.join("\n")}\n---\n`;
+}

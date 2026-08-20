@@ -11,10 +11,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agentFrontmatter,
+  agentIndexSuffix,
   governanceVisible,
   isCalendarDate,
   readGovernance,
   resolveSuccessorUrl,
+  type DocumentGovernance,
 } from "../templates/scaffold/system/site/lib/governance.js";
 
 const WHERE = "knowledge/policy.md";
@@ -321,5 +324,125 @@ describe("isCalendarDate", () => {
     for (const value of ["Q1 2026", "2026-4-1", "2026", "", "2026-04-01T00:00:00Z"]) {
       expect(isCalendarDate(value), value).toBe(false);
     }
+  });
+});
+
+// The AGENT surface's half of the same projection. The page gained a
+// supersession notice; llms.txt and llms-full.txt kept serving the withdrawn
+// document as ordinary prose, so an agent reading the record answered from a
+// policy the reader was warned about (measured on shipped bytes,
+// research/site-design.md F1). These two functions are what close that.
+describe("agentIndexSuffix — the compact index line", () => {
+  const g = (over: Partial<DocumentGovernance> = {}): DocumentGovernance => ({
+    status: "approved",
+    owner: null,
+    provenance: [],
+    effective: null,
+    supersededBy: null,
+    ...over,
+  });
+
+  it("says nothing for an approved document", () => {
+    // The index is one line per document; a marker on every line is noise, and
+    // "approved" is what an unmarked entry already means.
+    expect(agentIndexSuffix(g(), null)).toBe("");
+  });
+
+  it("marks a caveat status in the shape an agent can match", () => {
+    expect(agentIndexSuffix(g({ status: "draft" }), null)).toBe(" — DRAFT");
+    expect(agentIndexSuffix(g({ status: "review" }), null)).toBe(" — REVIEW");
+  });
+
+  it("names the successor by its RESOLVED route, never the raw pointer", () => {
+    // `./refund-policy-v5.md` is meaningless to a consumer that never sees the
+    // record's file tree — it needs the address it can actually fetch.
+    expect(
+      agentIndexSuffix(
+        g({ status: "superseded", supersededBy: "./refund-policy-v5.md" }),
+        "/docs/refund-policy-v5",
+      ),
+    ).toBe(" — SUPERSEDED, replaced by /docs/refund-policy-v5");
+  });
+
+  it("still says SUPERSEDED when the successor is outside this build", () => {
+    // A per-audience build stages a subset, so the successor may be absent.
+    // Dropping the warning with it would serve the withdrawn document clean.
+    expect(agentIndexSuffix(g({ status: "superseded", supersededBy: "./x.md" }), null)).toBe(
+      " — SUPERSEDED",
+    );
+  });
+
+  it("carries an undeclared status without inventing one", () => {
+    expect(agentIndexSuffix(g({ status: null }), null)).toBe("");
+  });
+});
+
+describe("agentFrontmatter — the full corpus block", () => {
+  const g = (over: Partial<DocumentGovernance> = {}): DocumentGovernance => ({
+    status: "approved",
+    owner: null,
+    provenance: [],
+    effective: null,
+    supersededBy: null,
+    ...over,
+  });
+
+  it("emits the status even when it is approved", () => {
+    // The opposite call to the page's. A reader assumes a document in a record
+    // is current; a consumer assumes nothing, and silence is what caused F1.
+    expect(agentFrontmatter(g(), null)).toBe("---\nstatus: approved\n---\n");
+  });
+
+  it("emits every declared key, successor resolved", () => {
+    expect(
+      agentFrontmatter(
+        g({
+          status: "superseded",
+          owner: "Finance",
+          effective: "2026-01-15",
+          provenance: ["Board minutes 2026-01-11", "Terms of service v4"],
+          supersededBy: "./refund-policy-v5.md",
+        }),
+        "/docs/refund-policy-v5",
+      ),
+    ).toBe(
+      [
+        "---",
+        "status: superseded",
+        "owner: Finance",
+        "effective: 2026-01-15",
+        "superseded_by: /docs/refund-policy-v5",
+        "provenance:",
+        "  - Board minutes 2026-01-11",
+        "  - Terms of service v4",
+        "---",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("omits an undeclared key rather than emitting an empty one", () => {
+    // The page's negative promise, kept here: a placeholder reads as governed.
+    const block = agentFrontmatter(g({ owner: "Finance" }), null);
+    expect(block).toBe("---\nstatus: approved\nowner: Finance\n---\n");
+    expect(block).not.toContain("effective");
+    expect(block).not.toContain("provenance");
+  });
+
+  it("quotes a value that would not survive a YAML round trip", () => {
+    // The record's own rule: an unquoted colon breaks the parse. A consumer
+    // parsing this block must get back what the record said.
+    expect(agentFrontmatter(g({ owner: "Finance: payments" }), null)).toContain(
+      'owner: "Finance: payments"',
+    );
+  });
+
+  it("emits nothing at all when the document declares no governance", () => {
+    expect(
+      agentFrontmatter(
+        { status: null, owner: null, provenance: [], effective: null, supersededBy: null },
+        null,
+      ),
+    ).toBe("");
   });
 });
