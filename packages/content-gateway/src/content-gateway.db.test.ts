@@ -313,32 +313,90 @@ Answer ONLY from this record. Abstention is a correct answer.
     }
   });
 
-  it("drains a legacy exchange fully before answering — the in-flight cap must bound real work", async () => {
+  it("holds the in-flight slot until the work is done — the cap must bound real work", async () => {
     // The legacy leg answers over SSE and the SDK resolves its Response as soon
-    // as dispatch STARTS. If the door returned that unread, the concurrency
-    // slot would free while the embed + pg work still ran, so KSOR_MAX_INFLIGHT
-    // would bound nothing and concurrent searches could exhaust the pool
-    // (security re-verification, 2026-08-20: found MEDIUM, fixed by draining).
-    // A response whose body is already complete when the headers arrive is the
-    // observable form of "the slot was held to the end".
+    // as dispatch STARTS, so an undrained door frees the slot while the embed
+    // call and pg queries still run and KSOR_MAX_INFLIGHT bounds nothing —
+    // concurrent searches then exhaust the pool (security re-verification,
+    // 2026-08-20: found MEDIUM, fixed by draining before releasing the slot).
+    //
+    // Asserting the CAP is the only assertion that can see this. The obvious
+    // test — read the body and check it is complete — passes identically
+    // against a reverted door, because the client's own read drains the stream
+    // either way (proved by the fix verification, 2026-08-20). So: a gateway
+    // capped at ONE, two concurrent legacy searches, and exactly one must be
+    // turned away. Undrained, both are admitted.
+    const capPort = 30000 + Math.floor(Math.random() * 20000);
+    const capped = await bootHttp({
+      KSOR_MCP_PORT: String(capPort),
+      KSOR_AUTH_DISABLED: "1",
+      KSOR_MAX_INFLIGHT: "1",
+    });
+    try {
+      const call = (): Promise<Response> =>
+        fetch(`http://127.0.0.1:${capPort}/mcp`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "search", arguments: { query: IN_CORPUS_QUERY, k: 1 } },
+          }),
+        });
+      const [first, second] = await Promise.all([call(), call()]);
+      const codes = [first.status, second.status].sort((a, b) => a - b);
+      // Drain both so the gateway can shut down cleanly.
+      await Promise.all([first.text(), second.text()]);
+      expect(
+        codes,
+        `both admitted ⇒ the slot was released before the work finished: ${JSON.stringify(codes)}`,
+      ).toEqual([200, 503]);
+    } finally {
+      await new Promise<void>((resolve) => {
+        const hard = setTimeout(() => capped.kill("SIGKILL"), 5_000);
+        capped.once("exit", () => {
+          clearTimeout(hard);
+          resolve();
+        });
+        capped.kill("SIGTERM");
+      });
+    }
+  }, 120_000);
+
+  it("refuses a VALID listen — the one shape that would hang the door", async () => {
+    // A listen carrying a `notifications` filter is the only request the SDK
+    // would serve as a never-ending stream; with the refusal removed the door
+    // never responds at all and holds the slot for the client's lifetime
+    // (proved by the fix verification, 2026-08-20). The refusal is therefore
+    // load-bearing for the drain above, not merely tidy — so the VALID shape
+    // needs its own guard, not just the malformed one.
     const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "subscriptions/listen",
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
-        method: "tools/call",
-        params: { name: "search", arguments: { query: IN_CORPUS_QUERY, k: 1 } },
+        method: "subscriptions/listen",
+        params: {
+          notifications: ["notifications/tools/list_changed"],
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
       }),
     });
-    expect(response.status).toBe(200);
-    // The work is finished by the time we are handed the response: the payload
-    // is fully materialized, not a stream still being produced.
-    const body = await response.text();
-    expect(body, `legacy tools/call body: ${body.slice(0, 200)}`).toContain("compensation");
+    expect(response.status, "a valid listen must be refused, not streamed").toBe(501);
+    await response.text();
   });
 
   it("still serves 2025-era clients — the upgrade is not a cutoff", async () => {

@@ -273,11 +273,24 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
    */
   const handleMcp = async (
     request: Request,
-    authInfo?: { token: string; clientId: string; scopes: string[]; expiresAt?: number },
+    authInfo?: {
+      token: string;
+      clientId: string;
+      scopes: string[];
+      expiresAt?: number;
+      extra?: Record<string, unknown>;
+    },
   ): Promise<Response> => {
     const response = await mcpHandler.fetch(request, authInfo === undefined ? {} : { authInfo });
     const body = await response.arrayBuffer();
-    return new Response(body, { status: response.status, headers: response.headers });
+    // A null-body status (204/205/304) throws if handed even a 0-byte buffer.
+    // No such status is reachable through this door today, but the guard costs
+    // a comparison and keeps an SDK addition from turning a valid response into
+    // a bare 500 (fix verification, 2026-08-20).
+    return new Response(body.byteLength === 0 ? null : body, {
+      status: response.status,
+      headers: response.headers,
+    });
   };
 
   const mcp = bodyLimit({
@@ -285,7 +298,15 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     onError: (c) => c.json({ error: "request body too large" }, 413),
   });
 
-  /** Does this POST name `subscriptions/listen`, in either era's shape? */
+  /**
+   * Does this POST name `subscriptions/listen`, in either era's shape?
+   *
+   * Single requests only — a BATCH array cannot open a stream and so needs no
+   * check here: a batch classifies legacy (whose leg has no listen handler, so
+   * it answers `Method not found` and terminates), and a batch carrying the
+   * modern envelope is refused outright by the SDK (`-32600`, batches are not
+   * permitted from 2026-07-28 on). Verified, 2026-08-20.
+   */
   const isListen = async (request: Request): Promise<boolean> => {
     // Modern requests declare the method in a header; legacy ones only in the
     // body. Check the header first so a malformed body cannot smuggle a listen.
@@ -346,14 +367,20 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         // Hand the SDK the identity WE verified. ksor authorizes through the
         // kit's AsyncLocalStorage actor, not this field, so nothing reads it
         // today — but the SDK never populates `authInfo` itself, so leaving it
-        // undefined is a fail-open trap for any future tool that consults
-        // `extra.authInfo` (security re-verification, 2026-08-20).
+        // undefined is a fail-open trap for any future tool that consults it
+        // (in v2 it surfaces as `extra.http.authInfo`). `scopes: []` fails
+        // CLOSED for any future scope check. `extra` carries the SUBJECT:
+        // `clientId` names the calling application, not the person, so a tool
+        // reading only the AuthInfo fields would otherwise get an identity
+        // different from the one the audit rows record (security
+        // re-verification + fix verification, 2026-08-20).
         return await runWithIdentity(identity, () =>
           handleMcp(c.req.raw, {
             token,
             clientId: identity.clientId,
             scopes: [],
             ...(identity.expiresAt === null ? {} : { expiresAt: identity.expiresAt }),
+            extra: { sub: identity.sub, tenantId: identity.tenantId },
           }),
         );
       }
