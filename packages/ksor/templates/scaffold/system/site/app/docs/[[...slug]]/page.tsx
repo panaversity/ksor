@@ -21,16 +21,14 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const MDX = page.data.body;
   // What the record says about this document. The page renders it; it never
   // supplies it — an undeclared key shows nothing (specs/ksor/site-governance).
-  const governance = readGovernance(page.data, page.url);
+  const governance = readGovernance(page.data, page.path);
 
   let successor: Successor | null = null;
   if (governance.supersededBy !== null) {
     const pages = getSortedPages();
-    const href = resolveSuccessorUrl(
-      governance.supersededBy,
-      page.url,
-      pages.map((candidate) => candidate.url),
-    );
+    // Against page.path, not page.url: a route cannot tell a file from a
+    // folder index, and `./terms.md` means a different document in each.
+    const href = resolveSuccessorUrl(governance.supersededBy, page.path, pages);
     // Name the successor by its title, not by its path: the notice is for a
     // reader, and the pointer is only the fallback when the route did not
     // resolve — never a dead link.

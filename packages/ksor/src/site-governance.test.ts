@@ -126,61 +126,83 @@ describe("readGovernance", () => {
 });
 
 describe("resolveSuccessorUrl", () => {
-  const KNOWN = [
-    "/docs/refund-policy",
-    "/docs/refund-policy-v5",
-    "/docs/legal/terms",
-    "/docs/legal",
+  // The record, as the loader reports it: source path (page.path) -> route.
+  const PAGES = [
+    { path: "refund-policy.md", url: "/docs/refund-policy" },
+    { path: "refund-policy-v5.md", url: "/docs/refund-policy-v5" },
+    { path: "terms.md", url: "/docs/terms" },
+    { path: "legal.md", url: "/docs/legal" },
+    { path: "legal/terms.md", url: "/docs/legal/terms" },
+    { path: "handbook/index.md", url: "/docs/handbook" },
+    { path: "handbook/terms.md", url: "/docs/handbook/terms" },
   ];
 
   it("resolves a sibling pointer to the successor's route", () => {
-    expect(resolveSuccessorUrl("./refund-policy-v5.md", "/docs/refund-policy", KNOWN)).toBe(
+    expect(resolveSuccessorUrl("./refund-policy-v5.md", "refund-policy.md", PAGES)).toBe(
       "/docs/refund-policy-v5",
     );
   });
 
   it("resolves a pointer written without the ./ prefix", () => {
-    expect(resolveSuccessorUrl("refund-policy-v5.md", "/docs/refund-policy", KNOWN)).toBe(
+    expect(resolveSuccessorUrl("refund-policy-v5.md", "refund-policy.md", PAGES)).toBe(
       "/docs/refund-policy-v5",
     );
   });
 
   it("walks up out of a folder", () => {
-    expect(resolveSuccessorUrl("../refund-policy-v5.md", "/docs/legal/terms", KNOWN)).toBe(
+    expect(resolveSuccessorUrl("../refund-policy-v5.md", "legal/terms.md", PAGES)).toBe(
       "/docs/refund-policy-v5",
     );
   });
 
   it("descends into a folder", () => {
-    expect(resolveSuccessorUrl("./legal/terms.md", "/docs/refund-policy", KNOWN)).toBe(
+    expect(resolveSuccessorUrl("./legal/terms.md", "refund-policy.md", PAGES)).toBe(
       "/docs/legal/terms",
     );
   });
 
   it("maps a folder index to the folder's own route", () => {
-    // knowledge/legal/index.md renders at /docs/legal, not /docs/legal/index.
-    expect(resolveSuccessorUrl("./legal/index.md", "/docs/refund-policy", KNOWN)).toBe(
-      "/docs/legal",
+    expect(resolveSuccessorUrl("./handbook/index.md", "refund-policy.md", PAGES)).toBe(
+      "/docs/handbook",
+    );
+  });
+
+  // The pair that a route alone cannot tell apart, and the reason this
+  // resolves against the SOURCE PATH: /docs/legal and /docs/handbook look
+  // identical as routes, but `./terms.md` means a different document in each.
+  it("reads a sibling pointer from a FILE as a sibling, even when a same-named folder child exists", () => {
+    // knowledge/legal.md is a file, so ./terms.md is knowledge/terms.md —
+    // NOT knowledge/legal/terms.md, which also exists.
+    expect(resolveSuccessorUrl("./terms.md", "legal.md", PAGES)).toBe("/docs/terms");
+  });
+
+  it("reads a sibling pointer from a FOLDER INDEX as its folder's child", () => {
+    // knowledge/handbook/index.md is inside the folder, so ./terms.md is
+    // knowledge/handbook/terms.md.
+    expect(resolveSuccessorUrl("./terms.md", "handbook/index.md", PAGES)).toBe(
+      "/docs/handbook/terms",
     );
   });
 
   it("carries an anchor through", () => {
-    expect(resolveSuccessorUrl("./refund-policy-v5.md#scope", "/docs/refund-policy", KNOWN)).toBe(
+    expect(resolveSuccessorUrl("./refund-policy-v5.md#scope", "refund-policy.md", PAGES)).toBe(
       "/docs/refund-policy-v5#scope",
     );
   });
 
-  it("yields null rather than a dead link when the route is unknown", () => {
-    // `pnpm check` proves the TARGET FILE exists, so reaching this means our
-    // url arithmetic disagreed with the loader's — our bug, and the honest
-    // answer is to show the pointer as text, never to ship a 404 link.
-    expect(resolveSuccessorUrl("./nowhere.md", "/docs/refund-policy", KNOWN)).toBeNull();
+  it("yields null rather than a dead link when the document is not in this build", () => {
+    // `pnpm check` proves the target exists in the record, but a per-audience
+    // build stages a SUBSET — the successor may legitimately be absent here.
+    expect(resolveSuccessorUrl("./nowhere.md", "refund-policy.md", PAGES)).toBeNull();
   });
 
   it("yields null for a pointer that leaves the record", () => {
-    expect(
-      resolveSuccessorUrl("https://example.com/v5.md", "/docs/refund-policy", KNOWN),
-    ).toBeNull();
+    expect(resolveSuccessorUrl("https://example.com/v5.md", "refund-policy.md", PAGES)).toBeNull();
+    expect(resolveSuccessorUrl("/terms.md", "refund-policy.md", PAGES)).toBeNull();
+  });
+
+  it("tolerates a windows-shaped source path", () => {
+    expect(resolveSuccessorUrl("./terms.md", "legal\\notes.md", PAGES)).toBe("/docs/legal/terms");
   });
 });
 

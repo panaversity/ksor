@@ -92,37 +92,47 @@ export function readGovernance(data: unknown, where: string): DocumentGovernance
   };
 }
 
-/** Resolve a `./successor.md` pointer against a base route. */
-function joinRoute(base: string, relative: string): string {
-  const segments = base.split("/").filter((segment) => segment !== "");
+/** One document as the loader reports it: its source path, and its route. */
+export interface RecordPage {
+  /** Path under `knowledge/`, e.g. `legal.md` or `handbook/index.md`. */
+  readonly path: string;
+  /** The route it renders at, e.g. `/docs/legal`. */
+  readonly url: string;
+}
+
+/** Resolve a relative pointer against the directory holding `from`. */
+function resolveFrom(from: string, relative: string): string {
+  // The source path is the authority, so it is normalized like one: Windows
+  // separators included (the loader reports whatever the filesystem gave it).
+  const segments = from.replaceAll("\\", "/").split("/").slice(0, -1);
   for (const part of relative.split("/")) {
     if (part === "" || part === ".") continue;
     if (part === "..") segments.pop();
     else segments.push(part);
   }
-  // knowledge/legal/index.md renders at /docs/legal — the folder's own route.
-  if (segments[segments.length - 1] === "index") segments.pop();
-  return `/${segments.join("/")}`;
+  return segments.join("/");
 }
 
 /**
  * The route a `superseded_by` pointer names, or null.
  *
- * `pnpm check` has already proved the pointer resolves to a real document
- * inside `knowledge/`, so a null here means OUR arithmetic disagreed with the
- * loader — and the honest answer is to render the pointer as text. A dead link
- * on a supersession notice is the worst of both: it says stop trusting this,
- * and then strands the reader.
+ * Resolved against the document's SOURCE PATH, never against its route. A
+ * route cannot tell `knowledge/legal.md` from `knowledge/handbook/index.md` —
+ * both render at one path segment — yet `./terms.md` means a sibling in the
+ * first and a folder child in the second. Resolving on routes had to guess,
+ * and refused to link a record the checker calls well-formed (found live,
+ * 2026-08-20: `legal.md` pointing at `./terms.md` beside a `legal/terms.md`
+ * rendered the raw pointer instead of a link).
  *
- * A route cannot say whether `/docs/legal` came from `legal.md` or from
- * `legal/index.md`, and the two give different meanings to `./terms.md`. Both
- * readings are resolved and one must survive: an ambiguous pointer (both
- * readings name real pages) yields null rather than a coin-flip link.
+ * Null means the successor is not in THIS build — legitimate for a
+ * per-audience build, which stages a subset — and the caller then shows the
+ * pointer as text. A dead link on a supersession notice is the worst outcome:
+ * it tells the reader to stop trusting the page and then strands them.
  */
 export function resolveSuccessorUrl(
   pointer: string,
-  currentUrl: string,
-  knownUrls: readonly string[],
+  currentPath: string,
+  pages: readonly RecordPage[],
 ): string | null {
   // Leaves the record: an absolute URL or a site-absolute path is not a
   // pointer into knowledge/ at all.
@@ -130,17 +140,12 @@ export function resolveSuccessorUrl(
 
   const [target = "", anchor] = pointer.split("#", 2);
   if (!target.endsWith(".md")) return null;
-  const withoutExtension = target.slice(0, -".md".length);
 
-  const asPage = currentUrl.split("/").slice(0, -1).join("/");
-  const readings = [joinRoute(asPage, withoutExtension), joinRoute(currentUrl, withoutExtension)];
+  const resolved = resolveFrom(currentPath, target);
+  const match = pages.find((page) => page.path.replaceAll("\\", "/") === resolved);
+  if (match === undefined) return null;
 
-  const known = new Set(knownUrls);
-  const resolved = [...new Set(readings)].filter((route) => known.has(route));
-  if (resolved.length !== 1) return null;
-
-  const route = resolved[0] ?? "";
-  return anchor === undefined ? route : `${route}#${anchor}`;
+  return anchor === undefined ? match.url : `${match.url}#${anchor}`;
 }
 
 /**

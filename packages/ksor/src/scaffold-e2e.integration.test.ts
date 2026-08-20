@@ -1,7 +1,14 @@
 /// <reference lib="dom" />
 // The page.evaluate callback runs in the browser; only this file needs DOM types.
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -324,6 +331,35 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(bare).not.toContain("Owner");
     expect(bare).not.toContain("Sources");
     expect(bare).not.toContain("Superseded");
+
+    // Regression (found live, 2026-08-20): a route cannot tell a FILE from a
+    // FOLDER INDEX, so resolving the successor pointer on routes had to guess
+    // and refused to link a record `pnpm check` calls well-formed. Here
+    // `knowledge/legal.md` points at its sibling `./terms.md` while a
+    // `knowledge/legal/terms.md` also exists — the link must go to the sibling.
+    doc("terms", ["title: Terms", "status: approved", "order: 8"].join("\n"), "The sibling.");
+    mkdirSync(path.join(project, "knowledge", "legal"), { recursive: true });
+    writeFileSync(
+      path.join(project, "knowledge", "legal", "terms.md"),
+      "---\ntitle: Legal terms\nstatus: approved\norder: 9\n---\n\nA same-named folder child.\n",
+    );
+    doc(
+      "legal",
+      ["title: Legal", "status: superseded", "order: 7", "superseded_by: ./terms.md"].join("\n"),
+      "Points at its sibling.",
+    );
+
+    const withFolder = buildScaffold(project);
+    expect(withFolder.status, `${withFolder.stdout}${withFolder.stderr}`.slice(-2000)).toBe(0);
+    const legal = readFileSync(
+      path.join(project, "system", "site", "out", "docs", "legal", "index.html"),
+      "utf8",
+    );
+    const notice = /<aside[^>]*role="note"[\s\S]*?<\/aside>/.exec(legal)?.[0] ?? "";
+    expect(notice).toMatch(/href="\/docs\/terms\/?"/);
+    expect(notice).toContain("Terms");
+    // …and never the raw pointer, which is what the route-based resolver showed.
+    expect(notice).not.toContain("./terms.md");
 
     // `site: governance: false` — the record still declares owner and sources
     // (the agent surface and the audit trail want them); the published page

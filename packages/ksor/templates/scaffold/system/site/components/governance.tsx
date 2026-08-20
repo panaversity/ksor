@@ -115,7 +115,14 @@ export function GovernanceMeta({
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
       {effective === null ? null : (
         <Fact label="Effective">
-          <time dateTime={effective}>{effective}</time>
+          {/* `effective` is free text in the record ("Q1 2026" is legal), and
+              an unparseable datetime="" is invalid HTML — so the machine
+              attribute is stamped only when the value really is a date. */}
+          {/^\d{4}-\d{2}-\d{2}$/.test(effective) ? (
+            <time dateTime={effective}>{effective}</time>
+          ) : (
+            <span>{effective}</span>
+          )}
         </Fact>
       )}
     </dl>
@@ -138,8 +145,10 @@ export function Provenance({ entries }: { entries: readonly string[] }): ReactEl
         Sources
       </h2>
       <ul className="space-y-1 text-fd-muted-foreground">
-        {entries.map((entry) => (
-          <li key={entry}>{entry}</li>
+        {entries.map((entry, index) => (
+          // Position, not text: a record may cite the same source twice, and
+          // duplicate keys are a console error on a governed page.
+          <li key={`${index}-${entry}`}>{entry}</li>
         ))}
       </ul>
     </section>
