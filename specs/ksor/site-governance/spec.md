@@ -162,6 +162,16 @@ and no conformance suite will say so. Reversed — promoted to a contract clause
 — if a second shell ever ships to adopters, or if the swap recipe starts being
 used for anything but conformance.
 
+_Extended 2026-08-21:_ the same narrowing now covers the **agent files**. The
+Fumadocs shell's `llms.txt` marks a caveat status and `llms-full.txt` carries
+each document's governance; the conformance shell's do neither, so the two
+shells' agent files legitimately differ and the suite passes both — it asserts
+the surface contract (the instance name, the canonical reading order, every link
+resolving), not this. Worth weighing harder than the page half if the promotion
+question is reopened: a reader who loses the page's notice still sees a
+document; a consumer who loses the file's frontmatter gets a withdrawn policy as
+clean prose and cannot tell.
+
 ## Acceptance
 
 Red first, in this order:
