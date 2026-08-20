@@ -17,14 +17,13 @@
 import type pg from "pg";
 import {
   createPool,
-  envFloat,
-  envInt,
   neverRetry,
   isOperationalError,
   PoolTimeoutError,
   runScopedIn,
   type Gucs,
-} from "@panaversity/ksor-platform";
+} from "@panaversity/ksor-postgres";
+import { envFloat, envInt } from "./env.js";
 
 export const TENANT_GUC = "app.tenant_id";
 export const RUNTIME_ROLE = "sor_content_runtime";

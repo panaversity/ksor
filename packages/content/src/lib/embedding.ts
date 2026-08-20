@@ -83,7 +83,7 @@ export interface TextGenerator {
 
 // ---------------------------------------------------------------------------
 // Env knobs come from the platform package — their permanent home.
-import { envFloat, envInt } from "@panaversity/ksor-platform";
+import { envFloat, envInt } from "../env.js";
 
 export { envFloat, envInt };
 

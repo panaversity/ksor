@@ -21,7 +21,7 @@
  */
 
 import { serve, type ServerType } from "@hono/node-server";
-import { createMcpHandler } from "@modelcontextprotocol/server";
+import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import {
@@ -273,13 +273,9 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
    */
   const handleMcp = async (
     request: Request,
-    authInfo?: {
-      token: string;
-      clientId: string;
-      scopes: string[];
-      expiresAt?: number;
-      extra?: Record<string, unknown>;
-    },
+    // The SDK's own type, not a structural copy: a hand-written duplicate
+    // silently drifts if upstream adds a required field.
+    authInfo?: AuthInfo,
   ): Promise<Response> => {
     const response = await mcpHandler.fetch(request, authInfo === undefined ? {} : { authInfo });
     const body = await response.arrayBuffer();

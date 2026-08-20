@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type pg from "pg";
-import { pooledEndpointFor } from "@panaversity/ksor-platform";
+import { pooledEndpointFor } from "@panaversity/ksor-postgres";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertSchemaCompatible,

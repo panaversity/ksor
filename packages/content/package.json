@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.17.1",
-    "@panaversity/ksor-platform": "workspace:*",
+    "@panaversity/ksor-postgres": "workspace:*",
     "@types/pg": "^8.21.0",
     "pg": "^8.23.0",
     "zod": "catalog:"

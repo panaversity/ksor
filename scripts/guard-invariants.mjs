@@ -172,8 +172,8 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     // is a DECLARED dependency (not a devDep) of every package whose published
     // .d.mts exposes pg.Pool/PoolClient in its public API, so an external TS
     // consumer resolves those types (decision 12, publish revision 2026-08-19).
-    [`${P}ksor-platform`, new Set(["pg", "@types/pg"])],
-    [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "@google/genai", `${P}ksor-platform`])],
+    [`${P}ksor-postgres`, new Set(["pg", "@types/pg"])],
+    [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "@google/genai", `${P}ksor-postgres`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
     // The ONE published kernel package (decision 12, publish revision
     // 2026-08-19): platform/content/gateway-kit are BUNDLED in (workspace

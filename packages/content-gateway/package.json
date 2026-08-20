@@ -50,7 +50,7 @@
     "@modelcontextprotocol/client": "^2.0.0",
     "@panaversity/ksor-content": "workspace:*",
     "@panaversity/ksor-gateway-kit": "workspace:*",
-    "@panaversity/ksor-platform": "workspace:*",
+    "@panaversity/ksor-postgres": "workspace:*",
     "@types/node": "catalog:",
     "tsdown": "0.22.14",
     "typescript": "catalog:",

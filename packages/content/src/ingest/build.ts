@@ -21,7 +21,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type pg from "pg";
 
-import { envFloat } from "@panaversity/ksor-platform";
+import { envFloat } from "../env.js";
 
 import { runIngest } from "../db.js";
 import type { ContentInstance } from "../instance.js";

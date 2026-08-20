@@ -41,12 +41,12 @@ against the tree, not recalled:
 Comes whole (line counts from the live tree; the source manifest's ~9.4k src
 / ~8k tests is the post-trim figure):
 
-| Source                      | Becomes                 | Note                                                                                      |
-| --------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
-| `packages/sor-content/`     | `packages/content/`     | kernel: ingest, chunking, generations, retrieval, calibrate, schema.sql                   |
-| `packages/sor-platform/`    | `packages/platform/`    | trimmed: load_bundle, pooled db endpoint, contracts minus the 6 Learning/Pedagogy classes |
-| `packages/sor-gateway-kit/` | `packages/gateway-kit/` | only auth + serve + harden + transport_security_from_env (~430 of 918 ln)                 |
-| `gateways/sor-content/`     | the `ksor serve` door   | fail-closed posture; MCP TS SDK, stateless Streamable HTTP (one transport)                |
+| Source                      | Becomes                 | Note                                                                                                                                                       |
+| --------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/sor-content/`     | `packages/content/`     | kernel: ingest, chunking, generations, retrieval, calibrate, schema.sql                                                                                    |
+| `packages/sor-platform/`    | `packages/postgres/`    | trimmed: load_bundle, pooled db endpoint, contracts minus the 6 Learning/Pedagogy classes (renamed from `platform` 2026-08-20 — see AGENTS.md decision 11) |
+| `packages/sor-gateway-kit/` | `packages/gateway-kit/` | only auth + serve + harden + transport_security_from_env (~430 of 918 ln)                                                                                  |
+| `gateways/sor-content/`     | the `ksor serve` door   | fail-closed posture; MCP TS SDK, stateless Streamable HTTP (one transport)                                                                                 |
 
 Mirroring the source topology during conversion is deliberate: it keeps the
 Python test suite mappable 1:1 as the oracle. Consolidation (platform folding

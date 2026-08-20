@@ -47,9 +47,9 @@ importers:
       '@google/genai':
         specifier: ^2.17.1
         version: 2.17.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
-      '@panaversity/ksor-platform':
+      '@panaversity/ksor-postgres':
         specifier: workspace:*
-        version: link:../platform
+        version: link:../postgres
       '@types/pg':
         specifier: ^8.21.0
         version: 8.21.0
@@ -109,9 +109,9 @@ importers:
       '@panaversity/ksor-gateway-kit':
         specifier: workspace:*
         version: link:../gateway-kit
-      '@panaversity/ksor-platform':
+      '@panaversity/ksor-postgres':
         specifier: workspace:*
-        version: link:../platform
+        version: link:../postgres
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -196,7 +196,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/platform:
+  packages/postgres:
     dependencies:
       '@types/pg':
         specifier: ^8.21.0

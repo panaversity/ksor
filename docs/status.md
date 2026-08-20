@@ -75,8 +75,8 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
 ## In this repository, not yet released
 
 - **The content kernel and the MCP gateway** (decision 11, in progress on
-  the kernel-conversion branch): four workspace packages — platform (pool
-  discipline), content (schema + ingest + hybrid retrieval
+  the kernel-conversion branch): four workspace packages — postgres (Postgres access
+  discipline: pooling, scoped transactions, retry classification), content (schema + ingest + hybrid retrieval
   - calibrated abstention + read plane), gateway-kit (fail-closed serving
     postures), content-gateway (the content MCP door: search/outline/read over stateless
     Streamable HTTP — one transport, loopback by default). BUNDLED into

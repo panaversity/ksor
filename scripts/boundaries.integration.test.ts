@@ -25,13 +25,13 @@ const ALLOWED: Record<string, readonly string[]> = {
   "@panaversity/ksor": ["@panaversity/ksor-content-gateway", "@panaversity/ksor-content"],
   // The kernel conversion's layering (decision 11): platform is the floor,
   // content stands on it, the gateway composes content behind the kit.
-  "@panaversity/ksor-platform": [],
-  "@panaversity/ksor-content": ["@panaversity/ksor-platform"],
+  "@panaversity/ksor-postgres": [],
+  "@panaversity/ksor-content": ["@panaversity/ksor-postgres"],
   "@panaversity/ksor-gateway-kit": [],
   "@panaversity/ksor-content-gateway": [
     "@panaversity/ksor-content",
     "@panaversity/ksor-gateway-kit",
-    "@panaversity/ksor-platform",
+    "@panaversity/ksor-postgres",
   ],
 };
 
