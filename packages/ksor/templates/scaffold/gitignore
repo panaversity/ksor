@@ -12,5 +12,6 @@ system/site/.staged-knowledge/
 
 # secrets never enter the record — system/ is their future home (serve)
 .env*
+!.env.example
 
 .DS_Store

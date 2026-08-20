@@ -16,7 +16,12 @@ export interface Stamps {
 
 // npm pack always excludes files named .gitignore, so the template ships as
 // "gitignore" (found live: npm pack --dry-run, 2026-08-18)
-const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([["gitignore", ".gitignore"]]);
+const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([
+  ["gitignore", ".gitignore"],
+  // Same reason as .gitignore: npm pack is unreliable about leading-dot names,
+  // so the template ships bare and init restores the dot.
+  ["env.example", ".env.example"],
+]);
 
 const TEXT_EXTENSIONS = new Set([
   ".md",

@@ -194,6 +194,22 @@ async function schemaCommand(args: string[]): Promise<number> {
   }
   const dsn = resolveDsn(instance);
   if (typeof dsn === "number") return dsn;
+  // Re-runnable. The DDL is plain CREATE TABLE, so applying it twice fails on
+  // "relation already exists" — which made `schema --apply` a step an operator
+  // had to REMEMBER whether they had taken, and made any setup sequence
+  // non-repeatable. An already-provisioned database is success, reported as
+  // such: the desired state is what the caller asked for (2026-08-20).
+  const already = await withPool(dsn, async (pool) => {
+    const r = await pool.query("SELECT schema_version FROM schema_meta LIMIT 1").catch(() => null);
+    return r === null ? null : String(r.rows[0]?.schema_version ?? "");
+  });
+  if (already !== null) {
+    process.stdout.write(
+      `schema: already applied (schema_meta ${already}) — nothing to do; ` +
+        `drop the database to start over\n`,
+    );
+    return 0;
+  }
   await withPool(dsn, (pool) => applySchema(pool, dim));
   process.stdout.write(`schema: applied at dim ${dim} (database named by ${instance.dsnEnv})\n`);
   return 0;

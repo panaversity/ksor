@@ -30,17 +30,24 @@ Postgres store (with pgvector) and an embedding provider key, so it is not
 part of `pnpm dev`. The ordered path is:
 
 ```sh
-export KSOR_DB_URL='postgresql://…'   # the DSN var your instance.md names
-export GEMINI_API_KEY='…'             # the embedding provider key
-pnpm schema     # apply the database schema (once)
-pnpm grant      # authorize ingest for this corpus (once)
-pnpm ingest     # embed knowledge/ into a generation and activate it
-pnpm serve      # run the MCP server over the record
+cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
+pnpm up                 # schema → grant → ingest → serve
 ```
 
-One setup step comes before this — adding the `database:`/`embedding:` blocks
-to `instance.md` — and there is more to know about the generation model and the
-fail-closed security posture. `AGENTS.md` → "Serving to agents" is the
+`ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
+is required for a local run: serve refuses to boot unauthenticated on purpose,
+so a server is never open by accident.
+
+Add one block to `instance.md` first — `database: { dsn_env: KSOR_DB_URL }`,
+the NAME of the variable, never the DSN. That is the whole required config:
+`embedding:` already defaults to Gemini at 1536 dimensions, and leaving
+`retrieval:` out starts you with the abstention gate off and honest about it
+(turn it on afterwards with `ksor calibrate`, once the record is serving).
+
+`pnpm up` is re-runnable — it is also how you refresh after editing
+`knowledge/`. It re-ingests each time but re-embeds only what changed, so an
+untouched corpus costs no provider calls; to simply restart the server without
+building a new generation, run `pnpm serve` on its own. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` binds loopback
 with auth off for local use; a public bind fails closed unless auth is
 configured. Any other operation is `pnpm exec ksor <verb>`.
@@ -67,8 +74,9 @@ different coding agent's way of finding the same working contract.
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                                                 |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
-| `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` / `pnpm schema` / `pnpm grant` / `pnpm ingest` / `pnpm serve` commands, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
+| `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in. |
+| `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history.                                                                                                                                                    |
+| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands and the served rung's `pnpm up` (schema → grant → ingest → serve, or run them separately), the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
 

@@ -31,7 +31,10 @@ const pkgVersion = (JSON.parse(readFileSync(pkgManifest, "utf8")) as { version: 
 // drops files called .gitignore, so the template ships under a bare name.
 // Written out here rather than imported — a test that shares the map with the
 // implementation cannot catch the implementation losing it.
-const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([["gitignore", ".gitignore"]]);
+const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([
+  ["gitignore", ".gitignore"],
+  ["env.example", ".env.example"],
+]);
 
 function emittedPath(templateRel: string): string {
   const dir = path.dirname(templateRel);
@@ -172,6 +175,23 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(pkg.scripts?.["grant"], "a local grant command").toBe(
       "ksor grant --instance instance.md",
     );
+    // The served rung's variables ship as an example, including the auth
+    // posture: `ksor serve` refuses to boot unauthenticated, so a runbook that
+    // omitted KSOR_AUTH_DISABLED dead-ended at the last step (found live,
+    // 2026-08-20).
+    const env = readFileSync(path.join(dir, "served-sor", ".env.example"), "utf8");
+    for (const key of ["KSOR_DB_URL", "GEMINI_API_KEY", "KSOR_AUTH_DISABLED"]) {
+      expect(env, `.env.example names ${key}`).toContain(key);
+    }
+    // …and it must survive the ignore rule that hides real .env files.
+    const ignore = readFileSync(path.join(dir, "served-sor", ".gitignore"), "utf8");
+    expect(ignore, "the example is exempt from .env*").toContain("!.env.example");
+
+    // One command for the whole served rung. Every step it chains is
+    // re-runnable, so it is also the refresh-after-editing command.
+    expect(pkg.scripts?.["up"], "one command brings the rung up").toBe(
+      "pnpm schema && pnpm grant && pnpm ingest && pnpm serve",
+    );
     const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     // The pinned tool MUST be excluded from the scaffold's 48h release-age
     // quarantine, or the first install of a freshly-published ksor breaks for
@@ -179,6 +199,17 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     // rejected the just-published version).
     expect(workspace, "the tool is excluded from the release-age quarantine").toMatch(
       /minimumReleaseAgeExclude:[\s\S]*@panaversity\/ksor/,
+    );
+    // The scaffold declares a root dependency that the COMMITTED lockfile
+    // cannot record (the version is stamped per-install), so the deploy's
+    // install must not be frozen — otherwise an adopter's very first Vercel
+    // import dies on ERR_PNPM_OUTDATED_LOCKFILE before any build (review,
+    // 2026-08-20). The repo's own e2e suites already had to make this switch.
+    const vercel = JSON.parse(
+      readFileSync(path.join(dir, "served-sor", "vercel.json"), "utf8"),
+    ) as { installCommand?: string };
+    expect(vercel.installCommand, "the deploy install must tolerate the stamped dep").toContain(
+      "--no-frozen-lockfile",
     );
     // The kernel's build-scripted deps must be explicitly denied, or pnpm 11
     // exits 1 on the adopter's first install (found live 2026-08-20).
@@ -490,6 +521,9 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
       [
         ".agents",
         ".claude",
+        // The served rung's variables, including the auth posture serve
+        // requires (decision 8 revision 2026-08-20).
+        ".env.example",
         ".gemini",
         ".gitattributes",
         ".github",

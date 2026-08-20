@@ -52,52 +52,90 @@ pnpm check       # the format checker — run before handing off any knowledge c
 with honest abstention. It is the climbed rung — not required for `pnpm dev`.
 Stand it up in this order (each step's errors explain how to fix themselves):
 
-1. **Configure `instance.md`.** Add the serve blocks to the frontmatter
-   (`pnpm check` accepts them; the kernel validates their values):
+1. **Configure `instance.md`.** One block is required — the name of the
+   environment variable holding your DSN (never the DSN itself):
 
    ```yaml
    database:
-     dsn_env: KSOR_DB_URL # the NAME of the env var holding the DSN — never the DSN itself
-   embedding:
-     provider: gemini # default; the seam, not the vendor, is the contract
-     model: gemini-embedding-001
-     dim: 1536 # ≤ 2000 for the pgvector HNSW index
-   retrieval:
-     vector_floor: uncalibrated # see step 6; `uncalibrated` REFUSES every serve until you paste a number
+     dsn_env: KSOR_DB_URL
    ```
 
-2. **Provision Postgres** with the `vector` extension (`CREATE EXTENSION vector`),
-   e.g. a Neon database. Export the DSN under the name `dsn_env` chose, plus the
-   provider key:
+   That is enough. `embedding:` is optional and already defaults to
+   `provider: gemini`, `model: gemini-embedding-001`, `dim: 1536`; write it out
+   only to pin the space explicitly or to change it — and note that model and
+   dim are the PERSISTED identity of the embedding space, so changing either
+   later means re-embedding the whole corpus. Keep `dim` at or below 2000: the
+   pgvector HNSW index refuses more, and `gemini-embedding-001` can emit 3072.
+
+   Leave `retrieval:` out for now — the gate is off and the server says so.
+   Turning it on is step 4, AFTER the record is serving.
+
+2. **Copy `.env.example` to `.env`** and fill it in — `ksor` reads it
+   automatically, so nothing needs exporting, and `.env` is already gitignored.
+   A real environment variable still wins over the file, so CI and production
+   overrides behave normally.
 
    ```sh
-   export KSOR_DB_URL='postgresql://…'   # the var instance.md names
-   export GEMINI_API_KEY='…'             # the embedding provider key
+   cp .env.example .env
    ```
 
-3. **Apply the schema:** `pnpm schema` (creates tables, indexes, and the
-   ingest role).
+   Three values matter:
 
-4. **Authorize ingest:** `pnpm grant` — writes the one row row-level security
-   requires before any write to this corpus is allowed. Idempotent, and
-   `pnpm exec ksor grant --instance instance.md --revoke` withdraws it.
+   - `KSOR_DB_URL` — the Postgres store named by `instance.md`'s `dsn_env`. It
+     needs the pgvector extension: `CREATE EXTENSION vector;`
+   - `GEMINI_API_KEY` — the embedding provider key.
+   - `KSOR_AUTH_DISABLED=1` — **required for a local run.** `ksor serve`
+     refuses to boot unauthenticated without it, deliberately, so a server is
+     never left open by accident. It binds loopback, where auth off is the
+     intended dev shape. A PUBLIC deployment configures the SSO door instead —
+     see the comments in `.env.example` and "Serving safely" below.
 
-   This is a separate, named act on purpose: applying the schema and
-   authorizing writes are different decisions, and a schema step that granted
-   itself write access would make the tool its own authorizer. Apply the schema
-   and ingest as the SAME Postgres login (the ingest role is granted to whoever
-   applied the DDL).
+3. **Bring it up — one command:**
 
-5. **Ingest:** `pnpm ingest` — embeds `knowledge/` into a fresh generation and
-   activates it (`--flip`). Safe to re-run (see the generation model below).
+   ```sh
+   pnpm up      # schema → grant → ingest → serve
+   ```
 
-6. **Calibrate the abstention floor** (only if `vector_floor: uncalibrated`):
-   `pnpm exec ksor calibrate --instance instance.md` prints a recommended
-   `vector_floor` measurement; paste the number into `instance.md`'s `retrieval:`
-   block and re-run. A corpus that declares no `retrieval:` block serves with the
-   gate OFF (honest: it will not refuse out-of-corpus questions).
+   Every step is re-runnable, so this is also how you **refresh after editing
+   `knowledge/`**: an applied schema reports "already applied", an existing
+   grant reports "already granted", and ingest builds a fresh generation.
 
-7. **Serve:** `pnpm serve`.
+   **`pnpm up` ingests every time — but it re-EMBEDS nothing that has not
+   changed.** Chunks carry forward by content hash, so a rerun on an untouched
+   corpus makes zero provider calls (`embedded 0, carried N` in the output).
+   What it does spend is a generation: each run creates and activates a new one,
+   and they accumulate. So:
+
+   | You want to                      | Run                                        |
+   | -------------------------------- | ------------------------------------------ |
+   | set up, or refresh after an edit | `pnpm up`                                  |
+   | just restart the server          | `pnpm serve` — no new generation           |
+   | reap superseded generations      | `pnpm exec ksor gc --instance instance.md` |
+
+   Run the steps individually (`pnpm schema`, `pnpm grant`, `pnpm ingest`)
+   when the acts belong to different people — a DBA holding the credentials
+   that authorize ingest, for instance.
+
+4. **Turn the abstention gate on — deliberately, once it serves.** This is the
+   step that makes "not in this corpus" a real answer, and it is measured, never
+   guessed:
+
+   ```sh
+   pnpm exec ksor calibrate --instance instance.md
+   ```
+
+   It prints a recommended `vector_floor` for THIS corpus in THIS embedding
+   space. Paste the number in and restart:
+
+   ```yaml
+   retrieval:
+     vector_floor: 0.55 # measured by ksor calibrate on <date>
+   ```
+
+   Never copy a floor from another corpus — recalibrate, and record the
+   measurement beside the number. Writing `vector_floor: uncalibrated` declares
+   the intent to gate WITHOUT a measurement, and every serve refuses until a
+   number replaces it; that is the fail-closed posture, not a starting point.
 
 ```sh
 pnpm schema      # apply the DDL (once)

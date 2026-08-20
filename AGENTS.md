@@ -197,7 +197,16 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    (site now; gateways/packages as earned; growth inside, never beside). The
    root set is closed at birth; full lock record and the closed set:
    `research/scaffold-structure.md` + `specs/ksor/init/spec.md`. Reversed
-   per-clause with evidence, recorded there.
+   per-clause with evidence, recorded there. _Revision 2026-08-20: the closed
+   root set gains ONE member, `.env.example`. The served rung needs three
+   variables and one of them is not guessable — `ksor serve` refuses to boot
+   unauthenticated, so `KSOR_AUTH_DISABLED=1` is required for a local run, and
+   a runbook that omitted it dead-ended at its last step (found live). An empty
+   directory is an unanswered question; a named, commented example of the
+   variables a rung needs is an ANSWERED one, and it is the only place those
+   values can live without being pasted into a shell. `.gitignore` gains
+   `!.env.example` so the example survives the `.env*` rule that hides real
+   secrets._
 9. **Site shell: one in core — Next.js + Fumadocs + shadcn** (owner,
    2026-08-18), replacing Docusaurus natively before v1 traffic. No shell
    selector at init (one obvious way; a flag forks every skill, test, and
