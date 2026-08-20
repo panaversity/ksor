@@ -34,7 +34,7 @@ The result is not merely a documentation site, knowledge base, vector database, 
 > remain designed, not implemented; running them prints an honest notice and
 > exits 2. Inside a scaffolded project, `pnpm dev` and `pnpm build` work today
 > without them. See [`docs/status.md`](docs/status.md) for the exact released
-> version — some of this lands the release after the one you install.
+> version.
 
 ---
 
@@ -526,17 +526,24 @@ provenance — is a future verb; see [`docs/status.md`](docs/status.md).)
 ## Serve to AI Agents
 
 ```bash
-npx @panaversity/ksor serve
+cp .env.example .env   # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
+pnpm serve             # schema → grant → ingest → serve
 ```
 
 The agent projection exposes the governed KSoR through MCP: `search`, `outline`,
 and `read` over stateless Streamable HTTP, with cited passages, snapshot
 generation-pinning, and honest abstention. `serve` reads `./instance.md` and
 runs the MCP server in-process — the climbed rung, so it needs a Postgres store
-(pgvector) and an embedding provider key, ingested with `ksor ingest`. It binds
-loopback with auth off by default; a public bind fails closed unless auth is
-configured. (Landing the release after the one you install — see
-[`docs/status.md`](docs/status.md).)
+(pgvector) and an embedding provider key. It binds loopback with auth off by
+default; a public bind fails closed unless auth is configured.
+
+`pnpm serve` is the only command this rung needs: run it the first time, after
+editing `knowledge/`, or to bring the server back. Every step reports the state
+it found instead of failing, and a rerun on an unchanged record costs nothing —
+ingest compares what it read against the generation already serving and, when
+they match at the same commit, writes no rows at all. The abstention gate stays
+off until you measure a floor with `ksor calibrate` and paste it into
+`instance.md` — never copied from another corpus.
 
 ---
 
