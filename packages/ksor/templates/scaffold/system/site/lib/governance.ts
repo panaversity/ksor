@@ -176,13 +176,13 @@ export function resolveSuccessorUrl(
  */
 export function governanceVisible(instanceFrontmatterBlock: string): boolean {
   const lines = instanceFrontmatterBlock.split("\n");
-  const start = lines.findIndex((line) => /^site:[ \t]*(?:#.*)?$/.test(line));
+  const start = lines.findIndex((line) => /^site[ \t]*:[ \t]*(?:#.*)?$/.test(line));
   if (start === -1) {
     // A flow mapping (`site: { governance: false }`) is a scalar to every
     // reader of this block, so a block-only scan would fall through to the
     // default and publish what the owner turned off. `pnpm check` refuses the
     // shape; refuse it here too rather than default past it silently.
-    const inline = lines.find((line) => /^site:[ \t]*\S/.test(line));
+    const inline = lines.find((line) => /^site[ \t]*:[ \t]*\S/.test(line));
     if (inline !== undefined) {
       throw new Error(
         `instance.md has ${JSON.stringify(inline.trim())} — a site: group written on one line is ` +
@@ -198,7 +198,7 @@ export function governanceVisible(instanceFrontmatterBlock: string): boolean {
     // A non-indented line ends the block: a TOP-LEVEL `governance:` is a
     // different key and must never be mistaken for this setting.
     if (!/^[ \t]/.test(line)) break;
-    const match = /^[ \t]+governance:[ \t]*(.*)$/.exec(line);
+    const match = /^[ \t]+governance[ \t]*:[ \t]*(.*)$/.exec(line);
     if (match === null) continue;
 
     const raw = (match[1] ?? "").trim();

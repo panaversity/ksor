@@ -288,3 +288,14 @@ describe("readGovernance — YAML types that are not strings", () => {
     ).toMatchObject({ effective: null, owner: null });
   });
 });
+
+describe("governanceVisible — whitespace YAML allows", () => {
+  it("reads a key written with a space before its colon", () => {
+    // js-yaml accepts `governance : false`, and the checker's nested-key regex
+    // (`\s*:`) does too — the site's did not, so the setting was read by both
+    // of them and silently ignored by the one that decides (round 3).
+    expect(governanceVisible("site:\n  governance : false")).toBe(false);
+    expect(governanceVisible("site :\n  governance: false")).toBe(false);
+    expect(governanceVisible("site :\n  governance : false")).toBe(false);
+  });
+});
