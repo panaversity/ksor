@@ -464,6 +464,23 @@ describe("scaffolded format-checker — torture", () => {
       expect(following.status, `following the remedy → ${following.output}`).toBe(0);
     });
 
+    it("refuses a value wrapped onto a second line, which YAML folds back", () => {
+      // The parser skipped indented continuations, so every rule inspected a
+      // string that was not the published value: this exact document passed
+      // the date rule and then shipped 2026-03-31 (round 3).
+      const wrapped = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01\n  00:00:00 +05:00\n---\n\nBody.\n",
+      });
+      expect(wrapped.status, wrapped.output).toBe(1);
+
+      const nextLine = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective:\n  2026-04-01 00:00:00 +05:00\n---\n\nBody.\n",
+      });
+      expect(nextLine.status, nextLine.output).toBe(1);
+    });
+
     it("validates EVERY superseded_by, not only ones shaped like a path", () => {
       // `legal/terms` matched neither shape test, so it skipped existence, the
       // escape-the-record rule AND the cross-audience leak rule — and the

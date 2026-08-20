@@ -176,7 +176,14 @@ function parseFrontmatter(text) {
       malformed.push(line.trim());
       continue;
     }
-    if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
+    if (/^[ \t]*-([ \t]|$)/.test(line)) continue;
+    // An indented line that is neither a nested key nor a list item is a value
+    // WRAPPED onto a second line. YAML folds it back into the value above;
+    // this parser used to skip it, so every rule here inspected a string that
+    // was not what the surfaces publish — `effective: 2026-04-01` continued by
+    // `  00:00:00 +05:00` passed the date rule and shipped the day before
+    // (found 2026-08-20). A value the checker cannot see is a value it cannot
+    // govern.
     malformed.push(line.trim());
   }
   return {
@@ -487,7 +494,7 @@ if (!existsSync(knowledgeDir)) {
       problem(
         rel,
         `unclosed or malformed frontmatter — this is not a frontmatter line: "${fm.malformed[0]}"`,
-        "an unclosed block swallows the body: the checker reads prose as governance, and the site renders a document with no title",
+        "an unclosed block swallows the body, and a value wrapped onto a second line is folded back by YAML but invisible here — either way this check inspects something the site does not publish",
         "close the block with --- on its own line; every line inside it is `key: value` or a `- list item` — no prose, no comments",
       );
     } else {
@@ -861,7 +868,7 @@ if (!existsSync(instanceMd)) {
     problem(
       "instance.md",
       `unclosed or malformed frontmatter — this is not a frontmatter line: "${fm.malformed[0]}"`,
-      "an unclosed block swallows the identity prose and turns it into unreadable configuration",
+      "an unclosed block swallows the identity prose and turns it into unreadable configuration; a value wrapped onto a second line is folded back by YAML but invisible here, so this check governs a string the surfaces never see",
       "close the block with --- on its own line; every line inside it is `key: value` — the identity prose belongs below it",
     );
   } else {
