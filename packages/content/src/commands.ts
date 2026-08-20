@@ -282,6 +282,15 @@ async function ingestCommand(args: string[]): Promise<number> {
       throw exc;
     }
   });
+  if (report.unchanged) {
+    // The record already serves these exact bytes at this commit: no
+    // generation consumed, nothing embedded. `ksor serve` runs ingest on every
+    // start, so a restart of an unedited record must cost nothing.
+    process.stdout.write(
+      `ingest: unchanged — generation ${report.generation} already serves this corpus\n`,
+    );
+    return 0;
+  }
   process.stdout.write(
     `ingest: generation ${report.generation} — ${report.nodes} nodes, ${report.chunks} chunks; ` +
       `embedded ${report.embedded}, carried ${report.carried}, failed ${report.failed}\n`,
