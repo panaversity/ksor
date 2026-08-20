@@ -229,18 +229,17 @@ function deniedStableIds(recordDir: string): DenylistManifest {
 }
 
 /**
- * Is this document denied? Node scope matches the id exactly; SUBTREE scope
- * matches it and everything filed beneath it.
+ * Is this document denied? EXACT ids only.
  *
- * Dropping `scope` left every descendant of a `--subtree` takedown published
- * here while the MCP door denied them (round-1 review of #43).
+ * `ksor takedown --export` expands a `--subtree` denial to its actual
+ * descendants by walking parent_id, where the tree lives. Interpreting scope
+ * HERE meant prefix-matching, and a section's stable_id ends in `/index` (or
+ * `#section`), so the prefix never matched its children and every descendant
+ * kept publishing — the failure decision 14 already records as the reason its
+ * own walk uses parent_id rather than a prefix (round-2 review of #43).
  */
 function isDenied(manifest: DenylistManifest, stableId: string): boolean {
-  return (manifest.denied ?? []).some((d) => {
-    const id = String(d.stable_id);
-    if (stableId === id) return true;
-    return d.scope === "subtree" && stableId.startsWith(`${id}/`);
-  });
+  return (manifest.denied ?? []).some((d) => String(d.stable_id) === stableId);
 }
 
 /**

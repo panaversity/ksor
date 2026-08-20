@@ -128,7 +128,10 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // unknown or un-narrowable tier used to surface per REQUEST, so a
   // misconfigured deployment looked healthy and failed one caller at a time
   // (round-1 review of #43).
-  const audience = process.env["KSOR_AUDIENCE"] || null;
+  // Trimmed, as the site trims it: a mounted secret with a trailing newline
+  // otherwise refuses at boot naming a tier that looks identical to a declared
+  // one (round-2 review of #43).
+  const audience = (process.env["KSOR_AUDIENCE"] ?? "").trim() || null;
   visibleTiers(
     { audiences: instance.audiences, defaultVisibility: instance.defaultVisibility },
     audience,

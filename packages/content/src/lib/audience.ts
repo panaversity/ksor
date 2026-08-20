@@ -63,32 +63,6 @@ export function visibleTiers(model: AudienceModel, viewer: string | null): strin
 }
 
 /**
- * The SQL predicate for the allowed tiers, as a fragment plus its parameters.
- * `null` tiers (no model) yields a TRUE predicate so the ungoverned hot path
- * pays nothing.
- *
- * A document whose visibility is NULL takes the default; a document declaring a
- * tier NOT in the allowed set is excluded — including one declaring a tier the
- * record does not know at all, which fails CLOSED rather than being served
- * because nobody recognised it.
- */
-export function audiencePredicate(
-  column: string,
-  tiers: readonly string[] | null,
-  defaultVisibility: string | null,
-  paramIndex: number,
-): { sql: string; params: unknown[] } {
-  if (tiers === null) return { sql: "TRUE", params: [] };
-  const allowed = [...tiers];
-  const defaultAllowed = defaultVisibility === null || allowed.includes(defaultVisibility);
-  const nullBranch = defaultAllowed ? `${column} IS NULL OR ` : "";
-  return {
-    sql: `(${nullBranch}${column} = ANY($${paramIndex}::text[]))`,
-    params: [allowed],
-  };
-}
-
-/**
  * The sentinel for "this record declares no audience model".
  *
  * It is a VALUE, not the absence of one, and that is the whole point. The

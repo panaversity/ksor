@@ -92,22 +92,35 @@ export function governanceFromFrontmatter(
   meta: Record<string, unknown>,
   text: string,
 ): NodeGovernance {
-  // `visibility:` is a SECURITY control, so a shape this reader cannot resolve
-  // must refuse — not read as "declared nothing" and take the default tier.
-  // The site excludes such a document entirely; reading it as absent served it
-  // (round-1 review of #43, and the same failing-open shape the visibility work
-  // already recorded fixing once).
+  // `visibility:` is a SECURITY control, so any shape this reader cannot
+  // resolve REFUSES rather than reading as "declared nothing" — which means
+  // the default tier, which means served, while the site excludes the same
+  // document entirely.
   if (frontmatterListValues(text, "visibility") !== null) {
     throw new GovernanceParseError(
       "a document declares `visibility:` as a LIST — a document belongs to exactly one tier. " +
         "Write a single value, e.g. `visibility: internal`.",
     );
   }
-  if (Object.hasOwn(meta, "visibility") && scalar(meta, "visibility") === null) {
+  // Checked against the RAW TEXT, not the parsed map: `frontmatterMeta` empties
+  // the WHOLE map on any parse failure, so one unrelated sibling key this
+  // narrow parser cannot read — `tags: [hr, payroll]`, or an unquoted value
+  // containing ": " — silently dropped `visibility:` and the document was
+  // served at the default tier. The leak, entering through a third door
+  // (round-2 review of #43, reproduced).
+  const declaredInText = /^visibility:[ \t]*(.*)$/m.exec(FRONTMATTER.exec(text)?.[1] ?? "");
+  if (declaredInText !== null && scalar(meta, "visibility") === null) {
+    const written = declaredInText[1]?.trim() ?? "";
     throw new GovernanceParseError(
-      "a document declares `visibility:` with no readable value — an unreadable tier reads as " +
-        "no tier, and no tier is the default tier, which is how a restricted document gets " +
-        "served. Write a single value, e.g. `visibility: internal`.",
+      written === ""
+        ? "a document declares `visibility:` with no readable value — an unreadable tier reads " +
+            "as no tier, and no tier is the default tier, which is how a restricted document " +
+            "gets served. Write a single value, e.g. `visibility: internal`."
+        : `a document declares \`visibility: ${written}\` but this reader could not resolve ` +
+            "it — usually because ANOTHER key in the same frontmatter is a shape it cannot read " +
+            '(a flow list like `tags: [a, b]`, or an unquoted value containing ": "). An ' +
+            "unresolved tier would be served at the default. Quote the other value, or write it " +
+            "as a block list.",
     );
   }
   const provenanceScalar = scalar(meta, "provenance");
@@ -119,20 +132,4 @@ export function governanceFromFrontmatter(
     provenance: provenanceList ?? (provenanceScalar === null ? null : [provenanceScalar]),
     supersededBy: scalar(meta, "superseded_by"),
   };
-}
-
-/**
- * The governance fingerprint that change detection compares. Body-only hashing
- * meant a retitle — or a `status: draft` -> `approved` promotion, or a
- * visibility change — reported "unchanged" and published nothing (review
- * 2026-08-20). Stable field order so the string is comparable across runs.
- */
-export function governanceFingerprint(g: NodeGovernance): string {
-  return JSON.stringify([
-    g.visibility,
-    g.docStatus,
-    g.owner,
-    g.provenance === null ? null : [...g.provenance],
-    g.supersededBy,
-  ]);
 }

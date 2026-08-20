@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { frontmatterMeta } from "./adapters/plain-tree.js";
-import {
-  governanceFingerprint,
-  governanceFromFrontmatter,
-  frontmatterListValues,
-  NO_GOVERNANCE,
-} from "./governance.js";
+import { governanceFromFrontmatter, frontmatterListValues, NO_GOVERNANCE } from "./governance.js";
 
 const doc = (frontmatter: string): string => `---\n${frontmatter}\n---\n\nBody text.\n`;
 
@@ -93,26 +88,6 @@ describe("frontmatterListValues", () => {
   });
 });
 
-describe("governanceFingerprint", () => {
-  it("changes when any governance field changes — the whole point of the change key", () => {
-    const base = read(doc("title: T\nstatus: draft"));
-    const promoted = read(doc("title: T\nstatus: approved"));
-    expect(governanceFingerprint(base)).not.toBe(governanceFingerprint(promoted));
-  });
-
-  it("is stable for the same governance written the same way", () => {
-    const a = read(doc("title: T\nstatus: approved\nowner: ops"));
-    const b = read(doc("title: T\nstatus: approved\nowner: ops"));
-    expect(governanceFingerprint(a)).toBe(governanceFingerprint(b));
-  });
-
-  it("distinguishes a visibility change, which is a security control", () => {
-    const pub = read(doc("title: T\nvisibility: public"));
-    const int = read(doc("title: T\nvisibility: internal"));
-    expect(governanceFingerprint(pub)).not.toBe(governanceFingerprint(int));
-  });
-});
-
 describe("list shapes the site accepts", () => {
   it("reads an UNINDENTED block sequence — valid YAML, and the site reads it", () => {
     const text = doc(["title: T", "provenance:", "- ISO 45001", "- Memo 2026-03"].join("\n"));
@@ -122,5 +97,32 @@ describe("list shapes the site accepts", () => {
   it("still reads an indented one", () => {
     const text = doc(["title: T", "provenance:", "  - ISO 45001"].join("\n"));
     expect(read(text).provenance).toEqual(["ISO 45001"]);
+  });
+});
+
+describe("visibility is read from the TEXT, never from a map a sibling can empty", () => {
+  it("REFUSES when an unrelated key makes the parser drop the whole map", () => {
+    // `frontmatterMeta` empties the WHOLE map on any parse failure, so one
+    // sibling key this narrow parser cannot read silently dropped
+    // `visibility:` — the document took the default tier and was served while
+    // the site still hid it. The leak, entering through a third door.
+    const text = doc(["title: T", "tags: [hr, payroll]", "visibility: internal"].join("\n"));
+    expect(() => read(text)).toThrow(/could not resolve it/i);
+    // and it names the actual cause, not just the symptom
+    expect(() => read(text)).toThrow(/flow list/i);
+  });
+
+  it("REFUSES for an unquoted value containing a colon-space, the other poison shape", () => {
+    const text = doc(["title: Report: Q3", "visibility: internal"].join("\n"));
+    expect(() => read(text)).toThrow(/could not resolve it/i);
+  });
+
+  it("still reads visibility when the siblings are shapes it CAN read", () => {
+    const text = doc(["title: T", "owner: ops", "visibility: internal"].join("\n"));
+    expect(read(text).visibility).toBe("internal");
+  });
+
+  it("says nothing about a document that declares no visibility at all", () => {
+    expect(read(doc(["title: T", "tags: [hr]"].join("\n"))).visibility).toBeNull();
   });
 });

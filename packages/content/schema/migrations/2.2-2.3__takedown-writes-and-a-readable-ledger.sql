@@ -62,3 +62,9 @@ ALTER TABLE retrieval_log DROP CONSTRAINT IF EXISTS retrieval_log_action_check;
 ALTER TABLE retrieval_log ADD CONSTRAINT retrieval_log_action_check CHECK (action = ANY (ARRAY[
   'content_served','similarity_searched','corpus_seeded','outline_served',
   'search_abstained','generation_activated','takedown_applied','takedown_revoked']));
+
+-- Drop an index the serving predicate cannot use: it filters on
+-- `coalesce(visibility, <runtime GUC>)`, which no plain btree on `visibility`
+-- can satisfy. Built and maintained, never read — the same shape as the HNSW
+-- index this release also stopped paying for.
+DROP INDEX IF EXISTS idx_nodes_visibility;

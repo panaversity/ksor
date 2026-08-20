@@ -82,9 +82,12 @@ CREATE TABLE content_nodes (
 CREATE INDEX idx_nodes_gen      ON content_nodes (tenant_id, generation, kind);
 CREATE INDEX idx_nodes_parent   ON content_nodes (parent_id);
 CREATE INDEX idx_nodes_keywords ON content_nodes USING gin (keywords);
--- The serving audience filter is (tenant, generation, visibility) — without this
--- the audience predicate turns every search into a scan of the generation.
-CREATE INDEX idx_nodes_visibility ON content_nodes (tenant_id, generation, visibility);
+-- NO index on visibility. The serving predicate is
+-- `coalesce(n.visibility, <runtime GUC>) = ANY(...)`, and a plain btree cannot
+-- serve a coalesce over a value that is only known per transaction — the index
+-- would be built and maintained and never read, which is exactly the defect
+-- the HNSW arm was just fixed for. The audience filter rides the
+-- (tenant_id, generation, kind) index that every serving arm already uses.
 CREATE UNIQUE INDEX nodes_root_slug_uniq ON content_nodes (tenant_id, generation, slug) WHERE parent_id IS NULL;
 
 CREATE TABLE slug_aliases (

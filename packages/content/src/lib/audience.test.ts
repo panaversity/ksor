@@ -5,7 +5,6 @@ import {
   AudienceError,
   audienceAllowed,
   audienceGucs,
-  audiencePredicate,
   visibleTiers,
 } from "./audience.js";
 
@@ -41,37 +40,6 @@ describe("visibleTiers", () => {
   it("REFUSES an unknown viewer tier rather than widening silently", () => {
     expect(() => visibleTiers(model, "board")).toThrow(AudienceError);
     expect(() => visibleTiers(model, "board")).toThrow(/unknown audience/i);
-  });
-});
-
-describe("audiencePredicate", () => {
-  it("is TRUE and parameterless when there is no model", () => {
-    expect(audiencePredicate("n.visibility", null, null, 1)).toEqual({ sql: "TRUE", params: [] });
-  });
-
-  it("admits NULL visibility when the default tier is allowed", () => {
-    const p = audiencePredicate("n.visibility", ["public"], "public", 5);
-    expect(p.sql).toBe("(n.visibility IS NULL OR n.visibility = ANY($5::text[]))");
-    expect(p.params).toEqual([["public"]]);
-  });
-
-  it("EXCLUDES NULL visibility when the default tier is not allowed", () => {
-    // default_visibility: internal, viewer at public → an undeclared document
-    // is internal by default and must not be served.
-    const p = audiencePredicate("n.visibility", ["public"], "internal", 2);
-    expect(p.sql).toBe("(n.visibility = ANY($2::text[]))");
-  });
-
-  it("passes the allowed tiers as one array parameter, never interpolated", () => {
-    const p = audiencePredicate("n.visibility", ["public", "internal"], "public", 3);
-    expect(p.sql).not.toContain("public");
-    expect(p.params).toEqual([["public", "internal"]]);
-  });
-
-  it("fails closed on a tier the record does not know: it is simply not in the allow-list", () => {
-    const p = audiencePredicate("n.visibility", ["public"], "public", 1);
-    // a document with visibility 'board-only' matches neither branch
-    expect(p.params[0]).toEqual(["public"]);
   });
 });
 

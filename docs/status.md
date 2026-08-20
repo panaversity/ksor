@@ -163,7 +163,7 @@ builtin `up`.
   for the swap.
 
 - **Schema migrations — DONE.** `schema.sql` provisions a FRESH database at the
-  current version (2.2); an existing one moves forward through
+  current version (2.3); an existing one moves forward through
   `schema/migrations/<from>-<to>__<slug>.sql`, applied by a runner keyed on
   `schema_meta`. The chain is WALKED, not sorted, so a missing step refuses
   rather than being skipped, and each step commits with the `schema_meta` row

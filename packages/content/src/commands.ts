@@ -23,7 +23,14 @@ import { parseInstance, InstanceParseError, type ContentInstance } from "./insta
 import { applySchema, renderSchema, schemaVersion } from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
-import { applyTakedown, denylistManifest, listTakedowns, revokeTakedown } from "./takedown-ops.js";
+import {
+  applyTakedown,
+  deniedStableIds,
+  denylistManifest,
+  listTakedowns,
+  readLedger,
+  revokeTakedown,
+} from "./takedown-ops.js";
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
@@ -55,11 +62,12 @@ Usage:
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
   ksor takedown --instance PATH (<stable-id> --reason TEXT [--subtree]
-                                 | --list | --revoke <stable-id>
+                                 | --list | --ledger | --revoke <stable-id>
                                  | --export PATH)
       Deny a document from EVERY surface. Default scope is the node itself;
       --subtree denies its descendants too. --export writes the manifest the
       site build reads, so a takedown reaches the human surface as well.
+      --ledger prints the recorded governance acts: who denied what, when.
   ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
@@ -569,6 +577,7 @@ async function takedownCommand(args: string[]): Promise<number> {
       reason: { type: "string" },
       subtree: { type: "boolean", default: false },
       list: { type: "boolean", default: false },
+      ledger: { type: "boolean", default: false },
       revoke: { type: "string" },
       export: { type: "string" },
       actor: { type: "string" },
@@ -584,10 +593,27 @@ async function takedownCommand(args: string[]): Promise<number> {
   const actor = values.actor ?? process.env["USER"] ?? process.env["USERNAME"] ?? "operator";
 
   if (values.export !== undefined) {
-    const rows = await withPool(dsn, (pool) => listTakedowns(pool, instance));
+    // EXPANDED here, where the tree lives: the site has no parent_id to walk.
+    const rows = await withPool(dsn, (pool) => deniedStableIds(pool, instance));
     const manifest = denylistManifest(instance.corpusId, rows, new Date());
     writeFileSync(values.export, JSON.stringify(manifest, null, 2) + "\n");
     process.stdout.write(`takedown: exported ${rows.length} denial(s) to ${values.export}\n`);
+    return 0;
+  }
+
+  if (values.ledger) {
+    // The §7 trail, read through the auditor role (schema 2.3). Before it, the
+    // ledger had FORCE row-level security, an INSERT policy and no reader at
+    // all — written forever, readable by nobody.
+    const rows = await withPool(dsn, (pool) => readLedger(pool, instance, 50));
+    if (rows.length === 0) {
+      process.stdout.write("ledger: no governance acts recorded for this corpus yet\n");
+      return 0;
+    }
+    for (const r of rows) {
+      const when = r.createdAt.toISOString().replace("T", " ").slice(0, 19);
+      process.stdout.write(`${when}\t${r.action}\t${r.actor}\t${JSON.stringify(r.detail)}\n`);
+    }
     return 0;
   }
 
@@ -645,6 +671,17 @@ async function takedownCommand(args: string[]): Promise<number> {
       ? `takedown: ${outcome.stableId} denied (scope: ${scope}) — no surface serves it from now on\n`
       : `takedown: ${outcome.stableId} was already denied with the same scope and reason\n`,
   );
+  if (outcome.resolves === false) {
+    // Recorded, but it currently names nothing — almost always a typo, and the
+    // difference between "withdrawn" and "still serving" is the whole point.
+    process.stdout.write(
+      `  WARNING: no document in the serving generation has the stable_id ` +
+        `${JSON.stringify(outcome.stableId)}. The denial is recorded (it will apply if that id ` +
+        `ever appears), but nothing is withdrawn right now — check the id with ` +
+        `\`ksor takedown --instance ${values.instance} --list\` or the provenance.stable_id a ` +
+        `search result reports.\n`,
+    );
+  }
   process.stdout.write(
     "  the SITE reads a manifest, not the database: run " +
       "`ksor takedown --instance ... --export <path>` before building it, or the human " +

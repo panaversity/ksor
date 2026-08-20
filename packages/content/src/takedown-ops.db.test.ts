@@ -13,6 +13,7 @@ import { contentPool } from "./db.js";
 import { grantIngest } from "./grant.js";
 import {
   applyTakedown,
+  deniedStableIds,
   denylistManifest,
   listTakedowns,
   readLedger,
@@ -113,11 +114,18 @@ describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
     expect((await listTakedowns(pool, instance))[0]?.scope).toBe("subtree");
   });
 
-  it("exports a manifest the site build can read", async () => {
-    const rows = await listTakedowns(pool, instance);
-    const manifest = denylistManifest(TENANT, rows, new Date("2026-08-21T00:00:00Z"));
+  it("exports a manifest of EXACT ids, with subtree denials already expanded", async () => {
+    // The site has no tree to walk, so the expansion happens here. Handing it a
+    // scope to interpret meant prefix-matching, and a section's stable_id ends
+    // in /index — so its children never matched and kept publishing.
+    const ids = await deniedStableIds(pool, instance);
+    const manifest = denylistManifest(TENANT, ids, new Date("2026-08-21T00:00:00Z"));
     expect(manifest.source).toBe("database");
-    expect(manifest.denied).toEqual([{ stable_id: "knowledge/withdrawn", scope: "subtree" }]);
+    expect(manifest.denied.map((d) => d.stable_id)).toContain("knowledge/withdrawn");
+    expect(
+      manifest.denied.every((d) => d.scope === "node"),
+      "every entry is an outright denial, nothing left to interpret",
+    ).toBe(true);
   });
 
   it("lifts a denial and records THAT act too", async () => {

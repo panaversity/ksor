@@ -55,6 +55,8 @@ export interface TakedownOutcome {
   readonly scope: TakedownScope;
   /** false when the row already said exactly this — the act is idempotent. */
   readonly changed: boolean;
+  /** Does this stable_id name a document in the generation being served? */
+  readonly resolves?: boolean;
 }
 
 /**
@@ -70,6 +72,19 @@ export async function applyTakedown(
   opts: { stableId: string; scope: TakedownScope; reason: string; actor: string },
 ): Promise<TakedownOutcome> {
   return runIngest(pool, instance.tenantId, async (client) => {
+    // Does this id name anything in the SERVING generation? A typo used to
+    // print "denied — no surface serves it from now on" while the document
+    // carried on serving (round-2 review of #43). The denial is still
+    // RECORDED either way — decision 14's identity guarantee means a denial
+    // may precede the document it names — but the caller is told.
+    const known = await client.query(
+      `SELECT 1 FROM content_nodes n
+         JOIN corpora c ON c.tenant_id = n.tenant_id AND c.corpus_id = $2
+        WHERE n.tenant_id = $1 AND n.stable_id = $3 AND n.generation = c.active_generation
+        LIMIT 1`,
+      [instance.tenantId, instance.corpusId, opts.stableId],
+    );
+    const resolves = (known.rowCount ?? 0) > 0;
     const result = await client.query(
       "INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason)" +
         " VALUES ($1, $2, $3, $4, $5)" +
@@ -92,7 +107,7 @@ export async function applyTakedown(
       },
       opts.actor,
     );
-    return { stableId: opts.stableId, scope: opts.scope, changed };
+    return { stableId: opts.stableId, scope: opts.scope, changed, resolves };
   });
 }
 
@@ -149,6 +164,50 @@ export async function readLedger(
   });
 }
 
+/**
+ * Every stable_id a build must not publish, with `subtree` denials EXPANDED to
+ * their actual descendants by the same `parent_id` walk the serving side uses.
+ *
+ * The site cannot do this itself: it has no tree, so it matched a prefix — and
+ * a section's stable_id ends in `/index` (or `#section`), so the prefix never
+ * matched its children and every descendant of a subtree takedown kept
+ * publishing. Decision 14 records exactly why a prefix is wrong here; the fix
+ * is to resolve the walk where the tree lives and hand over a flat list
+ * (round-2 review of #43).
+ */
+export async function deniedStableIds(pool: pg.Pool, instance: ContentInstance): Promise<string[]> {
+  return runIngest(pool, instance.tenantId, async (client) => {
+    const result = await client.query(
+      `WITH RECURSIVE gen AS (
+         SELECT active_generation AS g FROM corpora WHERE tenant_id = $1 AND corpus_id = $2
+       ),
+       seed AS (
+         SELECT n.node_id, n.stable_id, d.scope
+           FROM takedown_denylist d
+           JOIN content_nodes n ON n.tenant_id = d.tenant_id AND n.stable_id = d.stable_id
+           JOIN gen ON n.generation = gen.g
+          WHERE d.tenant_id = $1 AND d.corpus_id = $2
+       ),
+       walk AS (
+         SELECT node_id, stable_id, scope FROM seed
+         UNION ALL
+         SELECT c.node_id, c.stable_id, w.scope
+           FROM content_nodes c
+           JOIN walk w ON c.parent_id = w.node_id
+           JOIN gen ON c.generation = gen.g
+          WHERE c.tenant_id = $1 AND w.scope = 'subtree'
+       )
+       SELECT DISTINCT stable_id FROM walk
+       UNION
+       -- Denials naming a stable_id no CURRENT generation carries are still
+       -- denied: identity outlives any one generation (decision 14).
+       SELECT stable_id FROM takedown_denylist WHERE tenant_id = $1 AND corpus_id = $2`,
+      [instance.tenantId, instance.corpusId],
+    );
+    return result.rows.map((r: { stable_id: string }) => String(r.stable_id)).sort();
+  });
+}
+
 export async function listTakedowns(
   pool: pg.Pool,
   instance: ContentInstance,
@@ -192,7 +251,7 @@ export interface DenylistManifest {
 
 export function denylistManifest(
   corpusId: string,
-  rows: readonly TakedownRow[],
+  stableIds: readonly string[],
   now: Date,
 ): DenylistManifest {
   return {
@@ -200,16 +259,8 @@ export function denylistManifest(
     corpus_id: corpusId,
     source: "database",
     exported_at: now.toISOString(),
-    denied: rows.map((r) => ({ stable_id: r.stableId, scope: r.scope })),
-  };
-}
-
-export function emptyDenylistManifest(corpusId: string, now: Date): DenylistManifest {
-  return {
-    format: 1,
-    corpus_id: corpusId,
-    source: "none",
-    exported_at: now.toISOString(),
-    denied: [],
+    // Already EXPANDED: every id here is denied outright, so the consumer
+    // matches exact strings and never has to interpret scope.
+    denied: stableIds.map((stable_id) => ({ stable_id, scope: "node" as TakedownScope })),
   };
 }

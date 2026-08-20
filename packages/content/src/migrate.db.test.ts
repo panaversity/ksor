@@ -134,11 +134,16 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
     expect(r.rows[0].corpus_id).toBe(TENANT);
   });
 
-  it("creates the visibility index the serving predicate needs", async () => {
+  it("leaves NO index the serving predicate cannot use", async () => {
+    // A btree on `visibility` cannot serve `coalesce(visibility, <runtime GUC>)`,
+    // so it would be built and maintained and never read — the same defect the
+    // HNSW arm was fixed for in this release. The migration drops it.
     const r = await pool.query(
       "SELECT indexname FROM pg_indexes WHERE tablename = 'content_nodes'",
     );
-    expect(r.rows.map((x: { indexname: string }) => x.indexname)).toContain("idx_nodes_visibility");
+    expect(r.rows.map((x: { indexname: string }) => x.indexname)).not.toContain(
+      "idx_nodes_visibility",
+    );
   });
 
   it("PRESERVES the two tables a drop-and-recreate would have destroyed", async () => {
