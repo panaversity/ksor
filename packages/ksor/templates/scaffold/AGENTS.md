@@ -70,17 +70,25 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
 
-2. **Put the secrets in `.env`** (already gitignored — never commit it).
-   `ksor` reads it automatically, so nothing needs exporting; a real
-   environment variable still wins over the file, so CI and production
+2. **Copy `.env.example` to `.env`** and fill it in — `ksor` reads it
+   automatically, so nothing needs exporting, and `.env` is already gitignored.
+   A real environment variable still wins over the file, so CI and production
    overrides behave normally.
 
    ```sh
-   KSOR_DB_URL=postgresql://…
-   GEMINI_API_KEY=…
+   cp .env.example .env
    ```
 
-   The database needs the pgvector extension: `CREATE EXTENSION vector`.
+   Three values matter:
+
+   - `KSOR_DB_URL` — the Postgres store named by `instance.md`'s `dsn_env`. It
+     needs the pgvector extension: `CREATE EXTENSION vector;`
+   - `GEMINI_API_KEY` — the embedding provider key.
+   - `KSOR_AUTH_DISABLED=1` — **required for a local run.** `ksor serve`
+     refuses to boot unauthenticated without it, deliberately, so a server is
+     never left open by accident. It binds loopback, where auth off is the
+     intended dev shape. A PUBLIC deployment configures the SSO door instead —
+     see the comments in `.env.example` and "Serving safely" below.
 
 3. **Bring it up — one command:**
 

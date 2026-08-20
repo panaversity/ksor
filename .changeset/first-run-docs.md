@@ -2,6 +2,11 @@
 "@panaversity/ksor": patch
 ---
 
+feat: scaffolded projects ship a commented `.env.example` naming every
+variable the agent surface needs — the DSN variable, the provider key, and
+`KSOR_AUTH_DISABLED=1`, which a local run requires because `ksor serve` refuses
+to boot unauthenticated. Copy it to `.env` and it is read automatically.
+
 feat: standing up the agent surface is one command and one config block.
 `ksor` now reads `./.env` automatically (Node-native, no dependency; a real
 environment variable still wins), scaffolded projects get `pnpm up` —

@@ -30,11 +30,13 @@ Postgres store (with pgvector) and an embedding provider key, so it is not
 part of `pnpm dev`. The ordered path is:
 
 ```sh
-# .env (gitignored; ksor reads it automatically — nothing to export)
-#   KSOR_DB_URL=postgresql://…
-#   GEMINI_API_KEY=…
-pnpm up      # schema → grant → ingest → serve
+cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
+pnpm up                 # schema → grant → ingest → serve
 ```
+
+`ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
+is required for a local run: serve refuses to boot unauthenticated on purpose,
+so a server is never open by accident.
 
 Add one block to `instance.md` first — `database: { dsn_env: KSOR_DB_URL }`,
 the NAME of the variable, never the DSN. That is the whole required config:
@@ -70,7 +72,8 @@ different coding agent's way of finding the same working contract.
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                                                 |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
-| `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                                                                                    |
+| `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in. |
+| `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history.                                                                                                                                                    |
 | `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands and the served rung's `pnpm up` (schema → grant → ingest → serve, or run them separately), the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
