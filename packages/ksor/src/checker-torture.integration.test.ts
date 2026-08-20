@@ -575,6 +575,39 @@ describe("scaffolded format-checker — torture", () => {
       expect(stale.output).toContain("superseded_by on a document that is status: approved");
     });
 
+    it("catches a successor pointer whose capitalisation does not match the record", () => {
+      // The rule this pins was previously guarded only by a NEGATIVE assertion,
+      // so deleting it outright left the whole suite green (round 4).
+      //
+      // It is inherently filesystem-dependent: on a case-INSENSITIVE volume
+      // (macOS default) `./TERMS.md` resolves to a real file the record does
+      // not govern, which is the leak this rule exists to catch. On a
+      // case-sensitive volume the earlier does-not-exist rule fires first, and
+      // the message differs — so the probe is explicit about which it is
+      // rather than asserting a message that only holds on one platform.
+      const caseInsensitive = (() => {
+        const probeDir = path.join(project, "knowledge");
+        const lower = path.join(probeDir, "case-probe.md");
+        writeFileSync(lower, "---\ntitle: P\nstatus: draft\n---\n\nx\n");
+        const seen = existsSync(path.join(probeDir, "CASE-PROBE.md"));
+        rmSync(lower, { force: true });
+        return seen;
+      })();
+
+      const result = probe({
+        "knowledge/successor-doc.md": "---\ntitle: S\nstatus: approved\n---\n\nNew.\n",
+        "knowledge/replaced-doc.md":
+          "---\ntitle: R\nstatus: superseded\nsuperseded_by: ./SUCCESSOR-DOC.md\n---\n\nOld.\n",
+      });
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain("./SUCCESSOR-DOC.md");
+      if (caseInsensitive) {
+        // The rule under test: the file resolves, but not to a document of the
+        // record, so every rule keyed by the real path would have missed it.
+        expect(result.output).toContain("does not name a document in the record");
+      }
+    });
+
     it("does not blame a correct pointer when the SUCCESSOR is the broken one", () => {
       // The successor exists but has not been given frontmatter yet — the
       // ordinary state mid-edit. That is one problem, against the successor.
