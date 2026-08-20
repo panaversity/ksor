@@ -28,11 +28,31 @@ describe("ksor CLI (built artifact)", () => {
     ).toBe(true);
   });
 
-  it("answers honestly with exit 2 and the reservation notice", () => {
+  it("a bare invocation shows the usage and exits 0 — being asked what you are is not an error", () => {
+    // It used to answer "the name is reserved; this is not a release" from a
+    // shipped package with nine working verbs, at the moment a human or an
+    // agent is deciding whether to use it (review 2026-08-20).
     const result = runCli([]);
-    expect(result.status).toBe(2);
-    expect(result.stdout).toContain("the name is reserved");
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).not.toContain("the name is reserved");
+    expect(result.stdout, "the vocabulary is what a discovering caller needs").toContain(
+      "ksor <verb>",
+    );
+    expect(result.stdout).toContain("takedown");
     expect(result.stdout).toContain("github.com/panaversity/ksor");
+  });
+
+  it("a verb's --help reaches THAT verb, not the generic usage", () => {
+    const result = runCli(["ingest", "--help"]);
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout, "the verb's own flags").toContain("--knowledge");
+  });
+
+  it("a mistyped flag is REFUSED (exit 1), not reported as a broken environment", () => {
+    const result = runCli(["ingest", "--knowledg", "x"]);
+    expect(result.status, result.stdout + result.stderr).toBe(1);
+    expect(result.stderr).toContain("error: bad-args");
+    expect(result.stderr, "the remedy, not just the fault").toContain("--help");
   });
 
   it("names the verb it refuses to fake", () => {

@@ -64,8 +64,15 @@ const FRAMEWORK_INSTRUCTIONS = `You are answering from a Knowledge System of Rec
 - Check each search envelope's "gate" before treating an answer as covered: when it is
   "off" this record cannot abstain, so an answer is not evidence of coverage.`;
 
-/** The template body `ksor init` emits — served verbatim, it is meta-scaffolding, not instructions. */
-const TEMPLATE_MARKER = "This Knowledge System of Record is authoritative for —";
+/**
+ * The scaffold's UNFILLED placeholder.
+ *
+ * It matches the em-dash-and-italics tail the template leaves behind, NOT the
+ * opening words — because the template tells the author to complete that exact
+ * sentence in place, so matching its prefix discarded a fully authored body and
+ * replaced it with "has not yet been described" (review of PR #43).
+ */
+const TEMPLATE_MARKER = "_fill this in; it is";
 
 export function composeInstructions(authored: string): string {
   const body = authored.trim();
@@ -84,6 +91,94 @@ export function composeInstructions(authored: string): string {
 ${body}`;
 }
 
+// ── Output schemas ──────────────────────────────────────────────────────────
+// Declared because every tool returns `structuredContent`. Without them a
+// client cannot validate the envelope and an agent has to infer its shape from
+// the prose description — which is how `snapshot` came to mean two different
+// types across two tools without anything catching it (review 2026-08-20).
+
+const PROVENANCE = z.object({
+  corpus_id: z.string(),
+  stable_id: z.string(),
+  slug: z.string(),
+  generation: z.number().int(),
+  retrieved_at: z.string(),
+});
+
+const GATE = z
+  .union([z.literal("off"), z.literal("uncalibrated"), z.object({ floor: z.number() })])
+  .describe(
+    'Whether this record can abstain at all. "off" means it CANNOT: an answer is not evidence of coverage.',
+  );
+
+const SEARCH_OUTPUT = z.object({
+  ok: z.boolean(),
+  abstained: z.boolean(),
+  reason: z.string().optional(),
+  gate: GATE,
+  top_cosine: z.number().nullable().optional(),
+  hits: z.array(
+    z.object({
+      slug: z.string(),
+      heading_path: z.string(),
+      content: z.string(),
+      rrf_score: z.number(),
+      provenance: PROVENANCE,
+    }),
+  ),
+  snapshot: z
+    .object({
+      corpus_id: z.string(),
+      generation: z.number().int(),
+      token: z.string(),
+      expires_at: z.string(),
+    })
+    .nullable()
+    .describe("Pins the generation this search answered from. Pass token to read."),
+  note: z.string().optional(),
+  k_note: z.string().optional(),
+  degraded_reason: z.string().optional(),
+  content_advisory: z.string().optional(),
+});
+
+const OUTLINE_OUTPUT = z.object({
+  nodes: z.array(
+    z.object({
+      slug: z.string(),
+      kind: z.string(),
+      title: z.string(),
+      heading_path: z.string(),
+      position: z.number().int(),
+      depth: z.number().int(),
+      child_count: z.number().int(),
+      has_content: z.boolean(),
+    }),
+  ),
+  limit: z.number().int(),
+  has_more: z
+    .boolean()
+    .describe("True when rows were cut at limit — the record has more, this list is partial."),
+});
+
+const READ_OUTPUT = z.object({
+  slug: z.string(),
+  title: z.string(),
+  text: z.string(),
+  sections: z.array(z.string()),
+  provenance: PROVENANCE,
+  snapshot_status: z
+    .string()
+    .describe('"pinned", "unpinned", or why a supplied pin could not be used.'),
+  window_from: z.string().optional(),
+  window_to: z.string().optional(),
+  next: z.string().nullable().optional(),
+  remaining_outline: z.array(z.string()).optional(),
+  est_tokens: z.number().optional(),
+  total_est_tokens: z.number().optional(),
+  note: z.string().optional(),
+  content_advisory: z.string().optional(),
+});
+
 export function buildServer(ctx: ServiceContext, version: string): McpServer {
   // The instance.md BODY is the authored agent-surface instructions, preserved
   // beneath the framework floor above (the oracle's server contract, widened).
@@ -97,6 +192,7 @@ export function buildServer(ctx: ServiceContext, version: string): McpServer {
     {
       title: "Search the record",
       description: SEARCH_DESCRIPTION,
+      outputSchema: SEARCH_OUTPUT,
       inputSchema: z.object({
         query: z
           .string()
@@ -143,6 +239,7 @@ export function buildServer(ctx: ServiceContext, version: string): McpServer {
     "outline",
     {
       title: "Outline the record",
+      outputSchema: OUTLINE_OUTPUT,
       description: `List the record's structure in reading order.
 
 Omit node to browse the top level; pass node (a slug or a '/'-joined path copied from an
@@ -185,6 +282,7 @@ read tool.`,
     "read",
     {
       title: "Read a document",
+      outputSchema: READ_OUTPUT,
       description: `Read one document from the record, byte-exact, with provenance.
 
 Large documents arrive WINDOWED: the response carries next (an opaque continuation

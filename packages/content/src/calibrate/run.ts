@@ -18,8 +18,13 @@
 import type pg from "pg";
 
 import { runRead } from "../db.js";
+// Calibration measures the floor over the WHOLE record, deliberately — the
+// threshold is a property of the corpus, not of one caller's tier. Stated,
+// because an unbound scope now denies (the seam fails closed).
+import { WHOLE_RECORD_SCOPE as CALIBRATION_SCOPE } from "../lib/audience.js";
 import { aembedIntent, type EmbeddingProvider, type TextGenerator } from "../lib/embedding.js";
 import { topOneScore, VECTOR_TXN_GUCS, type SearchScope } from "../lib/search.js";
+
 import { DENIED_CTE, DENY } from "../lib/takedown.js";
 import {
   buildReport,
@@ -108,7 +113,7 @@ async function scoreQueries(
       pool,
       scope.tenantId,
       (client) => topOneScore(client, scope, vector ?? []),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...CALIBRATION_SCOPE },
     );
     if (score === null) {
       // The math treats a null score as fatal — surface it with the query.
@@ -133,10 +138,15 @@ export async function runCalibration(
     kinds: null,
     pinnedGeneration: generation,
   };
-  const embedded = await runRead(pool, options.tenantId, async (client) => {
-    const r = await client.query(COUNT_SQL, [options.tenantId, options.corpusId, generation]);
-    return Number(r.rows[0]?.count ?? 0);
-  });
+  const embedded = await runRead(
+    pool,
+    options.tenantId,
+    async (client) => {
+      const r = await client.query(COUNT_SQL, [options.tenantId, options.corpusId, generation]);
+      return Number(r.rows[0]?.count ?? 0);
+    },
+    CALIBRATION_SCOPE,
+  );
   if (embedded === 0) {
     throw new Error(
       `no embedded chunks in ${generation === null ? "the served generation" : `generation ${generation}`} — ingest first`,

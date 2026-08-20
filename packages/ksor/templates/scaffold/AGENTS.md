@@ -101,6 +101,33 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    `setup` is separate on purpose: applying DDL and granting ingest are acts an
    operator performs, not side effects of starting a server.
 
+   **Deploying to a container runtime you do not control** (Cloud Run, Fly,
+   Container Apps — anything that scales to zero and hands you a `$PORT`):
+   `ksor serve` is already shaped for it, and the posture is deliberate.
+
+   - It binds `$PORT` on `0.0.0.0` when the platform sets one.
+   - It holds **no idle database connections**. The pool minimum is 0 and an
+     unused connection is closed after 10s, so an idle instance keeps nothing
+     open against a serverless Postgres — and a busy one still reuses
+     connections instead of paying a TLS handshake per request.
+   - The first request after an idle period wakes the database, and that
+     connect is **retried** rather than failing: a cold start is a transient,
+     not a refusal.
+   - `SIGTERM` drains and exits within 8s, inside the ~10s a runtime usually
+     allows before `SIGKILL`.
+
+   What it does NOT do is open and close a connection per request. That is the
+   pattern connection poolers exist to remove — the handshake alone is ~26x the
+   cost of a pooled query even on localhost, before TLS — and it is not what
+   managed Postgres vendors recommend for a process that serves many requests.
+   Per-request connections are the right shape only for a per-invocation
+   runtime (an edge function), which is a different deployment and would want
+   an HTTP database driver rather than TCP.
+
+   Set `KSOR_SNAPSHOT_KEYS` for any such deployment: without it each cold start
+   mints a new signing key, so citations pinned before a scale-down stop
+   validating after it.
+
    **`pnpm serve` is the local loop, not the container command.** It re-ingests
    the whole record before the port opens, which is what you want at your desk
    and not what you want as a cold start — and it would demand ingest

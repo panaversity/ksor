@@ -22,6 +22,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import {
   applySchema,
   buildShippedProvider,
+  WHOLE_RECORD_SCOPE,
   contentPool,
   embedInput,
   embedIntent,
@@ -159,7 +160,7 @@ describe.runIf(adminDsn !== "")("gateway acceptance (HTTP, real MCP client)", ()
             { tenantId: TENANT, corpusId: TENANT, kinds: null, pinnedGeneration: null },
             qv ?? [],
           ),
-        VECTOR_TXN_GUCS,
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
       );
     };
     const inScore = await score(IN_CORPUS_QUERY);

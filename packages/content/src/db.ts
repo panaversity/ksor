@@ -24,6 +24,7 @@ import {
   type Gucs,
 } from "@panaversity/ksor-postgres";
 import { envFloat, envInt } from "./env.js";
+import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
 
 export const TENANT_GUC = "app.tenant_id";
 export const RUNTIME_ROLE = "sor_content_runtime";
@@ -133,7 +134,17 @@ export async function runRead<T>(
   try {
     return await runScopedIn(
       pool,
-      { ...gucsFor(tenantId, RUNTIME_ROLE, READ_STATEMENT_TIMEOUT_MS), ...extraGucs },
+      {
+        ...gucsFor(tenantId, RUNTIME_ROLE, READ_STATEMENT_TIMEOUT_MS),
+        // The audience scope is ALWAYS bound. The SQL predicate denies when it
+        // is unset — deliberately, so a statement can never serve every tier
+        // because nobody stated one — and this makes "the whole record" the
+        // explicit default for a caller that does not narrow it, rather than
+        // an accident of an unbound GUC. The serving door overrides it below
+        // with the caller's actual tier (review of PR #43).
+        ...WHOLE_RECORD_SCOPE,
+        ...extraGucs,
+      },
       op,
       {
         retry: true,

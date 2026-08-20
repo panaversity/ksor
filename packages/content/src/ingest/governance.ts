@@ -50,7 +50,7 @@ function scalar(meta: Record<string, unknown>, key: string): string | null {
 }
 
 const BLOCK_LIST = (key: string): RegExp =>
-  new RegExp(`^${key}:[ \\t]*\\r?\\n((?:[ \\t]+-[ \\t]*.*\\r?\\n?)+)`, "m");
+  new RegExp(`^${key}:[ \\t]*\\r?\\n((?:[ \\t]*-[ \\t]+.*\\r?\\n?)+)`, "m");
 
 const FRONTMATTER = /^﻿?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
@@ -67,7 +67,7 @@ export function frontmatterListValues(text: string, key: string): string[] | nul
   if (m === null) return null;
   const items = (m[1] ?? "")
     .split(/\r?\n/)
-    .map((line) => /^[ \t]+-[ \t]*(.*)$/.exec(line)?.[1] ?? "")
+    .map((line) => /^[ \t]*-[ \t]+(.*)$/.exec(line)?.[1] ?? "")
     .map((v) =>
       v
         .trim()

@@ -153,9 +153,28 @@ export async function runMigrations(
     await withGuardedClient(pool, async (client) => {
       try {
         await client.query("BEGIN");
+        // search_path is bound here for the same reason every other transaction
+        // binds it: unqualified DDL must not resolve against whatever the role's
+        // default happens to be. scopedTxn is not used because a migration must
+        // NOT run as the ingest role — it is DDL, executed by the applying user.
+        await client.query("SELECT set_config('search_path', 'public', true)");
+        // One migration at a time. Without this, two concurrent
+        // `ksor schema --apply` runs both read the old version, both apply the
+        // step, and both insert a schema_meta row — the second failing
+        // mid-DDL against objects the first just created (review of PR #43).
+        // Transaction-scoped, so it releases with the COMMIT or the ROLLBACK.
+        await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+          "ksor-schema-migrate",
+        ]);
         await client.query(sql);
         await client.query(
-          "INSERT INTO schema_meta (schema_version, compatible_from) VALUES ($1, $2)",
+          // compatible_from is the range this SCHEMA supports, not the version
+          // we came from: recording step.from made a migrated database claim a
+          // narrower range than a freshly provisioned one, so the two were no
+          // longer equivalent (review of PR #43). Carry forward what the
+          // database already records.
+          "INSERT INTO schema_meta (schema_version, compatible_from)" +
+            " SELECT $1, coalesce(min(compatible_from), $2) FROM schema_meta",
           [step.to, step.from],
         );
         await client.query("COMMIT");

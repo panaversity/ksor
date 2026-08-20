@@ -308,12 +308,89 @@ export function parseInstanceText(text: string): ContentInstance {
     abstain: { vectorFloor: retrieval.vector_floor, keywordFloor: retrieval.keyword_floor },
     maximumResponseCharacters: budgets.maximum_response_characters,
     instructions: fm.body.trim(),
-    audiences: fm.lists.get("audiences") ?? [],
-    defaultVisibility: fm.scalars.get("default_visibility") ?? null,
+    ...audienceModelOf(fm),
     embeddingProvider: embedding.provider,
     embeddingModel,
     embeddingDim: embedding.dim,
   };
+}
+
+/**
+ * The audience model, parsed with the SITE's grammar and its refusals.
+ *
+ * The two surfaces had two grammars and the kernel's was the weaker one:
+ * flow style (`audiences: [public, internal]`) parses on the site and read as
+ * a plain SCALAR here, so `lists.get("audiences")` was undefined, the model was
+ * empty, and an empty model filters NOTHING — the site hid a restricted
+ * document while the MCP door served it in full. That is precisely the failure
+ * decision 15 exists to end, reintroduced through a parser mismatch.
+ *
+ * So this mirrors `system/site/lib/audience.ts` clause for clause, and the
+ * governing rule is its comment: a declared-but-unreadable model must never
+ * read as "no model", because no model serves everything.
+ */
+function audienceModelOf(fm: Frontmatter): {
+  audiences: readonly string[];
+  defaultVisibility: string | null;
+} {
+  const declared =
+    fm.lists.has("audiences") || fm.scalars.has("audiences") || fm.maps.has("audiences");
+  if (!declared) return { audiences: [], defaultVisibility: null };
+
+  // Flow style is a LIST the site reads and this parser stores as a scalar.
+  const scalar = fm.scalars.get("audiences") ?? "";
+  const flow = /^\[(.*)\]$/.exec(scalar.trim())?.[1];
+  const audiences =
+    fm.lists.get("audiences") ??
+    (flow === undefined
+      ? []
+      : flow
+          .split(",")
+          .map((v) =>
+            v
+              .trim()
+              .replace(/^["']|["']$/g, "")
+              .trim(),
+          )
+          .filter((v) => v !== ""));
+
+  if (audiences.length === 0) {
+    throw new InstanceParseError(
+      "instance.md declares `audiences:` but no audience could be read from it",
+      "an unreadable model reads as no model, and no model serves every document to every caller — the one parse failure that leaks",
+      "write the audiences as a list, least-restricted first:\n  audiences:\n    - public\n    - internal",
+    );
+  }
+  if (audiences[0] !== "public") {
+    throw new InstanceParseError(
+      `audiences: must start with public (it starts with ${JSON.stringify(audiences[0])})`,
+      "the list is ordered least- to most-restricted, and a caller the door cannot identify gets the FIRST entry — any other first entry makes the anonymous default the most restricted tier, or the leak",
+      "reorder audiences: with public first",
+    );
+  }
+  if (new Set(audiences).size !== audiences.length) {
+    throw new InstanceParseError(
+      `audiences: declares a tier twice (${audiences.join(", ")})`,
+      "a duplicated tier has two positions in the ordering, and which one a request honours is undefined",
+      "remove the duplicate entry",
+    );
+  }
+  const defaultVisibility = fm.scalars.get("default_visibility") ?? "";
+  if (defaultVisibility === "") {
+    throw new InstanceParseError(
+      "instance.md declares `audiences:` without `default_visibility:`",
+      "there is no safe guess: the widest tier leaks on the first document that forgets the key, the narrowest hides the record — and an unset default binds an empty tier that matches nothing, blacking out every document that declares no visibility",
+      `add the tier a document without a visibility: key belongs to, e.g. default_visibility: ${audiences[0]}`,
+    );
+  }
+  if (!audiences.includes(defaultVisibility)) {
+    throw new InstanceParseError(
+      `default_visibility: ${JSON.stringify(defaultVisibility)} is not one of the declared audiences (${audiences.join(", ")})`,
+      "a default outside the model matches no tier, so every document that declares no visibility: is served to nobody",
+      `use one of: ${audiences.join(", ")}`,
+    );
+  }
+  return { audiences, defaultVisibility };
 }
 
 export function parseInstance(path: string): ContentInstance {

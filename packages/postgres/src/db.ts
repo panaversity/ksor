@@ -239,6 +239,13 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
  */
 export async function prewarmPool(pool: pg.Pool, count: number): Promise<number> {
   if (count <= 0) return 0;
+  // Never ask for more than the pool can hand out at once. `createPool` clamps
+  // min to max, but the caller's number is unclamped — and requesting max+1
+  // checkouts before releasing ANY of them deadlocks until the connect timeout
+  // expires, turning a misconfigured KSOR_CONTENT_POOL_MIN into a stalled boot
+  // (review of PR #43).
+  const max = (pool as { options?: { max?: number } }).options?.max ?? count;
+  count = Math.min(count, max);
   const clients = await Promise.allSettled(Array.from({ length: count }, () => pool.connect()));
   let opened = 0;
   for (const result of clients) {

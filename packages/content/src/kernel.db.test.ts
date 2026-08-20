@@ -23,6 +23,7 @@ import { vectorAbstains } from "./lib/abstain.js";
 import { keyRingFromEnv, mint, validate } from "./lib/snapshot.js";
 import { readDocument, search, type ServiceContext } from "./service.js";
 import type { ContentInstance } from "./instance.js";
+import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -146,7 +147,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       pool,
       TENANT,
       (c) => hybridSearch(c, scope, unit(0), "zebra compensation bands", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     expect(hits.length, JSON.stringify(hits.map((h) => h.slug))).toBeGreaterThan(0);
     expect(hits[0]?.slug, "vector+keyword agreement must rank zebra first").toBe("zebra");
@@ -163,7 +164,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       pool,
       TENANT,
       (c) => hybridSearch(c, scope, query, "quantum blockchain weather", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     const slugs = hits.map((h) => h.slug);
     expect(slugs, `draft leaked: ${slugs.join(",")}`).not.toContain("draft-doc");
@@ -181,7 +182,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       pool,
       "globex",
       (c) => hybridSearch(c, { ...scope, tenantId: "globex" }, unit(0), "zebra", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     expect(hits, "another tenant must see nothing").toEqual([]);
     expect(topCosine).toBeNull();
@@ -197,7 +198,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         pool,
         TENANT,
         (c) => hybridSearch(c, scope, unit(0), "zebra compensation bands", 10),
-        VECTOR_TXN_GUCS,
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
       );
       expect(
         hits.map((h) => h.slug),
@@ -364,7 +365,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     ).toEqual({ generation: 2, reason: null });
 
     const read = await readDocument(ctx, "zebra", { snapshotToken: withdrawn.token });
-    expect(read.snapshot, "a withdrawn pin must say why it refreshed").toBe(
+    expect(read.snapshot_status, "a withdrawn pin must say why it refreshed").toBe(
       "refreshed (withdrawn)",
     );
     expect(read.provenance.generation, "served from the ACTIVE generation").toBe(1);
@@ -377,7 +378,10 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const active = await readDocument(ctx, "zebra", {
       snapshotToken: mint(ring, scope, 1).token,
     });
-    expect(active.snapshot, "an active pin is honored silently").toBeUndefined();
+    // Honoured pins are STATED, not silent: the field used to be absent on
+    // success, so a caller could not tell an honoured pin from a server that
+    // ignores the field entirely.
+    expect(active.snapshot_status, "an honoured pin says so").toBe("pinned");
     expect(active.provenance.generation).toBe(1);
   });
 

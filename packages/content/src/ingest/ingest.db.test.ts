@@ -17,6 +17,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runIngest, runRead } from "../db.js";
+import { WHOLE_RECORD_SCOPE } from "../lib/audience.js";
 import { applySchema } from "../schema.js";
 import type { ContentInstance } from "../instance.js";
 import { aembedIntent, type EmbeddingProvider, type Intent } from "../lib/embedding.js";
@@ -179,7 +180,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
       pool,
       TENANT,
       (c) => hybridSearch(c, scope, queryVector!, "laser cutter PVC chlorine", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     expect(hits.length, JSON.stringify(hits.map((h) => h.slug))).toBeGreaterThan(0);
     expect(hits[0]?.slug, "the laser-cutter rule must rank first").toBe("laser-cutter");

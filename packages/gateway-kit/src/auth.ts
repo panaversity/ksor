@@ -28,6 +28,18 @@ export type AuthConfig = {
   ssoUrl: string;
   /** This server's canonical URI (the RFC 8707 audience clients bind to). */
   resourceUrl: string;
+  /**
+   * Where this SSO publishes its JWKS.
+   *
+   * `KSOR_SSO_URL` is documented as "the AS base", and the verifier used to
+   * append one vendor's layout (`/api/auth/jwks`, Better Auth's) with no
+   * override. Every other provider — Auth0, Okta, Entra, Keycloak, Cognito —
+   * therefore failed the JWKS fetch, which is classified TRANSIENT rather than
+   * misconfiguration, so every request 503'd with nothing naming the cause
+   * (review 2026-08-20). `KSOR_JWKS_URL` states it; the vendor default is only
+   * the fallback.
+   */
+  jwksUrl: string;
   allowedAudiences: readonly string[];
   /**
    * Enforced ONLY when KSOR_SSO_ISSUER is explicitly set — never defaulted to
@@ -132,6 +144,22 @@ function assertHttpUrl(name: string, value: string): void {
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new AuthConfigError(`${name}=${JSON.stringify(value)} must be an http(s) URL.`);
   }
+  // The JWKS fetched from this base is the ENTIRE trust root of the bearer
+  // gate: over cleartext, anyone on the path substitutes the signing keys and
+  // mints their own valid tokens. Loopback is exempt because it is a local dev
+  // door, not a network path (review 2026-08-20).
+  const loopback =
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "::1" ||
+    parsed.hostname === "[::1]";
+  if (parsed.protocol === "http:" && !loopback) {
+    throw new AuthConfigError(
+      `${name}=${JSON.stringify(value)} is cleartext http:// to a remote host. The JWKS ` +
+        "fetched from it is the whole trust root of the bearer gate — anyone on the path " +
+        "could serve their own keys. Use https://, or point at loopback for local dev.",
+    );
+  }
 }
 
 function configFromEnv(env: Env): AuthConfig | null {
@@ -151,7 +179,11 @@ function configFromEnv(env: Env): AuthConfig | null {
     .map((a) => a.trim())
     .filter((a) => a !== "");
   const issuer = (env.KSOR_SSO_ISSUER ?? "").trim() || null;
-  return { ssoUrl, resourceUrl, allowedAudiences, issuer, jwksCacheTtlS: 3600 };
+  // Explicit when given; otherwise the vendor layout that used to be the only
+  // option, so an existing Better Auth deployment keeps working unchanged.
+  const jwksUrl = (env.KSOR_JWKS_URL ?? "").trim() || `${ssoUrl}/api/auth/jwks`;
+  assertHttpUrl("KSOR_JWKS_URL", jwksUrl);
+  return { ssoUrl, resourceUrl, jwksUrl, allowedAudiences, issuer, jwksCacheTtlS: 3600 };
 }
 
 /**
@@ -248,7 +280,7 @@ function joseVerifyJwt(config: AuthConfig): (token: string) => Promise<TokenClai
   // refetches on an unknown kid after its cooldown (key rotation).
   let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
   return async (token: string): Promise<TokenClaims> => {
-    jwks ??= createRemoteJWKSet(new URL(`${config.ssoUrl}/api/auth/jwks`), {
+    jwks ??= createRemoteJWKSet(new URL(config.jwksUrl), {
       cacheMaxAge: config.jwksCacheTtlS * 1000,
     });
     const { payload } = await jwtVerify(token, jwks, {

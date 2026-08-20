@@ -67,6 +67,22 @@ Usage:
 Exit codes: 0 ok · 1 refused · 3 environment
 `;
 
+/**
+ * The USAGE block for ONE verb — the lines from its `ksor <verb>` heading up to
+ * the next one. Sliced from the same string the full usage prints, so a flag
+ * cannot be documented in one place and missing from the other.
+ */
+export function usageFor(command: string): string {
+  const lines = USAGE.split("\n");
+  const start = lines.findIndex((l) => l.trimStart().startsWith(`ksor ${command} `));
+  if (start === -1) return USAGE;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => /^ {2}ksor \S/.test(l));
+  return [lines[start], ...(end === -1 ? rest : rest.slice(0, end))]
+    .join("\n")
+    .replace(/\n+$/, "\n");
+}
+
 function fail(code: number, message: string): number {
   process.stderr.write(message.endsWith("\n") ? message : message + "\n");
   return code;
@@ -151,7 +167,9 @@ export function detectSourceCommit(knowledgeDir: string | undefined): string {
     if (!/^[0-9a-f]{40}$/.test(head)) return "unspecified";
     // A dirty tree did NOT produce that commit; say so rather than citing a
     // commit whose bytes differ from what was just ingested.
-    const dirty = execFileSync("git", ["-C", knowledgeDir, "status", "--porcelain"], {
+    // Path-scoped: a dirty file elsewhere in the repository says nothing about
+    // whether the RECORD that was ingested matches the commit (review of PR #43).
+    const dirty = execFileSync("git", ["-C", knowledgeDir, "status", "--porcelain", "--", "."], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
@@ -174,8 +192,20 @@ function classifyFailure(exc: unknown): number {
   // otherwise mis-read as an OS/fs failure (review 2026-08-19). Checked before
   // isFsError; a genuine connection failure is not a DatabaseError.
   if (exc instanceof pg.DatabaseError) return REFUSED;
+  // An argument the parser does not know is a REFUSAL — the operator mistyped
+  // a flag. Node's parseArgs raises ERR_PARSE_ARGS_* with a string `code`,
+  // which isFsError below duck-types as an OS failure, so `--knowledg` exited
+  // 3 ("the environment cannot run ksor") for a typo (review 2026-08-20).
+  // Checked BEFORE isFsError for exactly that reason.
+  if (isArgParseError(exc)) return REFUSED;
   if (exc instanceof ContentStoreError || isFsError(exc)) return ENVIRONMENT;
   return REFUSED;
+}
+
+/** Node's parseArgs failures: ERR_PARSE_ARGS_UNKNOWN_OPTION and its siblings. */
+function isArgParseError(exc: unknown): boolean {
+  const code = (exc as { code?: unknown } | null)?.code;
+  return typeof code === "string" && code.startsWith("ERR_PARSE_ARGS_");
 }
 
 async function withPool<T>(dsn: string, op: (pool: pg.Pool) => Promise<T>): Promise<T> {
@@ -307,7 +337,17 @@ async function readSchemaState(pool: pg.Pool): Promise<SchemaState> {
       "SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1",
     );
     const version = (r.rows[0] as { schema_version?: string } | undefined)?.schema_version;
-    if (version === undefined || version === "") return { kind: "uninitialized" };
+    if (version === undefined || version === "") {
+      // The TABLE exists, so the DDL has run — the row is just missing. Calling
+      // that "uninitialized" re-runs the full CREATE TABLE over live tables and
+      // dies on an opaque 42P07 (review of PR #43).
+      throw new ContentStoreError(
+        "schema_meta exists but records no version — this database was initialized and then " +
+          "lost its version row. Re-applying the DDL over live tables would fail on existing " +
+          "relations; restore the row with the version the data actually has, e.g.\n" +
+          "  INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.3', '2.0');",
+      );
+    }
     return { kind: "applied", version };
   } catch (error) {
     const code = (error as { code?: unknown }).code;
@@ -657,6 +697,13 @@ export async function runContentCli(argv: readonly string[]): Promise<number> {
     process.stdout.write(USAGE);
     return command === undefined ? REFUSED : 0;
   }
+  // `ksor <verb> --help` answers for THAT verb. It used to reach parseArgs,
+  // which refused `--help` as an unknown option — so the corpus verbs' flags
+  // were documented nowhere the binary could reach (review 2026-08-20).
+  if (rest.includes("--help") || rest.includes("-h")) {
+    process.stdout.write(usageFor(command));
+    return 0;
+  }
   try {
     switch (command) {
       case "schema":
@@ -675,6 +722,13 @@ export async function runContentCli(argv: readonly string[]): Promise<number> {
         return fail(REFUSED, `unknown command ${JSON.stringify(command)}\n` + USAGE);
     }
   } catch (exc) {
+    if (isArgParseError(exc)) {
+      return fail(
+        REFUSED,
+        `error: bad-args\n${exc instanceof Error ? exc.message : String(exc)}\n` +
+          `  see: ksor ${command} --help`,
+      );
+    }
     return fail(classifyFailure(exc), exc instanceof Error ? exc.message : String(exc));
   }
 }

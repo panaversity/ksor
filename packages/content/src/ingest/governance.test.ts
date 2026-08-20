@@ -106,3 +106,15 @@ describe("governanceFingerprint", () => {
     expect(governanceFingerprint(pub)).not.toBe(governanceFingerprint(int));
   });
 });
+
+describe("list shapes the site accepts", () => {
+  it("reads an UNINDENTED block sequence — valid YAML, and the site reads it", () => {
+    const text = doc(["title: T", "provenance:", "- ISO 45001", "- Memo 2026-03"].join("\n"));
+    expect(read(text).provenance).toEqual(["ISO 45001", "Memo 2026-03"]);
+  });
+
+  it("still reads an indented one", () => {
+    const text = doc(["title: T", "provenance:", "  - ISO 45001"].join("\n"));
+    expect(read(text).provenance).toEqual(["ISO 45001"]);
+  });
+});

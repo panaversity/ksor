@@ -75,6 +75,19 @@ export function audiencePredicate(
   };
 }
 
+/**
+ * The sentinel for "this record declares no audience model".
+ *
+ * It is a VALUE, not the absence of one, and that is the whole point. The
+ * predicate used to read an UNBOUND GUC as "no model" and evaluate TRUE, so any
+ * serving path that forgot to bind the scope served every tier — fail-open, in
+ * the seam whose entire job is to withhold. `lib/takedown.ts` cannot fail that
+ * way because it is a CTE join. Now an unbound GUC matches nothing and the path
+ * returns no rows: a forgotten binding is a visible outage, never a silent leak
+ * (review of PR #43).
+ */
+const NO_MODEL: string = "*";
+
 /** The unit separator, chosen because no audience name may contain it. */
 const SEP = "\u001f";
 
@@ -89,14 +102,26 @@ const SEP = "\u001f";
  * the same `set_config` round trip, invisible to the numbering, and impossible
  * to leak to the next pool borrower.
  *
- * Unset or empty `app.audience_tiers` means "this record declares no audience
- * model" and the predicate is a constant TRUE.
+ * Parameterised by TABLE ALIAS, because the outline's child_count subquery
+ * scans a second alias — and hand-copying the predicate for it produced two
+ * copies of the seam this module exists to make singular, which promptly
+ * drifted apart and returned child_count 0 for every node (review of PR #43,
+ * found by its own test).
+ *
+ * `app.audience_tiers = '*'` means "this record declares no audience model".
+ * UNBOUND means nobody stated a scope, and the predicate matches nothing —
+ * fail closed, so a forgotten binding is an outage rather than a leak.
  */
-export const AUDIENCE_ALLOWED = `(
-    coalesce(current_setting('app.audience_tiers', true), '') = ''
-    OR coalesce(n.visibility, coalesce(current_setting('app.default_visibility', true), '')) =
-       ANY (string_to_array(current_setting('app.audience_tiers', true), E'\\x1f'))
+export function audienceAllowed(alias: string): string {
+  return `(
+    current_setting('app.audience_tiers', true) = '${NO_MODEL}'
+    OR coalesce(${alias}.visibility, coalesce(current_setting('app.default_visibility', true), '')) =
+       ANY (string_to_array(coalesce(current_setting('app.audience_tiers', true), ''), E'\\x1f'))
 )`;
+}
+
+/** The predicate for the usual `n` alias. */
+export const AUDIENCE_ALLOWED: string = audienceAllowed("n");
 
 /**
  * The GUCs {@link AUDIENCE_ALLOWED} reads. Empty object when the record
@@ -107,7 +132,9 @@ export function audienceGucs(
   viewer: string | null,
 ): Readonly<Record<string, string>> {
   const tiers = visibleTiers(model, viewer);
-  if (tiers === null) return {};
+  // Bound EXPLICITLY even when there is no model, so every serving path states
+  // its audience scope and a missing one cannot be mistaken for "unrestricted".
+  if (tiers === null) return { "app.audience_tiers": NO_MODEL };
   return {
     "app.audience_tiers": tiers.join(SEP),
     // A document that declares no visibility takes this tier. Bound as the
@@ -117,3 +144,16 @@ export function audienceGucs(
     "app.default_visibility": model.defaultVisibility ?? "",
   };
 }
+
+/**
+ * The scope for a caller that is entitled to the WHOLE record: calibration
+ * (the floor is a property of the corpus, not of one tier), ingest-side
+ * verification, and tests that assert on the record as a whole.
+ *
+ * It exists so "everything" is something a caller SAYS rather than something
+ * that happens when nobody binds a scope.
+ */
+export const WHOLE_RECORD_SCOPE: Readonly<Record<string, string>> = audienceGucs(
+  { audiences: [], defaultVisibility: null },
+  null,
+);

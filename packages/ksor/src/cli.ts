@@ -66,7 +66,13 @@ function loadDotEnv(): void {
 
 async function main(args: readonly string[]): Promise<number> {
   loadDotEnv();
-  if (args.includes("--help") || args.includes("-h")) {
+  const wantsHelp = args.includes("--help") || args.includes("-h");
+  // Only the TOP-LEVEL help short-circuits. `ksor ingest --help` used to print
+  // the generic usage and exit 0, so the corpus verbs' flags (--instance,
+  // --knowledge, --flip, --apply, --revoke, --export) were documented nowhere
+  // the binary could reach (review 2026-08-20). A verb + --help is the verb's
+  // question to answer.
+  if (wantsHelp && resolveCommand(args).verb === null) {
     process.stdout.write(usage);
     return 0;
   }
@@ -151,11 +157,16 @@ async function main(args: readonly string[]): Promise<number> {
     return exitCodes.refused;
   }
 
-  const heading =
-    verb === null
-      ? `ksor ${pkg.version} — the name is reserved; this is not a release.`
-      : `ksor ${verb}: designed but not implemented in ${pkg.version}.`;
-  process.stdout.write(`${heading}\n${notice}`);
+  // A bare `ksor` is a DISCOVERY moment — for a human and, more often, for an
+  // agent reading the tool before using it. It used to answer "the name is
+  // reserved; this is not a release" from a shipped package with nine working
+  // verbs (review 2026-08-20). Show the usage, and exit 0: being asked what you
+  // are is not an error.
+  if (verb === null) {
+    process.stdout.write(usage + notice);
+    return 0;
+  }
+  process.stdout.write(`ksor ${verb}: designed but not implemented in ${pkg.version}.\n${notice}`);
   return exitCodes.notImplemented;
 }
 

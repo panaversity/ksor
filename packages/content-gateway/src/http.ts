@@ -45,7 +45,10 @@ import type { Composition } from "./compose.js";
  * real in-flight exchange and a remote pool teardown; short enough that a
  * wedged shutdown is a delay, never an orphaned server holding the port.
  */
-const DRAIN_TIMEOUT_MS = envInt(process.env, "KSOR_DRAIN_TIMEOUT_MS", 10_000, { minimum: 100 });
+// 8s, not 10: a container runtime that scales to zero typically allows ~10s
+// between SIGTERM and SIGKILL (Cloud Run's default), so a 10s deadline lands
+// exactly on the kill and never gets to run. Leave headroom for the exit.
+const DRAIN_TIMEOUT_MS = envInt(process.env, "KSOR_DRAIN_TIMEOUT_MS", 8_000, { minimum: 100 });
 
 export interface Security {
   /** Allowed Host header values; null = do not Host-gate (public, bearer-gated). */
@@ -451,7 +454,12 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
 
   // Drain: close the listener FIRST, then the pool in its callback — the pool
   // must not be torn down under in-flight work (review, 2026-08-19).
+  let draining = false;
   const shutdown = (): void => {
+    // A second signal must not re-enter: `process.once` covers one signal each,
+    // but SIGTERM followed by SIGINT called this twice and ended the pool twice.
+    if (draining) return;
+    draining = true;
     // SAY SO. Attaching a SIGTERM/SIGINT listener suppresses Node's default
     // terminate, so from here on this process exits only because we let it —
     // and it used to do that silently, which is how a stopped-looking server
@@ -464,8 +472,10 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     // unkillable server rather than a slow one. Unref'd so it never DELAYS a
     // clean exit — it only catches one that never arrives.
     const deadline = setTimeout(() => {
+      // Non-zero: the drain did NOT finish, and a supervisor reading exit 0
+      // would record a clean stop for one that dropped work.
       console.error(`ksor gateway: drain exceeded ${DRAIN_TIMEOUT_MS}ms — exiting anyway`);
-      process.exit(0);
+      process.exit(75);
     }, DRAIN_TIMEOUT_MS);
     deadline.unref();
 

@@ -133,9 +133,13 @@ export type GateState = "off" | "uncalibrated" | { readonly floor: number };
 
 export function gateState(instance: ContentInstance): GateState {
   const floor = instance.abstain.vectorFloor;
-  if (floor === null) return "off";
   if (floor === "uncalibrated") return "uncalibrated";
-  return { floor };
+  if (floor !== null) return { floor };
+  // A keyword floor gates the DEGRADED path. Reporting "off" while that floor
+  // is actively abstaining told the agent this record cannot decline, on a
+  // record that was declining (review of PR #43).
+  if (instance.abstain.keywordFloor !== null) return { floor: instance.abstain.keywordFloor };
+  return "off";
 }
 
 /** Abstention is a TYPE the caller branches on, never a phrasing (spec §6). */
@@ -452,8 +456,16 @@ export interface ReadResult {
   readonly total_est_tokens?: number;
   readonly note?: string;
   readonly content_advisory?: string;
-  /** ONLY when an incoming snapshot token failed validation — serves active, says why. */
-  readonly snapshot?: string;
+  /**
+   * What happened to the caller's generation pin, on EVERY read.
+   *
+   * This used to be `snapshot`, a string present only on FAILURE — the same key
+   * `search` returns as an OBJECT, so `if (result.snapshot)` meant "pin
+   * succeeded" after search and "your pin FAILED" after read, and a silently
+   * honoured pin was indistinguishable from a server ignoring the field
+   * (review 2026-08-20). Renamed, retyped, and always present.
+   */
+  readonly snapshot_status: "pinned" | "unpinned" | string;
 }
 
 export interface ReadOptions {
@@ -614,7 +626,10 @@ export async function readDocument(
         }
       : {}),
     ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
-    ...(refreshed === undefined ? {} : { snapshot: refreshed }),
+    // Always stated: "pinned" when the caller's token was honoured, "unpinned"
+    // when they sent none, and the refresh reason when one was sent and could
+    // not be used.
+    snapshot_status: refreshed ?? (pinned === null ? "unpinned" : "pinned"),
   };
 }
 
@@ -635,7 +650,7 @@ export interface OutlineNodeWire {
 export async function outlineDocuments(
   ctx: ServiceContext,
   options: { node?: string | null; depth?: number | null; limit?: number } = {},
-): Promise<{ nodes: OutlineNodeWire[] }> {
+): Promise<{ nodes: OutlineNodeWire[]; has_more: boolean; limit: number }> {
   const inst = ctx.instance;
   // A declared-but-uncalibrated floor REFUSES every serve — outline is a
   // serve (it hands out the whole record structure: slugs, titles, root-
@@ -651,21 +666,30 @@ export async function outlineDocuments(
   // 2026-08-19); a drill-down shows at least the immediate children.
   const depth = root === null ? (options.depth ?? 0) : Math.max(1, options.depth ?? 1);
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: null };
+  const limit = options.limit ?? 200;
+  // One MORE than asked for, so truncation is DETECTED rather than inferred.
+  // A silently cut outline manufactures a false "not in the record" — the
+  // agent asks for the structure, gets a partial list with no signal, and
+  // concludes the document is absent (review 2026-08-20).
   const rows = await runRead(
     ctx.pool,
     inst.tenantId,
-    (client) => outlineQuery(client, scope, { root, depth, limit: options.limit ?? 200 }),
+    (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1 }),
     audienceScope(ctx),
   );
+  const has_more = rows.length > limit;
+  if (has_more) rows.length = limit;
   await logRead(ctx.pool, {
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { node: root, returned: rows.length },
+    detail: { node: root, returned: rows.length, has_more },
   });
   return {
+    has_more,
+    limit,
     nodes: rows.map((r) => ({
       slug: r.slug,
       kind: r.kind,

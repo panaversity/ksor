@@ -33,6 +33,7 @@ export {
 } from "./schema.js";
 export { grantIngest, revokeIngest, SchemaNotAppliedError, type GrantOutcome } from "./grant.js";
 export { keywordAbstains, vectorAbstains, type AbstainConfig } from "./lib/abstain.js";
+export { audienceGucs, WHOLE_RECORD_SCOPE, type AudienceModel } from "./lib/audience.js";
 export {
   hybridSearch,
   keywordSearch,

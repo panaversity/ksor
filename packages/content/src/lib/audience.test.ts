@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUDIENCE_ALLOWED,
   AudienceError,
+  audienceAllowed,
   audienceGucs,
   audiencePredicate,
   visibleTiers,
@@ -71,8 +72,23 @@ describe("audiencePredicate", () => {
 describe("audienceGucs + AUDIENCE_ALLOWED", () => {
   const SEP = "\u001f";
 
-  it("binds nothing when the record declares no model", () => {
-    expect(audienceGucs(noModel, null)).toEqual({});
+  it("binds the no-model SENTINEL, never nothing — an unbound scope must not read as unrestricted", () => {
+    expect(audienceGucs(noModel, null)).toEqual({ "app.audience_tiers": "*" });
+  });
+
+  it("the predicate DENIES when the scope was never bound (fail closed)", () => {
+    // The seam's whole job is to withhold; the previous shape evaluated TRUE
+    // for an unbound GUC, so a path that forgot to bind served every tier.
+    expect(AUDIENCE_ALLOWED).toContain("'*'");
+  });
+
+  it("is parameterised by alias, so the seam has exactly ONE definition", () => {
+    // Hand-copying it for the outline's second alias produced a copy that
+    // drifted and returned child_count 0 for every node.
+    expect(audienceAllowed("ch")).toContain("ch.visibility");
+    expect(audienceAllowed("n")).toBe(AUDIENCE_ALLOWED);
+    // same shape, only the alias differs
+    expect(audienceAllowed("ch").replace(/ch\./g, "n.")).toBe(AUDIENCE_ALLOWED);
   });
 
   it("binds the allowed tiers and the default, unit-separated", () => {

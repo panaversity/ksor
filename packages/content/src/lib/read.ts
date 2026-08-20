@@ -15,7 +15,7 @@
 
 import type pg from "pg";
 
-import { AUDIENCE_ALLOWED } from "./audience.js";
+import { AUDIENCE_ALLOWED, audienceAllowed } from "./audience.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
@@ -142,10 +142,7 @@ SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'
-           AND (coalesce(current_setting('app.audience_tiers', true), '') = ''
-                OR coalesce(ch.visibility,
-                            coalesce(current_setting('app.default_visibility', true), '')) =
-                   ANY (string_to_array(current_setting('app.audience_tiers', true), E'\\x1f')))
+           AND ${audienceAllowed("ch")}
            AND ch.node_id NOT IN (SELECT node_id FROM denied)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
