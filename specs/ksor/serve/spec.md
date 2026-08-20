@@ -72,6 +72,14 @@ and local coding agents alike against a URL (no stdio door; one obvious
 way). The bind is the posture: unset PORT → loopback (the dev door,
 rebind-protected, safe with auth off); a public bind is deliberate.
 
+**The protocol revision is 2026-07-28** (SDK v2's `createMcpHandler`;
+decision 13 revision 2026-08-20): handshake-free, with `server/discover` in
+place of `initialize` and the per-request `_meta` envelope. 2025-era clients
+are still served through the same stateless idiom, so adopting the current
+revision is not a cutoff for assistants that have not moved. Both eras are
+pinned by acceptance tests — the MCP client alone cannot prove which era is
+served, because it negotiates whichever the server offers.
+
 **Visibility.** Serve reads the staged tier of the audience it is built
 for — the same seam and five guarantees as the site shells
 (`specs/ksor/visibility/spec.md`). Nothing outside the tier is on disk for

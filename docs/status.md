@@ -119,40 +119,37 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
   and a **serve deploy recipe** (Dockerfile / managed-Postgres guide — today
   serve runs anywhere Node runs, with the env contract and fail-closed posture
   documented, but no packaged deploy).
-- **MCP protocol version — the upstream gap CLOSED; the upgrade is now ours to
-  make** (corrected 2026-08-20; the prior entry said the SDK "does not
-  implement it yet", which is no longer true). The gateway is on
-  `@modelcontextprotocol/sdk` **1.30.0** (published 2026-07-27), whose
-  `LATEST_PROTOCOL_VERSION` is **2025-11-25**. Upstream has since shipped **SDK
-  v2** — the monolith split into `@modelcontextprotocol/server` +
-  `@modelcontextprotocol/client` **2.0.0** (GA 2026-07-28, after an
-  April–July alpha/beta track) — and v2 **implements the 2026-07-28 revision**:
-  the `server/discover` handler, tasks, `input_required` multi-round-trip
-  results, and the `requestState` HMAC codec are all in the shipped package.
-  v1 is not deprecated and upstream commits to bug/security fixes for at least
-  six months after v2's release, so nothing is broken today.
+- **MCP protocol version — DONE: the surface ships on the current revision.**
+  The gateway serves the **2026-07-28** spec revision via SDK **v2**
+  (`@modelcontextprotocol/server` 2.0.0; `@modelcontextprotocol/client` 2.0.0
+  drives the acceptance walk). Taken before shipping deliberately: this PR is
+  the MCP surface's first release, so shipping on the superseded 2025-11-25
+  revision would have dated the product's headline surface on day one.
+  _(Supersedes this entry's two earlier states: "the SDK does not implement it
+  yet — the gap is upstream", then "the upgrade is now ours to make, but not
+  taken in this PR".)_
 
-  Verified against the published packages, because it decides how big the
-  upgrade is: v2 **keeps `WebStandardStreamableHTTPServerTransport`**, so
-  decision 13's transport choice stands (it is reversed only if that transport
-  is dropped — it was not). Our whole import surface is four specifiers
-  (`server/mcp.js`, `server/webStandardStreamableHttp.js`, `client/index.js`,
-  `client/streamableHttp.js`), and upstream ships a codemod
-  (`npx @modelcontextprotocol/codemod@latest v1-to-v2 .`) for the mechanical
-  renames. Two things make the upgrade attractive beyond the revision itself:
-  v2's dependency weight collapses (`server` → `zod` + `core`; `core` → `zod`;
-  the Node middleware is `@hono/node-server`, which the gateway already
-  carries — versus v1 dragging Express + cors + ajv), and v2 exposes natively
-  what we hand-rolled — `validateHostHeader` / `validateOriginHeader` /
-  `localhostAllowedHostnames` for DNS-rebind, and `requireBearerAuth` /
-  `verifyBearerToken` / `buildOAuthProtectedResourceMetadata` for the public
-  door.
+  What the door does now: it composes v2's `createMcpHandler` (a per-request
+  server factory, `legacy: "stateless"`, `responseMode: "json"`) instead of
+  hand-driving one transport per request. That entry is what serves the modern
+  era — a bare transport does not, proved by probe before and after: the old
+  wiring answered `server/discover` "Method not found" and rejected the
+  `2026-07-28` header as "Unsupported protocol version"; the new one answers
+  `server/discover` with `supportedVersions: ["2026-07-28"]`, the authored
+  instructions, and the real tool list. **2025-era clients keep working**
+  through the same stateless idiom the gateway already shipped, so the upgrade
+  is not a cutoff. Both eras are pinned by tests in
+  `content-gateway.db.test.ts` (a hand-built modern envelope — the MCP client
+  itself negotiates either era and would stay green on the old one).
 
-  **Deliberately NOT taken in this PR**: it is an SDK major on a three-week-old
-  GA, and the serve surface's seven security controls were just verified
-  against the current transport and auth code — a transport swap invalidates
-  part of that verification and must re-earn it. Owed as its own PR, with the
-  security re-verification as acceptance.
+  Decision 13's transport choice STANDS — v2 keeps
+  `WebStandardStreamableHTTPServerTransport`; only the entry changed. v2 also
+  deprecates its transport-level `allowedHosts`/`enableDnsRebindingProtection`
+  in favour of external middleware, which is what this door already does, and
+  its dependency weight falls (`server` → `zod` + `core`; the Node middleware
+  is `@hono/node-server`, already carried) rather than rising. The seven
+  security controls were re-verified against the new wiring as the acceptance
+  for the swap.
 
 - **No schema migration runner**: `schema.sql` is one file, versioned in
   `schema_meta` (2.1). That is correct while no adopter has production data

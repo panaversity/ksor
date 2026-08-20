@@ -249,14 +249,14 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     pin (the reserved "first validated public API" arrived). `@google/genai`
     as the default embedding provider behind the seam — the seam, not the
     vendor, is the contract. `jose` for the gateway kit's public-door JWT
-    verification. `@modelcontextprotocol/sdk` for the MCP surface. Guard
+    verification. `@modelcontextprotocol/server` (SDK v2, the 2026-07-28 revision; `@modelcontextprotocol/client` is a devDep for the acceptance walk) for the MCP surface. Guard
     rule 5 now scans every workspace package against this list; install
     scripts stay denied (three denials recorded in `pnpm-workspace.yaml`
     with verified why-comments). _Revision 2026-08-20 (ONE package, owner):
     the kernel is BUNDLED INTO the published CLI — `@panaversity/ksor` inlines
     `platform` + `content` + `gateway-kit` + `content-gateway` (workspace
     devDeps, tsdown `noExternal`), carries their external runtime deps (`pg`,
-    `@google/genai`, `@modelcontextprotocol/sdk`, `hono`, `@hono/node-server`,
+    `@google/genai`, `@modelcontextprotocol/server`, `hono`, `@hono/node-server`,
     `jose`, `zod`, `@types/pg`), and exposes ONE binary `ksor` with all verbs:
     `init`/`dev`/`build` plus `serve` (runs the gateway IN-PROCESS, a direct
     import), `ingest`/`schema`/`calibrate`/`gc` (delegated to the bundled
@@ -297,7 +297,25 @@ gateway` package, serve-by-spawn) is superseded._
     2026-08-20 revision: the gateway IS bundled into `@panaversity/ksor`, which
     now carries `hono` + `@hono/node-server` (guard rule 5 enrolls them) and is
     no longer zero-dep. The SDK's dependency weight is now install weight of the
-    one published package, not a reason to keep two._
+    one published package, not a reason to keep two._ _Revision 2026-08-20 (SDK
+    v2): upstream split the monolith into `@modelcontextprotocol/server` +
+    `@modelcontextprotocol/client` 2.0.0 (GA 2026-07-28) implementing the
+    **2026-07-28** revision, and the gateway moved to it before shipping — this
+    PR is the MCP surface's first release, so shipping it on a superseded
+    revision would have made the product's headline surface out of date on day
+    one. The transport choice STANDS: v2 keeps
+    `WebStandardStreamableHTTPServerTransport`. What changed is the entry — the
+    door now composes v2's `createMcpHandler` (per-request server factory,
+    `legacy: "stateless"`, `responseMode: "json"`) instead of hand-driving a
+    transport per request, because the modern era is served by that entry and
+    NOT by a bare transport (proved by probe: the bare wiring answered
+    `server/discover` "Method not found" and rejected the 2026-07-28 header as
+    "Unsupported protocol version"). 2025-era clients keep working through the
+    same stateless idiom, so the upgrade is not a cutoff. v2 also deprecates its
+    transport-level `allowedHosts`/`enableDnsRebindingProtection` in favour of
+    external middleware — which is what this door already does. Dependency
+    weight falls (`server` → `zod` + `core`; the Node middleware is
+    `@hono/node-server`, already carried) rather than rising._
 
 14. **Takedown denial is scoped — per-node by default, subtree by explicit
     opt-in** (owner, 2026-08-19). A review found the ported denial was

@@ -18,8 +18,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import {
   applySchema,
   buildShippedProvider,
@@ -232,6 +231,87 @@ Answer ONLY from this record. Abstention is a correct answer.
     }
     if (work !== undefined) rmSync(work, { recursive: true, force: true });
   }, 60_000);
+
+  // The era is the point of the SDK v2 upgrade, and it is INVISIBLE to the
+  // MCP client above, which negotiates whichever era the server offers and
+  // would stay green on the superseded one. 2026-07-28 is handshake-free:
+  // every request carries the protocol version and client capabilities in the
+  // `_meta` envelope and declares its method in the `Mcp-Method` header (so
+  // intermediaries route without parsing the body). `server/discover` replaces
+  // the `initialize` handshake and exists ONLY in this era — the pre-upgrade
+  // wiring answered it "Method not found" and rejected the header with
+  // "Unsupported protocol version" (both proved by probe, 2026-08-20).
+  it("serves the 2026-07-28 era: server/discover answers handshake-free", async () => {
+    const modern = (method: string, id: number): Promise<Response> =>
+      fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": "2026-07-28",
+          "mcp-method": method,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method,
+          params: {
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+              "io.modelcontextprotocol/clientCapabilities": {},
+            },
+          },
+        }),
+      });
+
+    const discover = await modern("server/discover", 1);
+    const discoverBody = (await discover.text()).trim();
+    expect(discover.status, `server/discover: ${discoverBody.slice(0, 300)}`).toBe(200);
+    const discovered = JSON.parse(discoverBody) as {
+      result?: { supportedVersions?: string[]; instructions?: string };
+    };
+    expect(
+      discovered.result?.supportedVersions,
+      `the era the server itself reports: ${discoverBody.slice(0, 300)}`,
+    ).toContain("2026-07-28");
+    // The authored identity reaches the modern surface too, not only legacy.
+    expect(discovered.result?.instructions, "instance.md body is the system prompt").toContain(
+      "Answer ONLY from this record",
+    );
+
+    // Tools resolve over the modern envelope — the surface actually works,
+    // rather than merely completing a handshake.
+    const tools = await modern("tools/list", 2);
+    const toolsBody = (await tools.text()).trim();
+    expect(tools.status, `tools/list: ${toolsBody.slice(0, 300)}`).toBe(200);
+    const listed = JSON.parse(toolsBody) as { result?: { tools?: { name: string }[] } };
+    expect((listed.result?.tools ?? []).map((t) => t.name)).toContain("search");
+  });
+
+  it("still serves 2025-era clients — the upgrade is not a cutoff", async () => {
+    // `legacy: "stateless"` keeps the previous revision working, so an
+    // assistant that has not moved yet is not broken by our upgrade.
+    const legacy = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "legacy-probe", version: "0.0.0" },
+        },
+      }),
+    });
+    const body = await legacy.text();
+    expect(legacy.status, body.slice(0, 200)).toBe(200);
+    expect(body, "the legacy handshake still negotiates its own revision").toContain("2025-11-25");
+  });
 
   it("serves the instance body as the server's instructions", () => {
     expect(client.getInstructions(), "instance.md body is the agent-surface prompt").toContain(

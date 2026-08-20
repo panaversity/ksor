@@ -17,7 +17,7 @@
  */
 
 import { serve, type ServerType } from "@hono/node-server";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import {
@@ -236,26 +236,21 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       : c.json({ error: "no public auth door configured" }, 404),
   );
 
-  // Stateless JSON: a fresh server + transport per POST. The response is
-  // BUFFERED (enableJsonResponse) and fully read before the transport is
-  // closed, so nothing races the close (SSE would — which is exactly why we
-  // do not serve it: review, 2026-08-19).
-  const handleMcp = async (request: Request): Promise<Response> => {
-    const server = buildServer(ctx, version);
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
-    });
-    await server.connect(transport);
-    try {
-      const response = await transport.handleRequest(request);
-      const body = await response.arrayBuffer();
-      return new Response(body, { status: response.status, headers: response.headers });
-    } finally {
-      void transport.close().catch(() => undefined);
-      void server.close().catch(() => undefined);
-    }
-  };
+  // The SDK v2 modern HTTP entry: serves the 2026-07-28 revision (per-request
+  // envelope, handshake-free, `server/discover`) and — with `legacy:
+  // "stateless"` — still answers 2025-era clients through the same stateless
+  // idiom this gateway shipped before, so an older assistant keeps working
+  // while new ones get the current protocol. The factory is per-request, which
+  // is the shape we already had: one fresh server per exchange, nothing held
+  // between them. `responseMode: "json"` keeps the response a single buffered
+  // JSON body — we emit no mid-call notifications, and a stream would race the
+  // per-request teardown (review, 2026-08-19).
+  const mcpHandler = createMcpHandler(() => buildServer(ctx, version), {
+    legacy: "stateless",
+    responseMode: "json",
+    onerror: (error) => console.error(`mcp handler: ${error.name}`),
+  });
+  const handleMcp = (request: Request): Promise<Response> => mcpHandler.fetch(request);
 
   const mcp = bodyLimit({
     maxSize: maxBodyBytes,
@@ -332,6 +327,10 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     server.close(() => {
       void pool.end().catch(() => undefined);
     });
+    // The v2 handler owns the modern leg: aborting in-flight modern exchanges
+    // is its job, not the listener's (the legacy leg is per-request and holds
+    // nothing between exchanges).
+    void mcpHandler.close().catch(() => undefined);
     // close() waits for EXISTING connections to end; an idle keep-alive MCP
     // client (between requests) would keep its callback from ever firing — and
     // thus pool.end() from running — until SIGKILL. Close idle sockets so the

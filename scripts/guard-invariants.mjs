@@ -157,7 +157,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     [
       `${P}ksor`,
       new Set([
-        "@modelcontextprotocol/sdk",
+        "@modelcontextprotocol/server",
         "hono",
         "@hono/node-server",
         "zod",
@@ -182,7 +182,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     [
       `${P}ksor-content-gateway`,
       new Set([
-        "@modelcontextprotocol/sdk",
+        "@modelcontextprotocol/server",
         // hono + node-server: the SDK's own Web-standard transport shape, and
         // both are ALREADY the SDK's transitive deps (zero new install bytes)
         // — declared directly so the door composes them instead of

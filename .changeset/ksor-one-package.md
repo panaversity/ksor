@@ -19,6 +19,13 @@ than an `npx` afterthought. The scaffold's first `pnpm install` is non-frozen
 (it resolves the tool and writes the lockfile); `pnpm dev` still needs no
 database.
 
+The MCP surface ships on the **2026-07-28** spec revision, via SDK v2
+(`@modelcontextprotocol/server`). Since this release is the agent surface's
+debut, it ships current rather than one revision behind: the door serves the
+handshake-free modern era (`server/discover`, per-request envelope) and keeps
+serving 2025-era clients through the same stateless idiom, so nothing that
+works today stops working.
+
 Scaffold serve-rung fixes (from a multi-agent operability review): the
 scaffolded format checker (`pnpm check`) now accepts the `database:`/`embedding:`/
 `retrieval:`/`budgets:` blocks that `ksor serve`/`ingest` require, so a project
