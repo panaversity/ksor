@@ -1,0 +1,121 @@
+---
+status: draft
+date: 2026-08-20
+claim: whether an agent — or a reader — can be trusted is decided by the governance of what it reads, so the governance a document carries must be visible on the surface that serves it
+evidence: panaversity/ksor#29
+---
+
+# Site governance rendering
+
+The record carries a governance vocabulary on every document and `pnpm check`
+enforces it. The site parses four of those keys and renders none of them.
+Where this spec and the code disagree, the code wins and this page is
+corrected in the same commit.
+
+## What the record already says, and the site already discards
+
+`ALLOWED_KEYS` (format-checker) governs eleven keys. `title`, `description`
+and `order` reach the reader. These do not:
+
+| Key | What the record means by it | Rendered today |
+| --- | --- | --- |
+| `status` | where the document sits in the governance lifecycle — `draft` / `review` / `approved` / `superseded`. **Required on every document.** | no |
+| `owner` | who stands behind it | no |
+| `provenance` | the sources it came from — **a list**, one entry per source, so a citation can point at exactly one of them | no |
+| `effective` | when it took effect | no |
+| `superseded_by` | its successor — **required** when `status: superseded`, validated to resolve inside `knowledge/` | no |
+
+`source.config.ts` already parses `status`, `owner`, `provenance` and
+`superseded_by` into page data and throws them away; the comment there records
+them as "tolerated … so a governed document always renders".
+
+## Why this is not only a presentation gap
+
+1. **A superseded document is served as if it were current.** The checker
+   demands a successor pointer precisely so the supersession survives into
+   every surface; the page swallows it. "Superseded documents are marked,
+   never deleted" is true of the record and false of the page a human reads.
+   This clause is a correctness fix, not a design improvement.
+2. **Provenance is load-bearing** (product principle 6). A list whose stated
+   purpose is that citations can point at exactly one entry is worth nothing
+   while no surface shows the entries.
+3. **One source, two surfaces** (product principle 2) — the MCP surface
+   answers with provenance and the website does not. Two surfaces, two
+   truths.
+4. A reader cannot distinguish a `draft` from an `approved` document, which
+   is the single cheapest governance signal the ladder offers at level 0.
+
+## The observable contract
+
+For each rendered document the shell displays, **when the document declares
+it**: `status`; `owner`; every `provenance` entry, each separately visible;
+`effective`; and `superseded_by` **as a working link to the successor's
+rendered page**.
+
+A document with `status: superseded` carries an unmistakable marker naming
+its successor. A reader must not have to notice a subtle badge to learn that
+what they are reading has been replaced.
+
+### Negative promises
+
+- **Nothing is inferred, defaulted or synthesized.** An absent `owner`
+  renders nothing — never "unknown", never a placeholder. An invented
+  governance value is worse than a missing one, because it reads as governed.
+- **No new authored content** — surface-contract clause 2 stands: the shell
+  renders the record and nothing authored inside itself.
+- **No second identity.** Governance rendering introduces no `id:`/`name:`
+  and derives every route from the path (product principle 3).
+- **Degrades everywhere**: static export, no JavaScript, and print. No
+  governance fact may exist only inside an interactive control.
+- **`llms.txt` and the per-page markdown artifacts are unchanged** — the
+  markdown artifact already carries the document's own frontmatter.
+
+## Where it binds: a sixth clause of the surface contract
+
+Governance rendering belongs in the **pinned surface contract**
+(`specs/ksor/init/spec.md` §surface contract), not in the reference shell —
+so swapping shells cannot silently drop it. The precedent is clause 5: the
+visibility guarantee is specified once and conformance-tested against both
+shells, because it is a product guarantee rather than shell chrome. The same
+reasoning applies here, and applies more sharply: a shell that renders the
+record while hiding who stands behind it is not rendering the record.
+
+Clause 6 therefore reads: *a shell renders each document's declared
+governance — status, owner, provenance entries, effective date, and a
+resolving link to a successor when superseded — inferring nothing.*
+
+**Scope consequence, stated plainly:** the Docusaurus conformance shell
+implements it too. That shell is explicitly "never feature parity", but a
+contract clause is not a feature — it is the bar.
+
+## Acceptance
+
+Red first, in this order:
+
+1. **Unit** — the governance projection from page data: present keys in,
+   rendered values out; absent keys yield nothing; `provenance` of one entry
+   and of many; a `superseded` document without `superseded_by` (which the
+   checker refuses, so the shell must fail loudly rather than render a
+   dangling supersession).
+2. **Conformance, both shells** — a fixture record containing one document
+   per governance shape (bare `draft`; fully-populated `approved`; a
+   `superseded` document pointing at its successor). Assert the rendered
+   HTML of each shell contains every declared value, the successor link
+   resolves to a real built page, and a document declaring nothing extra
+   renders no governance furniture at all.
+3. **Browser smoke** — the existing both-themes, zero-console-error walk
+   covers the new furniture; the successor link is clicked and lands.
+4. **Positive control** — the assertions fail against the current build.
+   A conformance test that cannot go red proves nothing.
+
+## Out of scope
+
+- **Per-document visibility / audience tier** — interacts with the visibility
+  staging sweeps and gets its own decision.
+- **Generations and `build.lock.json`** — a generation is a serve-side and
+  `ksor build` concept; a static site build has no access to one. The
+  citation pin stays unrendered until `ksor build` emits the record.
+- **Governed directives** (`:::quiz` and friends) — no grammar ratified
+  (panaversity/ksor#35).
+- **The typography / layout / identity pass** — the other half of
+  panaversity/ksor#29.
