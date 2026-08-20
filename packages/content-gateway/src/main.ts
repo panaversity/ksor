@@ -39,13 +39,20 @@ import { runHttp } from "./http.js";
  * released `ksor serve` announce 0.0.0 to every client (verified live by
  * probe; review 2026-08-20).
  */
-export const GATEWAY_VERSION: string = process.env["KSOR_GATEWAY_VERSION"] || "0.0.0";
+/**
+ * Fallback only. The bundling CLI knows the PUBLISHED version and passes it to
+ * `main(version)`; a module-level env read cannot work here, because this
+ * module is evaluated by the CLI's static import BEFORE the CLI's own main()
+ * body could set an env var (ESM evaluation order — the reason the previous
+ * attempt at this shipped inert in 0.0.4).
+ */
+export const GATEWAY_VERSION = "0.0.0";
 
-export async function main(): Promise<void> {
+export async function main(version: string = GATEWAY_VERSION): Promise<void> {
   try {
     const composition = await compose(
       path.resolve(process.env["KSOR_INSTANCE"] ?? "instance.md"),
-      GATEWAY_VERSION,
+      version,
     );
     await runHttp(composition);
   } catch (error) {
