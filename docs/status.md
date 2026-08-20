@@ -6,17 +6,28 @@ updated: 2026-08-20.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.3** on npm (trusted publishing, provenance
-attached). **In the currently published 0.0.3** it ships the working
+`@panaversity/ksor` **0.0.7** on npm (trusted publishing, provenance
+attached). **In the currently published 0.0.7** it ships the working
 `ksor init` described below — including the visibility model and the deploy
-story — plus the CLI contract where `dev`, `build` AND `serve` still report
-"designed but not implemented" and exit `2`; an unknown verb is refused with
-exit `1` and a stable `error: unknown-verb` stderr slug. The package root
-exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the
-tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`/
-`calibrate`/`gc` real — that lands in the NEXT release, 0.0.4, not 0.0.3.)
+story — AND the bundled content kernel: `serve`, `ingest`, `schema`, `grant`,
+`calibrate`, and `gc` all run from the one `ksor` binary. Only `dev` and
+`build` still report "designed but not implemented" and exit `2`; an unknown
+verb is refused with exit `1` and a stable `error: unknown-verb` stderr slug.
+The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs
+ship inside the tarball under `docs/`.
 
-## Implemented (released in 0.0.3)
+Verified end to end against published 0.0.7 (2026-08-20, fresh `npm install`
+into a bare project, driven by a real MCP client over a live Neon Postgres and
+real Gemini embeddings): install · `schema` · `grant` · first `ingest` builds
+and flips · a **second ingest consumes nothing** ("unchanged — generation N
+already serves this corpus") · `serve` boots from `.env` alone · the server
+reports its real version · three MCP tools · `search` returns cited passages
+carrying their generation · `read` is byte-faithful. Two regressions repaired
+since 0.0.3 are covered by that walk: the version the server reported was inert
+(0.0.4 said `0.0.0`), and the scaffold's refresh script collided with pnpm's
+builtin `up`.
+
+## Implemented (released in 0.0.7)
 
 - **`ksor init`** — the first working verb, implemented red-first against
   the ratified spec (`specs/ksor/init/spec.md`). One command emits a
@@ -161,12 +172,10 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
 
 - `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
   own `pnpm dev` / `pnpm build` work today without them.
-  `ksor serve`, `ingest`, `schema`, `grant`, `calibrate`, `gc` ARE implemented — the
-  bundled kernel provides them from the one `ksor` binary. `serve` runs the
-  MCP server in-process (reads `./instance.md`; exits `3` with a remedy when
-  it is missing). Verified via a real `pnpm pack` → `npm install`. Not yet
-  released (pending the changesets release; the existing `@panaversity/ksor`
-  publish setup covers it — no new package to bootstrap).
+  `ksor serve`, `ingest`, `schema`, `grant`, `calibrate`, `gc` ARE implemented
+  and RELEASED in 0.0.7 — the bundled kernel provides them from the one `ksor`
+  binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
+  `3` with a remedy when it is missing).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
