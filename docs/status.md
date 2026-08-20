@@ -183,8 +183,14 @@ builtin `up`.
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
-- The agent-eval harness (contract in AGENTS.md → Testing); until it
-  exists, acceptance (6) runs as a manual rubric-scored walk.
+- The agent-eval harness's RELEVANCE and CORRECTNESS classes. The
+  **behavioural** class — the one the contract says gates — now exists at
+  `packages/content/src/evals/behavioural.db.test.ts`: citations resolve to a
+  readable generation, the abstention gate is disclosed on every envelope, and
+  an unpublished generation is never served (all three deterministic, any
+  provider), plus in/out-of-corpus separation and abstention across a
+  scope-adjacent near-miss, measured in a real embedding space where a key is
+  configured.
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry
   import fences worth verifying.
 
