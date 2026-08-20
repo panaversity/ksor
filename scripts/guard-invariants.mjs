@@ -136,24 +136,95 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
-// Rule 5 — the published package declares no runtime dependencies that are not
-// listed here with a decision reference. Keeping the runtime thin is a product
-// guarantee (see AGENTS.md coding principle 3).
+// Rule 5 — no workspace package declares a runtime dependency outside its
+// OWN allowlist. Keeping the runtime thin is a product guarantee (AGENTS.md
+// coding principle 3), and it is PER PACKAGE, so one package's dependency can
+// never be silently inherited by another (review finding, 2026-08-19 — a
+// shared allowlist meant adding zod to the CLI would have passed).
+// `@panaversity/ksor` carried ZERO runtime deps until decision 12's
+// 2026-08-20 revision bundled the kernel into it; it now enrols the kernel's
+// externals explicitly, which is the point — enrolment is the record of that
+// reversal, not an exception to the rule. Each package is enrolled; an
+// unenrolled package with any runtime dep is a violation, and enrolment is a
+// decision with a name on it (decision 12).
 {
-  const allowedRuntimeDeps = new Map([
-    // "package-name": "AGENTS.md Decisions #N — one-line reason",
+  const P = "@panaversity/";
+  const perPackageRuntimeDeps = new Map([
+    // The ONE published package (decision 12, publish revision 2026-08-20,
+    // owner): the kernel is BUNDLED into the CLI (platform/content/gateway-kit/
+    // content-gateway inlined via tsdown noExternal), so their external runtime
+    // deps surface HERE. This reverses the decision-1/13 zero-dep guarantee by
+    // owner call — every `npx @panaversity/ksor init` now pulls this set, and
+    // `ksor serve` runs the gateway in-process. Never add BEYOND the kernel's
+    // externals without a recorded decision.
+    [
+      `${P}ksor`,
+      new Set([
+        "@modelcontextprotocol/server",
+        "hono",
+        "@hono/node-server",
+        "zod",
+        "pg",
+        "@types/pg",
+        "@google/genai",
+        "jose",
+      ]),
+    ],
+    // The kernel packages (decision 12). drizzle-orm was dropped as unused —
+    // schema.sql is the DDL source of truth and queries are raw pg. @types/pg
+    // is a DECLARED dependency (not a devDep) of every package whose published
+    // .d.mts exposes pg.Pool/PoolClient in its public API, so an external TS
+    // consumer resolves those types (decision 12, publish revision 2026-08-19).
+    [`${P}ksor-postgres`, new Set(["pg", "@types/pg"])],
+    [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "@google/genai", `${P}ksor-postgres`])],
+    [`${P}ksor-gateway-kit`, new Set(["jose"])],
+    // The ONE published kernel package (decision 12, publish revision
+    // 2026-08-19): platform/content/gateway-kit are BUNDLED in (workspace
+    // devDeps, noExternal in tsdown) — never separate npm packages — so their
+    // external runtime deps surface HERE as this package's own dependencies.
+    [
+      `${P}ksor-content-gateway`,
+      new Set([
+        "@modelcontextprotocol/server",
+        // hono + node-server: the SDK's own Web-standard transport shape, and
+        // both are ALREADY the SDK's transitive deps (zero new install bytes)
+        // — declared directly so the door composes them instead of
+        // hand-rolling the HTTP layer three findings landed in (decision 13).
+        "hono",
+        "@hono/node-server",
+        "zod",
+        "pg",
+        "@types/pg",
+        "@google/genai", // bundled content's embedding provider
+        "jose", // bundled gateway-kit's JWT verification
+      ]),
+    ],
   ]);
-  const pkg = JSON.parse(
-    readFileSync(path.join(repoRoot, "packages", "ksor", "package.json"), "utf8"),
-  );
-  for (const dep of Object.keys(pkg.dependencies ?? {})) {
-    if (!allowedRuntimeDeps.has(dep)) {
-      violate(
-        5,
-        `packages/ksor depends on "${dep}" at runtime without a recorded decision`,
-        "every runtime dependency ships to every adopter; each one needs an ADR-level reason",
-        `record the decision in AGENTS.md → Decisions, then add "${dep}" to allowedRuntimeDeps in this guard with that reference`,
-      );
+  for (const dir of readdirSync(path.join(repoRoot, "packages"))) {
+    const manifest = path.join(repoRoot, "packages", dir, "package.json");
+    if (!existsSync(manifest)) continue;
+    const pkg = JSON.parse(readFileSync(manifest, "utf8"));
+    const allowed = perPackageRuntimeDeps.get(pkg.name);
+    if (allowed === undefined) {
+      if (Object.keys(pkg.dependencies ?? {}).length > 0) {
+        violate(
+          5,
+          `packages/${dir} (${pkg.name}) is not enrolled in rule 5's per-package allowlist`,
+          "every package's runtime dependency set is a named decision — a new package with deps must enrol",
+          `add "${pkg.name}" to perPackageRuntimeDeps in this guard with its allowed dep set`,
+        );
+      }
+      continue;
+    }
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      if (!allowed.has(dep)) {
+        violate(
+          5,
+          `${pkg.name} depends on "${dep}" at runtime, which its allowlist does not permit`,
+          "every runtime dependency ships to every adopter; each one needs an ADR-level reason",
+          `record the decision in AGENTS.md → Decisions, then add "${dep}" to ${pkg.name}'s set in this guard`,
+        );
+      }
     }
   }
 }

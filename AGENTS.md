@@ -78,19 +78,47 @@ Used precisely; do not repurpose.
 
 ## Repository layout
 
-| Path                        | What it is                                                 |
-| --------------------------- | ---------------------------------------------------------- |
-| `packages/ksor/`            | the published package: CLI + SDK (MCP surface lands here)  |
-| `packages/ksor/docs/`       | user docs, shipped inside the npm tarball                  |
-| `workbench/example-corpus/` | living KSoR fixture: dev target, test + eval surface       |
-| `workbench/shells/`         | alternative site shells proving the swap seam (decision 9) |
-| `docs/status.md`            | the only authority on what is implemented (npm links it)   |
-| `research/`                 | plans and records; frontmatter is guard-enforced           |
-| `specs/`                    | one-page feature contracts; frontmatter is guard-enforced  |
-| `.agents/skills/`           | repo-maintenance skills (`.claude/skills` symlinks here)   |
-| `scripts/`                  | guards, corpus checks, boundary tests — plain node/vitest  |
-| `tsconfig.base.json`        | the shared strict base — extend, don't fork                |
-| `.githooks/`                | committed pre-commit hook (`pnpm prepare` sets hooksPath)  |
+| Path                                                       | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/ksor/`                                           | the published package: CLI + SDK (MCP surface lands here)                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `packages/{postgres,content,gateway-kit,content-gateway}/` | the kernel (decision 11): Postgres access discipline (pooling, scoped transactions, retry classification), the content corpus store + retrieval + abstention, serving postures, and the content MCP door (one gateway per record — `content-gateway` today; `identity-gateway`, `praxis-gateway` follow). BUNDLED into `@panaversity/ksor` — the CLI inlines all four and exposes one `ksor` binary; the kernel packages stay private, never published (decision 12 publish revision 2026-08-20) |
+| `packages/ksor/docs/`                                      | user docs, shipped inside the npm tarball                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `workbench/example-corpus/`                                | living KSoR fixture: dev target, test + eval surface                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `workbench/shells/`                                        | alternative site shells proving the swap seam (decision 9)                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `docs/status.md`                                           | the only authority on what is implemented (npm links it)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `research/`                                                | plans and records; frontmatter is guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `specs/`                                                   | one-page feature contracts; frontmatter is guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `.agents/skills/`                                          | repo-maintenance skills (`.claude/skills` symlinks here)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `scripts/`                                                 | guards, corpus checks, boundary tests — plain node/vitest                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `tsconfig.base.json`                                       | the shared strict base — extend, don't fork                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `.githooks/`                                               | committed pre-commit hook (`pnpm prepare` sets hooksPath)                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+### How a package is named
+
+The table above is generated by a rule, not by taste. ksor is built to hold
+MORE records than one — the content SoR today, identity and praxis after it —
+so the package names have to say which layer a thing belongs to before anyone
+argues about it:
+
+| Layer                 | Name                    | Holds                                              |
+| --------------------- | ----------------------- | -------------------------------------------------- |
+| shared infrastructure | `ksor-postgres`         | pooling, scoped transactions, retry classification |
+| shared serving        | `ksor-gateway-kit`      | auth, fail-closed bind, transport security         |
+| ONE record's store    | `ksor-<record>`         | `ksor-content`                                     |
+| ONE record's MCP door | `ksor-<record>-gateway` | `ksor-content-gateway`                             |
+| the product           | `@panaversity/ksor`     | the published CLI; bundles the rest                |
+
+A second record adds exactly two packages — `ksor-identity` and
+`ksor-identity-gateway` — and no new pattern. If a change needs a pattern that
+is not here, that is the signal to stop and decide, not to invent a name.
+
+**Never name a package for a layer that admits anything.** `platform`, `core`,
+`common`, `shared`, `utils` constrain nothing, so unrelated code accretes into
+them — which is exactly what happened to `ksor-platform` before it became
+`ksor-postgres` (decision 11 revision 2026-08-20): it had quietly collected env
+helpers that duplicated gateway-kit's. The test a name must pass is that
+"does this belong in X?" has an answer. `postgres` passes; `content` passes (it
+is a record, alongside identity and praxis); `platform` never could.
 
 ## Commands
 
@@ -191,13 +219,193 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     lands in the adopter's proprietary repo free of attribution
     obligations, and init never emits a LICENSE file into a repo whose
     knowledge is theirs. The grant sentence lives in the scaffolded README.
+11. **The content kernel converts whole; serve is the graduated rung**
+    (owner, 2026-08-19). The predecessor kernel's content SoR
+    (`sor-agentfactory @ b554f91`: sor-content, the sor-platform trim, the
+    gateway-kit auth/serve/harden slice, and the content gateway) converts
+    to TypeScript in this workspace — retrieval, generations, the calibrated
+    abstention method with its measurement history, and the fail-closed
+    dual-mode serving posture — with the Python suite as conversion oracle:
+    gold sets, schema contract, and calibration data extract as conformance
+    fixtures first, red before any port. The MCP door speaks the MCP
+    TypeScript SDK, stateless Streamable HTTP (one transport — the shape
+    the production gateway ships; a local agent uses the same URL).
+    Placement is the
+    ladder: `ksor init` stays database-free (`pnpm dev` unchanged — the
+    out-of-the-box claim holds); the kernel lands as framework-owned
+    workspace packages behind `ksor serve`, and adopters climb to it.
+    Retrieval runs in a real embedding space through the merged provider
+    seam; CI carries a Gemini key for the gated live tiers. Record:
+    `research/kernel-conversion.md`; contract: `specs/ksor/serve/spec.md`.
+    Each crossing mechanism still answers decision 6's gate individually;
+    the database-free-init clause is reversed only by an explicit owner
+    decision recorded here. _Revision 2026-08-20: the kernel's floor package was
+    renamed `ksor-platform` → **`ksor-postgres`** (directory `packages/postgres`).
+    "Platform" was inherited from the predecessor and is a bucket name — it
+    constrains nothing, so unrelated code accretes: it had already collected
+    `envInt`/`envFloat`, duplicating a differently-shaped pair in gateway-kit.
+    The package is Postgres access discipline (pooling, scoped transactions with
+    GUCs, retry classification), and the new name makes membership answerable.
+    The env helpers moved to `content`, their only consumer. Private package, so
+    no published contract changed._ _Revision 2026-08-20 (owner): MCP serving is a
+    CORE surface of every KSoR, not an optional rung, so the served tool ships
+    as a FIRST-CLASS scaffold dependency — `ksor init` writes
+    `@panaversity/ksor` into the scaffold's `package.json` dependencies, pinned
+    to the EXACT CLI version that scaffolded the project (via the existing
+    `KSOR-STAMP-VERSION` stamp), plus `serve`/`ingest` convenience scripts, so
+    `pnpm serve` is a local, version-pinned command rather than an `npx`
+    afterthought. This does NOT reverse the database-free-init clause:
+    installing the dependency needs no database, and `pnpm dev` still runs the
+    site without one — the "climb" to serving is now only standing up Postgres
+    and a provider key, not acquiring the tool. The committed scaffold lockfile
+    stays site-only (a stamped version cannot be pre-resolved into a committed
+    lock), so the adopter's FIRST `pnpm install` is non-frozen and writes the
+    lock; their shipped `validate.yml` runs no install, so their CI is
+    unaffected. Verified live: an emitted scaffold's `pnpm install` resolves the
+    pinned dep, links the `ksor` bin, and `pnpm exec ksor` runs. Reversed only
+    by an explicit owner decision recorded here._
 
-**Open questions — decide independently when the work arrives:** how retrieval
-and abstention are implemented for `serve` — reimplement in TS or convert the
-predecessor kernel's logic (decision 6 permits either; revision note: this was
-recorded as settled "stays Python" on 2026-08-17, reversed 2026-08-18). PyPI
+12. **The kernel's dependency set** (2026-08-19, with decision 11; each
+    entry individually reversible by a better tool winning a recorded
+    comparison). One Postgres driver: `pg`, queried **raw** —
+    **`schema.sql` stays the DDL source of truth** (converted from the
+    oracle; a rendered-SQL test in `schema.integration.test.ts` pins it).
+    _Revision 2026-08-19: `drizzle-orm` was proposed here for typed queries
+    with an information_schema drift test, then DROPPED as unused before it
+    landed — no package declares it, and guard rule 5 enforces its absence;
+    raw `pg` with explicit projection-width guards carries the kernel. If a
+    typed-query layer returns, it re-earns its place with the drift test the
+    original proposal named._ _Revision 2026-08-19 (publish prep): `@types/pg`
+    is a declared `dependency` (not a devDep) of `ksor-postgres`,
+    `ksor-content`, and `ksor-content-gateway` — their published `.d.mts`
+    exposes `pg.Pool`/`PoolClient` in the public API, so an external TS
+    consumer needs the types to resolve; enrolled in guard rule 5's per-package
+    allowlist._ `zod` from the catalog
+    pin (the reserved "first validated public API" arrived). `@google/genai`
+    as the default embedding provider behind the seam — the seam, not the
+    vendor, is the contract. `jose` for the gateway kit's public-door JWT
+    verification. `@modelcontextprotocol/server` (SDK v2, the 2026-07-28 revision; `@modelcontextprotocol/client` is a devDep for the acceptance walk) for the MCP surface. Guard
+    rule 5 now scans every workspace package against this list; install
+    scripts stay denied (three denials recorded in `pnpm-workspace.yaml`
+    with verified why-comments). _Revision 2026-08-20 (ONE package, owner):
+    the kernel is BUNDLED INTO the published CLI — `@panaversity/ksor` inlines
+    `postgres` + `content` + `gateway-kit` + `content-gateway` (workspace
+    devDeps, tsdown `noExternal`), carries their external runtime deps (`pg`,
+    `@google/genai`, `@modelcontextprotocol/server`, `hono`, `@hono/node-server`,
+    `jose`, `zod`, `@types/pg`), and exposes ONE binary `ksor` with all verbs:
+    `init`/`dev`/`build` plus `serve` (runs the gateway IN-PROCESS, a direct
+    import), `ingest`/`schema`/`calibrate`/`gc` (delegated to the bundled
+    write-plane dispatcher). So an adopter installs ONE thing — `@panaversity/
+ksor` — for everything, and the content SoR is always present. This
+    REVERSES the decision-1/13 zero-runtime-deps guarantee for the CLI (by
+    owner call, weighed against a separate package): the cost is that
+    `npx @panaversity/ksor init` now pulls ~60MB; the win is no second package
+    to publish (the existing `@panaversity/ksor` publish + trusted-publisher
+    setup covers it) and no spawn/resolve dance. `content`'s `schema.sql` ships
+    as `ksor/schema/` (build-copied, gitignored, resolved via
+    `import.meta.url`). `postgres`/`content`/`gateway-kit`/`content-gateway`
+    stay `private: true` forever — dev/test workspace packages, bundled, never
+    published. Verified by a real `pnpm pack` → `npm install` in a fresh dir:
+    `ksor serve`/`ksor schema`/`ksor ingest` run, schema resolves, deps are
+    self-contained. The prior revision (separate `@panaversity/ksor-content-
+gateway` package, serve-by-spawn) is superseded._
+
+13. **The content gateway's HTTP door composes the SDK's Web-standard
+    transport, not a hand-rolled one** (owner-directed, 2026-08-19). The MCP
+    surface IS the product; shipping a door hand-built on `node:http` — which
+    reimplemented routing, body parsing, security headers, and the loopback
+    DNS-rebind default that the SDK already gets right, and in which three
+    security review findings landed — is shipping bad MCP for the one thing
+    that is the point. The door uses
+    `WebStandardStreamableHTTPServerTransport` (`Request → Response`,
+    stateless) behind Hono, with Host validation as middleware (the shape the
+    SDK's deprecation of its transport-level option points to) and
+    `secureHeaders` / `bodyLimit` middleware replacing the hand-rolled
+    hardening. `hono` and `@hono/node-server` are declared runtime deps of
+    the content-gateway — already the MCP SDK's own transitive deps, so zero
+    new install bytes. What stays ours because it is good: `buildAuth` and the
+    fail-closed boot posture, the three probes, and the whole content kernel.
+    Reversed only if the SDK drops the Web-standard transport. _Revision
+    2026-08-20: the transport choice stands unchanged. The packaging
+    sub-claim that these deps "never reach the published zero-dep `ksor` CLI"
+    and "the gateway can never fold into it" is SUPERSEDED by decision 12's
+    2026-08-20 revision: the gateway IS bundled into `@panaversity/ksor`, which
+    now carries `hono` + `@hono/node-server` (guard rule 5 enrolls them) and is
+    no longer zero-dep. The SDK's dependency weight is now install weight of the
+    one published package, not a reason to keep two._ _Revision 2026-08-20 (SDK
+    v2): upstream split the monolith into `@modelcontextprotocol/server` +
+    `@modelcontextprotocol/client` 2.0.0 (GA 2026-07-28) implementing the
+    **2026-07-28** revision, and the gateway moved to it before shipping — this
+    PR is the MCP surface's first release, so shipping it on a superseded
+    revision would have made the product's headline surface out of date on day
+    one. The transport choice STANDS: v2 keeps
+    `WebStandardStreamableHTTPServerTransport`. What changed is the entry — the
+    door now composes v2's `createMcpHandler` (per-request server factory,
+    `legacy: "stateless"`, `responseMode: "json"`) instead of hand-driving a
+    transport per request, because the modern era is served by that entry and
+    NOT by a bare transport (proved by probe: the bare wiring answered
+    `server/discover` "Method not found" and rejected the 2026-07-28 header as
+    "Unsupported protocol version"). 2025-era clients keep working through the
+    same stateless idiom, so the upgrade is not a cutoff. v2 also deprecates its
+    transport-level `allowedHosts`/`enableDnsRebindingProtection` in favour of
+    external middleware — which is what this door already does. Dependency
+    weight falls (`server` → `zod` + `core`; the Node middleware is
+    `@hono/node-server`, already carried) rather than rising._
+
+14. **Takedown denial is scoped — per-node by default, subtree by explicit
+    opt-in** (owner, 2026-08-19). A review found the ported denial was
+    per-node only, so a section takedown left its documents served. Rather
+    than flip the whole mechanism to subtree (a governance reversal), scope
+    is a property of the takedown row: `scope = 'node'` (default) denies
+    exactly the listed `stable_id` — identity, immune to reorganization, an
+    auditable frozen list; `scope = 'subtree'` denies the node AND every
+    descendant, resolved at SERVING time by a recursive `parent_id` walk.
+    Serving-time (not write-time expansion) is required because
+    `takedown_denylist` has no generation column by design — a subtree deny
+    must also cover descendants a FUTURE re-ingest adds. The walk is by
+    `parent_id`, NOT a `stable_id` prefix — a frontmatter `sor_id` override
+    decouples stable_id from the path, so a prefix both leaks sor_id children
+    and over-matches prefix-siblings (both proved in `takedown.db.test.ts`).
+    One seam (`lib/takedown.ts`: `DENIED_CTE` + `DENY`) binds search, read,
+    outline, and the calibration sampler; an empty denylist makes the seed
+    empty and the recursion terminate at once, so the hot path pays nothing.
+    Schema: `takedown_denylist.scope` (schema_meta 2.1, additive with a
+    default → a 2.0 reader still reads a 2.1 DB). When the `takedown` write
+    verb lands it must make a container selection an EXPLICIT choice —
+    expand to leaves (identity) or declare a subtree rule — never silently
+    guess. Reversed per-clause with evidence; the `node` default is not
+    reversible without an owner decision (it is the identity guarantee).
+
+**Open questions — decide independently when the work arrives:** ~~how
+retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
+decision 11: the predecessor kernel converts (revision trail: recorded as
+settled "stays Python" 2026-08-17, reversed to "either" 2026-08-18). PyPI
 `ksor` is left unclaimed on purpose (a PyPI pending publisher reserves nothing
 — only an upload claims a name); revisit only if the exposure changes.
+
+**The two the SECOND record forces** (surfaced 2026-08-20 while renaming the
+floor package; neither blocks the content SoR, both must be answered before
+`ksor-identity` exists, and neither is a naming question):
+
+1. **Which half of `schema.sql` is governance, not content** (issue #17). The schema owns
+   two kinds of table. Content-shaped: `content_nodes`, `chunks`, `sources`,
+   `node_centroids`, `slug_aliases`. Generic to ANY record: `corpora`,
+   `ingestion_runs`, `schema_meta`, `takedown_denylist`,
+   `ingest_tenant_grants`, `retrieval_log` — generations, takedown, ingest
+   authorization and the provenance trail are machinery every SoR needs
+   IDENTICALLY, and they are where the product's guarantees live. A second
+   record either forks them (and the guarantees drift per record — the failure
+   mode) or shares them (and something must own the shared half). The roles are
+   already namespaced `sor_content_*`, so the split is half-anticipated. Decide
+   before duplicating, because duplicated governance is the one duplication
+   this project cannot afford.
+2. **The bundling ceiling** (issue #18). Decision 12 inlines the whole kernel into the one
+   published CLI — ~60MB with ONE record. Three records put content + identity
+   - praxis and their dependencies into every `npx @panaversity/ksor init`,
+     including for adopters who will never climb to a served rung at all. The
+     answer is either selective bundling or separately installable records; what
+     is NOT available is "keep inlining everything", so the decision arrives with
+     the second record whether or not it is taken deliberately.
 
 ## Product principles
 

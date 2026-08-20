@@ -5,6 +5,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["packages/*/src/**/*.test.ts", "scripts/**/*.test.ts"],
-    exclude: ["**/*.integration.test.ts", "**/node_modules/**", "**/dist/**"],
+    // *.db.test.ts is the database tier (vitest.db.config.ts) — it needs a
+    // real Postgres and must never be collected here, or an exported
+    // KSOR_DB_URL runs heavy DB suites in the parallel unit tier and they
+    // race (found live 2026-08-19).
+    exclude: ["**/*.integration.test.ts", "**/*.db.test.ts", "**/node_modules/**", "**/dist/**"],
   },
 });

@@ -13,6 +13,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildScaffold } from "./e2e-build.js";
+import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The visibility spec's acceptance (specs/ksor/visibility/spec.md), run
@@ -150,9 +153,7 @@ describe.runIf(enabled).each(SHELLS)(
       // 2026-08-18: the suite's own pre-wipe made that structurally
       // invisible).
       if (!opts?.keepOut) rmSync(outDir, { recursive: true, force: true });
-      return run(
-        "pnpm",
-        ["build"],
+      return buildScaffold(
         project,
         audience === undefined ? { KSOR_AUDIENCE: "" } : { KSOR_AUDIENCE: audience },
       );
@@ -198,10 +199,16 @@ describe.runIf(enabled).each(SHELLS)(
       );
 
       swap?.(project);
-      mustPass(
-        run("pnpm", ["install", ...(swap ? ["--no-frozen-lockfile"] : [])], project),
-        "install",
-      );
+      // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build
+      // (the pinned exact version is unpublished in CI/dev).
+      const localKsor = injectLocalKsor(project);
+      // Non-frozen by design: the scaffold pins `@panaversity/ksor` to the exact
+      // CLI version, absent from the committed site-only lockfile, so the first
+      // install adds it (decision 11 revision 2026-08-20); a shell swap changes
+      // the dependency set the same way. CI defaults frozen-lockfile on.
+      mustPass(run("pnpm", ["install", "--no-frozen-lockfile"], project), "install");
+      expectLocalKsorResolved(project, localKsor);
+      cleanupLocalKsor(localKsor);
 
       // The record itself must be legal before any build claims anything.
       mustPass(

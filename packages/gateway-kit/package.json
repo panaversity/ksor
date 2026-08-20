@@ -1,0 +1,33 @@
+{
+  "name": "@panaversity/ksor-gateway-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fail-closed serving kit for KSoR gateways: auth postures, hardening, transport security — converted from the production sor-gateway-kit slice.",
+  "license": "Apache-2.0",
+  "author": "Panaversity",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "jose": "^6.2.9"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "0.22.14",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

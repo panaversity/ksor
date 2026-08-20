@@ -8,6 +8,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { main as runGateway } from "@panaversity/ksor-content-gateway";
+import { runContentCli } from "@panaversity/ksor-content";
+
 import { exitCodes, resolveCommand, verbs } from "./index.js";
 import { runInit } from "./init/index.js";
 import { unsupportedPlatform } from "./init/platform.js";
@@ -31,16 +34,21 @@ const usage =
   "\n" +
   "Usage: ksor <verb>\n" +
   "\n" +
-  `Verbs (init is implemented; the rest exit 2 until they ship):\n` +
-  "  init    create a new KSoR project (implemented)\n" +
-  "  dev     run the human surface locally, watching\n" +
-  "  build   validate and build both surfaces\n" +
-  "  serve   expose the MCP agent surface\n" +
+  `Verbs (dev and build exit 2 until they ship; the rest are implemented):\n` +
+  "  init       create a new KSoR project\n" +
+  "  dev        run the human surface locally, watching\n" +
+  "  build      validate and build both surfaces\n" +
+  "  serve      start the MCP agent surface (reads ./instance.md)\n" +
+  "  ingest     load / refresh the corpus into the database\n" +
+  "  calibrate  measure the abstention floor\n" +
+  "  schema     apply the database schema\n" +
+  "  grant      authorize ingest for this corpus (or --revoke it)\n" +
+  "  gc         collect superseded generations\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
   `Docs: node_modules/${pkg.name}/docs · ${pkg.homepage}\n`;
 
-function main(args: readonly string[]): number {
+async function main(args: readonly string[]): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
     process.stdout.write(usage);
     return 0;
@@ -76,6 +84,43 @@ function main(args: readonly string[]): number {
     );
   }
 
+  if (verb === "serve") {
+    // The kernel is bundled INTO this package (decision 12 publish revision),
+    // so serve runs the gateway IN-PROCESS: this process becomes the MCP
+    // server. runGateway reads ./instance.md + the DSN env it names, runs its
+    // own fail-closed boot and exit contract (it process.exit()s on error and
+    // holds the event loop while serving), and drains on SIGTERM/SIGINT.
+    // Honour --instance like every sibling corpus verb. Without this the flag
+    // was silently ignored and ./instance.md served instead — a user who
+    // extrapolated from ingest/schema/grant/calibrate/gc served the WRONG
+    // corpus with no signal (review, 2026-08-20). The gateway reads
+    // KSOR_INSTANCE, so the flag sets it rather than growing a second path.
+    const flag = args.indexOf("--instance");
+    const instance = flag === -1 ? undefined : args[flag + 1];
+    if (flag !== -1 && (instance === undefined || instance.startsWith("-"))) {
+      process.stderr.write("error: bad-args\n--instance needs a path to an instance.md\n");
+      return exitCodes.refused;
+    }
+    if (instance !== undefined) process.env["KSOR_INSTANCE"] = instance;
+    // The served version is the PUBLISHED one; the gateway cannot know it.
+    process.env["KSOR_GATEWAY_VERSION"] = pkg.version;
+    await runGateway();
+    return 0;
+  }
+
+  // The corpus operations the bundled kernel provides — delegated to its write-
+  // plane dispatcher (schema --apply / ingest / calibrate / gc). It owns the
+  // same exit contract (1 refused, 3 environment).
+  if (
+    verb === "ingest" ||
+    verb === "schema" ||
+    verb === "grant" ||
+    verb === "calibrate" ||
+    verb === "gc"
+  ) {
+    return runContentCli(args.slice(args.indexOf(verb)));
+  }
+
   // A word that is not in the design is refused (exit 1), never conflated with
   // "designed but unimplemented" (exit 2). First stderr line is a stable slug.
   if (word !== null && verb === null) {
@@ -93,4 +138,4 @@ function main(args: readonly string[]): number {
   return exitCodes.notImplemented;
 }
 
-process.exitCode = main(process.argv.slice(2));
+process.exitCode = await main(process.argv.slice(2));

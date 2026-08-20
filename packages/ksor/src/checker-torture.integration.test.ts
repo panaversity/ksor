@@ -288,6 +288,28 @@ describe("scaffolded format-checker — torture", () => {
     expect(duplicated.output).toContain("duplicate frontmatter key: name");
   });
 
+  it("accepts the kernel's serve config blocks — the checker must not fight the kernel", () => {
+    // The kernel's instance parser REQUIRES database: to serve; if the scaffold
+    // checker (which runs in adopter CI) rejected it, no instance.md could
+    // satisfy both serving and CI — the "two parsers, one file" contradiction
+    // (review 2026-08-20). Verify all four groups pass.
+    const result = probe({
+      "instance.md": instance(
+        "database:\n  dsn_env: KSOR_DB_URL\n" +
+          "embedding:\n  provider: gemini\n  model: gemini-embedding-001\n  dim: 1536\n" +
+          "retrieval:\n  vector_floor: 0.55\n" +
+          "budgets:\n  maximum_response_characters: 120000",
+      ),
+    });
+    expect(result.status, result.output).toBe(0);
+  });
+
+  it("still catches a misspelled field inside a kernel block", () => {
+    const result = probe({ "instance.md": instance("database:\n  dsn_evn: KSOR_DB_URL") });
+    expect(result.status, result.output).toBe(1);
+    expect(result.output).toContain("unknown key under database: dsn_evn");
+  });
+
   it("reports symlinks in the record instead of crashing on a dangling one", () => {
     const target = path.join(project, "knowledge", "dangling.md");
     symlinkSync(path.join(project, "knowledge", "no-such-file.md"), target);

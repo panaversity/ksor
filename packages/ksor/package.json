@@ -6,7 +6,7 @@
     "abstention",
     "citations",
     "documentation",
-    "docusaurus",
+    "fumadocs",
     "governance",
     "knowledge-system-of-record",
     "mcp",
@@ -33,7 +33,8 @@
     "docs",
     "templates",
     "CHANGELOG.md",
-    "NOTICE"
+    "NOTICE",
+    "schema"
   ],
   "type": "module",
   "sideEffects": false,
@@ -50,11 +51,23 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && node copy-schema.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "publint": "publint"
   },
+  "dependencies": {
+    "@google/genai": "^2.17.1",
+    "@hono/node-server": "2.1.1",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@types/pg": "^8.21.0",
+    "hono": "4.13.2",
+    "jose": "^6.2.9",
+    "pg": "^8.23.0",
+    "zod": "catalog:"
+  },
   "devDependencies": {
+    "@panaversity/ksor-content": "workspace:*",
+    "@panaversity/ksor-content-gateway": "workspace:*",
     "@types/node": "catalog:",
     "playwright": "^1.58.0",
     "publint": "0.3.23",

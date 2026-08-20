@@ -13,3 +13,8 @@ workbench/shells/*/.docusaurus/
 workbench/shells/*/.generated/
 workbench/shells/*/.staged-knowledge/
 workbench/shells/*/out/
+packages/ksor/schema/
+# transient integration-test roots (rooted under the package so the built CLI
+# resolves its bundled deps by upward walk; afterEach removes them)
+packages/ksor/ksor-fakeinstall-*/
+packages/ksor/ksor-tarball-run-*/

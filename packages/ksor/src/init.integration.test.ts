@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const distDir = fileURLToPath(new URL("../dist", import.meta.url));
 const distCli = path.join(distDir, "cli.mjs");
 const pkgManifest = fileURLToPath(new URL("../package.json", import.meta.url));
+const pkgRoot = fileURLToPath(new URL("..", import.meta.url));
 const templatesDir = fileURLToPath(new URL("../templates/scaffold", import.meta.url));
 const pkgVersion = (JSON.parse(readFileSync(pkgManifest, "utf8")) as { version: string }).version;
 
@@ -73,7 +74,15 @@ function runInit(args: readonly string[], cwd: string) {
  * templates — so tests can damage the install without touching the checkout.
  */
 function fakeInstall(options: { readonly templates: boolean }): string {
-  const home = workDir();
+  // ksor bundles the kernel and is no longer zero-dep; the ESM cli.mjs resolves
+  // its runtime deps (zod, pg, …) via node_modules — and ESM import ignores
+  // NODE_PATH, while a node_modules junction does NOT resolve on Windows (the
+  // CLI crashed on `import zod` with exit 1 before reaching the fault path).
+  // Rooting the fake install INSIDE packages/ksor lets Node's upward module
+  // resolution find the real node_modules with no copy and no symlink —
+  // cross-platform, and it hits the init FAULT paths, not a missing-module crash.
+  const home = mkdtempSync(path.join(pkgRoot, "ksor-fakeinstall-"));
+  workDirs.push(home);
   cpSync(distDir, path.join(home, "dist"), { recursive: true });
   copyFileSync(pkgManifest, path.join(home, "package.json"));
   if (options.templates) {
@@ -133,6 +142,48 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
       const bytesB = readFileSync(path.join(b, "my-sor", rel));
       expect(bytesA.equals(bytesB), `byte difference in ${rel}`).toBe(true);
     }
+  });
+
+  it("declares @panaversity/ksor as a version-pinned dependency with a serve command", () => {
+    // MCP serving is a core surface, not an npx afterthought (decision 11
+    // revision 2026-08-20): the served tool ships as a first-class dependency,
+    // pinned to the EXACT CLI that scaffolded the project (always a published,
+    // kernel-bundled ksor, since this template change ships with the bundling).
+    const dir = workDir();
+    expect(runInit(["served-sor"], dir).status).toBe(0);
+    const pkg = JSON.parse(readFileSync(path.join(dir, "served-sor", "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+    expect(pkg.dependencies?.["@panaversity/ksor"], "the served dependency, version-pinned").toBe(
+      pkgVersion,
+    );
+    expect(pkg.scripts?.["serve"], "a local serve command").toBe("ksor serve");
+    // First ingest must --flip or serve answers from an unactivated generation
+    // (empty server); ingest needs --instance + --knowledge (no CLI defaults).
+    expect(pkg.scripts?.["ingest"], "a local ingest command that activates").toBe(
+      "ksor ingest --instance instance.md --knowledge knowledge --flip",
+    );
+    expect(pkg.scripts?.["schema"], "a local schema command").toBe(
+      "ksor schema --instance instance.md --apply",
+    );
+    // Authorizing ingest must be a ksor command, never a psql one-liner: the
+    // golden path may not require a second tool (specs/ksor/grant/spec.md).
+    expect(pkg.scripts?.["grant"], "a local grant command").toBe(
+      "ksor grant --instance instance.md",
+    );
+    const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
+    // The pinned tool MUST be excluded from the scaffold's 48h release-age
+    // quarantine, or the first install of a freshly-published ksor breaks for
+    // two days after every release (found live 2026-08-20: minimumReleaseAge
+    // rejected the just-published version).
+    expect(workspace, "the tool is excluded from the release-age quarantine").toMatch(
+      /minimumReleaseAgeExclude:[\s\S]*@panaversity\/ksor/,
+    );
+    // The kernel's build-scripted deps must be explicitly denied, or pnpm 11
+    // exits 1 on the adopter's first install (found live 2026-08-20).
+    expect(workspace, "@google/genai build denied").toMatch(/"@google\/genai":\s*false/);
+    expect(workspace, "protobufjs build denied").toMatch(/protobufjs:\s*false/);
   });
 
   it.runIf(process.platform !== "win32")(

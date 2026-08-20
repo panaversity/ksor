@@ -18,7 +18,21 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.url
 // reviewed decision about the dependency graph, made in the same PR that adds
 // the package.
 const ALLOWED: Record<string, readonly string[]> = {
-  "@panaversity/ksor": [],
+  // decision 12 (publish revision 2026-08-20): the CLI BUNDLES the kernel and
+  // runs it in-process — `serve` imports the gateway's `main`, and the corpus
+  // verbs delegate to `content`'s `runContentCli`. So the CLI now sits ABOVE
+  // the whole kernel graph (one published package).
+  "@panaversity/ksor": ["@panaversity/ksor-content-gateway", "@panaversity/ksor-content"],
+  // The kernel conversion's layering (decision 11): platform is the floor,
+  // content stands on it, the gateway composes content behind the kit.
+  "@panaversity/ksor-postgres": [],
+  "@panaversity/ksor-content": ["@panaversity/ksor-postgres"],
+  "@panaversity/ksor-gateway-kit": [],
+  "@panaversity/ksor-content-gateway": [
+    "@panaversity/ksor-content",
+    "@panaversity/ksor-gateway-kit",
+    "@panaversity/ksor-postgres",
+  ],
 };
 
 interface SourceFile {

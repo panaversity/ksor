@@ -1,0 +1,34 @@
+{
+  "name": "@panaversity/ksor-postgres",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Postgres access discipline for the ksor kernel: pooling, scoped transactions, retry classification",
+  "license": "Apache-2.0",
+  "author": "Panaversity",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@types/pg": "^8.21.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "0.22.14",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

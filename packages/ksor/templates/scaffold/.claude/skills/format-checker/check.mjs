@@ -706,6 +706,15 @@ if (!existsSync(knowledgeDir)) {
 // ---------------------------------------------------------------------------
 // instance.md: the identity of this SoR — format 1, closed key set
 // ---------------------------------------------------------------------------
+// The identity/site keys this checker owns, PLUS the four kernel config groups
+// (database/embedding/retrieval/budgets) that `ksor serve`/`ingest` read. The
+// groups are optional — a level-0 project that only runs `pnpm dev` declares
+// none, and the default scaffold ships none (init stays database-free). They
+// must be ALLOWED here so a project climbing to the served rung is not fought
+// by its own CI: the kernel's instance parser (packages/content/src/instance.ts)
+// REQUIRES `database:` to serve and is authoritative for the VALUES inside each
+// group (dsn_env grammar, dim range, the vector_floor states). This checker
+// only guards the key NAMES so a misspelled group or field is still caught.
 const INSTANCE_KEYS = new Set([
   "format",
   "name",
@@ -713,9 +722,19 @@ const INSTANCE_KEYS = new Set([
   "site",
   "audiences",
   "default_visibility",
+  "database",
+  "embedding",
+  "retrieval",
+  "budgets",
 ]);
 const INSTANCE_KSOR_KEYS = new Set(["requires", "scaffolded"]);
 const INSTANCE_SITE_KEYS = new Set(["url"]);
+// Nested field names mirror the kernel's instance schema; the kernel validates
+// their values (this checker stays dependency-free and cannot import it).
+const INSTANCE_DATABASE_KEYS = new Set(["dsn_env", "tenant_id"]);
+const INSTANCE_EMBEDDING_KEYS = new Set(["provider", "model", "dim"]);
+const INSTANCE_RETRIEVAL_KEYS = new Set(["vector_floor", "keyword_floor"]);
+const INSTANCE_BUDGETS_KEYS = new Set(["maximum_response_characters"]);
 
 if (!existsSync(instanceMd)) {
   problem(
@@ -882,6 +901,10 @@ if (!existsSync(instanceMd)) {
     for (const [parent, allowed] of [
       ["ksor", INSTANCE_KSOR_KEYS],
       ["site", INSTANCE_SITE_KEYS],
+      ["database", INSTANCE_DATABASE_KEYS],
+      ["embedding", INSTANCE_EMBEDDING_KEYS],
+      ["retrieval", INSTANCE_RETRIEVAL_KEYS],
+      ["budgets", INSTANCE_BUDGETS_KEYS],
     ]) {
       for (const key of fm.children.get(parent)?.keys() ?? []) {
         if (!allowed.has(key)) {

@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildScaffold } from "./e2e-build.js";
+import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Spec acceptance (4)+(5): the scaffolded site serves the example document in
@@ -28,11 +31,25 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     });
     expect(init.status, init.stderr).toBe(0);
     project = path.join(work, "walkthrough");
-    const install = spawnSync("pnpm", ["install"], { cwd: project, encoding: "utf8" });
+    // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build,
+    // not the registry: the pin is the exact (unpublished-in-CI) CLI version.
+    const localKsor = injectLocalKsor(project);
+    // A fresh scaffold's FIRST install is non-frozen by design: the served tool
+    // is pinned to the exact CLI version, which the committed site-only lockfile
+    // cannot pre-resolve — so pnpm adds it and writes the lock.
+    // `--no-frozen-lockfile` is required because pnpm defaults to frozen under
+    // CI=true; it models the adopter's real first `pnpm install`.
+    const install = spawnSync("pnpm", ["install", "--no-frozen-lockfile"], {
+      cwd: project,
+      encoding: "utf8",
+    });
     expect(
       install.status,
       (install.stderr ?? String(install.error ?? "spawn failed")).slice(-2000),
     ).toBe(0);
+    // …and prove it was OUR build, not the published package of the same version.
+    expectLocalKsorResolved(project, localKsor);
+    cleanupLocalKsor(localKsor);
   }, 300_000);
 
   afterAll(() => {
@@ -40,7 +57,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
   });
 
   it("static build serves the record: llms.txt index, distinct themes, no console errors, no external requests", async () => {
-    const build = spawnSync("pnpm", ["build"], { cwd: project, encoding: "utf8" });
+    const build = buildScaffold(project);
     expect(build.status, (build.stderr ?? String(build.error ?? "spawn failed")).slice(-2000)).toBe(
       0,
     );

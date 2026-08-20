@@ -22,6 +22,7 @@
     "check:corpus": "node scripts/check-corpus.mjs",
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:db": "vitest run --config vitest.db.config.ts",
     "publint": "pnpm -r publint",
     "changeset": "changeset",
     "prepare": "git config core.hooksPath .githooks || echo hooks-skipped"

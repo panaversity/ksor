@@ -1,0 +1,46 @@
+/**
+ * Fail-SOFT env knobs (oracle SP/env.py): a tuning variable must never keep
+ * the process from binding its port. Unset/blank/malformed (and non-finite
+ * float) fall back to the default with a warning naming the variable; a
+ * well-formed value below `minimum` is CLAMPED to the minimum, not reset —
+ * clamping honors operator intent, resetting punishes a typo twice.
+ */
+
+function warn(name: string, raw: string, fallback: number): void {
+  console.warn(`env ${name}=${JSON.stringify(raw)} is not a number; using default ${fallback}`);
+}
+
+export function envInt(name: string, fallback: number, minimum?: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const trimmed = raw.trim();
+  // Strict: parseInt accepts "12abc" → 12 (review, 2026-08-19). A malformed
+  // value must fall back to the default, per this function's own contract.
+  if (!/^[+-]?\d+$/.test(trimmed)) {
+    warn(name, raw, fallback);
+    return fallback;
+  }
+  const value = Number(trimmed);
+  if (minimum !== undefined && value < minimum) return minimum;
+  return value;
+}
+
+export function envFloat(name: string, fallback: number, minimum?: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const trimmed = raw.trim();
+  // Strict: Number.parseFloat("15%") → 15 and "15abc" → 15 (review,
+  // 2026-08-19). A malformed value must fall back to the default, matching
+  // envInt — a lax parse here silently disabled the KSOR_MAX_SHRINK guard.
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(trimmed)) {
+    warn(name, raw, fallback);
+    return fallback;
+  }
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) {
+    warn(name, raw, fallback);
+    return fallback;
+  }
+  if (minimum !== undefined && value < minimum) return minimum;
+  return value;
+}

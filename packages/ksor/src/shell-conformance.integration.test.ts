@@ -17,6 +17,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildScaffold } from "./e2e-build.js";
+import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The shell swap seam, proven the only way a seam can be: one suite, two
@@ -218,17 +221,28 @@ describe.runIf(enabled).each(SHELLS)(
       );
 
       swap?.(project);
-      // The swap changes the dependency set, so the shipped lockfile is
-      // legitimately outdated — and CI environments default frozen-lockfile
-      // on (found live 2026-08-18: ERR_PNPM_OUTDATED_LOCKFILE under CI=true).
-      run("pnpm", ["install", ...(swap ? ["--no-frozen-lockfile"] : [])], project);
+      // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build
+      // (the pinned exact version is unpublished in CI/dev).
+      const localKsor = injectLocalKsor(project);
+      // The scaffold's first install is non-frozen by design: the served tool
+      // is pinned to the exact CLI version, which the committed site-only
+      // lockfile cannot pre-resolve, so pnpm adds it and writes the lock
+      // (decision 11 revision 2026-08-20). A shell swap changes the dependency
+      // set the same way. CI defaults frozen-lockfile on (found live 2026-08-18:
+      // ERR_PNPM_OUTDATED_LOCKFILE under CI=true), so it must be disabled here.
+      run("pnpm", ["install", "--no-frozen-lockfile"], project);
+      expectLocalKsorResolved(project, localKsor);
+      cleanupLocalKsor(localKsor);
       if (swap) {
         // The workbench shell is not a repo workspace member, so nothing else
         // ever typechecks its ~1,900 TS/TSX lines; here its dependencies
         // exist, so it typechecks here (review finding, 2026-08-18).
         run("pnpm", ["--dir", path.join("system", "site"), "exec", "tsc", "--noEmit"], project);
       }
-      run("pnpm", ["build"], project);
+      const built = buildScaffold(project);
+      expect(built.status, `${built.stdout ?? ""}\n${built.stderr ?? ""}`.trim().slice(-2000)).toBe(
+        0,
+      );
       outDir = path.join(project, "system", "site", "out");
     }, 600_000);
 
@@ -369,11 +383,7 @@ describe.runIf(enabled).each(SHELLS)(
     }, 240_000);
 
     it("sub-path hosting: a KSOR_BASE_PATH build prefixes llms.txt and page links", () => {
-      const result = spawnSync("pnpm", ["build"], {
-        cwd: project,
-        encoding: "utf8",
-        env: { ...process.env, KSOR_BASE_PATH: "/repo" },
-      });
+      const result = buildScaffold(project, { KSOR_BASE_PATH: "/repo" });
       expect(
         result.status,
         (result.stderr ?? String(result.error ?? "spawn failed")).slice(-2000),

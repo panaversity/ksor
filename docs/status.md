@@ -2,19 +2,19 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-19.
+updated: 2026-08-20.
 
 ## Published package
 
 `@panaversity/ksor` **0.0.3** on npm (trusted publishing, provenance
-attached — published by the release merging this page). It ships the
-working `ksor init` described below — including the visibility model and
-the deploy story — plus the CLI contract: `dev`,
-`build` and `serve` still report "designed but not implemented" and exit
-`2`; an unknown verb is refused with exit `1` and a stable
-`error: unknown-verb` stderr slug. The package root exports `exitCodes`,
-`verbs`, and `resolveCommand`, and docs ship inside the tarball under
-`docs/`.
+attached). **In the currently published 0.0.3** it ships the working
+`ksor init` described below — including the visibility model and the deploy
+story — plus the CLI contract where `dev`, `build` AND `serve` still report
+"designed but not implemented" and exit `2`; an unknown verb is refused with
+exit `1` and a stable `error: unknown-verb` stderr slug. The package root
+exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the
+tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`/
+`calibrate`/`gc` real — that lands in the NEXT release, 0.0.4, not 0.0.3.)
 
 ## Implemented (released in 0.0.3)
 
@@ -72,12 +72,101 @@ the deploy story — plus the CLI contract: `dev`,
 - **Fixture**: `workbench/example-corpus/` — a tiny governed corpus exercising
   the same rules adopters will live under.
 
+## In this repository, not yet released
+
+- **The content kernel and the MCP gateway** (decision 11, in progress on
+  the kernel-conversion branch): four workspace packages — postgres (Postgres access
+  discipline: pooling, scoped transactions, retry classification), content (schema + ingest + hybrid retrieval
+  - calibrated abstention + read plane), gateway-kit (fail-closed serving
+    postures), content-gateway (the content MCP door: search/outline/read over stateless
+    Streamable HTTP — one transport, loopback by default). BUNDLED into
+    `@panaversity/ksor` (decision 12, publish revision 2026-08-20): the CLI
+    inlines all four and exposes ONE `ksor` binary with every verb —
+    `init`/`dev`/`build`, `serve` (the MCP server, in-process), and
+    `ingest`/`schema`/`grant`/`calibrate`/`gc`; the four kernel packages stay
+    `private` (dev/test), never published. The CLI is no longer zero-dep.
+    Converted from the production oracle with
+    its suite as the fixture source; acceptance drives the BUILT binary
+    with a real MCP client against live Postgres (Neon, pgvector) — cited
+    passages, snapshot generation-pinning, byte-exact reads, and the typed
+    abstention. Takedown denial is scoped (decision 14): per-node by default,
+    whole-subtree by explicit opt-in via a serving-time `parent_id` walk —
+    one seam (`lib/takedown.ts`) across search, read, outline, and calibration,
+    proved in `takedown.db.test.ts`. The npm packaging question (decision 12)
+    is resolved 2026-08-20: the kernel is bundled into `@panaversity/ksor` and
+    `ksor serve` runs the MCP server in-process (see "Designed, not
+    implemented" for the exact per-verb state). Because MCP serving is a core
+    surface (decision 11 revision 2026-08-20), `ksor init` now declares
+    `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
+    version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
+    first-class in every new project. Not yet released.
+
+## Known gaps in the kernel conversion (tracked, not blocking)
+
+- **Serve-rung ergonomics, deferred to a fast-follow** (surfaced by a
+  four-agent operability review, 2026-08-20; the blockers it found — the
+  format-checker rejecting kernel `instance.md` keys, the release-CI
+  self-reference, the missing `--flip`, the undocumented setup path — are
+  FIXED here, as are a second round's: the tarball now asserts the bundled
+  `schema/schema.sql` ships and renders DDL from the PACKED layout, the corpus
+  verbs have binary-level dispatch coverage, the withdrawn-generation snapshot
+  refresh has a db test with a positive control, and one gated live Gemini call
+  proves the real embedding space). Still owed, each additive and
+  independently specced: a dedicated **`serve-setup` skill** in the
+  scaffold agent kit (today the runbook lives in the scaffold `AGENTS.md`,
+  which every coding agent reads first — a skill must first be shown to beat
+  that);
+  and a **serve deploy recipe** (Dockerfile / managed-Postgres guide — today
+  serve runs anywhere Node runs, with the env contract and fail-closed posture
+  documented, but no packaged deploy).
+- **MCP protocol version — DONE: the surface ships on the current revision.**
+  The gateway serves the **2026-07-28** spec revision via SDK **v2**
+  (`@modelcontextprotocol/server` 2.0.0; `@modelcontextprotocol/client` 2.0.0
+  drives the acceptance walk). Taken before shipping deliberately: this PR is
+  the MCP surface's first release, so shipping on the superseded 2025-11-25
+  revision would have dated the product's headline surface on day one.
+  _(Supersedes this entry's two earlier states: "the SDK does not implement it
+  yet — the gap is upstream", then "the upgrade is now ours to make, but not
+  taken in this PR".)_
+
+  What the door does now: it composes v2's `createMcpHandler` (a per-request
+  server factory, `legacy: "stateless"`, `responseMode: "json"`) instead of
+  hand-driving one transport per request. That entry is what serves the modern
+  era — a bare transport does not, proved by probe before and after: the old
+  wiring answered `server/discover` "Method not found" and rejected the
+  `2026-07-28` header as "Unsupported protocol version"; the new one answers
+  `server/discover` with `supportedVersions: ["2026-07-28"]`, the authored
+  instructions, and the real tool list. **2025-era clients keep working**
+  through the same stateless idiom the gateway already shipped, so the upgrade
+  is not a cutoff. Both eras are pinned by tests in
+  `content-gateway.db.test.ts` (a hand-built modern envelope — the MCP client
+  itself negotiates either era and would stay green on the old one).
+
+  Decision 13's transport choice STANDS — v2 keeps
+  `WebStandardStreamableHTTPServerTransport`; only the entry changed. v2 also
+  deprecates its transport-level `allowedHosts`/`enableDnsRebindingProtection`
+  in favour of external middleware, which is what this door already does, and
+  its dependency weight falls (`server` → `zod` + `core`; the Node middleware
+  is `@hono/node-server`, already carried) rather than rising. The seven
+  security controls were re-verified against the new wiring as the acceptance
+  for the swap.
+
+- **No schema migration runner**: `schema.sql` is one file, versioned in
+  `schema_meta` (2.1). That is correct while no adopter has production data
+  (nothing is released). Before adopters do, a forward-migration path
+  (versioned plain SQL + a runner keyed on `schema_meta`) is owed —
+  recorded as a decision in `research/kernel-conversion.md`.
+
 ## Designed, not implemented
 
-- `ksor dev` / `build` / `serve` — the remaining verbs (each still exits
-  `2` with an honest notice; the scaffold's own `pnpm dev` / `pnpm build`
-  work today without them).
-- The MCP agent surface (`instance.md` prose is its reserved system prompt).
+- `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
+  own `pnpm dev` / `pnpm build` work today without them.
+  `ksor serve`, `ingest`, `schema`, `grant`, `calibrate`, `gc` ARE implemented — the
+  bundled kernel provides them from the one `ksor` binary. `serve` runs the
+  MCP server in-process (reads `./instance.md`; exits `3` with a remedy when
+  it is missing). Verified via a real `pnpm pack` → `npm install`. Not yet
+  released (pending the changesets release; the existing `@panaversity/ksor`
+  publish setup covers it — no new package to bootstrap).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
@@ -102,13 +191,13 @@ tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 ## Pending owner actions
 
+- **`GEMINI_API_KEY`** is configured as a repository Actions secret (owner,
+  confirmed 2026-08-20) — the kernel conversion's gated live tiers (retrieval
+  - calibration evals) embed for real (decision 11).
 - Flip the org setting **"Allow GitHub Actions to create and approve pull
   requests"** — until then every release's Version-PR needs the manual
   rescue documented in the `$release` skill. (The npm Trusted Publisher is
   configured — 0.0.1 published through it.)
-- Decide the version signal for the init release: the changeset is `patch`
-  (0.0.2) per the constitution's pre-1.0 rule; flip to `minor` (0.1.0) if
-  the milestone should read in the version.
 - Repoint the **`vsor` PyPI Trusted Publisher** — it still names
   `panaversity/zia-vertical-system-of-record`, which no longer resolves; a
   release tag today passes every gate and fails at upload.

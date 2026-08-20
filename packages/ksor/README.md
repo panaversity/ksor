@@ -23,11 +23,13 @@ search and `llms.txt`, adopter CI, a dependency-free format checker
 operate it. Everything emitted is yours (the templates are MIT-0), the
 scaffold is deterministic and offline, and every refusal explains itself.
 
-> **`0.x` status:** `init` works; `dev`, `build` and `serve` are designed,
-> not implemented — each prints an honest notice and exits `2` (inside a
-> scaffolded project, `pnpm dev` / `pnpm build` cover local work).
+> **`0.x` status:** `init` works, and `serve` runs the MCP server over a built
+> record (with `ingest`/`schema`/`calibrate`/`gc` — the climbed rung, needing
+> Postgres and a provider key). Only `dev` and `build` are designed, not
+> implemented — each prints an honest notice and exits `2` (inside a scaffolded
+> project, `pnpm dev` / `pnpm build` cover local work).
 > [`docs/status.md`](https://github.com/panaversity/ksor/blob/main/docs/status.md)
-> and the released version number are authoritative for implemented
+> and the released version number are authoritative for the exact released
 > functionality.
 
 Full concept, design goals, and project status:

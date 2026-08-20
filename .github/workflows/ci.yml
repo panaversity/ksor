@@ -19,6 +19,7 @@ jobs:
   lint:
     name: Lint, format, guards, corpus
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,41 +41,72 @@ jobs:
       !startsWith(github.head_ref, 'changeset-release/') &&
       !startsWith(github.head_ref, 'release-')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      # Fails when anything under packages/ksor changed without a changeset —
+      # Fails when the PUBLISHED package changed without a changeset —
       # bundled docs included, they ship in the tarball (AGENTS.md policy:
-      # patch by default pre-1.0; repo docs/tooling outside the package are
-      # exempt because the gate only watches the published package).
+      # patch by default pre-1.0; repo docs/tooling outside packages/ are
+      # exempt).
       - run: pnpm changeset status --since=origin/main
+      # ...and the same for the BUNDLED KERNEL, which changesets cannot see.
+      # The kernel packages are `private: true`, so changesets ignores them —
+      # but decision 12 inlines them INTO the published tarball, so editing
+      # them changes what adopters install. Without this, a kernel change
+      # shipped inside someone else's release with no changelog line (verified
+      # 2026-08-20: `changeset status` reports nothing for a content-only
+      # diff). The changeset belongs to @panaversity/ksor, the thing actually
+      # published — not to the private package.
+      - name: Bundled-kernel changes need a changeset too
+        run: |
+          kernel=$(git diff --name-only origin/main...HEAD -- packages/ \
+            | grep -v '^packages/ksor/' | head -1)
+          noted=$(git diff --name-only origin/main...HEAD -- .changeset/ \
+            | grep -E '\.md$' | grep -v 'README' | head -1)
+          if [ -n "$kernel" ] && [ -z "$noted" ]; then
+            echo "::error::$kernel changed, but no changeset was added."
+            echo "The kernel is bundled into @panaversity/ksor, so this changes"
+            echo "what adopters install. Run \`pnpm changeset\` and describe it"
+            echo "for release-notes readers (patch by default pre-1.0)."
+            exit 1
+          fi
 
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # Workspace packages resolve one another's types through their built
+      # dist (package.json exports), so build first (found live: the first
+      # multi-package push, 2026-08-19).
+      - run: pnpm build
       - run: pnpm typecheck
 
   test-unit:
     name: Unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # Unit tests import across workspace packages — same dist resolution.
+      - run: pnpm build
       - run: pnpm test:unit
 
   test-integration:
     name: Integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,6 +119,7 @@ jobs:
   build:
     name: Build + publint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +131,10 @@ jobs:
   scaffold-e2e:
     name: Scaffold walkthrough (browser)
     runs-on: ubuntu-latest
+    # ~5 min normally (playwright install + 3 browser suites). A generous cap
+    # so a hung dev-server or browser launch FAILS fast (red, actionable)
+    # instead of running to GitHub's 6-hour default and reading as "stuck".
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,9 +155,44 @@ jobs:
       # "filtered" can never be confused with "broken".
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/visibility-conformance.integration.test.ts
 
+  kernel-db:
+    name: Kernel acceptance (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ksor
+          POSTGRES_PASSWORD: ksor
+          POSTGRES_DB: ksor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ksor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      # The kernel's database tier (decision 11): ingest → retrieve round
+      # trips against real Postgres + pgvector. The Gemini-live suite
+      # (gemini.live.db.test.ts — the one real embedding call, proving the
+      # provider seam and catching vendor API drift) gates separately on
+      # GEMINI_API_KEY and skips without it; the secret is configured.
+      - run: pnpm test:db
+        env:
+          KSOR_DB_URL: postgresql://ksor:ksor@localhost:5432/ksor
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
   init-windows:
     name: Init acceptance (Windows)
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
