@@ -9,7 +9,7 @@
 
 import type pg from "pg";
 
-import { MIN_CONTENT_CHARS } from "../config.js";
+import { MIN_CONTENT_CHARS, RRF_K } from "../config.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 
 /**
@@ -70,7 +70,7 @@ WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
           AND c.search_tsv @@ websearch_to_tsquery('english', $4)
         ORDER BY r LIMIT $6),
     fused AS (
-        SELECT chunk_id, max(gen) AS gen, sum(1.0 / (60 + r)) AS score
+        SELECT chunk_id, max(gen) AS gen, sum(1.0 / (${RRF_K} + r)) AS score
         FROM (SELECT chunk_id, gen, r FROM vec UNION ALL SELECT chunk_id, gen, r FROM kw) u
         GROUP BY chunk_id)
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
