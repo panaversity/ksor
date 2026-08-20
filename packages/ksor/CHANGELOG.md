@@ -1,5 +1,37 @@
 # @panaversity/ksor
 
+## 0.0.5
+
+### Patch Changes
+
+- 995f002: feat: scaffolded projects ship a commented `.env.example` naming every
+  variable the agent surface needs — the DSN variable, the provider key, and
+  `KSOR_AUTH_DISABLED=1`, which a local run requires because `ksor serve` refuses
+  to boot unauthenticated. Copy it to `.env` and it is read automatically.
+
+  feat: standing up the agent surface is one command and one config block.
+  `ksor` now reads `./.env` automatically (Node-native, no dependency; a real
+  environment variable still wins), scaffolded projects get `pnpm up` —
+  schema → grant → ingest → serve — and `ksor schema --apply` is re-runnable
+  instead of failing on an already-provisioned database, so the whole sequence
+  is safe to repeat and doubles as the refresh after editing `knowledge/`.
+
+  fix: a scaffolded project deploys on the first try. The shipped `vercel.json`
+  pinned `--frozen-lockfile`, so an adopter's first Vercel import failed with
+  `ERR_PNPM_OUTDATED_LOCKFILE` — the scaffold declares a root dependency whose
+  stamped version the committed lockfile cannot record.
+
+  fix: the serve runbook no longer tells first-timers to declare
+  `retrieval.vector_floor: uncalibrated` before serving, which made every request
+  refuse until a floor was measured. Configuring the record needs one `database:`
+  block; the abstention gate is turned on deliberately, after it serves.
+
+- 4e84cdf: fix: `ksor serve` reports its real version to MCP clients. In 0.0.4 every
+  client saw `serverInfo.version` of `0.0.0`: the gateway read the version from
+  an environment variable at module scope, and the CLI's static import evaluated
+  that module before the CLI could set the variable. The version now travels as
+  an argument, and a test drives the bundled binary to assert it.
+
 ## 0.0.4
 
 ### Patch Changes

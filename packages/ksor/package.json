@@ -1,6 +1,6 @@
 {
   "name": "@panaversity/ksor",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Knowledge System of Record — the authoritative, governed source of knowledge that humans and AI agents operate from. Name reserved; implementation in progress.",
   "keywords": [
     "abstention",
