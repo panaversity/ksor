@@ -660,22 +660,36 @@ if (!existsSync(knowledgeDir)) {
       // time, YAML makes it a timestamp, and normalizing that to a UTC day
       // prints the day before the record's for any positive offset (found
       // 2026-08-20: `2026-04-01 00:00:00 +05:00` rendered 2026-03-31).
+      // `effective` is the DAY a document takes effect, and the page publishes
+      // it as fact inside <time datetime>. Unquoted it must be a calendar-valid
+      // YYYY-MM-DD and nothing else, because every other shape YAML accepts
+      // here publishes something the record does not say: `2026-06-31` rolls
+      // silently to July 1st (js-yaml's date path is `Date.UTC(y, m, d)` with
+      // no validation), a value carrying a time reads back in a timezone and
+      // can land a day early, and a bare `2026` types as a number that never
+      // reaches the page at all. Three rounds of narrower rules each leaked a
+      // different one of those, so the rule is now the whole contract: a plain
+      // date, or QUOTED text that is published verbatim and never parsed.
       const effective = fm.keys.get("effective");
-      // YAML's timestamp grammar EXACTLY (js-yaml YAML_TIMESTAMP_REGEXP): a
-      // one-or-two-digit month and day, and `T`, `t` or whitespace before the
-      // time. The narrower shape this replaces let `2026-4-1 00:00:00 +05:00`
-      // through — and refused `2026-04-01 for new customers`, which YAML never
-      // turns into a Date at all (both found 2026-08-20).
-      const yamlTimestamp =
-        /^\d{4}-\d\d?-\d\d?(?:(?:[Tt]|[ \t]+)(\d\d?):(\d\d):(\d\d)(?:\.\d*)?(?:[ \t]*(?:Z|[-+]\d\d?(?::\d\d)?))?)?$/;
-      const stamped = effective === undefined ? null : yamlTimestamp.exec(effective);
-      if (effective !== undefined && !fm.quoted.has("effective") && stamped?.[1] !== undefined) {
-        problem(
-          rel,
-          `effective carries a time: ${effective}`,
-          "a timestamp is read in a timezone, and the day it lands on is not always the day written here — the page would show the day before this one",
-          `write the date alone (effective: ${effective.slice(0, 10)}), or quote it to keep it as text`,
-        );
+      if (effective !== undefined && effective !== "" && !fm.quoted.has("effective")) {
+        const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(effective);
+        let calendarValid = false;
+        if (iso !== null) {
+          const [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+          const probe = new Date(Date.UTC(year, month - 1, day));
+          calendarValid =
+            probe.getUTCFullYear() === year &&
+            probe.getUTCMonth() === month - 1 &&
+            probe.getUTCDate() === day;
+        }
+        if (!calendarValid) {
+          problem(
+            rel,
+            `effective is not a calendar date: ${effective}`,
+            "the page publishes this as the day the document takes effect, in a <time> element a machine reads as fact — YAML rolls an impossible date to the next month without a word, reads a value carrying a time in a timezone, and types a bare year as a number that never reaches the page",
+            `write a real date (effective: 2026-04-01), or quote it to publish it as text (effective: "${effective.replace(/"/g, "'")}")`,
+          );
+        }
       }
       // visibility: one audience per document, from the set instance.md declares
       const visibility = fm.keys.get("visibility");

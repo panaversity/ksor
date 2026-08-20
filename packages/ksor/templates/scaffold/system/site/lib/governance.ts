@@ -36,6 +36,11 @@ export interface DocumentGovernance {
  * timezone-dependent string into the record.
  */
 function declared(value: unknown): string | null {
+  // A bare `effective: 2026` types as a NUMBER in YAML and used to disappear
+  // from the page entirely — the record declared it and the page said nothing.
+  // `pnpm check` refuses it now; showing what the author wrote is still the
+  // honest fallback for a record that skipped the checker.
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : (value.toISOString().split("T")[0] ?? null);
   }

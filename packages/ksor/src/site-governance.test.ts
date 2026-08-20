@@ -271,3 +271,20 @@ describe("governanceVisible — a group written as a flow mapping", () => {
     expect(governanceVisible("site: # nothing yet\n  governance: false")).toBe(false);
   });
 });
+
+describe("readGovernance — YAML types that are not strings", () => {
+  it("shows a number rather than dropping it", () => {
+    // `effective: 2026` types as a NUMBER, and used to vanish from the page
+    // entirely — the record declared it and the page said nothing. The checker
+    // refuses it now; this is the honest fallback if one slips through.
+    expect(readGovernance({ status: "approved", effective: 2026 }, "k.md")).toMatchObject({
+      effective: "2026",
+    });
+  });
+
+  it("still drops a value with no readable text", () => {
+    expect(
+      readGovernance({ status: "approved", effective: Number.NaN, owner: {} }, "k.md"),
+    ).toMatchObject({ effective: null, owner: null });
+  });
+});

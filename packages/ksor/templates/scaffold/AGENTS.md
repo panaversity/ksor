@@ -217,12 +217,12 @@ Details in README → Deploying.
   are required. `owner` and `provenance` (a list naming real sources) are
   strongly encouraged — they become required as this project climbs the
   governance ladder. `description`, `visibility` (below), `order` (sidebar
-  position), `effective` (the date the document takes effect — write the date
-  alone, `2026-04-01`, or quote it; an unquoted date WITH a time is a YAML
-  timestamp and reads back in a timezone, so the page can show the day before
-  the one you wrote — free text that merely starts with a date, like
-  `2026-04-01 for new customers`, is fine) and `superseded` (a legacy marker —
-  prefer `status`) are available. No other keys; never
+  position), `effective` (the date the document takes effect — a real
+  `YYYY-MM-DD` date and nothing else, or **quote it** to publish it as text:
+  `effective: "Q1 2026"`. Unquoted, YAML turns `2026-06-31` into July 1st and
+  `2026-04-01 09:00 +05:00` into the day before, without a word, and the page
+  publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
+  are available. No other keys; never
   `id:` or `name:` — the path is the identity.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every

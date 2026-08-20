@@ -94,6 +94,21 @@ A value that is neither `true` nor `false` is refused — by `pnpm check` and by
 the build. Defaulting silently would publish the governance the owner asked to
 hide, or hide what they asked to publish.
 
+### `effective` is a date, or it is quoted text
+
+Unquoted, `effective` must be a **calendar-valid `YYYY-MM-DD`**. Anything else
+must be quoted, and quoted text is published verbatim, never parsed as a date.
+
+This is narrower than the key started out, and deliberately so — it is the
+third revision. Every wider rule leaked a different way for the page to state a
+day the record never wrote: `2026-06-31` rolls to July 1st (YAML's date path
+builds a `Date` with no calendar validation), a value carrying a time reads back
+in a timezone and can land a day early, a wrapped value is invisible to the
+checker's line-based parser, and a bare `2026` types as a number that never
+reached the page at all. The page publishes this value inside `<time datetime>`
+as machine-readable fact, so a shape whose meaning depends on the reader's
+timezone or on YAML's rollover behaviour cannot be allowed through.
+
 ### Negative promises
 
 - **Nothing is inferred, defaulted or synthesized.** An absent `owner`

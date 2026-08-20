@@ -402,56 +402,66 @@ describe("scaffolded format-checker — torture", () => {
       expect(ok.status, ok.output).toBe(0);
     });
 
-    it("refuses an `effective` carrying a time, which renders as the day before", () => {
-      // An unquoted YAML timestamp normalizes to a UTC day: +05:00 midnight is
-      // the PREVIOUS day in UTC, so the page contradicted the record.
-      const timestamped = probe({
-        "knowledge/tz.md":
-          "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01 00:00:00 +05:00\n---\n\nBody.\n",
-      });
-      expect(timestamped.status, timestamped.output).toBe(1);
-      expect(timestamped.output).toContain("effective carries a time");
+    // `effective` is published inside <time datetime> as fact. Three rounds of
+    // narrower rules each leaked a different way for the page to say a day the
+    // record never wrote, so the contract is now: a calendar-valid YYYY-MM-DD
+    // unquoted, or quoted text published verbatim.
+    it("refuses every unquoted shape YAML would republish as a different day", () => {
+      const cases: readonly [string, string][] = [
+        // js-yaml's date path is Date.UTC(y, m, d) with NO validation, so an
+        // impossible date rolls into the next month silently.
+        ["2026-06-31", "rolls to July 1st"],
+        ["2026-13-01", "rolls a year forward"],
+        ["2026-02-29", "2026 is not a leap year"],
+        // carries a time → read back in a timezone, can land a day early
+        ["2026-04-01 00:00:00 +05:00", "timestamp with an offset"],
+        ["2026-4-1 00:00:00 +05:00", "one-digit month and day"],
+        ["2026-04-01t00:00:00+05:00", "lowercase t separator"],
+        // types as a NUMBER and used to vanish from the page entirely
+        ["2026", "a bare year"],
+        // free text YAML leaves alone, but which is not a date either
+        ["2026-04-01 for new customers", "trailing prose"],
+      ];
+      for (const [value, why] of cases) {
+        const result = probe({
+          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${value}\n---\n\nBody.\n`,
+        });
+        expect(result.status, `${value} (${why}) → ${result.output}`).toBe(1);
+        expect(result.output).toContain("effective is not a calendar date");
+      }
+    });
 
-      // The two shapes that stay legal: a bare date, and anything quoted.
-      const dateOnly = probe({
+    it("accepts a real date, and any text the author QUOTES", () => {
+      // Quoted is the escape hatch: it is published verbatim and never parsed
+      // as a date, so "Q1 2026" and a legal-sounding phrase both work.
+      const real = probe({
         "knowledge/tz.md":
           "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01\n---\n\nBody.\n",
       });
-      expect(dateOnly.status, dateOnly.output).toBe(0);
-      const quoted = probe({
-        "knowledge/tz.md": '---\ntitle: TZ\nstatus: approved\neffective: "Q1 2026"\n---\n\nBody.\n',
+      expect(real.status, real.output).toBe(0);
+      for (const quoted of ['"Q1 2026"', '"2026-04-01 for new customers"', '"2026-06-31"']) {
+        const result = probe({
+          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${quoted}\n---\n\nBody.\n`,
+        });
+        expect(result.status, `${quoted} → ${result.output}`).toBe(0);
+      }
+    });
+
+    it("prints a remedy that is itself valid — following it must produce a green check", () => {
+      // The previous rule's remedy sliced 10 characters off the value, so for
+      // `2026-4-1 00:00:00 +05:00` it advised writing `2026-4-1 0` — garbage
+      // that the checker then accepted (round 3).
+      const refused = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-4-1 00:00:00 +05:00\n---\n\nBody.\n",
       });
-      expect(quoted.status, quoted.output).toBe(0);
-    });
-
-    it("matches YAML's timestamp grammar, not a padded-date shape", () => {
-      // The first version of this rule tested /^\d{4}-\d{2}-\d{2}[T ]./ — but
-      // js-yaml accepts one-digit month/day and `t`/tab as the separator, so
-      // every spelling in the gap still became a Date and still published the
-      // day before (round 2, 2026-08-20).
-      for (const value of [
-        "2026-4-1 00:00:00 +05:00",
-        "2026-04-01t00:00:00+05:00",
-        "2026-04-01\t00:00:00 +05:00",
-      ]) {
-        const result = probe({
-          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${value}\n---\n\nBody.\n`,
-        });
-        expect(result.status, `${value} → ${result.output}`).toBe(1);
-        expect(result.output).toContain("effective carries a time");
-      }
-    });
-
-    it("leaves free text that merely starts with a date alone", () => {
-      // YAML makes this a STRING, not a Date, so there is no timezone to shift
-      // — and the old rule's remedy ("write effective: 2026-04-01") would have
-      // silently deleted half the value.
-      for (const value of ["2026-04-01 for new customers", "2026-4-1", "2026-04-01"]) {
-        const result = probe({
-          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${value}\n---\n\nBody.\n`,
-        });
-        expect(result.status, `${value} → ${result.output}`).toBe(0);
-      }
+      expect(refused.status).toBe(1);
+      const quotedRemedy = /effective: "([^"]*)"/.exec(refused.output)?.[1];
+      expect(quotedRemedy, refused.output).toBeDefined();
+      const following = probe({
+        "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: "${quotedRemedy}"\n---\n\nBody.\n`,
+      });
+      expect(following.status, `following the remedy → ${following.output}`).toBe(0);
     });
 
     it("validates EVERY superseded_by, not only ones shaped like a path", () => {
