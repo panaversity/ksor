@@ -230,7 +230,13 @@ describe.runIf(enabled).each(SHELLS)(
       // (decision 11 revision 2026-08-20). A shell swap changes the dependency
       // set the same way. CI defaults frozen-lockfile on (found live 2026-08-18:
       // ERR_PNPM_OUTDATED_LOCKFILE under CI=true), so it must be disabled here.
-      run("pnpm", ["install", "--no-frozen-lockfile"], project);
+      // --config.minimumReleaseAge=0: the scaffold quarantines dependency versions
+      // published in the last 48h, which is right for an adopter and NON-DETERMINISTIC
+      // for CI — any transitive dep that happens to publish today fails this job
+      // (found live 2026-08-20: @peculiar/asn1-x509 via the Docusaurus shell). The
+      // policy itself is asserted from the emitted yaml in the init suite; this test
+      // is about the shell swap.
+      run("pnpm", ["install", "--no-frozen-lockfile", "--config.minimumReleaseAge=0"], project);
       expectLocalKsorResolved(project, localKsor);
       cleanupLocalKsor(localKsor);
       if (swap) {
