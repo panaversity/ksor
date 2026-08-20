@@ -444,6 +444,57 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
       1,
     );
   }, 120_000);
+
+  it("an UNCHANGED corpus at the SAME commit consumes no generation", async () => {
+    // `pnpm serve` runs ingest on every start, so restarting an unedited
+    // record must cost nothing: no new generation, no rows, no flip, no
+    // embedding. A NEW commit over identical bytes still earns a generation —
+    // that is a build fact, and provenance records it (test (2) pins that).
+    // Assertions are relative so this can run after the sequence above.
+    const baseline = await buildGeneration(pool, instance, {
+      knowledgeDir: FIXTURE,
+      sourceCommit: "commit-idempotent",
+      flip: true,
+      provider: fake,
+    });
+    expect(baseline.unchanged, "a new commit builds").toBe(false);
+
+    const before = await runRead(pool, TENANT, async (c) => {
+      const a = await c.query(
+        "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+        [TENANT, CORPUS],
+      );
+      const g = await c.query(
+        "SELECT count(DISTINCT generation)::int AS n FROM content_nodes WHERE tenant_id = $1",
+        [TENANT],
+      );
+      return { active: Number(a.rows[0]?.active_generation), gens: Number(g.rows[0]?.n) };
+    });
+
+    const again = await buildGeneration(pool, instance, {
+      knowledgeDir: FIXTURE,
+      sourceCommit: "commit-idempotent",
+      flip: true,
+      provider: fake,
+    });
+    expect(again.unchanged, "re-ingesting identical bytes at the same commit").toBe(true);
+    expect(again.embedded, "no embedding spend").toBe(0);
+    expect(again.generation, "names the generation still serving").toBe(before.active);
+
+    const after = await runRead(pool, TENANT, async (c) => {
+      const a = await c.query(
+        "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+        [TENANT, CORPUS],
+      );
+      const g = await c.query(
+        "SELECT count(DISTINCT generation)::int AS n FROM content_nodes WHERE tenant_id = $1",
+        [TENANT],
+      );
+      return { active: Number(a.rows[0]?.active_generation), gens: Number(g.rows[0]?.n) };
+    });
+    expect(after.active, "the active pointer must not move").toBe(before.active);
+    expect(after.gens, "no generation was persisted").toBe(before.gens);
+  }, 240_000);
 });
 
 describe.runIf(adminDsn === "")("ingest pipeline db acceptance (gated)", () => {

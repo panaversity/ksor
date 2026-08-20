@@ -108,8 +108,14 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    unchanged chunks carry forward by content hash, so a rerun on an untouched
    corpus makes **zero provider calls** (`embedded 0, carried N`).
 
-   What a rerun does spend is a generation — each one is created and activated,
-   and they accumulate. Reap them when you think of it, or on a schedule:
+   A rerun on an unchanged record costs **nothing at all**: ingest compares the
+   corpus it just read against the generation already serving and, when they
+   are identical at the same commit, consumes no generation and writes no rows
+   ("unchanged — generation N already serves this corpus"). Edit a document and
+   the next run builds a generation for it, re-embedding only what changed.
+
+   Generations do accumulate as you edit. Reap the superseded ones when you
+   think of it, or on a schedule:
 
    ```sh
    pnpm exec ksor gc --instance instance.md

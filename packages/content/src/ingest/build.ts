@@ -319,6 +319,12 @@ export interface BuildReport {
    */
   readonly refusal: string | null;
   readonly health: GenerationHealth;
+  /**
+   * The corpus was byte-identical to the generation already serving, so NO
+   * generation was consumed and nothing was embedded. `generation` then names
+   * the generation still active, not a new one.
+   */
+  readonly unchanged: boolean;
 }
 
 /**
@@ -328,6 +334,78 @@ export interface BuildReport {
  * finalize (+ optional flip, same transaction). Returns the report; the CLI
  * turns `refusal` into stderr + exit 1.
  */
+async function activeGenerationOf(
+  c: pg.PoolClient,
+  tenantId: string,
+  corpusId: string,
+): Promise<number | null> {
+  const r = await c.query(
+    "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+    [tenantId, corpusId],
+  );
+  const raw: unknown = r.rows[0]?.active_generation ?? null;
+  return raw === null ? null : Number(raw);
+}
+
+/**
+ * Do two generations hold the same corpus? Compared on the SET of
+ * (stable_id, content_hash) pairs — identity plus content — so a moved
+ * document, an edited body, an added or removed file all count as different,
+ * while a rebuild of identical bytes does not.
+ */
+async function sameCorpus(
+  c: pg.PoolClient,
+  tenantId: string,
+  a: number,
+  b: number,
+): Promise<boolean> {
+  const r = await c.query(
+    `WITH pair AS (
+       SELECT s.generation, n.stable_id, s.content_hash
+         FROM sources s JOIN content_nodes n
+           ON n.tenant_id = s.tenant_id AND n.generation = s.generation AND n.node_id = s.node_id
+        WHERE s.tenant_id = $1 AND s.generation IN ($2, $3)
+     )
+     SELECT (SELECT count(*) FROM pair WHERE generation = $2) =
+            (SELECT count(*) FROM pair WHERE generation = $3)
+        AND NOT EXISTS (
+              SELECT 1 FROM pair x WHERE x.generation = $2
+               AND NOT EXISTS (SELECT 1 FROM pair y WHERE y.generation = $3
+                                AND y.stable_id = x.stable_id AND y.content_hash = x.content_hash)
+            ) AS same`,
+    [tenantId, a, b],
+  );
+  return r.rows[0]?.same === true;
+}
+
+/** Was the active generation produced by this same source commit? */
+async function sameCommit(
+  c: pg.PoolClient,
+  tenantId: string,
+  generation: number,
+  sourceCommit: string | undefined,
+): Promise<boolean> {
+  const r = await c.query(
+    `SELECT source_commit FROM ingestion_runs
+      WHERE tenant_id = $1 AND generation = $2
+      ORDER BY run_id DESC LIMIT 1`,
+    [tenantId, generation],
+  );
+  if (r.rows.length === 0) return false;
+  const stored: unknown = r.rows[0]?.source_commit ?? null;
+  return String(stored ?? "") === String(sourceCommit ?? "");
+}
+
+/** Thrown inside the build transaction to roll it back when nothing changed. */
+class UnchangedCorpus extends Error {
+  readonly activeGeneration: number;
+  constructor(activeGeneration: number) {
+    super("corpus unchanged");
+    this.name = "UnchangedCorpus";
+    this.activeGeneration = activeGeneration;
+  }
+}
+
 export async function buildGeneration(
   pool: pg.Pool,
   instance: ContentInstance,
@@ -350,24 +428,67 @@ export async function buildGeneration(
       .digest("hex");
 
   // ---- allocate + structure + carry: ONE transaction (atomic per generation)
-  const structure = await runIngest(pool, tenant, async (c) => {
-    const alloc = await allocateRun(c, {
-      tenantId: tenant,
-      corpusId: instance.corpusId,
-      sourceCommit: options.sourceCommit,
-      manifestSha256,
+  let structure;
+  try {
+    structure = await runIngest(pool, tenant, async (c) => {
+      const alloc = await allocateRun(c, {
+        tenantId: tenant,
+        corpusId: instance.corpusId,
+        sourceCommit: options.sourceCommit,
+        manifestSha256,
+      });
+      const stats = await buildStructure(c, {
+        tenantId: tenant,
+        corpusId: instance.corpusId,
+        generation: alloc.generation,
+        manifest,
+        files: sources,
+        treeRoot: options.knowledgeDir,
+        modelId,
+      });
+      // Nothing to do? Compare what we JUST wrote against what is already
+      // serving, using the content hashes buildStructure computed — never a
+      // second digest of our own, which could disagree with the real one and
+      // skip a genuine edit. Identical means this generation is a duplicate, so
+      // roll the whole transaction back: no rows persist, no flip, no embedding
+      // spend. `pnpm serve` therefore costs nothing when the record has not
+      // changed (2026-08-20).
+      // Skip only when the SOURCE COMMIT matches too. A new commit over
+      // identical bytes is still a new build fact — "every build records the
+      // exact corpus that produced it" — so it earns a generation; a plain
+      // restart, which names no commit, does not.
+      const active = await activeGenerationOf(c, tenant, instance.corpusId);
+      if (
+        active !== null &&
+        (await sameCommit(c, tenant, active, options.sourceCommit)) &&
+        (await sameCorpus(c, tenant, active, alloc.generation))
+      ) {
+        throw new UnchangedCorpus(active);
+      }
+      return { ...alloc, stats };
     });
-    const stats = await buildStructure(c, {
-      tenantId: tenant,
-      corpusId: instance.corpusId,
-      generation: alloc.generation,
-      manifest,
-      files: sources,
-      treeRoot: options.knowledgeDir,
-      modelId,
-    });
-    return { ...alloc, stats };
-  });
+  } catch (error) {
+    if (error instanceof UnchangedCorpus) {
+      log(`unchanged: generation ${error.activeGeneration} already serves this corpus`);
+      return {
+        runId: 0,
+        generation: error.activeGeneration,
+        nodes: 0,
+        sources: 0,
+        chunks: 0,
+        carried: 0,
+        embedded: 0,
+        failed: 0,
+        ready: true,
+        centroids: 0,
+        flipped: false,
+        refusal: null,
+        health: { ok: true, reasons: [] } as unknown as GenerationHealth,
+        unchanged: true,
+      };
+    }
+    throw error;
+  }
   const { runId, generation, stats } = structure;
   log(
     `run ${runId}: building generation ${generation} (embed ${provider.providerId}:${provider.recipe})`,
@@ -494,6 +615,7 @@ export async function buildGeneration(
     flipped: fin.flipped,
     refusal: fin.refusal,
     health: fin.health,
+    unchanged: false,
   };
 }
 
