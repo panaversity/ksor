@@ -17,9 +17,10 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
-import { contentPool, ContentStoreError } from "./db.js";
+import { contentPool, ContentStoreError, INGEST_ROLE } from "./db.js";
 import { parseInstance, InstanceParseError, type ContentInstance } from "./instance.js";
 import { applySchema, renderSchema } from "./schema.js";
+import { grantIngest, revokeIngest } from "./grant.js";
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
@@ -46,6 +47,9 @@ Usage:
       Build one generation from the knowledge tree: structure atomically,
       embed resumably, finalize behind the ready gate. --flip activates it
       (never implicit).
+  ksor-content grant --instance PATH [--revoke]
+      Authorize ingest for the instance's tenant (the row row-level security
+      requires), or withdraw it. Idempotent; reports the state it established.
   ksor-content gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
@@ -256,8 +260,7 @@ async function ingestCommand(args: string[]): Promise<number> {
         throw new Error(
           `ingest was refused by the database's row-level security — the grant table has no row ` +
             `authorizing this tenant.\n  why: who may WRITE a tenant's corpus is decided in the ` +
-            `database, not by a flag\n  fix: psql "$${instance.dsnEnv}" -c "INSERT INTO ` +
-            `ingest_tenant_grants (role_name, tenant_id) VALUES ('sor_content_ingest', '${instance.tenantId}')"`,
+            `database, not by a flag\n  fix: ksor grant --instance <instance.md>`,
         );
       }
       throw exc;
@@ -352,6 +355,34 @@ async function calibrateCommand(args: string[]): Promise<number> {
   return 0;
 }
 
+async function grantCommand(args: string[]): Promise<number> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      instance: { type: "string" },
+      revoke: { type: "boolean", default: false },
+    },
+  });
+  const instance = loadInstance(values.instance);
+  if (typeof instance === "number") return instance;
+  const dsn = resolveDsn(instance);
+  if (typeof dsn === "number") return dsn;
+  const revoke = values.revoke ?? false;
+  const outcome = await withPool(dsn, (pool) =>
+    revoke ? revokeIngest(pool, instance.tenantId) : grantIngest(pool, instance.tenantId),
+  );
+  // Report the STATE established, never merely "ok" — a repeat run must be
+  // distinguishable from the first (specs/ksor/grant/spec.md).
+  const said = {
+    granted: `granted: ${INGEST_ROLE} may now ingest ${instance.tenantId}`,
+    "already-granted": `already granted: ${INGEST_ROLE} could already ingest ${instance.tenantId}`,
+    revoked: `revoked: ${INGEST_ROLE} may no longer ingest ${instance.tenantId}`,
+    "not-granted": `not granted: ${INGEST_ROLE} could not ingest ${instance.tenantId} anyway`,
+  }[outcome];
+  process.stdout.write(said + "\n");
+  return 0;
+}
+
 async function gcCommand(args: string[]): Promise<number> {
   const { values } = parseArgs({
     args,
@@ -404,6 +435,8 @@ export async function runContentCli(argv: readonly string[]): Promise<number> {
         return await ingestCommand(rest);
       case "calibrate":
         return await calibrateCommand(rest);
+      case "grant":
+        return await grantCommand(rest);
       case "gc":
         return await gcCommand(rest);
       default:

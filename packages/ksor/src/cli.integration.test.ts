@@ -8,6 +8,11 @@ import { describe, expect, it } from "vitest";
 
 // Integration tests exercise the BUILT artifact — the same file the published
 // bin points at — not the TypeScript source. Run `pnpm build` first.
+//
+// Tests that spawn the CLI more than once carry an explicit timeout: the
+// bundled binary costs ~0.35s to load per spawn, and under the parallel
+// integration run that contends past vitest's 5s default (found live
+// 2026-08-20, when a fifth corpus verb tipped it over).
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
 
 function runCli(args: readonly string[]) {
@@ -44,28 +49,36 @@ describe("ksor CLI (built artifact)", () => {
     expect(result.stderr).toContain("init, dev, build, serve");
   });
 
-  it("answers --help and -h with usage and exit 0 — help is not an unimplemented verb", () => {
-    for (const flag of ["--help", "-h"]) {
-      const result = runCli([flag]);
-      expect(result.status, `${flag} exit code`).toBe(0);
-      expect(result.stdout).toContain("Usage: ksor <verb>");
-      expect(result.stdout).toContain("ingest");
-    }
-  });
+  it(
+    "answers --help and -h with usage and exit 0 — help is not an unimplemented verb",
+    { timeout: 30_000 },
+    () => {
+      for (const flag of ["--help", "-h"]) {
+        const result = runCli([flag]);
+        expect(result.status, `${flag} exit code`).toBe(0);
+        expect(result.stdout).toContain("Usage: ksor <verb>");
+        expect(result.stdout).toContain("ingest");
+      }
+    },
+  );
 
-  it("serve runs the bundled gateway in-process; a missing instance.md is exit 3", () => {
-    // The kernel is bundled into the CLI, so serve runs the gateway in-process
-    // (no spawn, no install). With no instance.md in cwd the gateway's own
-    // compose fails closed — an environment error (3), not a crash.
-    const cwd = mkdtempSync(path.join(tmpdir(), "ksor-serve-"));
-    try {
-      const result = spawnSync(process.execPath, [distCli, "serve"], { cwd, encoding: "utf8" });
-      expect(result.status, result.stderr).toBe(3);
-      expect(result.stderr).toContain("instance.md");
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  });
+  it(
+    "serve runs the bundled gateway in-process; a missing instance.md is exit 3",
+    { timeout: 30_000 },
+    () => {
+      // The kernel is bundled into the CLI, so serve runs the gateway in-process
+      // (no spawn, no install). With no instance.md in cwd the gateway's own
+      // compose fails closed — an environment error (3), not a crash.
+      const cwd = mkdtempSync(path.join(tmpdir(), "ksor-serve-"));
+      try {
+        const result = spawnSync(process.execPath, [distCli, "serve"], { cwd, encoding: "utf8" });
+        expect(result.status, result.stderr).toBe(3);
+        expect(result.stderr).toContain("instance.md");
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("answers --version with the version and exit 0", () => {
     const result = runCli(["--version"]);
@@ -77,8 +90,8 @@ describe("ksor CLI (built artifact)", () => {
   // Without these, dropping a verb from that dispatch silently demotes it to
   // "designed but not implemented" (exit 2) and the scaffold's `pnpm ingest` /
   // `pnpm schema` break with no red test (review finding, 2026-08-20).
-  it("routes every corpus verb to the bundled kernel — never exit 2", () => {
-    for (const verb of ["ingest", "schema", "calibrate", "gc"]) {
+  it("routes every corpus verb to the bundled kernel — never exit 2", { timeout: 30_000 }, () => {
+    for (const verb of ["ingest", "schema", "grant", "calibrate", "gc"]) {
       const result = runCli([verb]);
       expect(result.status, `ksor ${verb} exit (stdout: ${result.stdout})`).not.toBe(2);
       expect(
@@ -88,21 +101,25 @@ describe("ksor CLI (built artifact)", () => {
     }
   });
 
-  it("names the missing flag when a corpus verb is under-specified (exit 1)", () => {
-    // The exact flags the scaffold's package.json scripts pass — a rename in
-    // the content CLI's parser must fail HERE, not in an adopter's project.
-    const ingest = runCli(["ingest", "--instance", "instance.md"]);
-    expect(ingest.status, ingest.stdout).toBe(1);
-    expect(`${ingest.stdout}${ingest.stderr}`).toContain("--knowledge");
+  it(
+    "names the missing flag when a corpus verb is under-specified (exit 1)",
+    { timeout: 30_000 },
+    () => {
+      // The exact flags the scaffold's package.json scripts pass — a rename in
+      // the content CLI's parser must fail HERE, not in an adopter's project.
+      const ingest = runCli(["ingest", "--instance", "instance.md"]);
+      expect(ingest.status, ingest.stdout).toBe(1);
+      expect(`${ingest.stdout}${ingest.stderr}`).toContain("--knowledge");
 
-    for (const verb of ["calibrate", "gc"]) {
-      const result = runCli([verb]);
-      expect(result.status, `${verb}: ${result.stdout}`).toBe(1);
-      expect(`${result.stdout}${result.stderr}`, `${verb} names --instance`).toContain(
-        "--instance",
-      );
-    }
-  });
+      for (const verb of ["calibrate", "gc", "grant"]) {
+        const result = runCli([verb]);
+        expect(result.status, `${verb}: ${result.stdout}`).toBe(1);
+        expect(`${result.stdout}${result.stderr}`, `${verb} names --instance`).toContain(
+          "--instance",
+        );
+      }
+    },
+  );
 
   it("renders the DDL from the bundled schema.sql — proving it resolves at runtime", () => {
     // `schema/schema.sql` is build-copied beside dist/ and resolved via

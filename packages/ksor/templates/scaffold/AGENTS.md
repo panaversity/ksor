@@ -78,15 +78,15 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 3. **Apply the schema:** `pnpm schema` (creates tables, indexes, and the
    ingest role).
 
-4. **Authorize ingest** — one row, once (row-level security refuses ingest
-   without it; a future `ksor grant` verb will fold this in):
+4. **Authorize ingest:** `pnpm grant` — writes the one row row-level security
+   requires before any write to this corpus is allowed. Idempotent, and
+   `pnpm exec ksor grant --instance instance.md --revoke` withdraws it.
 
-   ```sh
-   psql "$KSOR_DB_URL" -c "INSERT INTO ingest_tenant_grants (role_name, tenant_id) VALUES ('sor_content_ingest', '<name>')"
-   ```
-
-   `<name>` is `instance.md`'s `name:`. Apply the schema and ingest as the SAME
-   Postgres login (the ingest role is granted to whoever applied the DDL).
+   This is a separate, named act on purpose: applying the schema and
+   authorizing writes are different decisions, and a schema step that granted
+   itself write access would make the tool its own authorizer. Apply the schema
+   and ingest as the SAME Postgres login (the ingest role is granted to whoever
+   applied the DDL).
 
 5. **Ingest:** `pnpm ingest` — embeds `knowledge/` into a fresh generation and
    activates it (`--flip`). Safe to re-run (see the generation model below).
@@ -101,6 +101,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 
 ```sh
 pnpm schema      # apply the DDL (once)
+pnpm grant       # authorize ingest for this corpus (once)
 pnpm ingest      # embed knowledge/ into a generation and activate it
 pnpm serve       # run the MCP server; any other verb: pnpm exec ksor <verb>
 ```

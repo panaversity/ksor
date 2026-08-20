@@ -30,6 +30,7 @@ export {
   schemaVersion,
   SchemaVersionError,
 } from "./schema.js";
+export { grantIngest, revokeIngest, SchemaNotAppliedError, type GrantOutcome } from "./grant.js";
 export { keywordAbstains, vectorAbstains, type AbstainConfig } from "./lib/abstain.js";
 export {
   hybridSearch,

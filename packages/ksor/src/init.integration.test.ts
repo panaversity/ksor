@@ -167,6 +167,11 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(pkg.scripts?.["schema"], "a local schema command").toBe(
       "ksor schema --instance instance.md --apply",
     );
+    // Authorizing ingest must be a ksor command, never a psql one-liner: the
+    // golden path may not require a second tool (specs/ksor/grant/spec.md).
+    expect(pkg.scripts?.["grant"], "a local grant command").toBe(
+      "ksor grant --instance instance.md",
+    );
     const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     // The pinned tool MUST be excluded from the scaffold's 48h release-age
     // quarantine, or the first install of a freshly-published ksor breaks for

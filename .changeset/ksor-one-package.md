@@ -26,6 +26,14 @@ handshake-free modern era (`server/discover`, per-request envelope) and keeps
 serving 2025-era clients through the same stateless idiom, so nothing that
 works today stops working.
 
+New verb: **`ksor grant`** authorizes ingest for a corpus (and `--revoke`
+withdraws it) — the row row-level security requires before any write. It runs
+through the same `pg` driver every other verb uses, so finishing setup no
+longer requires dropping out of ksor into `psql`. Idempotent, and it reports
+the state it established rather than a bare "ok". Kept a separate act from
+`schema --apply` on purpose: a schema step that granted itself write access
+would make the tool its own authorizer.
+
 Scaffold serve-rung fixes (from a multi-agent operability review): the
 scaffolded format checker (`pnpm check`) now accepts the `database:`/`embedding:`/
 `retrieval:`/`budgets:` blocks that `ksor serve`/`ingest` require, so a project

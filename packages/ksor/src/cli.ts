@@ -42,6 +42,7 @@ const usage =
   "  ingest     load / refresh the corpus into the database\n" +
   "  calibrate  measure the abstention floor\n" +
   "  schema     apply the database schema\n" +
+  "  grant      authorize ingest for this corpus (or --revoke it)\n" +
   "  gc         collect superseded generations\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
@@ -96,7 +97,13 @@ async function main(args: readonly string[]): Promise<number> {
   // The corpus operations the bundled kernel provides — delegated to its write-
   // plane dispatcher (schema --apply / ingest / calibrate / gc). It owns the
   // same exit contract (1 refused, 3 environment).
-  if (verb === "ingest" || verb === "schema" || verb === "calibrate" || verb === "gc") {
+  if (
+    verb === "ingest" ||
+    verb === "schema" ||
+    verb === "grant" ||
+    verb === "calibrate" ||
+    verb === "gc"
+  ) {
     return runContentCli(args.slice(args.indexOf(verb)));
   }
 

@@ -83,7 +83,7 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
     `@panaversity/ksor` (decision 12, publish revision 2026-08-20): the CLI
     inlines all four and exposes ONE `ksor` binary with every verb —
     `init`/`dev`/`build`, `serve` (the MCP server, in-process), and
-    `ingest`/`schema`/`calibrate`/`gc`; the four kernel packages stay
+    `ingest`/`schema`/`grant`/`calibrate`/`gc`; the four kernel packages stay
     `private` (dev/test), never published. The CLI is no longer zero-dep.
     Converted from the production oracle with
     its suite as the fixture source; acceptance drives the BUILT binary
@@ -112,10 +112,10 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
   verbs have binary-level dispatch coverage, the withdrawn-generation snapshot
   refresh has a db test with a positive control, and one gated live Gemini call
   proves the real embedding space). Still owed, each additive and
-  independently specced: a
-  first-class **`ksor grant`** verb (today the ingest authorization is a
-  documented manual `INSERT`); a dedicated **`serve-setup` skill** in the
-  scaffold agent kit (today the runbook lives in the scaffold `AGENTS.md`);
+  independently specced: a dedicated **`serve-setup` skill** in the
+  scaffold agent kit (today the runbook lives in the scaffold `AGENTS.md`,
+  which every coding agent reads first — a skill must first be shown to beat
+  that);
   and a **serve deploy recipe** (Dockerfile / managed-Postgres guide — today
   serve runs anywhere Node runs, with the env contract and fail-closed posture
   documented, but no packaged deploy).
@@ -161,7 +161,7 @@ tarball under `docs/`. (The kernel fold-in below makes `serve`/`ingest`/`schema`
 
 - `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
   own `pnpm dev` / `pnpm build` work today without them.
-  `ksor serve`, `ingest`, `schema`, `calibrate`, `gc` ARE implemented — the
+  `ksor serve`, `ingest`, `schema`, `grant`, `calibrate`, `gc` ARE implemented — the
   bundled kernel provides them from the one `ksor` binary. `serve` runs the
   MCP server in-process (reads `./instance.md`; exits `3` with a remedy when
   it is missing). Verified via a real `pnpm pack` → `npm install`. Not yet

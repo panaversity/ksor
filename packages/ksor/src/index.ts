@@ -30,6 +30,7 @@ export const verbs = [
   "serve",
   "ingest",
   "schema",
+  "grant",
   "calibrate",
   "gc",
 ] as const;

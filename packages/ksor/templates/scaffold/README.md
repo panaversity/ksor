@@ -33,13 +33,14 @@ part of `pnpm dev`. The ordered path is:
 export KSOR_DB_URL='postgresql://…'   # the DSN var your instance.md names
 export GEMINI_API_KEY='…'             # the embedding provider key
 pnpm schema     # apply the database schema (once)
+pnpm grant      # authorize ingest for this corpus (once)
 pnpm ingest     # embed knowledge/ into a generation and activate it
 pnpm serve      # run the MCP server over the record
 ```
 
-There are two setup steps before this — adding the `database:`/`embedding:`
-blocks to `instance.md`, and authorizing ingest — plus the generation model
-and the fail-closed security posture. `AGENTS.md` → "Serving to agents" is the
+One setup step comes before this — adding the `database:`/`embedding:` blocks
+to `instance.md` — and there is more to know about the generation model and the
+fail-closed security posture. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` binds loopback
 with auth off for local use; a public bind fails closed unless auth is
 configured. Any other operation is `pnpm exec ksor <verb>`.
@@ -67,7 +68,7 @@ different coding agent's way of finding the same working contract.
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env*` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` / `pnpm schema` / `pnpm ingest` / `pnpm serve` commands, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
+| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` / `pnpm schema` / `pnpm grant` / `pnpm ingest` / `pnpm serve` commands, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
 

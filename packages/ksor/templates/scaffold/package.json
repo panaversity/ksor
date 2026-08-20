@@ -8,6 +8,7 @@
     "build": "pnpm -C system/site build",
     "check": "node .agents/skills/format-checker/check.mjs",
     "schema": "ksor schema --instance instance.md --apply",
+    "grant": "ksor grant --instance instance.md",
     "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip",
     "serve": "ksor serve"
   },
