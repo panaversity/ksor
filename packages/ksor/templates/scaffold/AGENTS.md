@@ -168,7 +168,9 @@ abandoned ones.
 
 ### Serving safely (fail-closed posture)
 
-`pnpm serve` binds **loopback with auth off** — safe for local use. A **public**
+`pnpm serve` **refuses to boot unauthenticated** — there is no auth-off
+default. A local run says so deliberately with `KSOR_AUTH_DISABLED=1` and binds
+loopback, which is the intended dev shape. A **public**
 bind refuses to boot unless auth is configured (`KSOR_SSO_URL` +
 `KSOR_MCP_RESOURCE_URL` + `KSOR_JWT_ALLOWED_AUDIENCES`, making it an OAuth
 Resource Server) OR you deliberately set `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`.

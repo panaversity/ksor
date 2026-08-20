@@ -180,15 +180,23 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    — each individually reversible with new evidence, recorded here:
    **conversation is the interface** (the human runs `ksor init <name>` once,
    then talks to the coding agent they already use; CLI verbs are for the
-   agent); **serving fails safe** (local serve binds loopback with auth off; a
-   public bind fails closed unless auth is configured or unauthenticated
-   serving is explicitly flagged — "disabled by default" must never silently
-   become an open server); **the governance level is derived, never declared**
+   agent); **serving fails safe** (serve refuses to boot unauthenticated at
+   all — a local run flags it explicitly and binds loopback; a public bind
+   additionally fails closed unless auth is configured — "disabled by default"
+   must never silently become an open server); **the governance level is derived, never declared**
    (tools report the level the governance artifacts achieve; no `governance:`
    key in `instance.md`); **no empty scaffolded directories** (an empty
    directory is an unanswered question in the adopter's repo — directories
    appear when the ladder or the work demands them); **the site is preview and
    review, not an editor** (the agent writes; the human checks).
+   _Revision 2026-08-20: the serving clause read "local serve binds loopback
+   with auth off", describing a default the code has never had — `buildAuth`
+   refuses to boot unless SSO is configured OR `KSOR_AUTH_DISABLED=1` is
+   explicit, loopback included (`packages/gateway-kit/src/auth.ts`). The
+   posture is unchanged and STRONGER than the sentence claimed; the wording is
+   corrected here and in the three docs that had copied it (both READMEs and
+   the scaffold's AGENTS.md), which were telling adopters a local `serve` would
+   come up without the flag it requires._
 
 8. **Scaffold structure: root workspace + system roof** (owner, 2026-08-18).
    `ksor init` emits the workspace manifests at the repo root (defaults beat

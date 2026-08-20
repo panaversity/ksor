@@ -48,9 +48,11 @@ the NAME of the variable, never the DSN. That is the whole required config:
 `knowledge/`, or just to bring the server back. A rerun on an unchanged record
 costs nothing: no new generation, no embedding, no rows. Edit a document and
 the next run picks up exactly that change. `AGENTS.md` → "Serving to agents" is the
-full runbook; your coding agent reads it first. `pnpm serve` binds loopback
-with auth off for local use; a public bind fails closed unless auth is
-configured. Any other operation is `pnpm exec ksor <verb>`.
+full runbook; your coding agent reads it first. `pnpm serve` refuses to boot
+unauthenticated: a local run declares `KSOR_AUTH_DISABLED=1` (already in
+`.env.example`) and binds loopback, so a server is never left open by accident;
+a public bind needs a configured SSO door instead. Any other operation is
+`pnpm exec ksor <verb>`.
 
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you
