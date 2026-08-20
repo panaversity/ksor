@@ -24,7 +24,11 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const governance = readGovernance(page.data, page.path);
 
   let successor: Successor | null = null;
-  if (governance.supersededBy !== null) {
+  // Gated on the STATUS, not on the pointer: a document the record calls
+  // current must never be published under a "Superseded" banner, whatever
+  // stale successor pointer it still carries (`pnpm check` refuses that
+  // combination too — this is the second lock on the same door).
+  if (governance.status === "superseded" && governance.supersededBy !== null) {
     const pages = getSortedPages();
     // Against page.path, not page.url: a route cannot tell a file from a
     // folder index, and `./terms.md` means a different document in each.

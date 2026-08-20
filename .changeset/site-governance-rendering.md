@@ -29,3 +29,14 @@ in `instance.md` keeps them plain while the record still carries every key for
 the agent surface and the audit trail. It defaults to on, and it never hides
 the supersession notice — a reader handed a replaced document with no word of
 its successor has been misled regardless of the site's preferences.
+
+The record's checker was hardened alongside, because these keys now reach a
+published page: `superseded_by` is validated whatever shape it is written in
+(a pointer matching neither `./x` nor `*.md` previously skipped every rule,
+including the cross-audience one, and the page then published it verbatim); it
+must name a real markdown document, not a directory, and must pair with
+`status: superseded`; an `effective` carrying a time is refused, because a YAML
+timestamp reads back in a timezone and could render the day before the one
+written; and a grouped `instance.md` key written inline (`site: { … }`) is
+refused instead of being silently dropped, which also restores the closed-key-set
+guarantee for every nested group.

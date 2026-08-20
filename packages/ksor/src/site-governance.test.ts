@@ -253,3 +253,21 @@ describe("governanceVisible", () => {
     expect(() => governanceVisible(fm("site:", "  governance:"))).toThrowError(/governance/);
   });
 });
+
+describe("governanceVisible — a group written as a flow mapping", () => {
+  // `site: { governance: false }` parses as a SCALAR with no children, so a
+  // block-only scan never sees the key and silently returns the default —
+  // publishing the governance the owner turned off. The checker refuses this
+  // shape; the site refuses it too, because a silent default is the one
+  // outcome this setting must never have.
+  it("refuses a flow mapping rather than defaulting past it", () => {
+    expect(() => governanceVisible("site: { governance: false }")).toThrowError(/site:/);
+    expect(() =>
+      governanceVisible('site: { url: "https://acme.example", governance: false }'),
+    ).toThrowError(/site:/);
+  });
+
+  it("still ignores a site: key that carries only a comment", () => {
+    expect(governanceVisible("site: # nothing yet\n  governance: false")).toBe(false);
+  });
+});

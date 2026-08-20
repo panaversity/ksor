@@ -15,6 +15,12 @@ The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
 record; the record never references the system.
 
+Every grouped key in `instance.md` (`ksor`, `site`, `database`, `embedding`,
+`retrieval`, `budgets`) is written as an indented block, never inline on one
+line: a group written as `site: { governance: false }` is not read as a group
+at all, so every setting inside it is silently dropped. `pnpm check` refuses
+that shape, and refuses a key repeated inside a group.
+
 `instance.md` carries a closed key set — `format`, `name`, `ksor`, `site`,
 the optional pair `audiences` + `default_visibility` (the record's reader
 audiences, ordered least- to most-restricted with `public` first, and the one
@@ -211,8 +217,11 @@ Details in README → Deploying.
   are required. `owner` and `provenance` (a list naming real sources) are
   strongly encouraged — they become required as this project climbs the
   governance ladder. `description`, `visibility` (below), `order` (sidebar
-  position), `effective` (the date the document takes effect) and `superseded`
-  (a legacy marker — prefer `status`) are available. No other keys; never
+  position), `effective` (the date the document takes effect — write the date
+  alone, `2026-04-01`, or quote it; an unquoted date WITH a time is a YAML
+  timestamp and reads back in a timezone, so the page can show the day before
+  the one you wrote) and `superseded` (a legacy marker — prefer `status`) are
+  available. No other keys; never
   `id:` or `name:` — the path is the identity.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every
@@ -243,7 +252,12 @@ Details in README → Deploying.
   document and can clone, the answer is a second repository.**
 
 - A replaced document is marked `status: superseded` with `superseded_by:`
-  pointing at its successor — superseded documents are never deleted.
+  pointing at its successor — superseded documents are never deleted. The two
+  keys are one statement, so `pnpm check` refuses each without the other: a
+  successor pointer left on a document you have set back to `approved` would
+  publish a "Superseded" banner over a live document. The pointer must name a
+  markdown document (`./<successor>.md`), exactly as it is capitalised under
+  `knowledge/`.
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their

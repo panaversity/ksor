@@ -343,6 +343,110 @@ describe("scaffolded format-checker — torture", () => {
     expect(result.output).toContain("frontmatter value needs quoting: title: - foo");
   });
 
+  // The governance-rendering slice put these frontmatter keys on the PAGE, so
+  // a shape the checker waved through stopped being cosmetic and started
+  // publishing wrong or leaked text. Every case below was reproduced against
+  // the real checker before the rule existed (2026-08-20).
+  describe("governance keys the site now publishes", () => {
+    const instanceWith = (block: string): string =>
+      readFileSync(path.join(project, "instance.md"), "utf8").replace(
+        "\nksor:\n",
+        `\n${block}\nksor:\n`,
+      );
+
+    it("refuses a group written as a flow mapping, which parses as a scalar with no children", () => {
+      // `site: { governance: false }` passed the check AND was ignored by the
+      // site — the owner's setting dropped in silence, and the closed key set
+      // voided for every nested group at the same time.
+      const flow = probe({ "instance.md": instanceWith("site: { governance: false }") });
+      expect(flow.status, flow.output).toBe(1);
+      expect(flow.output).toContain("site: has an inline value");
+
+      const misspelledInside = probe({
+        "instance.md": instanceWith('database: { dsn_evn: "KSOR_DB_URL" }'),
+      });
+      expect(misspelledInside.status, misspelledInside.output).toBe(1);
+    });
+
+    it("refuses a duplicated NESTED key: the map kept the last, the site reads the first", () => {
+      const dup = probe({
+        "instance.md": instanceWith("site:\n  governance: true\n  governance: false"),
+      });
+      expect(dup.status, dup.output).toBe(1);
+      expect(dup.output).toContain("duplicate frontmatter key: site.governance");
+    });
+
+    it("accepts a block-style governance switch — the shape an owner is told to write", () => {
+      const ok = probe({ "instance.md": instanceWith("site:\n  governance: false") });
+      expect(ok.status, ok.output).toBe(0);
+    });
+
+    it("refuses an `effective` carrying a time, which renders as the day before", () => {
+      // An unquoted YAML timestamp normalizes to a UTC day: +05:00 midnight is
+      // the PREVIOUS day in UTC, so the page contradicted the record.
+      const timestamped = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01 00:00:00 +05:00\n---\n\nBody.\n",
+      });
+      expect(timestamped.status, timestamped.output).toBe(1);
+      expect(timestamped.output).toContain("effective carries a time");
+
+      // The two shapes that stay legal: a bare date, and anything quoted.
+      const dateOnly = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01\n---\n\nBody.\n",
+      });
+      expect(dateOnly.status, dateOnly.output).toBe(0);
+      const quoted = probe({
+        "knowledge/tz.md": '---\ntitle: TZ\nstatus: approved\neffective: "Q1 2026"\n---\n\nBody.\n',
+      });
+      expect(quoted.status, quoted.output).toBe(0);
+    });
+
+    it("validates EVERY superseded_by, not only ones shaped like a path", () => {
+      // `legal/terms` matched neither shape test, so it skipped existence, the
+      // escape-the-record rule AND the cross-audience leak rule — and the
+      // notice then published the raw pointer.
+      const shapeless = probe({
+        "knowledge/gone.md":
+          "---\ntitle: Gone\nstatus: superseded\nsuperseded_by: legal/terms\n---\n\nBody.\n",
+      });
+      expect(shapeless.status, shapeless.output).toBe(1);
+      expect(shapeless.output).toContain("superseded_by is not a document pointer");
+    });
+
+    it("refuses a superseded_by that names a directory", () => {
+      const dir = probe({
+        "knowledge/folder/child.md": "---\ntitle: Child\nstatus: approved\n---\n\nBody.\n",
+        "knowledge/gone.md":
+          "---\ntitle: Gone\nstatus: superseded\nsuperseded_by: ./folder/\n---\n\nBody.\n",
+      });
+      expect(dir.status, dir.output).toBe(1);
+    });
+
+    it("refuses a successor pointer on a document the record calls current", () => {
+      // Otherwise the site publishes an unmissable "Superseded" banner over a
+      // live document — the natural state after an author edits status back
+      // and forgets the pointer.
+      const stale = probe({
+        "knowledge/live.md":
+          "---\ntitle: Live\nstatus: approved\nsuperseded_by: ./example.md\n---\n\nStill current.\n",
+      });
+      expect(stale.status, stale.output).toBe(1);
+      expect(stale.output).toContain("superseded_by on a document that is status: approved");
+    });
+
+    it("still accepts a fully governed document — the rules must not fight the record", () => {
+      const good = probe({
+        "knowledge/successor.md": "---\ntitle: Successor\nstatus: approved\n---\n\nNew.\n",
+        "knowledge/replaced.md":
+          "---\ntitle: Replaced\nstatus: superseded\nowner: Finance\neffective: 2026-04-01\n" +
+          "provenance:\n  - Board minutes 2026-03-11\nsuperseded_by: ./successor.md\n---\n\nOld.\n",
+      });
+      expect(good.status, good.output).toBe(0);
+    });
+  });
+
   it("keeps checking links after a stray unpaired backtick", () => {
     const result = probe({
       "knowledge/stray.md": doc(

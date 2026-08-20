@@ -36,7 +36,12 @@ export function SupersededNotice({ successor }: { successor: Successor }): React
   return (
     <aside
       role="note"
-      className="mb-8 rounded-lg border border-fd-border bg-fd-muted/40 px-4 py-3 text-sm"
+      // Tinted with the brand accent and ruled down the left edge, NOT filled
+      // with fd-muted: the shipped light theme defines --color-fd-muted and
+      // --color-fd-background as the same value, so the callout composited to
+      // exactly the page and had no visible surface at all (measured in
+      // Chromium, 2026-08-20). The one thing this notice cannot be is missable.
+      className="mb-8 rounded-lg border border-fd-primary/30 border-l-4 border-l-fd-primary bg-fd-primary/10 px-4 py-3 text-sm"
     >
       <p className="font-medium text-fd-foreground">Superseded</p>
       <p className="mt-1 text-fd-muted-foreground">

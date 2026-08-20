@@ -147,6 +147,12 @@ function parseFrontmatter(text) {
     }
     const nested = /^[ \t]+([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
     if (nested && current !== null) {
+      // Same hazard as the top-level duplicate above, one level down: this Map
+      // keeps the LAST write while the surfaces read the FIRST occurrence, so
+      // the check validates one value and the build publishes the other
+      // (found 2026-08-20: `governance: nope` then `governance: false` passed
+      // the check and crashed the build).
+      if (children.get(current).has(nested[1])) duplicates.push(`${current}.${nested[1]}`);
       children.get(current).set(nested[1], unquote(nested[2]));
       continue;
     }
@@ -462,6 +468,7 @@ if (!existsSync(knowledgeDir)) {
 
   // frontmatter + links per document
   const visibilityByPath = new Map();
+  const documentPaths = new Set();
   const crossings = [];
   for (const p of mdFiles) {
     const rel = path.relative(root, p);
@@ -608,9 +615,28 @@ if (!existsSync(knowledgeDir)) {
           "add superseded_by: ./<successor>.md",
         );
       }
-      // A successor that names a path must be a document that exists: the
-      // pointer is the whole value of marking something superseded.
-      if (successor && (/^\.{1,2}\//.test(successor) || successor.toLowerCase().endsWith(".md"))) {
+      if (successor && status !== "superseded") {
+        problem(
+          rel,
+          `superseded_by on a document that is status: ${status || "(none)"}`,
+          "the two keys are one statement — a successor pointer says this document was replaced, so a record that keeps the pointer while calling the document current contradicts itself, and the site publishes a Superseded notice over a live document",
+          "set status: superseded, or remove superseded_by if this document is still current",
+        );
+      }
+      // superseded_by must be a document pointer, and EVERY successor is
+      // validated. This was gated behind a shape test until 2026-08-20, so a
+      // value matching neither shape (`hr/refunds-2026`) skipped existence,
+      // escape-the-record AND the cross-audience rule — and then the site
+      // published the raw pointer, naming a document a lower tier must not know
+      // exists.
+      if (successor && !successor.split("#")[0].toLowerCase().endsWith(".md")) {
+        problem(
+          rel,
+          `superseded_by is not a document pointer: ${successor}`,
+          "unless it names a markdown document this check cannot tell whether the successor exists, stays inside the record, or is readable by this document's audience — and the site publishes the raw text of it",
+          "write it as a relative path to the successor, e.g. superseded_by: ./<successor>.md",
+        );
+      } else if (successor) {
         const resolved = path.resolve(path.dirname(p), successor.split("#")[0]);
         if (!resolved.startsWith(knowledgeDir + path.sep)) {
           problem(
@@ -619,7 +645,7 @@ if (!existsSync(knowledgeDir)) {
             "the successor is what readers are sent to instead — outside knowledge/ it is not a governed document",
             "point superseded_by at a document inside knowledge/",
           );
-        } else if (!existsSync(resolved)) {
+        } else if (!existsSync(resolved) || !lstatSync(resolved).isFile()) {
           problem(
             rel,
             `superseded_by points at a document that does not exist: ${successor}`,
@@ -629,6 +655,23 @@ if (!existsSync(knowledgeDir)) {
         } else {
           crossings.push({ kind: "superseded_by", rel, from: p, to: resolved, target: successor });
         }
+      }
+      // `effective` is the DAY a document takes effect. Written unquoted with a
+      // time, YAML makes it a timestamp, and normalizing that to a UTC day
+      // prints the day before the record's for any positive offset (found
+      // 2026-08-20: `2026-04-01 00:00:00 +05:00` rendered 2026-03-31).
+      const effective = fm.keys.get("effective");
+      if (
+        effective !== undefined &&
+        !fm.quoted.has("effective") &&
+        /^\d{4}-\d{2}-\d{2}[T ]./.test(effective)
+      ) {
+        problem(
+          rel,
+          `effective carries a time: ${effective}`,
+          "a timestamp is read in a timezone, and the day it lands on is not always the day written here — the page would show the day before this one",
+          `write the date alone (effective: ${effective.slice(0, 10)}), or quote it to keep it as text`,
+        );
       }
       // visibility: one audience per document, from the set instance.md declares
       const visibility = fm.keys.get("visibility");
@@ -659,6 +702,7 @@ if (!existsSync(knowledgeDir)) {
           );
         }
       }
+      documentPaths.add(p);
       if (audienceModel !== null) {
         visibilityByPath.set(p, visibility ?? audienceModel.defaultVisibility);
       }
@@ -668,6 +712,16 @@ if (!existsSync(knowledgeDir)) {
       const to = checkLinkTarget(rel, p, target);
       if (to !== null) crossings.push({ kind: "link", rel, from: p, to, target });
     }
+  }
+
+  for (const { kind, rel, to, target } of crossings) {
+    if (kind !== "superseded_by" || documentPaths.has(to)) continue;
+    problem(
+      rel,
+      `superseded_by does not name a document in the record: ${target}`,
+      "it resolves to a file the record does not govern — on a case-insensitive filesystem a mis-typed capitalisation resolves happily here and then misses every rule keyed by the real path, the cross-audience check included",
+      "match the successor's path exactly as it appears under knowledge/ (ascii lowercase)",
+    );
   }
 
   // Pointers across audiences: the leak no single build can catch, because the
@@ -897,6 +951,21 @@ if (!existsSync(instanceMd)) {
         "a default audience with no audience list is a setting with nothing to select from — the owner believes the record has a visibility model while every surface publishes every document to everyone",
         "add audiences: (ordered least- to most-restricted, public first), or remove default_visibility:",
       );
+    }
+    // A group written as a flow mapping (`site: { governance: false }`) lands
+    // as a scalar with NO children, so every nested rule below — the closed key
+    // set included — silently skips it: the owner's setting is dropped without
+    // a word (found 2026-08-20). The groups are block mappings, always.
+    for (const parent of ["ksor", "site", "database", "embedding", "retrieval", "budgets"]) {
+      const inline = fm.keys.get(parent);
+      if (inline !== undefined && inline !== "") {
+        problem(
+          "instance.md",
+          `${parent}: has an inline value: ${inline}`,
+          "a group written on one line is not read as a group — every key inside it is skipped by this check AND by the surfaces, so the settings the owner wrote are silently dropped",
+          `write it as an indented block:\n      ${parent}:\n        <key>: <value>`,
+        );
+      }
     }
     for (const [parent, allowed] of [
       ["ksor", INSTANCE_KSOR_KEYS],

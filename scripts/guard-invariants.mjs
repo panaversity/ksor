@@ -321,9 +321,46 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 9 — the scaffold ships each skill twice, byte-identical, under
+// .agents/skills and .claude/skills. The scaffold's own checker refuses a
+// divergence, so editing one copy here emits a project that fails its first
+// `pnpm check` — and the only signal is an integration suite minutes later
+// (hit twice while landing site-governance, 2026-08-20).
+{
+  const scaffold = path.join(repoRoot, "packages", "ksor", "templates", "scaffold");
+  const agents = path.join(scaffold, ".agents", "skills");
+  const claude = path.join(scaffold, ".claude", "skills");
+  if (existsSync(agents) && existsSync(claude)) {
+    const walkFiles = (dir, base = dir) =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walkFiles(path.join(dir, e.name), base)
+          : [path.relative(base, path.join(dir, e.name))],
+      );
+    for (const rel of walkFiles(agents)) {
+      const twin = path.join(claude, rel);
+      if (!existsSync(twin)) {
+        violate(
+          9,
+          `.claude/skills/${rel} is missing its .agents/skills twin`,
+          "the scaffold ships both copies byte-identical; a missing one emits a project whose own checker fails",
+          `copy packages/ksor/templates/scaffold/.agents/skills/${rel} to the .claude/skills path`,
+        );
+      } else if (!readFileSync(path.join(agents, rel)).equals(readFileSync(twin))) {
+        violate(
+          9,
+          `packages/ksor/templates/scaffold/.claude/skills/${rel} differs from the .agents copy`,
+          "two diverging copies means agents follow different rules by tool, and the emitted project fails its own pnpm check",
+          `copy .agents/skills/${rel} over .claude/skills/${rel}`,
+        );
+      }
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error(`guard: ${violations.length} invariant violation(s):\n`);
   for (const v of violations) console.error(`  ${v}\n`);
   process.exit(1);
 }
-console.log("guard: ok (8 rules)");
+console.log("guard: ok (9 rules)");
