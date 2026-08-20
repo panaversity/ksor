@@ -759,21 +759,30 @@ if (!existsSync(knowledgeDir)) {
     for (const { kind, from, to } of crossings) {
       if (kind === "superseded_by" && !successorOf.has(from)) successorOf.set(from, to);
     }
-    const reported = new Set();
+    const walked = new Set();
     for (const start of successorOf.keys()) {
-      if (reported.has(start)) continue;
-      const chain = new Set([start]);
+      if (walked.has(start)) continue;
+      // An ORDERED path, not a set: the documents visited before the loop
+      // closes are not part of the cycle, and reporting them made the check
+      // blame a document whose pointer was correct while printing an edge the
+      // record does not contain (found 2026-08-20 — a → b → c → b was reported
+      // as "a → b → c → a").
+      const trail = [start];
+      const onTrail = new Set([start]);
       let cursor = successorOf.get(start);
-      while (cursor !== undefined && !chain.has(cursor)) {
-        chain.add(cursor);
+      while (cursor !== undefined && !onTrail.has(cursor)) {
+        onTrail.add(cursor);
+        trail.push(cursor);
         cursor = successorOf.get(cursor);
       }
+      for (const node of trail) walked.add(node);
       if (cursor === undefined) continue; // the chain ends at a current document
-      for (const node of chain) reported.add(node);
-      const names = [...chain].map((file) => path.relative(root, file));
+      // The cycle is the trail from the document the walk returned to.
+      const cycle = trail.slice(trail.indexOf(cursor));
+      const names = cycle.map((file) => path.relative(root, file));
       problem(
-        path.relative(root, start),
-        chain.size === 1
+        names[0],
+        cycle.length === 1
           ? "superseded_by points at this document itself"
           : `supersession cycle: ${names.join(" → ")} → ${names[0]}`,
         "a supersession sends the reader to the successor that replaced this one — a pointer that comes back here sends them in a circle and never reaches a current document",

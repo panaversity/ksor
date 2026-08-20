@@ -532,6 +532,28 @@ describe("scaffolded format-checker — torture", () => {
       expect(cycle.output).toContain("supersession cycle");
     });
 
+    it("names the documents actually in the cycle, and no edge the record lacks", () => {
+      // a → b → c → b. The cycle is b ⇄ c; `a` merely leads into it and its own
+      // pointer is correct. The first version reported "a → b → c → a" against
+      // a — blaming the innocent document and inventing the closing edge.
+      const result = probe({
+        "knowledge/lead-a.md":
+          "---\ntitle: A\nstatus: superseded\nsuperseded_by: ./cyc-b.md\n---\n\nBody.\n",
+        "knowledge/cyc-b.md":
+          "---\ntitle: B\nstatus: superseded\nsuperseded_by: ./cyc-c.md\n---\n\nBody.\n",
+        "knowledge/cyc-c.md":
+          "---\ntitle: C\nstatus: superseded\nsuperseded_by: ./cyc-b.md\n---\n\nBody.\n",
+      });
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain(
+        "supersession cycle: knowledge/cyc-b.md → knowledge/cyc-c.md → knowledge/cyc-b.md",
+      );
+      // The edge c → a does not exist and must not be printed, and the innocent
+      // document must not be the one blamed.
+      expect(result.output).not.toContain("knowledge/lead-a.md → ");
+      expect(result.output).not.toMatch(/→ knowledge\/lead-a\.md/);
+    });
+
     it("accepts a supersession CHAIN, which ends at a current document", () => {
       // a → b → c is not a cycle: the reader arrives somewhere real.
       const chain = probe({
