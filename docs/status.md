@@ -64,6 +64,23 @@ builtin `up`.
   including the two that once failed open (a block-list `visibility:`,
   a `----`-closed frontmatter block).
 
+- **Governance rendering on the site**
+  (`specs/ksor/site-governance/spec.md`, issue #29) — the record enforces
+  `status` / `owner` / `provenance` / `effective` / `superseded_by` on every
+  document, and the site rendered none of them. Now each document shows the
+  governance it declares: a status chip, owner and effective date under the
+  title, one entry per `provenance` source at the foot, and — above the title,
+  where it cannot be missed — a supersession notice naming the successor and
+  linking to its route. This closed a correctness gap, not only a cosmetic
+  one: a `status: superseded` document was served looking identical to an
+  approved one, with the successor pointer the checker demands swallowed.
+  Nothing is inferred — an undeclared key renders nothing, never a placeholder
+  that would read as governed. All server-rendered, so it survives print, a
+  failed bundle and JavaScript off (verified live in both themes). The
+  Fumadocs shell only: bound there rather than as a surface-contract clause
+  (owner, 2026-08-20), so a project that swaps shells loses it until its shell
+  adds it. Not yet released.
+
 - **The deploy story** — the scaffold ships `vercel.json` answering
   Vercel's setup interview (repo root, static export), and the scaffolded
   README/AGENTS.md document deploying to any static host, including the

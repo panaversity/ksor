@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 // The page.evaluate callback runs in the browser; only this file needs DOM types.
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -222,6 +222,101 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       }
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
+  }, 240_000);
+
+  // specs/ksor/site-governance/spec.md — the record enforces a governance
+  // vocabulary on every document, and until this landed the site parsed four of
+  // those keys and threw them away. Asserted on the SHIPPED BYTES of a static
+  // export, not on a component in isolation: the failure this prevents is a
+  // superseded document served looking exactly like an approved one.
+  it("renders each document's declared governance, and infers nothing", () => {
+    const doc = (name: string, frontmatter: string, body: string): void =>
+      writeFileSync(
+        path.join(project, "knowledge", `${name}.md`),
+        `---\n${frontmatter}\n---\n\n${body}\n`,
+      );
+
+    doc(
+      "refund-policy",
+      [
+        "title: Refund policy",
+        "status: superseded",
+        "order: 2",
+        "owner: Finance",
+        "effective: 2026-01-15",
+        "provenance:",
+        "  - Board minutes 2026-01-11",
+        "  - Terms of service v4",
+        "superseded_by: ./refund-policy-v5.md",
+      ].join("\n"),
+      "Refunds are issued within 30 days of purchase.",
+    );
+    doc(
+      "refund-policy-v5",
+      ["title: Refund policy v5", "status: approved", "order: 3", "owner: Finance"].join("\n"),
+      "Refunds are issued within 60 days of purchase.",
+    );
+
+    // The fixtures must be legal record content, or this suite proves the site
+    // renders something no adopter could write.
+    const check = spawnSync(
+      process.execPath,
+      [path.join(project, ".agents", "skills", "format-checker", "check.mjs")],
+      { cwd: project, encoding: "utf8" },
+    );
+    expect(check.status, `${check.stdout}${check.stderr}`).toBe(0);
+
+    const built = buildScaffold(project);
+    expect(built.status, `${built.stdout}${built.stderr}`.slice(-2000)).toBe(0);
+
+    const visible = (route: string): string => {
+      const html = readFileSync(
+        path.join(project, "system", "site", "out", route, "index.html"),
+        "utf8",
+      );
+      const article = html.slice(html.indexOf("<article"));
+      return article
+        .replace(/<script[\s\S]*?<\/script>/g, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ");
+    };
+
+    const superseded = visible("docs/refund-policy");
+    // The supersession, named — the clause that is a correctness fix and not a
+    // presentation choice.
+    expect(superseded).toContain("Superseded");
+    expect(superseded).toContain("replaced by");
+    expect(superseded).toContain("Refund policy v5");
+    expect(superseded).toMatch(/Status superseded/);
+    expect(superseded).toMatch(/Owner Finance/);
+    expect(superseded).toMatch(/Effective 2026-01-15/);
+    // provenance is a LIST so a citation can point at exactly one entry: both
+    // survive to the page, separately.
+    expect(superseded).toContain("Board minutes 2026-01-11");
+    expect(superseded).toContain("Terms of service v4");
+
+    // The successor pointer resolves to a route that was really built — a dead
+    // link on a supersession notice strands the reader it just warned.
+    const supersededHtml = readFileSync(
+      path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
+      "utf8",
+    );
+    expect(supersededHtml).toMatch(/href="\/docs\/refund-policy-v5\/?"/);
+    expect(
+      readFileSync(
+        path.join(project, "system", "site", "out", "docs", "refund-policy-v5", "index.html"),
+        "utf8",
+      ),
+    ).toContain("Refund policy v5");
+
+    // Nothing inferred: the shipped example declares only title/status/order,
+    // so it renders its status and NO other governance furniture — never an
+    // "unknown" owner, which would read as governed.
+    const bare = visible("docs/example");
+    expect(bare).toMatch(/Status draft/);
+    expect(bare).not.toContain("Owner");
+    expect(bare).not.toContain("Sources");
+    expect(bare).not.toContain("Superseded");
   }, 240_000);
 });
 
