@@ -48,11 +48,32 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      # Fails when anything under packages/ksor changed without a changeset —
+      # Fails when the PUBLISHED package changed without a changeset —
       # bundled docs included, they ship in the tarball (AGENTS.md policy:
-      # patch by default pre-1.0; repo docs/tooling outside the package are
-      # exempt because the gate only watches the published package).
+      # patch by default pre-1.0; repo docs/tooling outside packages/ are
+      # exempt).
       - run: pnpm changeset status --since=origin/main
+      # ...and the same for the BUNDLED KERNEL, which changesets cannot see.
+      # The kernel packages are `private: true`, so changesets ignores them —
+      # but decision 12 inlines them INTO the published tarball, so editing
+      # them changes what adopters install. Without this, a kernel change
+      # shipped inside someone else's release with no changelog line (verified
+      # 2026-08-20: `changeset status` reports nothing for a content-only
+      # diff). The changeset belongs to @panaversity/ksor, the thing actually
+      # published — not to the private package.
+      - name: Bundled-kernel changes need a changeset too
+        run: |
+          kernel=$(git diff --name-only origin/main...HEAD -- packages/ \
+            | grep -v '^packages/ksor/' | head -1)
+          noted=$(git diff --name-only origin/main...HEAD -- .changeset/ \
+            | grep -E '\.md$' | grep -v 'README' | head -1)
+          if [ -n "$kernel" ] && [ -z "$noted" ]; then
+            echo "::error::$kernel changed, but no changeset was added."
+            echo "The kernel is bundled into @panaversity/ksor, so this changes"
+            echo "what adopters install. Run \`pnpm changeset\` and describe it"
+            echo "for release-notes readers (patch by default pre-1.0)."
+            exit 1
+          fi
 
   typecheck:
     name: Typecheck
