@@ -479,6 +479,12 @@ if (!existsSync(knowledgeDir)) {
   const crossings = [];
   for (const p of mdFiles) {
     const rel = path.relative(root, p);
+    // Every markdown file under knowledge/ IS a document of the record, whether
+    // or not its own frontmatter parses. Counting it only after a clean parse
+    // made a correct `superseded_by` be reported as a capitalisation mistake
+    // whenever its successor was the document still being written (round 3) —
+    // two problems for one cause, and the second one false.
+    documentPaths.add(p);
     const text = readFileSync(p, "utf8");
     const fm = parseFrontmatter(text);
     if (fm === null) {
@@ -727,7 +733,6 @@ if (!existsSync(knowledgeDir)) {
           );
         }
       }
-      documentPaths.add(p);
       if (audienceModel !== null) {
         visibilityByPath.set(p, visibility ?? audienceModel.defaultVisibility);
       }

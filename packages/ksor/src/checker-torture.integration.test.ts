@@ -514,6 +514,20 @@ describe("scaffolded format-checker — torture", () => {
       expect(stale.output).toContain("superseded_by on a document that is status: approved");
     });
 
+    it("does not blame a correct pointer when the SUCCESSOR is the broken one", () => {
+      // The successor exists but has not been given frontmatter yet — the
+      // ordinary state mid-edit. That is one problem, against the successor.
+      // It used to raise a second, false one against the pointer, telling the
+      // author to check capitalisation that was already right.
+      const result = probe({
+        "knowledge/new-policy.md": "# New policy\n\nStill being written.\n",
+        "knowledge/old-policy.md":
+          "---\ntitle: Old\nstatus: superseded\nsuperseded_by: ./new-policy.md\n---\n\nBody.\n",
+      });
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).not.toContain("does not name a document in the record");
+    });
+
     it("refuses a supersession that leads back to itself", () => {
       const itself = probe({
         "knowledge/self.md":
