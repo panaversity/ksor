@@ -187,6 +187,11 @@ function parseFrontmatter(text) {
       continue;
     }
     if (/^[ \t]*-([ \t]|$)/.test(line)) continue;
+    // A whole-line comment is YAML, not a wrapped value — an author annotating
+    // their own frontmatter ("# add the signed PDF once it lands") is doing
+    // nothing wrong, and refusing it turned the adopter's shipped CI red on a
+    // record both surfaces read perfectly (found 2026-08-21).
+    if (/^[ \t]*#/.test(line)) continue;
     // An indented line that is neither a nested key nor a list item is a value
     // WRAPPED onto a second line. YAML folds it back into the value above;
     // this parser used to skip it, so every rule here inspected a string that

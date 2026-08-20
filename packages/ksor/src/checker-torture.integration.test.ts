@@ -464,6 +464,24 @@ describe("scaffolded format-checker — torture", () => {
       expect(following.status, `following the remedy → ${following.output}`).toBe(0);
     });
 
+    it("accepts a comment line an author writes inside their own frontmatter", () => {
+      // YAML allows it, both surfaces read the record perfectly, and the rule
+      // that refused it was meant for WRAPPED VALUES — it caught annotations
+      // instead and turned the adopter's CI red (round 4).
+      const annotated = probe({
+        "knowledge/note.md":
+          "---\ntitle: Note\nstatus: approved\nprovenance:\n  - Board minute 2026-02-11\n" +
+          "  # add the signed PDF once it lands\n---\n\nBody.\n",
+      });
+      expect(annotated.status, annotated.output).toBe(0);
+
+      const topLevelComment = probe({
+        "knowledge/note.md":
+          "---\n# the two sources this rests on\ntitle: Note\nstatus: approved\n---\n\nBody.\n",
+      });
+      expect(topLevelComment.status, topLevelComment.output).toBe(0);
+    });
+
     it("refuses a value wrapped onto a second line, which YAML folds back", () => {
       // The parser skipped indented continuations, so every rule inspected a
       // string that was not the published value: this exact document passed
