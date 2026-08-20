@@ -40,6 +40,13 @@ import { runProbe } from "@panaversity/ksor-content";
 import { buildServer } from "./server.js";
 import type { Composition } from "./compose.js";
 
+/**
+ * How long a drain may take before the process exits anyway. Long enough for a
+ * real in-flight exchange and a remote pool teardown; short enough that a
+ * wedged shutdown is a delay, never an orphaned server holding the port.
+ */
+const DRAIN_TIMEOUT_MS = envInt(process.env, "KSOR_DRAIN_TIMEOUT_MS", 10_000, { minimum: 100 });
+
 export interface Security {
   /** Allowed Host header values; null = do not Host-gate (public, bearer-gated). */
   readonly hosts: Set<string> | null;
@@ -445,14 +452,33 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // Drain: close the listener FIRST, then the pool in its callback — the pool
   // must not be torn down under in-flight work (review, 2026-08-19).
   const shutdown = (): void => {
+    // SAY SO. Attaching a SIGTERM/SIGINT listener suppresses Node's default
+    // terminate, so from here on this process exits only because we let it —
+    // and it used to do that silently, which is how a stopped-looking server
+    // could still be holding its port with the operator's prompt already back
+    // (review 2026-08-20, an orphan found running long after).
+    console.error("ksor gateway: draining…");
+    // A hard deadline. Both closes below are unawaited network teardowns with
+    // no bound of their own; against a remote pooler either can hang, and an
+    // idle pooled socket keeps the event loop alive, so a hang here is an
+    // unkillable server rather than a slow one. Unref'd so it never DELAYS a
+    // clean exit — it only catches one that never arrives.
+    const deadline = setTimeout(() => {
+      console.error(`ksor gateway: drain exceeded ${DRAIN_TIMEOUT_MS}ms — exiting anyway`);
+      process.exit(0);
+    }, DRAIN_TIMEOUT_MS);
+    deadline.unref();
+
     server.close(() => {
       // Close the MCP handler INSIDE the listener's callback, beside the pool:
       // once closed it throws "This MCP handler has been closed" for any new
       // fetch, which would escape as a bare 500 for requests still in the drain
       // window. The listener stops accepting first, in-flight exchanges finish,
       // then both are torn down (security re-verification, 2026-08-20).
-      void mcpHandler.close().catch(() => undefined);
-      void pool.end().catch(() => undefined);
+      void Promise.allSettled([mcpHandler.close(), pool.end()]).then(() => {
+        clearTimeout(deadline);
+        console.error("ksor gateway: stopped");
+      });
     });
     // close() waits for EXISTING connections to end; an idle keep-alive MCP
     // client (between requests) would keep its callback from ever firing — and

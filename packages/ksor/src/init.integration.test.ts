@@ -194,8 +194,21 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     // TWO surfaces, TWO commands, each named for what it serves: `pnpm dev`
     // is the site for people, `pnpm serve` is the record for agents. `serve`
     // carries the whole chain so there is never a choice to make.
+    // SETUP is separate from SERVE on purpose. The fused form applied DDL and
+    // granted the tool its own ingest authorization on EVERY boot — grant.ts
+    // argues at length that a flag is not authorization, and here the tool was
+    // its own authorizer once per start (review 2026-08-20). The privileged,
+    // once-only acts moved to `pnpm setup`; the daily loop stays one command.
+    expect(pkg.scripts?.["setup"], "the privileged acts, run once by a human").toBe(
+      "pnpm schema && pnpm grant",
+    );
     expect(pkg.scripts?.["serve"], "one command serves the agent surface").toBe(
-      "pnpm schema && pnpm grant && pnpm ingest && ksor serve",
+      "pnpm ingest && pnpm gc && ksor serve",
+    );
+    // gc in the loop: a refused flip leaves a complete generation behind, and
+    // nothing in the default path ever collected them.
+    expect(pkg.scripts?.["gc"], "collection is part of the loop").toBe(
+      "ksor gc --instance instance.md",
     );
     // `up` is pnpm's own alias for `update`: a script by that name is shadowed
     // and silently upgrades the adopter's dependencies (shipped in 0.0.5).

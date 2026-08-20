@@ -58,10 +58,11 @@ export class SchemaVersionError extends ContentStoreError {
 
 /**
  * Refuse to serve against a database that is missing the schema OR older than
- * this build needs — fail closed at boot with a legible message. There is no
- * migration runner (a recorded gap): a newer gateway on an older/absent schema
- * would otherwise answer /live and /health while erroring PER-REQUEST on a
- * missing table or column. Queried with the pool's OWN role (schema_meta has no
+ * this build needs — fail closed at boot with a legible message. Serving never
+ * migrates on its own: a newer gateway on an older/absent schema would
+ * otherwise answer /live and /health while erroring PER-REQUEST on a missing
+ * table or column. Moving the database forward is a deliberate operator act
+ * (`ksor schema --apply`, see migrate.ts). Queried with the pool's OWN role (schema_meta has no
  * RLS) so the raw SQLSTATE is visible: a missing schema_meta table (42P01) or
  * database (3D000) is "reachable but uninitialized" — the COMMON case, and it
  * refuses. A genuine connection failure is NOT this error's concern; it
@@ -93,7 +94,7 @@ export async function assertSchemaCompatible(pool: pg.Pool): Promise<void> {
   if (compareVersion(dbVersion, required) < 0) {
     throw new SchemaVersionError(
       `database schema is ${dbVersion}; this build requires >= ${required}. ` +
-        "Re-apply schema.sql (dev: drop and recreate the database) or run a migration — " +
+        "Run `ksor schema --instance instance.md --apply` to migrate it forward — " +
         "a newer gateway on an older database errors per-request on missing columns.",
     );
   }

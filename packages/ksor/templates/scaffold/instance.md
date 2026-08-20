@@ -4,6 +4,14 @@ name: KSOR-STAMP-NAME
 ksor:
   requires: ">=KSOR-STAMP-VERSION"
   scaffolded: "KSOR-STAMP-VERSION"
+# The served MCP rung needs ONE required block: the NAME of the environment
+# variable holding your Postgres DSN — never the DSN itself. Uncomment it, copy
+# .env.example to .env, then run `pnpm serve`. Nothing else here is required:
+# `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
+# `retrieval:` out starts you with the abstention gate off and honest about it
+# (turn it on afterwards with `ksor calibrate`, once the record is serving).
+# database:
+#   dsn_env: KSOR_DB_URL
 ---
 
 # Knowledge System of Record

@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runRead } from "../db.js";
 import { applySchema } from "../schema.js";
-import { audienceGucs } from "./audience.js";
+import { audienceGucs, type AudienceModel } from "./audience.js";
 import { findDocument, outline, UnknownSlug } from "./read.js";
 import { keywordSearch } from "./search.js";
 import type pg from "pg";
@@ -22,8 +22,11 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_audience_test";
 const TENANT = "audience-corp";
 
-const MODEL = { audiences: ["public", "internal", "restricted"], defaultVisibility: "public" };
-const NO_MODEL = { audiences: [] as string[], defaultVisibility: null };
+const MODEL: AudienceModel = {
+  audiences: ["public", "internal", "restricted"],
+  defaultVisibility: "public",
+};
+const NO_MODEL: AudienceModel = { audiences: [], defaultVisibility: null };
 
 const scope = { tenantId: TENANT, corpusId: TENANT, kinds: null, pinnedGeneration: null };
 
@@ -93,7 +96,7 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
     await admin?.end().catch(() => undefined);
   });
 
-  const searchAs = (viewer: string | null, model = MODEL): Promise<string[]> =>
+  const searchAs = (viewer: string | null, model: AudienceModel = MODEL): Promise<string[]> =>
     runRead(
       pool,
       TENANT,
@@ -101,7 +104,7 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
       audienceGucs(model, viewer),
     ).then((s) => s.sort());
 
-  const outlineAs = (viewer: string | null, model = MODEL): Promise<string[]> =>
+  const outlineAs = (viewer: string | null, model: AudienceModel = MODEL): Promise<string[]> =>
     runRead(
       pool,
       TENANT,
@@ -110,7 +113,11 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
       audienceGucs(model, viewer),
     ).then((s) => s.sort());
 
-  const readAs = (viewer: string | null, slug: string, model = MODEL): Promise<string | null> =>
+  const readAs = (
+    viewer: string | null,
+    slug: string,
+    model: AudienceModel = MODEL,
+  ): Promise<string | null> =>
     runRead(
       pool,
       TENANT,
@@ -168,7 +175,7 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
   });
 
   it("an undeclared document follows default_visibility, and fails CLOSED when there is none", async () => {
-    const noDefault = { audiences: ["public", "internal"], defaultVisibility: null };
+    const noDefault: AudienceModel = { audiences: ["public", "internal"], defaultVisibility: null };
     expect(await searchAs("public", noDefault)).toEqual(["open-notice"]);
     expect(await readAs("public", "undeclared", noDefault)).toBeNull();
   });

@@ -31,21 +31,25 @@ part of `pnpm dev`. The ordered path is:
 
 ```sh
 cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
-pnpm serve             # schema → grant → ingest → serve
+pnpm setup             # once: apply the schema, authorize ingest
+pnpm serve             # ingest → collect → serve
 ```
 
 `ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
 is required for a local run: serve refuses to boot unauthenticated on purpose,
 so a server is never open by accident.
 
-Add one block to `instance.md` first — `database: { dsn_env: KSOR_DB_URL }`,
-the NAME of the variable, never the DSN. That is the whole required config:
+Uncomment the `database:` block already in `instance.md` — it names the
+VARIABLE holding your DSN, never the DSN itself. That is the whole required
+config:
 `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
 `retrieval:` out starts you with the abstention gate off and honest about it
 (turn it on afterwards with `ksor calibrate`, once the record is serving).
 
-`pnpm serve` is the only command this rung needs — first run, after editing
-`knowledge/`, or just to bring the server back. A rerun on an unchanged record
+`pnpm setup` runs once — it applies the schema (or migrates it forward) and
+authorizes ingest, the two privileged acts that should not happen on every
+boot. After that `pnpm serve` is the only command this rung needs — after
+editing `knowledge/`, or just to bring the server back. A rerun on an unchanged record
 costs nothing: no new generation, no embedding, no rows. Edit a document and
 the next run picks up exactly that change. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` refuses to boot

@@ -8,5 +8,7 @@ export {
   PoolTimeoutError,
   runScopedIn,
   scopedTxn,
+  tlsAdvisory,
+  withGuardedClient,
 } from "./db.js";
 export type { DomainPoolOptions, Gucs, RetryOptions } from "./db.js";

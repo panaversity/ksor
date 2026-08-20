@@ -121,6 +121,12 @@ function parseFrontmatter(text) {
   for (const raw of match[1].split("\n")) {
     const line = raw.replace(/[ \t]+$/, "");
     if (line === "") continue;
+    // A full-line `#` comment is YAML, and the kernel's own instance parser
+    // skips it — the checker refusing one made the two grammars disagree about
+    // the same file, which is exactly the drift this checker exists to stop.
+    // (Only a WHOLE-line comment: a trailing `# ...` after a value is still the
+    // value, as YAML and the kernel both read it.)
+    if (line.trimStart().startsWith("#")) continue;
     // YAML requires a space after the colon and refuses tab indentation —
     // both parsed here fine and failed the build (review findings, 2026-08-18).
     if (/^[A-Za-z_][\w-]*:\S/.test(line)) tightColons.push(line);

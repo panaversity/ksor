@@ -56,13 +56,28 @@ const JOINS = `
 
 const HYBRID_SQL = `
 WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
+    -- The top-k is taken by a PLAIN \`ORDER BY <distance> LIMIT\`, and the rank
+    -- is numbered OUTSIDE it. Ordering by a window column instead made the
+    -- HNSW index unusable: a window function must see every row in its
+    -- partition before it can number anything, so Postgres computed the
+    -- distance for every chunk in the generation and sorted — measured on
+    -- PG 17.7 / pgvector 0.8.2 at 6,667 rows: 1180 ms seq-scan+quicksort here
+    -- versus 14 ms via the index, with idx_chunks_hnsw built and maintained
+    -- but never used (review 2026-08-20). The arm's filters stay INSIDE the
+    -- ordered scan on purpose: hnsw.iterative_scan = relaxed_order (bound in
+    -- VECTOR_TXN_GUCS) is what keeps recall honest when a predicate rejects
+    -- candidates, which is the whole reason that knob is set.
     vec AS (
-        SELECT c.chunk_id, g.gen,
-               row_number() OVER (ORDER BY c.embedding <=> $3::vector, c.chunk_id) AS r,
-               1 - (c.embedding <=> $3::vector) AS sim
-        ${JOINS}
-        WHERE ${ARM_WHERE}
-        ORDER BY r LIMIT $6),
+        SELECT chunk_id, gen,
+               row_number() OVER (ORDER BY dist, chunk_id) AS r,
+               1 - dist AS sim
+        FROM (
+            SELECT c.chunk_id, g.gen, (c.embedding <=> $3::vector) AS dist
+            ${JOINS}
+            WHERE ${ARM_WHERE}
+            ORDER BY c.embedding <=> $3::vector, c.chunk_id
+            LIMIT $6
+        ) ranked),
     kw AS (
         SELECT c.chunk_id, g.gen,
                row_number() OVER (ORDER BY ts_rank_cd(c.search_tsv,

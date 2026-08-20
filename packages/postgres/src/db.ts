@@ -75,6 +75,38 @@ export function neverRetry(error: unknown): boolean {
   return code !== undefined && NEVER_RETRY_SQLSTATE.has(code);
 }
 
+/** sslmode values pg 8 treats as FULL verification and pg 9 will not. */
+const WEAK_SSLMODES = ["require", "prefer", "verify-ca"];
+
+/**
+ * Warn once when a remote DSN's TLS posture is inherited rather than chosen.
+ *
+ * With pg 8, `sslmode=require|prefer|verify-ca` all resolve to full
+ * verification — so ksor gets verified TLS today by accident of a default, not
+ * by decision, and nothing in the repo states or tests the posture. The driver
+ * itself warns that those modes adopt libpq semantics (NO certificate
+ * verification) in pg 9, which would silently downgrade every adopter on a
+ * dependency bump. `pg` is pinned `^8.23.0` so semver blocks that today; this
+ * makes the posture legible now and names the one-word fix.
+ */
+export function tlsAdvisory(dsn: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(dsn);
+  } catch {
+    return null;
+  }
+  const host = url.hostname;
+  if (host === "" || host === "localhost" || host === "127.0.0.1" || host === "::1") return null;
+  const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
+  if (!WEAK_SSLMODES.includes(mode)) return null;
+  return (
+    `db TLS: sslmode=${mode} is verified TODAY (pg 8 treats it as verify-full) but becomes ` +
+    "UNVERIFIED under libpq semantics in pg 9 — write sslmode=verify-full in the DSN to say so " +
+    "explicitly and keep the guarantee across a driver upgrade."
+  );
+}
+
 /**
  * Whether a DSN points at a transaction-mode pooler. It CLASSIFIES, never
  * transforms. In the oracle the consequence was prepare_threshold=None;
@@ -181,25 +213,71 @@ export async function scopedTxn<T>(
   gucs: Gucs,
   op: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
-  const client = await acquire(pool);
-  try {
-    await client.query("BEGIN");
-    const entries = Object.entries({ search_path: "public", ...gucs });
-    const calls = entries.map((_, i) => `set_config($${i * 2 + 1}, $${i * 2 + 2}, true)`);
-    await client.query(`SELECT ${calls.join(", ")}`, entries.flat());
-    const result = await op(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
+  return withGuardedClient(pool, async (client) => {
     try {
-      await client.query("ROLLBACK");
-    } catch {
-      // The rollback failing means the connection is gone; the original
-      // error is the one that matters.
+      await client.query("BEGIN");
+      const entries = Object.entries({ search_path: "public", ...gucs });
+      const calls = entries.map((_, i) => `set_config($${i * 2 + 1}, $${i * 2 + 2}, true)`);
+      await client.query(`SELECT ${calls.join(", ")}`, entries.flat());
+      const result = await op(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // The rollback failing means the connection is gone; the original
+        // error is the one that matters.
+      }
+      throw error;
     }
-    throw error;
+  });
+}
+
+/**
+ * Check a client out with an 'error' listener attached for the WHOLE checkout,
+ * and hand a broken one back for destruction rather than reuse.
+ *
+ * pg-pool 3.14 removes the client's own 'error' listener on checkout
+ * (`_acquireClient`: `client.removeListener('error', idleListener)`) and only
+ * re-attaches it in `_release`. Between those two points a pg Client has ZERO
+ * error listeners, while `Client._handleErrorEvent` emits 'error'
+ * unconditionally — so a connection dying mid-statement became an UNCAUGHT
+ * EXCEPTION and took the whole process down with exit 1.
+ *
+ * The pool-level listener does not cover this: pg-pool forwards to the pool
+ * only for IDLE clients, which is why the same deployment showed two endings —
+ * an idle-time drop logged "idle client error … connection discarded" and
+ * served on, while a drop during a query killed the server. On an endpoint that
+ * suspends its compute, the second is the first request after an idle period
+ * (review 2026-08-20; reproduced in checkout-error.db.test.ts, which fails with
+ * "Connection terminated unexpectedly" escaping uncaught without this).
+ *
+ * The listener is deliberately NOT removed on the error path: pg can emit a
+ * late 'error' after the query has already rejected, and a client being
+ * destroyed has nothing left to say that anyone needs to hear.
+ */
+export async function withGuardedClient<T>(
+  pool: pg.Pool,
+  op: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await acquire(pool);
+  let socketError: Error | undefined;
+  const guard = (error: Error): void => {
+    socketError = error;
+  };
+  client.on("error", guard);
+  try {
+    return await op(client);
   } finally {
-    client.release();
+    if (socketError === undefined) {
+      client.removeListener("error", guard);
+      client.release();
+    } else {
+      // Release WITH the error so pg-pool destroys this connection instead of
+      // returning a dead socket to the pool for the next borrower to trip over.
+      client.release(socketError);
+    }
   }
 }
 

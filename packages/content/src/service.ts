@@ -124,6 +124,20 @@ export interface SnapshotEnvelope {
   readonly expires_at: string;
 }
 
+/**
+ * What the abstention gate is doing, reported on every search envelope.
+ * "off" is an HONEST state (governance is a ladder) — but only if the surface
+ * says so; before this it was visible in the boot log and nowhere on the wire.
+ */
+export type GateState = "off" | "uncalibrated" | { readonly floor: number };
+
+export function gateState(instance: ContentInstance): GateState {
+  const floor = instance.abstain.vectorFloor;
+  if (floor === null) return "off";
+  if (floor === "uncalibrated") return "uncalibrated";
+  return { floor };
+}
+
 /** Abstention is a TYPE the caller branches on, never a phrasing (spec §6). */
 export type SearchResult =
   | {
@@ -131,6 +145,17 @@ export type SearchResult =
       readonly abstained: false;
       readonly hits: SearchHit[];
       readonly snapshot: SnapshotEnvelope;
+      /**
+       * Whether the abstention gate is ARMED, on every envelope. Without it
+       * `ok:true` from an UNCALIBRATED corpus is indistinguishable from
+       * `ok:true` from a gated one, and the tool description tells the agent
+       * that an answer means the record covers the question — so a level-0
+       * record answered out-of-corpus questions with confident citations and
+       * nothing on the wire said otherwise (review 2026-08-20).
+       */
+      readonly gate: GateState;
+      /** Top-1 cosine actually measured, so "why did this not abstain?" is answerable off-database. */
+      readonly top_cosine?: number | null;
       readonly note?: string;
       readonly content_advisory?: string;
       readonly k_note?: string;
@@ -140,6 +165,11 @@ export type SearchResult =
       readonly ok: false;
       readonly abstained: true;
       readonly reason: "abstained";
+      readonly gate: GateState;
+      /** The measured signal beside the floor that rejected it — an operator
+       * can tell "genuinely out of corpus" from "the embedding space is
+       * broken" without querying retrieval_log, which no shipped role can read. */
+      readonly top_cosine?: number | null;
       readonly hits: [];
       /**
        * UNIFORM key, present on every abstention: a floor abstention (hits
@@ -319,6 +349,8 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ok: false,
       abstained: true,
       reason: "abstained",
+      gate: gateState(inst),
+      top_cosine: topCosine,
       hits: [],
       snapshot: generation === undefined ? null : snapshotEnvelope(ctx, generation),
       ...(kNote === undefined ? {} : { k_note: kNote }),
@@ -387,6 +419,8 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     abstained: false,
     hits: shaped,
     snapshot: snapshotEnvelope(ctx, generation),
+    gate: gateState(inst),
+    top_cosine: topCosine,
     ...(truncated === 0
       ? {}
       : {

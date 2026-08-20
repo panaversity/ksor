@@ -21,6 +21,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
 
+import { withGuardedClient } from "@panaversity/ksor-postgres";
+
 const NAME = /^(\d+(?:\.\d+)*)-(\d+(?:\.\d+)*)__([a-z0-9][a-z0-9-]*)\.sql$/;
 
 export interface MigrationName {
@@ -145,25 +147,27 @@ export async function runMigrations(
   const applied: string[] = [];
   for (const step of plan) {
     const sql = read(path.join(dir, step.filename));
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO schema_meta (schema_version, compatible_from) VALUES ($1, $2)",
-        [step.to, step.from],
-      );
-      await client.query("COMMIT");
-    } catch (error) {
+    // Guarded checkout: a connection dying mid-migration must reject, not
+    // become an uncaught 'error' on a listener-less client (see
+    // withGuardedClient in @panaversity/ksor-postgres).
+    await withGuardedClient(pool, async (client) => {
       try {
-        await client.query("ROLLBACK");
-      } catch {
-        // the connection is gone; the original error is the one that matters
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query(
+          "INSERT INTO schema_meta (schema_version, compatible_from) VALUES ($1, $2)",
+          [step.to, step.from],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          // the connection is gone; the original error is the one that matters
+        }
+        throw error;
       }
-      throw error;
-    } finally {
-      client.release();
-    }
+    });
     applied.push(step.filename);
   }
   return { from: current, to: plan.at(-1)?.to ?? current, applied };

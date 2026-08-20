@@ -52,8 +52,9 @@ pnpm check       # the format checker — run before handing off any knowledge c
 with honest abstention. It is the climbed rung — not required for `pnpm dev`.
 Stand it up in this order (each step's errors explain how to fix themselves):
 
-1. **Configure `instance.md`.** One block is required — the name of the
-   environment variable holding your DSN (never the DSN itself):
+1. **Configure `instance.md`.** One block is required, and it is already
+   there, commented out — uncomment it. It names the environment variable
+   holding your DSN (never the DSN itself):
 
    ```yaml
    database:
@@ -90,11 +91,15 @@ Stand it up in this order (each step's errors explain how to fix themselves):
      intended dev shape. A PUBLIC deployment configures the SSO door instead —
      see the comments in `.env.example` and "Serving safely" below.
 
-3. **Bring it up — one command:**
+3. **Bring it up.** Once, then every time:
 
    ```sh
-   pnpm serve   # schema → grant → ingest → serve
+   pnpm setup   # schema (or migrate) + grant — the privileged acts, run once
+   pnpm serve   # ingest → collect → serve
    ```
+
+   `setup` is separate on purpose: applying DDL and granting ingest are acts an
+   operator performs, not side effects of starting a server.
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing

@@ -13,6 +13,7 @@
  * guard only).
  */
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import pg from "pg";
@@ -117,6 +118,39 @@ function composeProvider(instance: ContentInstance): EmbeddingProvider | number 
       REFUSED,
       `instance embedding.provider: ${exc instanceof Error ? exc.message : String(exc)}`,
     );
+  }
+}
+
+/**
+ * The commit the corpus was ingested from, resolved from git when the tree is
+ * in a repository.
+ *
+ * `--source-commit` has always existed and the golden path never passed it, so
+ * EVERY generation an adopter produced recorded the literal string
+ * "unspecified" — product principle 6 requires a build to record the exact
+ * corpus that produced it, and a placeholder records nothing (review
+ * 2026-08-20). Resolved here rather than in the scaffold script so it is right
+ * however the verb is invoked. A tree that is not a repository, or a git that
+ * is not installed, still records the honest sentinel rather than failing an
+ * ingest over provenance metadata.
+ */
+export function detectSourceCommit(knowledgeDir: string | undefined): string {
+  if (knowledgeDir === undefined) return "unspecified";
+  try {
+    const head = execFileSync("git", ["-C", knowledgeDir, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (!/^[0-9a-f]{40}$/.test(head)) return "unspecified";
+    // A dirty tree did NOT produce that commit; say so rather than citing a
+    // commit whose bytes differ from what was just ingested.
+    const dirty = execFileSync("git", ["-C", knowledgeDir, "status", "--porcelain"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return dirty === "" ? head : `${head}-dirty`;
+  } catch {
+    return "unspecified";
   }
 }
 
@@ -324,7 +358,7 @@ async function ingestCommand(args: string[]): Promise<number> {
         knowledgeDir: values.knowledge!,
         // Provenance is recorded honestly: without --source-commit the sources
         // rows say so rather than carrying a guessed SHA.
-        sourceCommit: values["source-commit"] ?? "unspecified",
+        sourceCommit: values["source-commit"] ?? detectSourceCommit(values.knowledge),
         flip: values.flip ?? false,
         provider,
         onLog: (line) => process.stdout.write(line + "\n"),

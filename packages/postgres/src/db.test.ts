@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isOperationalError, neverRetry, pooledEndpointFor, PoolTimeoutError } from "./db.js";
+import {
+  isOperationalError,
+  neverRetry,
+  pooledEndpointFor,
+  PoolTimeoutError,
+  tlsAdvisory,
+} from "./db.js";
 
 describe("pooledEndpointFor — classify, never transform", () => {
   it("detects Neon pooler hosts, pgbouncer, and port 6432", () => {
@@ -43,5 +49,34 @@ describe("error classification — the retry/shed contract", () => {
   it("a bare connection-drop message (no code) is operational", () => {
     expect(isOperationalError(new Error("Connection terminated unexpectedly"))).toBe(true);
     expect(isOperationalError(new Error("some app-level failure"))).toBe(false);
+  });
+});
+
+describe("tlsAdvisory", () => {
+  it("is silent for a loopback DSN — a local socket needs no certificate story", () => {
+    for (const dsn of [
+      "postgresql://u@localhost:5432/db?sslmode=require",
+      "postgresql://u@127.0.0.1:5432/db?sslmode=prefer",
+    ]) {
+      expect(tlsAdvisory(dsn), dsn).toBeNull();
+    }
+  });
+
+  it("is silent when the DSN states the posture explicitly", () => {
+    expect(tlsAdvisory("postgresql://u@db.example.com/x?sslmode=verify-full")).toBeNull();
+    expect(tlsAdvisory("postgresql://u@db.example.com/x?sslmode=disable")).toBeNull();
+  });
+
+  it("names the weak mode and the one-word fix for a remote DSN", () => {
+    for (const mode of ["require", "prefer", "verify-ca"]) {
+      const out = tlsAdvisory(`postgresql://u@db.example.com/x?sslmode=${mode}`);
+      expect(out, mode).toContain(mode);
+      expect(out, mode).toContain("verify-full");
+    }
+  });
+
+  it("never throws on an unparseable DSN", () => {
+    expect(tlsAdvisory("not a url")).toBeNull();
+    expect(tlsAdvisory("")).toBeNull();
   });
 });

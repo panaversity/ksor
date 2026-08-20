@@ -162,11 +162,15 @@ builtin `up`.
   security controls were re-verified against the new wiring as the acceptance
   for the swap.
 
-- **No schema migration runner**: `schema.sql` is one file, versioned in
-  `schema_meta` (2.1). That is correct while no adopter has production data
-  (nothing is released). Before adopters do, a forward-migration path
-  (versioned plain SQL + a runner keyed on `schema_meta`) is owed —
-  recorded as a decision in `research/kernel-conversion.md`.
+- **Schema migrations — DONE.** `schema.sql` provisions a FRESH database at the
+  current version (2.2); an existing one moves forward through
+  `schema/migrations/<from>-<to>__<slug>.sql`, applied by a runner keyed on
+  `schema_meta`. The chain is WALKED, not sorted, so a missing step refuses
+  rather than being skipped, and each step commits with the `schema_meta` row
+  that records it. `ksor schema --apply` compares versions instead of checking
+  presence. This retires the "drop and recreate the database" remedy, which
+  destroyed `retrieval_log` and `takedown_denylist` — the only two tables that
+  cannot be rebuilt from markdown.
 
 ## Designed, not implemented
 

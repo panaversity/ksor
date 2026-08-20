@@ -7,10 +7,12 @@
     "dev": "pnpm -C system/site dev",
     "build": "pnpm -C system/site build",
     "check": "node .agents/skills/format-checker/check.mjs",
-    "serve": "pnpm schema && pnpm grant && pnpm ingest && ksor serve",
+    "setup": "pnpm schema && pnpm grant",
+    "serve": "pnpm ingest && pnpm gc && ksor serve",
     "schema": "ksor schema --instance instance.md --apply",
     "grant": "ksor grant --instance instance.md",
-    "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip"
+    "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip",
+    "gc": "ksor gc --instance instance.md"
   },
   "dependencies": {
     "@panaversity/ksor": "KSOR-STAMP-VERSION"

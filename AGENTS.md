@@ -387,11 +387,33 @@ gateway` package, serve-by-spawn) is superseded._
     outline, and the calibration sampler; an empty denylist makes the seed
     empty and the recursion terminate at once, so the hot path pays nothing.
     Schema: `takedown_denylist.scope` (schema_meta 2.1, additive with a
-    default → a 2.0 reader still reads a 2.1 DB). When the `takedown` write
+    default → a 2.0 reader still reads a 2.1 DB; 2.2 adds the governance
+    columns the same additive way). When the `takedown` write
     verb lands it must make a container selection an EXPLICIT choice —
     expand to leaves (identity) or declare a subtree rule — never silently
     guess. Reversed per-clause with evidence; the `node` default is not
     reversible without an owner decision (it is the identity guarantee).
+
+15. **Governance is stored on the record, not re-derived per surface**
+    (2026-08-20, from the end-to-end review). The ingest adapter kept four
+    frontmatter keys and dropped the rest, so `visibility`, the authored
+    `status`, `owner` and `provenance` existed only in markdown and each
+    surface implemented its own subset — the site enforced `visibility:` and
+    the MCP door could not, because the record did not carry it (a document
+    marked `visibility: internal` was hidden from the website and served in
+    full to every agent, reproduced live). Schema 2.2 puts them on
+    `content_nodes`; ONE frontmatter module reads them; `lib/audience.ts` is
+    the single serving seam, bound the way `lib/takedown.ts` binds denial. A
+    new guarantee about a document is a COLUMN plus a seam, never a filter in
+    one surface's build step. Reversed only by an owner decision recorded here.
+
+16. **Forward migrations exist and are walked, not sorted** (2026-08-20).
+    `schema/migrations/<from>-<to>__<slug>.sql`: each file names both ends of
+    its step, so a missing step refuses instead of being silently skipped, and
+    each applies in one transaction with the `schema_meta` row recording it.
+    `schema.sql` remains the DDL source of truth for a FRESH database. This
+    retires "drop and recreate", which destroyed the two tables that cannot be
+    rebuilt from markdown. Reversed only with a recorded replacement.
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,

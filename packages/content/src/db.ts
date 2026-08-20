@@ -21,6 +21,7 @@ import {
   isOperationalError,
   PoolTimeoutError,
   runScopedIn,
+  pooledEndpointFor,
   type Gucs,
 } from "@panaversity/ksor-postgres";
 import { envFloat, envInt } from "./env.js";
@@ -86,7 +87,17 @@ export function contentPool(dsn: string, maxSize?: number): pg.Pool {
   const max = maxSize ?? envInt("KSOR_CONTENT_POOL_MAX", 20, 1);
   // 0 is a legal prewarm floor — a dial that silently floors at 1 lies to
   // the operator.
-  const min = envInt("KSOR_CONTENT_POOL_MIN", 2, 0);
+  //
+  // The DEFAULT is endpoint-shaped. pg-pool 3.14 does not establish minimum
+  // connections eagerly, so a non-zero `min` buys no prewarm at all — it only
+  // suppresses pg-pool's idle reaping. Against a serverless endpoint that
+  // means ksor never closes its own idle sockets, so the POOLER is always the
+  // party that closes one, and every such close surfaces as
+  // "db pool: idle client error" on an otherwise healthy server (review
+  // 2026-08-20, reproduced). On a pooled endpoint the honest floor is 0: let
+  // the idle timeout reap our own connections before the remote drops them.
+  const pooled = pooledEndpointFor(dsn);
+  const min = envInt("KSOR_CONTENT_POOL_MIN", pooled ? 0 : 2, 0);
   return createPool(dsn, { maxSize: max, minSize: min });
 }
 

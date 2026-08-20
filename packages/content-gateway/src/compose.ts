@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type pg from "pg";
-import { pooledEndpointFor } from "@panaversity/ksor-postgres";
+import { pooledEndpointFor, tlsAdvisory } from "@panaversity/ksor-postgres";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertSchemaCompatible,
@@ -88,10 +88,10 @@ export async function compose(instancePath: string, version: string): Promise<Co
   );
   const pool = contentPool(dsn);
 
-  // Fail closed on a database OLDER than this build needs (there is no
-  // migration runner): a reachable, too-old schema refuses to boot with a
-  // legible exit-3 message, instead of erroring per-request on a missing
-  // column while /health reports healthy. An UNREACHABLE store is not this
+  // Fail closed on a database OLDER than this build needs: a reachable,
+  // too-old schema refuses to boot with a legible exit-3 message naming
+  // `ksor schema --apply` (which now migrates it forward), instead of erroring
+  // per-request on a missing column while /health reports healthy. An UNREACHABLE store is not this
   // gate's concern — it is a warning, handled by the space check below.
   try {
     await assertSchemaCompatible(pool);
@@ -121,6 +121,9 @@ export async function compose(instancePath: string, version: string): Promise<Co
     spaceSkipReason = `content store unreachable (${error instanceof Error ? error.name : "Error"})`;
     console.error(`embedding-space check skipped: ${spaceSkipReason}`);
   }
+
+  const advisory = tlsAdvisory(dsn);
+  if (advisory !== null) console.error(advisory);
 
   const ctx: ServiceContext = {
     pool,
