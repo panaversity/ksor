@@ -728,7 +728,7 @@ const INSTANCE_KEYS = new Set([
   "budgets",
 ]);
 const INSTANCE_KSOR_KEYS = new Set(["requires", "scaffolded"]);
-const INSTANCE_SITE_KEYS = new Set(["url"]);
+const INSTANCE_SITE_KEYS = new Set(["url", "governance"]);
 // Nested field names mirror the kernel's instance schema; the kernel validates
 // their values (this checker stays dependency-free and cannot import it).
 const INSTANCE_DATABASE_KEYS = new Set(["dsn_env", "tenant_id"]);
@@ -907,6 +907,23 @@ if (!existsSync(instanceMd)) {
       ["budgets", INSTANCE_BUDGETS_KEYS],
     ]) {
       for (const key of fm.children.get(parent)?.keys() ?? []) {
+        // site.governance is a switch, so its VALUE is checked here: a typo
+        // that silently defaulted would publish the governance the owner asked
+        // to hide, or hide what they asked to publish.
+        if (parent === "site" && key === "governance") {
+          const raw = (fm.children.get("site")?.get("governance") ?? "").trim();
+          const value = (/^["']/.test(raw) ? raw : raw.replace(/\s+#.*$/, ""))
+            .trim()
+            .replace(/^(['"])(.*)\1$/, "$2");
+          if (value !== "true" && value !== "false") {
+            problem(
+              "instance.md",
+              `site.governance is "${value}" — it must be true or false`,
+              "it decides whether pages show the owner, effective date and sources each document declares; a value nobody can read is a setting the owner believes is in effect",
+              'write "governance: false" to keep pages plain, or remove the key (the default shows them)',
+            );
+          }
+        }
         if (!allowed.has(key)) {
           problem(
             "instance.md",

@@ -11,6 +11,7 @@ import {
   type Successor,
 } from "@/components/governance";
 import { readGovernance, resolveSuccessorUrl } from "@/lib/governance";
+import { showGovernance } from "@/lib/shared";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
@@ -42,7 +43,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
       {successor === null ? null : <SupersededNotice successor={successor} />}
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
-      <GovernanceMeta governance={governance} />
+      {showGovernance ? <GovernanceMeta governance={governance} /> : null}
       <DocsBody>
         <MDX
           components={getMDXComponents({
@@ -52,7 +53,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           })}
         />
       </DocsBody>
-      <Provenance entries={governance.provenance} />
+      {showGovernance ? <Provenance entries={governance.provenance} /> : null}
     </DocsPage>
   );
 }

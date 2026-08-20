@@ -142,3 +142,56 @@ export function resolveSuccessorUrl(
   const route = resolved[0] ?? "";
   return anchor === undefined ? route : `${route}#${anchor}`;
 }
+
+/**
+ * Whether this record's site shows the governance it declares — the
+ * `site.governance` key in instance.md, default **on**:
+ *
+ *     site:
+ *       governance: false
+ *
+ * The record often wants `owner:` and `provenance:` filled in for the agent
+ * surface and the audit trail while the published page stays plain. That is a
+ * publication choice, so it belongs to the instance, not to each document —
+ * per-document control is already the frontmatter itself (declare a key and it
+ * shows; leave it off and nothing does).
+ *
+ * Default on, and additive: every record written before this key existed keeps
+ * rendering exactly as it did. Turning it off never hides the SUPERSESSION
+ * notice — that is a correctness warning, not decoration, and a reader handed a
+ * replaced document with no word of its successor has been misled.
+ *
+ * Takes the frontmatter block (not a path) so it stays pure and testable; the
+ * site binds it once in lib/shared.ts.
+ */
+export function governanceVisible(instanceFrontmatterBlock: string): boolean {
+  const lines = instanceFrontmatterBlock.split("\n");
+  const start = lines.findIndex((line) => /^site:[ \t]*(?:#.*)?$/.test(line));
+  if (start === -1) return true;
+
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") continue;
+    // A non-indented line ends the block: a TOP-LEVEL `governance:` is a
+    // different key and must never be mistaken for this setting.
+    if (!/^[ \t]/.test(line)) break;
+    const match = /^[ \t]+governance:[ \t]*(.*)$/.exec(line);
+    if (match === null) continue;
+
+    const raw = (match[1] ?? "").trim();
+    // ` #` starts a YAML comment on an unquoted value (the grammar the
+    // audience model already follows).
+    const value = (/^["']/.test(raw) ? raw : raw.replace(/\s+#.*$/, ""))
+      .trim()
+      .replace(/^(['"])(.*)\1$/, "$2")
+      .toLowerCase();
+
+    if (value === "true") return true;
+    if (value === "false") return false;
+    throw new Error(
+      `instance.md site.governance is ${JSON.stringify(raw)} — it must be true or false. ` +
+        "Defaulting silently would publish the governance you asked to hide, or hide what you " +
+        "asked to publish. Write `governance: false` to keep the pages plain, or remove the key.",
+    );
+  }
+  return true;
+}

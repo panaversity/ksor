@@ -69,6 +69,31 @@ A document with `status: superseded` carries an unmistakable marker naming
 its successor. A reader must not have to notice a subtle badge to learn that
 what they are reading has been replaced.
 
+### The publication switch
+
+`site.governance` in instance.md, **default on**:
+
+```yaml
+site:
+  governance: false
+```
+
+A record often wants `owner:` and `provenance:` filled in for the agent
+surface and the audit trail while the published page stays plain — the data
+is governance, the display is publication. Per-document control already
+exists (declare a key and it shows; leave it off and nothing does), so this
+key answers the other question: whether the site publishes what the record
+declares.
+
+Off hides the status/owner/effective strip and the sources list. It **never**
+hides the supersession notice: that is a correctness warning, not decoration,
+and a reader handed a replaced document with no word of its successor has been
+misled whatever the site's preferences are.
+
+A value that is neither `true` nor `false` is refused — by `pnpm check` and by
+the build. Defaulting silently would publish the governance the owner asked to
+hide, or hide what they asked to publish.
+
 ### Negative promises
 
 - **Nothing is inferred, defaulted or synthesized.** An absent `owner`
@@ -117,7 +142,9 @@ Red first, in this order:
    document per governance shape (bare `draft`; fully-populated `approved`; a
    `superseded` document pointing at its successor). Assert the built HTML
    carries every declared value, the successor link resolves to a real built
-   page, an `approved` document renders no status chip while still showing
+   page, `site: governance: false` leaves the pages plain while the
+   supersession notice survives it, an `approved` document renders no status
+   chip while still showing
    what it declared, and a document declaring only `title` + `status: draft`
    renders that caveat and no other governance furniture.
 3. **Browser smoke** — the existing both-themes, zero-console-error walk

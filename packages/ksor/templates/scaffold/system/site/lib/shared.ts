@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { governanceVisible } from "./governance";
+
 // The record's one identity source: instance.md's `name:` — the same file
 // every other shell reads, so renaming the instance renames every surface
 // at the next build, and no shell carries a baked-in copy (found live
@@ -58,3 +60,10 @@ function readInstanceTitle(): string {
 }
 
 export const appTitle: string = readInstanceTitle();
+
+/**
+ * Whether the pages show the governance each document declares
+ * (`site.governance` in instance.md, default on). Read once at build/server
+ * start, like the identity above — restart `pnpm dev` after changing it.
+ */
+export const showGovernance: boolean = governanceVisible(instanceFrontmatter());

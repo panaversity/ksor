@@ -324,7 +324,36 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(bare).not.toContain("Owner");
     expect(bare).not.toContain("Sources");
     expect(bare).not.toContain("Superseded");
-  }, 240_000);
+
+    // `site: governance: false` — the record still declares owner and sources
+    // (the agent surface and the audit trail want them); the published page
+    // just stays plain. The SUPERSESSION NOTICE survives it: that is a
+    // correctness warning, not decoration.
+    const instanceMd = path.join(project, "instance.md");
+    const original = readFileSync(instanceMd, "utf8");
+    writeFileSync(
+      instanceMd,
+      original.replace("\nksor:\n", "\nsite:\n  governance: false\nksor:\n"),
+    );
+    const checkOff = spawnSync(
+      process.execPath,
+      [path.join(project, ".agents", "skills", "format-checker", "check.mjs")],
+      { cwd: project, encoding: "utf8" },
+    );
+    expect(checkOff.status, `${checkOff.stdout}${checkOff.stderr}`).toBe(0);
+
+    const rebuilt = buildScaffold(project);
+    expect(rebuilt.status, `${rebuilt.stdout}${rebuilt.stderr}`.slice(-2000)).toBe(0);
+
+    const plain = visible("docs/refund-policy");
+    expect(plain).not.toContain("Owner Finance");
+    expect(plain).not.toContain("Sources");
+    expect(plain).not.toContain("Board minutes 2026-01-11");
+    expect(plain).toContain("Superseded");
+    expect(plain).toContain("Refund policy v5");
+
+    writeFileSync(instanceMd, original);
+  }, 420_000);
 });
 
 describe.runIf(!enabled)("scaffold e2e (gated)", () => {

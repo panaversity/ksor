@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  governanceVisible,
   readGovernance,
   resolveSuccessorUrl,
 } from "../templates/scaffold/system/site/lib/governance.js";
@@ -180,5 +181,53 @@ describe("resolveSuccessorUrl", () => {
     expect(
       resolveSuccessorUrl("https://example.com/v5.md", "/docs/refund-policy", KNOWN),
     ).toBeNull();
+  });
+});
+
+describe("governanceVisible", () => {
+  const fm = (...lines: string[]): string => lines.join("\n");
+
+  it("defaults to on when instance.md says nothing", () => {
+    // Purely additive: every record written before this key existed keeps
+    // rendering its governance.
+    expect(governanceVisible(fm("format: 1", "name: acme"))).toBe(true);
+  });
+
+  it("stays on for a site block that declares only a url", () => {
+    expect(governanceVisible(fm("site:", "  url: https://acme.example"))).toBe(true);
+  });
+
+  it("turns off on an explicit false", () => {
+    expect(governanceVisible(fm("site:", "  governance: false"))).toBe(false);
+  });
+
+  it("stays on for an explicit true", () => {
+    expect(governanceVisible(fm("site:", "  governance: true"))).toBe(true);
+  });
+
+  it("reads it beside its sibling keys, in either order", () => {
+    expect(
+      governanceVisible(fm("site:", "  url: https://acme.example", "  governance: false")),
+    ).toBe(false);
+    expect(
+      governanceVisible(fm("site:", "  governance: false", "  url: https://acme.example")),
+    ).toBe(false);
+  });
+
+  it("ends the block at the next top-level key", () => {
+    // `governance:` here is NOT a child of site: — a top-level key of that
+    // name is not this setting and must not silently become it.
+    expect(governanceVisible(fm("site:", "  url: x", "governance: false"))).toBe(true);
+  });
+
+  it("tolerates a trailing comment", () => {
+    expect(governanceVisible(fm("site:", "  governance: false # not on this site"))).toBe(false);
+  });
+
+  it("refuses a value that is not true or false", () => {
+    // Silently defaulting would publish the governance the owner asked to
+    // hide — the owner's intent must never be dropped without a word.
+    expect(() => governanceVisible(fm("site:", "  governance: no"))).toThrowError(/governance/);
+    expect(() => governanceVisible(fm("site:", "  governance:"))).toThrowError(/governance/);
   });
 });

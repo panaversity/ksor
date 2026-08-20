@@ -220,6 +220,11 @@ Details in README → Deploying.
   carries a notice above the title naming its successor and linking to it. A
   key you leave off renders nothing at all: the site never invents a value, so
   a missing owner reads as missing rather than as unowned.
+- **Don't want any of it on the published pages?** Set `governance: false`
+  under `site:` in `instance.md`. The record keeps every key — the agent
+  surface and your audit trail still read them — and the pages simply stay
+  plain. The supersession notice is the one thing it does not hide: a reader
+  handed a replaced document with no word of its successor has been misled.
 - **`status` is shown only when it is a caveat.** `draft`, `review` and
   `superseded` appear as a small label; `approved` shows nothing, because a
   reader already assumes a document in the record is current — so the label

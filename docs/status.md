@@ -80,6 +80,10 @@ builtin `up`.
   Nothing is inferred — an undeclared key renders nothing, never a placeholder
   that would read as governed. All server-rendered, so it survives print, a
   failed bundle and JavaScript off (verified live in both themes). The
+  Publication is the owner's call: `site: governance: false` in instance.md
+  leaves the pages plain while the record keeps every key for the agent
+  surface and the audit trail — and it never hides the supersession notice.
+  `pnpm check` and the build both refuse a value that is not `true`/`false`.
   Fumadocs shell only: bound there rather than as a surface-contract clause
   (owner, 2026-08-20), so a project that swaps shells loses it until its shell
   adds it. Not yet released.
