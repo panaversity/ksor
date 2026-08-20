@@ -327,6 +327,62 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       ),
     ).toContain("Refund policy v5");
 
+    // The AGENT surface carries the same governance, or the record has two
+    // truths (research/site-design.md F1): before this, llms.txt listed a
+    // withdrawn policy and its replacement as adjacent entries told apart only
+    // by their titles, and llms-full.txt served the withdrawn body as clean
+    // prose. Asserted on the built files, not on the projection.
+    const agentFile = (name: string): string =>
+      readFileSync(path.join(project, "system", "site", "out", name), "utf8");
+
+    // ONE document's block, never "from this heading to the end of the file":
+    // the loose form swallows every document after it, so an assertion that a
+    // bare document emits no `owner:` passed on the NEXT document's owner
+    // (caught by this suite on its first run, 2026-08-21 — the same class as
+    // the page-wide notice assertion two screens up).
+    const blockFor = (full: string, heading: string): string => {
+      const from = full.indexOf(heading);
+      expect(from, `no ${heading} in llms-full.txt`).toBeGreaterThanOrEqual(0);
+      const next = full.indexOf("\n# ", from + heading.length);
+      return next === -1 ? full.slice(from) : full.slice(from, next);
+    };
+
+    const index = agentFile("llms.txt");
+    const supersededLine = index
+      .split("\n")
+      .find((line) => line.includes("(/docs/refund-policy)")) as string;
+    expect(supersededLine, `llms.txt:\n${index}`).toBeDefined();
+    expect(supersededLine).toContain("SUPERSEDED");
+    // The RESOLVED route — a consumer never sees the record's file tree, so
+    // `./refund-policy-v5.md` would be a reference it cannot follow.
+    expect(supersededLine).toContain("replaced by /docs/refund-policy-v5");
+    expect(supersededLine).not.toContain(".md");
+    // Caveats only: the successor is approved, so its line stays clean.
+    const successorLine = index
+      .split("\n")
+      .find((line) => line.includes("(/docs/refund-policy-v5)")) as string;
+    expect(successorLine).not.toContain("SUPERSEDED");
+    expect(successorLine).not.toContain("APPROVED");
+    // …and the draft the scaffold ships is marked, because draft is a caveat.
+    expect(index.split("\n").find((line) => line.includes("(/docs/example)"))).toContain("DRAFT");
+
+    const full = agentFile("llms-full.txt");
+    const withdrawnBlock = blockFor(full, "# Refund policy (");
+    expect(withdrawnBlock, `llms-full.txt:\n${full.slice(0, 400)}`).toContain("status: superseded");
+    expect(withdrawnBlock).toContain("superseded_by: /docs/refund-policy-v5");
+    expect(withdrawnBlock).toContain("owner: Finance");
+    expect(withdrawnBlock).toContain("effective: 2026-01-15");
+    expect(withdrawnBlock).toContain("  - Board minutes 2026-01-11");
+    expect(withdrawnBlock).toContain("  - Terms of service v4");
+    // The body still follows the block, byte-faithful.
+    expect(withdrawnBlock).toContain("Refunds are issued within 30 days");
+    // Nothing inferred here either: a document declaring only title+status
+    // gets exactly one key.
+    const exampleBlock = blockFor(full, "# Your first governed document (");
+    expect(exampleBlock).toContain("status: draft");
+    expect(exampleBlock).not.toContain("owner:");
+    expect(exampleBlock).not.toContain("provenance:");
+
     // An approved document carries no status chip: that is what a reader
     // already assumes, and a label that never varies stops being read. What
     // the author DID declare still shows.
@@ -394,6 +450,17 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(plain).not.toContain("Board minutes 2026-01-11");
     expect(plain).toContain("Superseded");
     expect(plain).toContain("Refund policy v5");
+
+    // …and `site.governance` never reaches the AGENT surface. That key decides
+    // what the PAGES publish; the record keeps every key for the agent surface
+    // and the audit trail, so suppressing it here would rebuild the very defect
+    // this test exists to catch, on purpose.
+    const indexOff = agentFile("llms.txt");
+    expect(indexOff.split("\n").find((line) => line.includes("(/docs/refund-policy)"))).toContain(
+      "SUPERSEDED",
+    );
+    const fullOff = agentFile("llms-full.txt");
+    expect(blockFor(fullOff, "# Refund policy (")).toContain("owner: Finance");
 
     writeFileSync(instanceMd, original);
   }, 420_000);

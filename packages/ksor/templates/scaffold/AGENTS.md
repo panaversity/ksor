@@ -230,10 +230,15 @@ Details in README → Deploying.
   carries a notice above the title naming its successor and linking to it. A
   key you leave off renders nothing at all: the site never invents a value, so
   a missing owner reads as missing rather than as unowned.
+- **The agent surface carries them too.** `llms.txt` marks a document whose
+  status is a caveat and names the route that replaced a superseded one;
+  `llms-full.txt` puts the keys back as frontmatter above each document. An
+  agent reading the record therefore sees what a reader sees — a withdrawn
+  document is never handed over as plain prose.
 - **Don't want any of it on the published pages?** Set `governance: false`
   under `site:` in `instance.md`. The record keeps every key — the agent
-  surface and your audit trail still read them — and the pages simply stay
-  plain. The supersession notice is the one thing it does not hide: a reader
+  surface and your audit trail still read them, and `llms.txt`/`llms-full.txt`
+  keep publishing them — and the pages simply stay plain. The supersession notice is the one thing it does not hide: a reader
   handed a replaced document with no word of its successor has been misled.
 - **`status` is shown only when it is a caveat.** `draft`, `review` and
   `superseded` appear as a small label; `approved` shows nothing, because a

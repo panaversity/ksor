@@ -3,6 +3,8 @@ import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import type { Node, Root } from "fumadocs-core/page-tree";
 
+import { agentFrontmatter, readGovernance, resolveSuccessorUrl } from "./governance";
+
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
   baseUrl: "/docs",
@@ -110,10 +112,32 @@ export function getSortedPages(): KnowledgePage[] {
   return [...ordered, ...remaining.values()];
 }
 
-export async function getLLMText(page: KnowledgePage): Promise<string> {
+/**
+ * One document as the full-corpus file carries it: heading, then the record's
+ * own governance as frontmatter, then the body.
+ *
+ * The frontmatter is the point. Without it this file served a superseded
+ * document as clean prose, so a consumer ingesting the corpus answered from a
+ * withdrawn policy with nothing in the bytes to say so (research/site-design.md
+ * F1). `pages` resolves a successor pointer to the route a consumer can
+ * actually fetch.
+ */
+export async function getLLMText(
+  page: KnowledgePage,
+  pages: readonly KnowledgePage[] = [],
+): Promise<string> {
   const processed = await page.data.getText("processed");
+  const governance = readGovernance(page.data, page.path);
+  const successor =
+    governance.supersededBy === null
+      ? null
+      : resolveSuccessorUrl(governance.supersededBy, page.path, pages);
+  const front = agentFrontmatter(governance, successor === null ? null : basePath + successor);
 
-  return `# ${page.data.title} (${basePath}${page.url})
-
-${processed}`;
+  // found live 2026-08-21: the processed markdown arrives with its own leading
+  // blank lines, so every block opened with three of them — and adding the
+  // frontmatter above made it four. One blank line between each part, always.
+  return [`# ${page.data.title} (${basePath}${page.url})`, front.trimEnd(), processed.trimStart()]
+    .filter((part) => part !== "")
+    .join("\n\n");
 }

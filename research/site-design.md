@@ -124,6 +124,13 @@ Ordered by what they cost the product, not by effort.
 
 ### F1 · The agent surface drops the governance the page just gained — _correctness_
 
+> **Closed 2026-08-21.** `llms.txt` now carries the caveat status and the
+> successor's resolved route; `llms-full.txt` carries each document's governance
+> as frontmatter. Proved on the shipped bytes of a freshly scaffolded build, and
+> the e2e assertion was mutation-checked — reverting the projection turns it red.
+> Tier 1 moves 1 and 2 below are done; 3 and 4 (per-page `.md`, the copy action)
+> remain, and F2 with them.
+
 The same superseded policy, on the two surfaces of one build:
 
 ```text

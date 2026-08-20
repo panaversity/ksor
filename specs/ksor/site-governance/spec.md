@@ -90,6 +90,13 @@ hides the supersession notice: that is a correctness warning, not decoration,
 and a reader handed a replaced document with no word of its successor has been
 misled whatever the site's preferences are.
 
+It also never reaches the **agent** files. `llms.txt` and `llms-full.txt` carry
+the governance whatever this key says: it is a decision about what the published
+PAGES show, and the record keeps every key for the agent surface and the audit
+trail — the sentence this key's own rationale opens with. Suppressing them here
+would hand a consumer a withdrawn document as clean prose, which is the defect,
+not the preference.
+
 A value that is neither `true` nor `false` is refused — by `pnpm check` and by
 the build. Defaulting silently would publish the governance the owner asked to
 hide, or hide what they asked to publish.
@@ -120,8 +127,20 @@ timezone or on YAML's rollover behaviour cannot be allowed through.
   and derives every route from the path (product principle 3).
 - **Degrades everywhere**: static export, no JavaScript, and print. No
   governance fact may exist only inside an interactive control.
-- **`llms.txt` and the per-page markdown artifacts are unchanged** — the
-  markdown artifact already carries the document's own frontmatter.
+- ~~**`llms.txt` and the per-page markdown artifacts are unchanged** — the
+  markdown artifact already carries the document's own frontmatter.~~
+  _Revision 2026-08-21 (code wins): the first half is **reversed**. This clause
+  rested on a premise that was false in the build — the per-page markdown
+  artifact does not exist yet, so nothing carried the frontmatter, and `llms.txt`
+  listed a withdrawn document beside its replacement with no way to tell them
+  apart. Scoping governance to the HTML page therefore did not leave the agent
+  surface untouched; it left it **wrong**, which breaks product principle 2
+  (one source, two surfaces, never two truths). `llms.txt` now carries a caveat
+  status and the successor's resolved route, and `llms-full.txt` carries each
+  document's governance as frontmatter — the record's own grammar. Measured
+  before and after on shipped bytes: `research/site-design.md` F1. The per-page
+  markdown artifact stays out of scope (F2), and the parenthetical about it
+  becomes true the day `ksor build` emits one._
 
 ## Where it binds: the Fumadocs reference shell
 

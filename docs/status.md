@@ -84,6 +84,13 @@ builtin `up`.
   leaves the pages plain while the record keeps every key for the agent
   surface and the audit trail — and it never hides the supersession notice.
   `pnpm check` and the build both refuse a value that is not `true`/`false`.
+  The **agent files carry the same governance**: `llms.txt` marks a caveat
+  status and names the route that replaced a superseded document, and
+  `llms-full.txt` restores each document's keys as frontmatter above its body.
+  Without that half, a build warned a reader about a withdrawn policy and handed
+  an agent the same policy as clean prose — one source, two truths (measured on
+  shipped bytes, `research/site-design.md` F1). `site: governance: false` is a
+  decision about the PAGES and never reaches those files.
   Fumadocs shell only: bound there rather than as a surface-contract clause
   (owner, 2026-08-20), so a project that swaps shells loses it until its shell
   adds it. Not yet released.
