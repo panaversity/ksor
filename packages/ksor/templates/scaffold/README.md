@@ -31,7 +31,7 @@ part of `pnpm dev`. The ordered path is:
 
 ```sh
 cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
-pnpm start              # schema → grant → ingest → serve
+pnpm serve             # schema → grant → ingest → serve
 ```
 
 `ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
@@ -44,7 +44,7 @@ the NAME of the variable, never the DSN. That is the whole required config:
 `retrieval:` out starts you with the abstention gate off and honest about it
 (turn it on afterwards with `ksor calibrate`, once the record is serving).
 
-`pnpm start` is the only command this rung needs — first run, after editing
+`pnpm serve` is the only command this rung needs — first run, after editing
 `knowledge/`, or just to bring the server back. It re-embeds only what changed,
 so a rerun on an untouched corpus costs no provider calls. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` binds loopback
@@ -75,7 +75,7 @@ different coding agent's way of finding the same working contract.
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
 | `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in. |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the `pnpm dev` / `pnpm build` / `pnpm check` commands and the served rung's `pnpm start` (schema → grant → ingest → serve, or run them separately), the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
+| `package.json`                   | the two surface commands — `pnpm dev` (the site) and `pnpm serve` (the agent surface: schema → grant → ingest → serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
 

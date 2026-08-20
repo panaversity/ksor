@@ -93,14 +93,14 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 3. **Bring it up — one command:**
 
    ```sh
-   pnpm start   # schema → grant → ingest → serve
+   pnpm serve   # schema → grant → ingest → serve
    ```
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing
    grant reports "already granted", and ingest builds a fresh generation.
 
-   **`pnpm start` is the only command this rung needs.** Run it the first
+   **`pnpm serve` is the only command this rung needs.** Run it the first
    time, run it after editing `knowledge/`, run it to bring the server back —
    it is always the right answer, so there is nothing to decide. Every step it
    chains reports the state it found rather than failing: an applied schema
