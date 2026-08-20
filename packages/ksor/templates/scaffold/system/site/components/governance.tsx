@@ -47,7 +47,7 @@ export function SupersededNotice({ successor }: { successor: Successor }): React
       <p className="mt-1 text-fd-muted-foreground">
         This document has been replaced by{" "}
         {successor.href === null ? (
-          <code className="text-fd-foreground">{successor.label}</code>
+          <code className="break-words text-fd-foreground">{successor.label}</code>
         ) : (
           <Link
             href={successor.href}
@@ -72,7 +72,7 @@ function Fact({
   return (
     <div className="flex items-baseline gap-1.5">
       <dt className="text-fd-muted-foreground">{label}</dt>
-      <dd className="text-fd-foreground">{children}</dd>
+      <dd className="break-words text-fd-foreground">{children}</dd>
     </div>
   );
 }
@@ -149,7 +149,12 @@ export function Provenance({ entries }: { entries: readonly string[] }): ReactEl
       <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-fd-muted-foreground">
         Sources
       </h2>
-      <ul className="space-y-1 text-fd-muted-foreground">
+      {/* break-words, because a citation is often a long unbroken URL: on a
+          phone it overflowed its row by 175px under an ancestor with
+          `overflow-x: clip`, so the middle of the source was clipped away with
+          no ellipsis and nothing to scroll (measured, 2026-08-20). A source
+          nobody can read is not provenance. */}
+      <ul className="space-y-1 break-words text-fd-muted-foreground">
         {entries.map((entry, index) => (
           // Position, not text: a record may cite the same source twice, and
           // duplicate keys are a console error on a governed page.
