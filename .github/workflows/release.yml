@@ -29,9 +29,17 @@ jobs:
       # The version PR is opened by the repo GITHUB_TOKEN, which never triggers
       # the pull_request CI workflow — so the full gate runs HERE, in the same
       # job that publishes. No artifact ships untested.
+      #
+      # BUILD FIRST. Workspace packages resolve one another's types through
+      # their built dist (package.json exports), so typecheck, the unit tier
+      # and the integration tier all need it — ci.yml learned this on
+      # 2026-08-19 and this workflow did not, because a single-package repo
+      # had no cross-package types to resolve. The kernel conversion gave it
+      # some, and the FIRST release after it failed here with "Cannot find
+      # module '@panaversity/ksor-postgres'" (found live, 2026-08-20).
+      - run: pnpm build
       - run: pnpm lint:ci && pnpm fmt:ci && pnpm typecheck && pnpm guard && pnpm check:corpus
       - run: pnpm test:unit
-      - run: pnpm build
       - run: pnpm test:integration
       - run: pnpm publint
       # Publishing uses npm trusted publishing (id-token above): configure the

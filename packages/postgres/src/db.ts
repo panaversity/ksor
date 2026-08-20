@@ -124,7 +124,7 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
   // arms the pending-queue timer when this is non-zero), and it removes the
   // waiter from the queue instead of the hand-rolled "let the late winner
   // complete and bounce" — so we use the native mechanism, not a Promise.race.
-  return new pg.Pool({
+  const pool = new pg.Pool({
     connectionString: dsn,
     max: options.maxSize,
     min: Math.min(options.minSize, options.maxSize),
@@ -133,6 +133,20 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
     connectionTimeoutMillis: options.connectionTimeoutMs ?? 10_000,
     maxLifetimeSeconds: options.maxLifetimeSeconds ?? 900,
   });
+  // pg REQUIRES an error listener on the Pool. An IDLE client that the server
+  // terminates — a restart, a failover, `pg_terminate_backend`, a
+  // `DROP DATABASE ... WITH (FORCE)` — emits 'error' on the pool with no
+  // request to attach it to, and with no listener Node turns that into an
+  // UNCAUGHT EXCEPTION that kills the process. A long-running `ksor serve`
+  // would therefore die on a routine database failover rather than reconnect.
+  // pg discards the broken client itself; our job is to not crash, and to say
+  // what happened without leaking the DSN (found via a CI flake whose real
+  // subject was this, 2026-08-20).
+  pool.on("error", (error: Error & { code?: string }) => {
+    const code = error.code === undefined ? "" : ` ${error.code}`;
+    console.error(`db pool: idle client error (${error.name}${code}) — connection discarded`);
+  });
+  return pool;
 }
 
 /** pg's checkout/connect timeout messages; mapped to our shedding error.
