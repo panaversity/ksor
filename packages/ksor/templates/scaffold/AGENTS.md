@@ -93,28 +93,33 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 3. **Bring it up — one command:**
 
    ```sh
-   pnpm up      # schema → grant → ingest → serve
+   pnpm serve   # schema → grant → ingest → serve
    ```
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing
    grant reports "already granted", and ingest builds a fresh generation.
 
-   **`pnpm up` ingests every time — but it re-EMBEDS nothing that has not
-   changed.** Chunks carry forward by content hash, so a rerun on an untouched
-   corpus makes zero provider calls (`embedded 0, carried N` in the output).
-   What it does spend is a generation: each run creates and activates a new one,
-   and they accumulate. So:
+   **`pnpm serve` is the only command this rung needs.** Run it the first
+   time, run it after editing `knowledge/`, run it to bring the server back —
+   it is always the right answer, so there is nothing to decide. Every step it
+   chains reports the state it found rather than failing: an applied schema
+   says "already applied", an existing grant says "already granted", and
+   unchanged chunks carry forward by content hash, so a rerun on an untouched
+   corpus makes **zero provider calls** (`embedded 0, carried N`).
 
-   | You want to                      | Run                                        |
-   | -------------------------------- | ------------------------------------------ |
-   | set up, or refresh after an edit | `pnpm up`                                  |
-   | just restart the server          | `pnpm serve` — no new generation           |
-   | reap superseded generations      | `pnpm exec ksor gc --instance instance.md` |
+   What a rerun does spend is a generation — each one is created and activated,
+   and they accumulate. Reap them when you think of it, or on a schedule:
 
-   Run the steps individually (`pnpm schema`, `pnpm grant`, `pnpm ingest`)
-   when the acts belong to different people — a DBA holding the credentials
-   that authorize ingest, for instance.
+   ```sh
+   pnpm exec ksor gc --instance instance.md
+   ```
+
+   The individual verbs (`pnpm schema`, `pnpm grant`, `pnpm ingest`,
+   `pnpm serve`) exist for pipelines and split duties — a deploy step that
+   ingests while a different process serves, or a DBA who holds the credentials
+   that authorize ingest. Reach for them when something else runs the steps;
+   not as a daily choice.
 
 4. **Turn the abstention gate on — deliberately, once it serves.** This is the
    step that makes "not in this corpus" a real answer, and it is measured, never

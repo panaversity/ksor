@@ -206,7 +206,14 @@ describe.runIf(enabled).each(SHELLS)(
       // CLI version, absent from the committed site-only lockfile, so the first
       // install adds it (decision 11 revision 2026-08-20); a shell swap changes
       // the dependency set the same way. CI defaults frozen-lockfile on.
-      mustPass(run("pnpm", ["install", "--no-frozen-lockfile"], project), "install");
+      // --config.minimumReleaseAge=0: the scaffold's 48h quarantine is right for an
+      // adopter but non-deterministic in CI (any transitive dep publishing today
+      // fails the job). The policy is asserted from the emitted yaml in the init
+      // suite; this test is about visibility.
+      mustPass(
+        run("pnpm", ["install", "--no-frozen-lockfile", "--config.minimumReleaseAge=0"], project),
+        "install",
+      );
       expectLocalKsorResolved(project, localKsor);
       cleanupLocalKsor(localKsor);
 

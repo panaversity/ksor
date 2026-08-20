@@ -161,7 +161,6 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(pkg.dependencies?.["@panaversity/ksor"], "the served dependency, version-pinned").toBe(
       pkgVersion,
     );
-    expect(pkg.scripts?.["serve"], "a local serve command").toBe("ksor serve");
     // First ingest must --flip or serve answers from an unactivated generation
     // (empty server); ingest needs --instance + --knowledge (no CLI defaults).
     expect(pkg.scripts?.["ingest"], "a local ingest command that activates").toBe(
@@ -188,10 +187,19 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(ignore, "the example is exempt from .env*").toContain("!.env.example");
 
     // One command for the whole served rung. Every step it chains is
-    // re-runnable, so it is also the refresh-after-editing command.
-    expect(pkg.scripts?.["up"], "one command brings the rung up").toBe(
-      "pnpm schema && pnpm grant && pnpm ingest && pnpm serve",
+    // re-runnable, so it is also the refresh-after-editing command. It must
+    // NOT be called `up`: that is pnpm's own alias for `update`, so the script
+    // is shadowed and `pnpm up` silently upgrades the adopter's dependencies
+    // instead (shipped that way in 0.0.5; found live 2026-08-20).
+    // TWO surfaces, TWO commands, each named for what it serves: `pnpm dev`
+    // is the site for people, `pnpm serve` is the record for agents. `serve`
+    // carries the whole chain so there is never a choice to make.
+    expect(pkg.scripts?.["serve"], "one command serves the agent surface").toBe(
+      "pnpm schema && pnpm grant && pnpm ingest && ksor serve",
     );
+    // `up` is pnpm's own alias for `update`: a script by that name is shadowed
+    // and silently upgrades the adopter's dependencies (shipped in 0.0.5).
+    expect(pkg.scripts?.["up"], "`up` collides with pnpm's built-in").toBeUndefined();
     const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     // The pinned tool MUST be excluded from the scaffold's 48h release-age
     // quarantine, or the first install of a freshly-published ksor breaks for

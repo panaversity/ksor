@@ -39,10 +39,17 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // cannot pre-resolve — so pnpm adds it and writes the lock.
     // `--no-frozen-lockfile` is required because pnpm defaults to frozen under
     // CI=true; it models the adopter's real first `pnpm install`.
-    const install = spawnSync("pnpm", ["install", "--no-frozen-lockfile"], {
-      cwd: project,
-      encoding: "utf8",
-    });
+    // --config.minimumReleaseAge=0: the scaffold's 48h dependency quarantine is
+    // correct for an adopter and non-deterministic for CI (a transitive dep
+    // publishing today fails the job — found live 2026-08-20).
+    const install = spawnSync(
+      "pnpm",
+      ["install", "--no-frozen-lockfile", "--config.minimumReleaseAge=0"],
+      {
+        cwd: project,
+        encoding: "utf8",
+      },
+    );
     expect(
       install.status,
       (install.stderr ?? String(install.error ?? "spawn failed")).slice(-2000),
