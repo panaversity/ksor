@@ -198,10 +198,11 @@ describe.runIf(enabled).each(SHELLS)(
       );
 
       swap?.(project);
-      mustPass(
-        run("pnpm", ["install", ...(swap ? ["--no-frozen-lockfile"] : [])], project),
-        "install",
-      );
+      // Non-frozen by design: the scaffold pins `@panaversity/ksor` to the exact
+      // CLI version, absent from the committed site-only lockfile, so the first
+      // install adds it (decision 11 revision 2026-08-20); a shell swap changes
+      // the dependency set the same way. CI defaults frozen-lockfile on.
+      mustPass(run("pnpm", ["install", "--no-frozen-lockfile"], project), "install");
 
       // The record itself must be legal before any build claims anything.
       mustPass(

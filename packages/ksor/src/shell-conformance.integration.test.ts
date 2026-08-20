@@ -220,10 +220,14 @@ describe.runIf(enabled).each(SHELLS)(
       );
 
       swap?.(project);
-      // The swap changes the dependency set, so the shipped lockfile is
-      // legitimately outdated — and CI environments default frozen-lockfile
-      // on (found live 2026-08-18: ERR_PNPM_OUTDATED_LOCKFILE under CI=true).
-      run("pnpm", ["install", ...(swap ? ["--no-frozen-lockfile"] : [])], project);
+      // The scaffold's first install is non-frozen by design: the served tool
+      // `@panaversity/ksor` is pinned in package.json to the exact CLI version
+      // (KSOR-STAMP-VERSION), which the committed site-only lockfile cannot
+      // pre-resolve, so pnpm adds it and writes the lock (decision 11 revision
+      // 2026-08-20). A shell swap changes the dependency set the same way.
+      // CI defaults frozen-lockfile on (found live 2026-08-18:
+      // ERR_PNPM_OUTDATED_LOCKFILE under CI=true), so it must be disabled here.
+      run("pnpm", ["install", "--no-frozen-lockfile"], project);
       if (swap) {
         // The workbench shell is not a repo workspace member, so nothing else
         // ever typechecks its ~1,900 TS/TSX lines; here its dependencies
