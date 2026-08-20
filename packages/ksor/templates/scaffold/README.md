@@ -44,10 +44,9 @@ the NAME of the variable, never the DSN. That is the whole required config:
 `retrieval:` out starts you with the abstention gate off and honest about it
 (turn it on afterwards with `ksor calibrate`, once the record is serving).
 
-`pnpm start` is re-runnable — it is also how you refresh after editing
-`knowledge/`. It re-ingests each time but re-embeds only what changed, so an
-untouched corpus costs no provider calls; to simply restart the server without
-building a new generation, run `pnpm serve` on its own. `AGENTS.md` → "Serving to agents" is the
+`pnpm start` is the only command this rung needs — first run, after editing
+`knowledge/`, or just to bring the server back. It re-embeds only what changed,
+so a rerun on an untouched corpus costs no provider calls. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` binds loopback
 with auth off for local use; a public bind fails closed unless auth is
 configured. Any other operation is `pnpm exec ksor <verb>`.
