@@ -148,7 +148,71 @@ interface StagePlan {
   readonly total: number;
 }
 
-function planStage(recordDir: string): StagePlan {
+/**
+ * The stable_ids this build must NOT publish.
+ *
+ * A takedown lives in the database, and the site compiles `knowledge/` from
+ * disk — so a denied document stayed published on the human surface,
+ * `llms.txt` included, the file written specifically for AI crawlers. The
+ * database's answer is EXPORTED to this manifest (`ksor takedown --export`)
+ * rather than opened here, because `pnpm dev` must keep working without a
+ * database at all.
+ *
+ * It fails CLOSED on the one ambiguity that matters. A manifest saying
+ * `source: "none"` is a project that declares no database — nothing can be
+ * denied, publish everything. A manifest that is MISSING means nobody asked
+ * the database, and this build cannot tell "no takedowns" from "the export
+ * never ran" — so a project that HAS a database refuses rather than guessing.
+ */
+/** Where `ksor takedown --export` writes, relative to the project root. */
+const DENYLIST_FILE = ".ksor-denylist.json";
+
+/** Does this project declare a database at all? A level-0 record does not. */
+function declaresDatabase(): boolean {
+  try {
+    return /^database:/m.test(
+      readFileSync(path.join(process.cwd(), "..", "..", "instance.md"), "utf8"),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function deniedStableIds(recordDir: string): Set<string> {
+  const manifestPath = path.join(recordDir, "..", DENYLIST_FILE);
+  let raw: string;
+  try {
+    raw = readFileSync(manifestPath, "utf8");
+  } catch {
+    if (!declaresDatabase()) return new Set();
+    refuse(
+      "ksor-denylist-missing",
+      `instance.md declares a database but ${DENYLIST_FILE} is not there`,
+      "a takedown is recorded in the database and the site builds from disk, so without the export this build cannot tell 'nothing is denied' from 'nobody asked' — and publishing a withdrawn document is the failure that matters",
+      `run: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
+    );
+  }
+  let parsed: { source?: string; denied?: { stable_id?: string }[] };
+  try {
+    parsed = JSON.parse(raw) as typeof parsed;
+  } catch {
+    refuse(
+      "ksor-denylist-unreadable",
+      `${DENYLIST_FILE} is not valid JSON`,
+      "an unreadable denylist is indistinguishable from an empty one, and the difference is whether a withdrawn document gets published",
+      `re-export it: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
+    );
+  }
+  return new Set((parsed.denied ?? []).map((d) => String(d.stable_id)));
+}
+
+/** The record's stable_id for a file, mirroring the kernel's path-derived id. */
+function stableIdOf(recordDir: string, file: string): string {
+  const rel = path.relative(recordDir, file).split(path.sep).join("/");
+  return `${path.basename(recordDir)}/${rel.replace(/\.md$/i, "")}`;
+}
+
+function planStage(recordDir: string, denied: Set<string>): StagePlan {
   const documents: string[] = [];
   const assets = new Set<string>();
   let total = 0;
@@ -160,6 +224,8 @@ function planStage(recordDir: string): StagePlan {
     // no build at all — fail closed here, and `pnpm check` (which CI runs) is
     // what names the typo.
     if (!visibleInBuild(visibilityOf(text))) continue;
+    // A takedown beats every other consideration, on every surface.
+    if (denied.has(stableIdOf(recordDir, file))) continue;
     documents.push(file);
     // Body only: frontmatter carries no links in the record grammar, and
     // scanning it here while the other shell strips it staged different
@@ -175,13 +241,13 @@ function planStage(recordDir: string): StagePlan {
 }
 
 /** Fill a clean stage with exactly the set this build may publish. */
-function fillStage(recordDir: string, stageDir: string): void {
+function fillStage(recordDir: string, stageDir: string, denied: Set<string>): void {
   // The old stage goes first, before any refusal can throw: a refused build
   // that leaves the previous, more permissive stage on disk hands the next
   // careless build a filtered copy nothing governs (review finding,
   // 2026-08-19).
   rmSync(stageDir, { recursive: true, force: true });
-  const plan = planStage(recordDir);
+  const plan = planStage(recordDir, denied);
   // An empty record is its own problem, reported by the page that renders it;
   // an empty AUDIENCE is a misconfiguration that would otherwise surface as
   // "the record has no documents" against a record full of them.
@@ -234,8 +300,8 @@ function refuseVisibilityWithoutAudiences(recordDir: string): void {
  * that to a restart keeps dev honest in the direction that matters: the
  * published build is always staged from scratch.
  */
-function refreshStage(recordDir: string, stageDir: string): void {
-  const permitted = new Set(planStage(recordDir).files);
+function refreshStage(recordDir: string, stageDir: string, denied: Set<string>): void {
+  const permitted = new Set(planStage(recordDir, denied).files);
   for (const staged of walkFiles(stageDir)) {
     const from = path.join(recordDir, path.relative(stageDir, staged));
     if (!permitted.has(from)) continue;
@@ -259,7 +325,7 @@ function watchRecord(recordDir: string, stageDir: string): void {
     // Debounced: one save is several filesystem events.
     pending = setTimeout(() => {
       try {
-        refreshStage(recordDir, stageDir);
+        refreshStage(recordDir, stageDir, deniedStableIds(recordDir));
       } catch {
         // An editor saving atomically, or a file being moved, is a record
         // that is briefly incomplete — the next event re-runs this, and a
@@ -287,7 +353,15 @@ function watchRecord(recordDir: string, stageDir: string): void {
 export function knowledgeSourceDir(): string {
   const stageDir = path.resolve(process.cwd(), STAGE_DIR);
   const recordDir = path.resolve(process.cwd(), RECORD_DIR);
-  if (audienceModel === null) {
+  // A TAKEDOWN is not an audience concern: it must be honoured whether or not
+  // this record declares `audiences:`, and most records do not. Staging used to
+  // run only for an audience model, so putting the denial filter inside it
+  // silently skipped it for exactly the common case (found live: a denied
+  // document still built into /docs and llms.txt on a record with no
+  // audiences).
+  const denied = deniedStableIds(recordDir);
+  if (audienceModel === null && denied.size === 0) {
+    // Nothing to filter — serve the record itself, the level-0 fast path.
     // A stage left behind by an earlier model would be a filtered copy of the
     // record nothing governs any more — removed before the refusal below can
     // throw, so a refused build never leaves one behind either.
@@ -295,7 +369,8 @@ export function knowledgeSourceDir(): string {
     refuseVisibilityWithoutAudiences(recordDir);
     return RECORD_DIR;
   }
-  fillStage(recordDir, stageDir);
+  if (audienceModel === null) refuseVisibilityWithoutAudiences(recordDir);
+  fillStage(recordDir, stageDir, denied);
   watchRecord(recordDir, stageDir);
   return STAGE_DIR;
 }

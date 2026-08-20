@@ -28,6 +28,7 @@ import { envFloat, envInt } from "./env.js";
 export const TENANT_GUC = "app.tenant_id";
 export const RUNTIME_ROLE = "sor_content_runtime";
 export const INGEST_ROLE = "sor_content_ingest";
+export const AUDITOR_ROLE = "sor_content_auditor";
 
 export const READ_STATEMENT_TIMEOUT_MS = 15_000;
 export const AUDIT_STATEMENT_TIMEOUT_MS = 5_000;
@@ -152,6 +153,13 @@ export async function runRead<T>(
 /** The /ready and /health path: bounded budgets so a saturated pool reports fast. */
 export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
   return runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, PROBE_STATEMENT_TIMEOUT_MS), op, {
+    retry: true,
+  });
+}
+
+/** The AUDITOR path: reads the §7 ledger under the read-only auditor role. */
+export async function runAuditRead<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
+  return runScopedIn(pool, gucsFor(tenantId, AUDITOR_ROLE, READ_STATEMENT_TIMEOUT_MS), op, {
     retry: true,
   });
 }

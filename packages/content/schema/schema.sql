@@ -209,10 +209,11 @@ CREATE TABLE schema_meta (
 );
 -- 2.1 adds takedown_denylist.scope (decision 14). 2.2 puts governance on the node
 -- row (corpus_id, visibility, doc_status, owner, provenance, superseded_by).
+-- 2.3 gives takedown a write plane and the ledger a reader (sor_content_auditor).
 -- Both are additive and nullable, so a 2.0 reader still reads a 2.2 database —
 -- compatible_from stays 2.0. Existing databases move forward through
 -- schema/migrations/; schema.sql provisions a FRESH one at the current version.
-INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.2', '2.0');
+INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.3', '2.0');
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
@@ -246,6 +247,9 @@ CREATE TABLE ingest_tenant_grants (
 DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_runtime') THEN CREATE ROLE sor_content_runtime NOLOGIN; END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_ingest')  THEN CREATE ROLE sor_content_ingest NOLOGIN;  END IF;
+  -- The ledger's READER (2.3). Without it retrieval_log was write-only under
+  -- every credential ksor ships: FORCE RLS, an INSERT policy, and no way back in.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_auditor') THEN CREATE ROLE sor_content_auditor NOLOGIN; END IF;
 END $$;
 
 -- Explicit in-schema membership for the APPLYING role, so SET LOCAL ROLE works from day one
@@ -253,10 +257,10 @@ END $$;
 -- every fresh project until hand-fixed). Deployment LOGIN roles receive the same membership
 -- when they are provisioned (1h).
 DO $$ BEGIN
-  EXECUTE format('GRANT sor_content_runtime, sor_content_ingest TO %I WITH SET TRUE', current_user);
+  EXECUTE format('GRANT sor_content_runtime, sor_content_ingest, sor_content_auditor TO %I WITH SET TRUE', current_user);
 END $$;
 
-GRANT USAGE ON SCHEMA public TO sor_content_runtime, sor_content_ingest;
+GRANT USAGE ON SCHEMA public TO sor_content_runtime, sor_content_ingest, sor_content_auditor;
 -- runtime: read published corpora, write the ledger — NOTHING else.
 GRANT SELECT ON corpora, content_nodes, sources, chunks, slug_aliases, node_centroids, takedown_denylist, schema_meta TO sor_content_runtime;
 -- freshness on /health (2026-07-16): the runtime reads the active run's source_commit +
@@ -265,7 +269,15 @@ GRANT SELECT ON ingestion_runs TO sor_content_runtime;
 GRANT INSERT ON retrieval_log TO sor_content_runtime;
 GRANT USAGE, SELECT ON SEQUENCE retrieval_log_id_seq TO sor_content_runtime;
 -- ingest: build generations + flip, for AUTHORIZED tenants only (policy-checked via the grant table).
-GRANT SELECT ON schema_meta, takedown_denylist, ingest_tenant_grants TO sor_content_ingest;
+GRANT SELECT ON schema_meta, ingest_tenant_grants TO sor_content_ingest;
+-- Takedown is a WRITE to the record's governance: ingest imposes and lifts it
+-- through `ksor takedown`, authorized by the same grant table every other write
+-- is (2.3 — before it, the only door was a superuser psql prompt).
+GRANT SELECT, INSERT, UPDATE, DELETE ON takedown_denylist TO sor_content_ingest;
+-- The ledger needs a READER. Without one, retrieval_log was write-only under
+-- every credential ksor ships (2.3).
+GRANT SELECT ON retrieval_log TO sor_content_auditor;
+GRANT SELECT ON takedown_denylist, schema_meta, corpora, ingestion_runs TO sor_content_auditor;
 GRANT SELECT, INSERT, UPDATE, DELETE ON corpora, ingestion_runs, content_nodes, sources, chunks, slug_aliases, node_centroids TO sor_content_ingest;
 GRANT INSERT ON retrieval_log TO sor_content_ingest;
 GRANT USAGE, SELECT ON SEQUENCE retrieval_log_id_seq, ingestion_runs_run_id_seq TO sor_content_ingest;
@@ -291,10 +303,17 @@ CREATE POLICY tenant_read ON node_centroids    FOR SELECT USING (tenant_id = cur
 CREATE POLICY tenant_read ON takedown_denylist FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
 CREATE POLICY tenant_read ON ingestion_runs    FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
 -- Ledger writes:
+CREATE POLICY tenant_read ON retrieval_log FOR SELECT
+  USING (tenant_id = current_setting('app.tenant_id', true));
 CREATE POLICY tenant_write ON retrieval_log FOR INSERT
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 -- Ingest mutations: tenant GUC match AND the grant table authorizes THIS role for THIS tenant
 -- (a CLI flag is not authorization — spec §5).
+CREATE POLICY takedown_write ON takedown_denylist FOR ALL TO sor_content_ingest
+  USING (tenant_id = current_setting('app.tenant_id', true)
+         AND EXISTS (SELECT 1 FROM ingest_tenant_grants g WHERE g.role_name = current_user AND g.tenant_id = takedown_denylist.tenant_id))
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)
+         AND EXISTS (SELECT 1 FROM ingest_tenant_grants g WHERE g.role_name = current_user AND g.tenant_id = takedown_denylist.tenant_id));
 CREATE POLICY ingest_write ON content_nodes FOR ALL TO sor_content_ingest
   USING (tenant_id = current_setting('app.tenant_id', true)
          AND EXISTS (SELECT 1 FROM ingest_tenant_grants g WHERE g.role_name = current_user AND g.tenant_id = content_nodes.tenant_id))

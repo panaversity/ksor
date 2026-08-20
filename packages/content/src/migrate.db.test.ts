@@ -11,7 +11,15 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compareSchemaVersion, planMigrations, runMigrations } from "./migrate.js";
+import { readdirSync } from "node:fs";
+
+import {
+  compareSchemaVersion,
+  migrationsDir,
+  parseMigrationName,
+  planMigrations,
+  runMigrations,
+} from "./migrate.js";
 import { applySchema, schemaVersion } from "./schema.js";
 import type pg from "pg";
 
@@ -149,14 +157,19 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
     expect(await version()).toBe(required);
   });
 
-  it("the shipped chain can actually reach the version schema.sql declares", () => {
-    // A migration directory that cannot walk from the previous release to this
-    // one is the failure this whole module exists to prevent; assert it against
-    // the real directory rather than a fixture.
+  it("the SHIPPED chain reaches the version schema.sql declares, from every step in it", () => {
+    // Reads the real directory, not a fixture: a chain that cannot walk from an
+    // earlier release to this one is the failure this module exists to prevent,
+    // and hardcoding the filenames here would hide exactly that.
     const required = schemaVersion();
-    expect(() =>
-      planMigrations("2.1", ["2.1-2.2__governance-on-the-node-row.sql"], required),
-    ).not.toThrow();
+    const files = readdirSync(migrationsDir()).filter((f) => f.endsWith(".sql"));
+    expect(files.length, "there is at least one migration").toBeGreaterThan(0);
+
+    for (const file of files) {
+      const { from } = parseMigrationName(file);
+      const plan = planMigrations(from, files, required);
+      expect(plan.at(-1)?.to, `the chain from ${from} ends at ${required}`).toBe(required);
+    }
   });
 });
 

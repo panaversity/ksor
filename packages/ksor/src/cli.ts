@@ -43,6 +43,7 @@ const usage =
   "  calibrate  measure the abstention floor\n" +
   "  schema     apply the database schema\n" +
   "  grant      authorize ingest for this corpus (or --revoke it)\n" +
+  "  takedown   deny a document from every surface (or --list / --revoke it)\n" +
   "  gc         collect superseded generations\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
@@ -134,6 +135,7 @@ async function main(args: readonly string[]): Promise<number> {
     verb === "ingest" ||
     verb === "schema" ||
     verb === "grant" ||
+    verb === "takedown" ||
     verb === "calibrate" ||
     verb === "gc"
   ) {

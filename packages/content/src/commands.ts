@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
@@ -23,6 +23,7 @@ import { parseInstance, InstanceParseError, type ContentInstance } from "./insta
 import { applySchema, renderSchema, schemaVersion } from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
+import { applyTakedown, denylistManifest, listTakedowns, revokeTakedown } from "./takedown-ops.js";
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
@@ -53,6 +54,12 @@ Usage:
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
+  ksor takedown --instance PATH (<stable-id> --reason TEXT [--subtree]
+                                 | --list | --revoke <stable-id>
+                                 | --export PATH)
+      Deny a document from EVERY surface. Default scope is the node itself;
+      --subtree denies its descendants too. --export writes the manifest the
+      site build reads, so a takedown reaches the human surface as well.
   ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
@@ -513,6 +520,99 @@ async function grantCommand(args: string[]): Promise<number> {
   return 0;
 }
 
+async function takedownCommand(args: string[]): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      instance: { type: "string" },
+      reason: { type: "string" },
+      subtree: { type: "boolean", default: false },
+      list: { type: "boolean", default: false },
+      revoke: { type: "string" },
+      export: { type: "string" },
+      actor: { type: "string" },
+    },
+  });
+  const loaded = loadInstance(values.instance);
+  if (typeof loaded === "number") return loaded;
+  const instance = loaded;
+  const dsn = resolveDsn(instance);
+  if (typeof dsn === "number") return dsn;
+  // Who performed the act. Governance governs ACTS: the ledger row has to name
+  // someone, and "unknown" is a worse answer than the operating user.
+  const actor = values.actor ?? process.env["USER"] ?? process.env["USERNAME"] ?? "operator";
+
+  if (values.export !== undefined) {
+    const rows = await withPool(dsn, (pool) => listTakedowns(pool, instance));
+    const manifest = denylistManifest(instance.corpusId, rows, new Date());
+    writeFileSync(values.export, JSON.stringify(manifest, null, 2) + "\n");
+    process.stdout.write(`takedown: exported ${rows.length} denial(s) to ${values.export}\n`);
+    return 0;
+  }
+
+  if (values.list) {
+    const rows = await withPool(dsn, (pool) => listTakedowns(pool, instance));
+    if (rows.length === 0) {
+      process.stdout.write("takedown: nothing is denied in this corpus\n");
+      return 0;
+    }
+    for (const r of rows) {
+      process.stdout.write(`${r.stableId}\t${r.scope}\t${r.reason}\n`);
+    }
+    return 0;
+  }
+
+  if (values.revoke !== undefined) {
+    const outcome = await withPool(dsn, (pool) =>
+      revokeTakedown(pool, instance, { stableId: values.revoke!, actor }),
+    );
+    process.stdout.write(
+      outcome.changed
+        ? `takedown: lifted — ${outcome.stableId} serves again from the next request\n`
+        : `takedown: ${outcome.stableId} was not denied; nothing to lift\n`,
+    );
+    return 0;
+  }
+
+  const stableId = positionals[0];
+  if (stableId === undefined || stableId === "") {
+    return fail(
+      REFUSED,
+      "takedown: name the document's stable_id, or pass --list / --revoke / --export\n" +
+        "  the stable_id is what search and read report as provenance.stable_id",
+    );
+  }
+  if (values.reason === undefined || values.reason.trim() === "") {
+    // A denial with no recorded reason is an unexplained hole in the record.
+    return fail(
+      REFUSED,
+      "takedown: --reason TEXT is required — a denial with no recorded reason is an " +
+        "unexplained hole in the record, and this row is the only place it is written down",
+    );
+  }
+  const scope = values.subtree ? "subtree" : "node";
+  const outcome = await withPool(dsn, (pool) =>
+    applyTakedown(pool, instance, {
+      stableId,
+      scope,
+      reason: values.reason!,
+      actor,
+    }),
+  );
+  process.stdout.write(
+    outcome.changed
+      ? `takedown: ${outcome.stableId} denied (scope: ${scope}) — no surface serves it from now on\n`
+      : `takedown: ${outcome.stableId} was already denied with the same scope and reason\n`,
+  );
+  process.stdout.write(
+    "  the SITE reads a manifest, not the database: run " +
+      "`ksor takedown --instance ... --export <path>` before building it, or the human " +
+      "surface keeps publishing this document\n",
+  );
+  return 0;
+}
+
 async function gcCommand(args: string[]): Promise<number> {
   const { values } = parseArgs({
     args,
@@ -567,6 +667,8 @@ export async function runContentCli(argv: readonly string[]): Promise<number> {
         return await calibrateCommand(rest);
       case "grant":
         return await grantCommand(rest);
+      case "takedown":
+        return await takedownCommand(rest);
       case "gc":
         return await gcCommand(rest);
       default:

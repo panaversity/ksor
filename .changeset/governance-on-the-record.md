@@ -14,6 +14,17 @@ into search, read and outline. A server that cannot establish who is asking
 serves the least-privileged tier; an unknown tier refuses rather than widening;
 a record that declares no `audiences:` is unfiltered exactly as before.
 
+**A takedown now reaches BOTH surfaces, and has a door.** `ksor takedown
+<stable-id> --reason …` imposes one (`--subtree`, `--list`, `--revoke`), through
+the ingest role rather than a superuser psql prompt, writing the §7 row that
+records who did it in the same transaction as the denial. `--export` writes the
+manifest the site build reads, so a withdrawn document stops being published on
+the human surface — `llms.txt` included. Schema 2.3 adds the write policy this
+needs, and a `sor_content_auditor` role: `retrieval_log` had FORCE row-level
+security, an INSERT policy, and no SELECT policy or grant, so the provenance
+ledger the governance story rests on was write-only under every credential ksor
+ships.
+
 **Forward migrations.** `schema/migrations/<from>-<to>__<slug>.sql` with a runner
 that walks the chain rather than sorting it, so a missing step refuses instead of
 being skipped. `ksor schema --apply` now compares versions instead of checking
