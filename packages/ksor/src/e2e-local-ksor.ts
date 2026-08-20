@@ -59,7 +59,10 @@ export function injectLocalKsor(projectDir: string): string {
 export function expectLocalKsorResolved(projectDir: string, tarball: string): void {
   const lock = path.join(projectDir, "pnpm-lock.yaml");
   const text = existsSync(lock) ? readFileSync(lock, "utf8") : "";
-  if (!text.includes(path.basename(tarball)) && !text.includes("file:")) {
+  // Match the tarball by NAME. A bare `file:` test passed on any unrelated
+  // file: entry in the lockfile, which is exactly the silent fallback this
+  // check exists to catch (review, 2026-08-20).
+  if (!text.includes(path.basename(tarball))) {
     throw new Error(
       `@panaversity/ksor did not resolve to the local tarball (${path.basename(tarball)}) — ` +
         `the pnpm-workspace override was ignored, so this suite would test the PUBLISHED package`,

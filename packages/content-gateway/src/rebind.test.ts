@@ -9,6 +9,30 @@ import { resolveSecurity } from "./http.js";
  * config once produced an empty allowlist and re-opened the hole.
  */
 describe("resolveSecurity — the loopback rebind allowlist (Host + Origin)", () => {
+  // RFC 9110: clients OMIT the port when it is the scheme default, so on :80
+  // the Host header is bare `localhost`. A port-qualified-only allowlist 421s
+  // every request on a legal KSOR_MCP_PORT=80 — a total outage from a valid
+  // setting (review, 2026-08-20).
+  it("accepts the bare Host on the scheme-default ports, where clients omit it", () => {
+    for (const port of [80, 443]) {
+      const { hosts } = resolveSecurity({ host: "127.0.0.1", port });
+      expect(hosts, `port ${port}`).not.toBeNull();
+      for (const bare of ["localhost", "127.0.0.1", "[::1]"]) {
+        expect(hosts?.has(bare), `bare Host ${bare} on :${port}`).toBe(true);
+      }
+      // …and the qualified spelling still works, since clients may send it.
+      expect(hosts?.has(`localhost:${port}`), `qualified on :${port}`).toBe(true);
+    }
+  });
+
+  it("does NOT accept a bare Host on a non-default port — that would widen the gate", () => {
+    const { hosts } = resolveSecurity({ host: "127.0.0.1", port: 8080 });
+    for (const bare of ["localhost", "127.0.0.1", "[::1]"]) {
+      expect(hosts?.has(bare), `bare ${bare} must not be allowed on :8080`).toBe(false);
+    }
+    expect(hosts?.has("localhost:8080")).toBe(true);
+  });
+
   it("arms the Host gate for every loopback spelling, with all host:port forms", () => {
     for (const host of ["127.0.0.1", "localhost", "::1"]) {
       const { hosts } = resolveSecurity({ host, port: 8080 });

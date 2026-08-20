@@ -33,7 +33,13 @@ import { AuthConfigError, RequiredEnvError } from "@panaversity/ksor-gateway-kit
 import { compose } from "./compose.js";
 import { runHttp } from "./http.js";
 
-export const GATEWAY_VERSION = "0.0.0";
+/**
+ * The version the MCP server reports to clients. Overridden by the bundling
+ * CLI, which knows the published version — a hardcoded constant made every
+ * released `ksor serve` announce 0.0.0 to every client (verified live by
+ * probe; review 2026-08-20).
+ */
+export const GATEWAY_VERSION: string = process.env["KSOR_GATEWAY_VERSION"] || "0.0.0";
 
 export async function main(): Promise<void> {
   try {

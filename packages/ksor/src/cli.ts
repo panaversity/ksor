@@ -90,6 +90,20 @@ async function main(args: readonly string[]): Promise<number> {
     // server. runGateway reads ./instance.md + the DSN env it names, runs its
     // own fail-closed boot and exit contract (it process.exit()s on error and
     // holds the event loop while serving), and drains on SIGTERM/SIGINT.
+    // Honour --instance like every sibling corpus verb. Without this the flag
+    // was silently ignored and ./instance.md served instead — a user who
+    // extrapolated from ingest/schema/grant/calibrate/gc served the WRONG
+    // corpus with no signal (review, 2026-08-20). The gateway reads
+    // KSOR_INSTANCE, so the flag sets it rather than growing a second path.
+    const flag = args.indexOf("--instance");
+    const instance = flag === -1 ? undefined : args[flag + 1];
+    if (flag !== -1 && (instance === undefined || instance.startsWith("-"))) {
+      process.stderr.write("error: bad-args\n--instance needs a path to an instance.md\n");
+      return exitCodes.refused;
+    }
+    if (instance !== undefined) process.env["KSOR_INSTANCE"] = instance;
+    // The served version is the PUBLISHED one; the gateway cannot know it.
+    process.env["KSOR_GATEWAY_VERSION"] = pkg.version;
     await runGateway();
     return 0;
   }

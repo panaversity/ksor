@@ -33,6 +33,7 @@ import {
   transportSecurityFromEnv,
   TokenVerifyError,
   type Auth,
+  type VerifiedIdentity,
 } from "@panaversity/ksor-gateway-kit";
 import { runProbe } from "@panaversity/ksor-content";
 
@@ -58,10 +59,18 @@ export interface Security {
 export function resolveSecurity(bind: { host: string; port: number }): Security {
   const explicit = transportSecurityFromEnv(process.env);
   const loopback = bind.host === "127.0.0.1" || bind.host === "localhost" || bind.host === "::1";
+  // RFC 9110: a client OMITS the port when it is the scheme default, so on
+  // :80 the Host header is bare `localhost`, not `localhost:80`. A
+  // port-qualified allowlist alone therefore 421s EVERY request on a legal
+  // KSOR_MCP_PORT=80 — a total outage from a valid setting (review,
+  // 2026-08-20). Allow both spellings; on any other port only the qualified
+  // form is legal, so nothing is widened.
+  const bare = bind.port === 80 || bind.port === 443;
   const loopbackHosts = new Set([
     `127.0.0.1:${bind.port}`,
     `localhost:${bind.port}`,
     `[::1]:${bind.port}`,
+    ...(bare ? ["127.0.0.1", "localhost", "[::1]"] : []),
   ]);
   // On a loopback bind, ORIGIN is gated by default — not only when
   // KSOR_ALLOWED_ORIGINS is set. This is the exact target of the MCP spec's
@@ -321,6 +330,36 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   };
 
   app.post("/mcp", mcp, async (c) => {
+    // AUTHENTICATE BEFORE TAKING A SLOT. The in-flight cap exists to bound
+    // SERVING work; letting an unverified caller hold a slot through a
+    // JWKS-backed RS256 verify hands anonymous traffic the whole budget. The
+    // negative cache is keyed on the token hash, so a flood of DISTINCT forged
+    // tokens misses it every time, and during a JWKS outage each verify blocks
+    // for the fetch timeout while holding its slot — authenticated callers
+    // then get 503 "server busy" from traffic that never proved anything
+    // (review, 2026-08-20). Verification is bounded by its own timeouts and
+    // costs no pool connection, so it is safe outside the cap.
+    let identity: VerifiedIdentity | null = null;
+    let bearer = "";
+    if (auth.mode === "public") {
+      const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
+      if (token === undefined) {
+        return c.json({ error: "bearer token required" }, 401, {
+          "www-authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
+        });
+      }
+      try {
+        identity = await auth.verify(token);
+      } catch (error) {
+        const transient = error instanceof TokenVerifyError && error.transient;
+        return c.json(
+          { error: transient ? "token verification temporarily unavailable" : "invalid token" },
+          transient ? 503 : 401,
+        );
+      }
+      bearer = token;
+    }
+
     if (inflight >= maxInflight) {
       return c.json({ error: "server busy — retry shortly" }, 503, { "retry-after": "1" });
     }
@@ -343,23 +382,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
           501,
         );
       }
-      if (auth.mode === "public") {
-        const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
-        if (token === undefined) {
-          return c.json({ error: "bearer token required" }, 401, {
-            "www-authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"`,
-          });
-        }
-        let identity;
-        try {
-          identity = await auth.verify(token);
-        } catch (error) {
-          const transient = error instanceof TokenVerifyError && error.transient;
-          return c.json(
-            { error: transient ? "token verification temporarily unavailable" : "invalid token" },
-            transient ? 503 : 401,
-          );
-        }
+      if (identity !== null) {
         // Hand the SDK the identity WE verified. ksor authorizes through the
         // kit's AsyncLocalStorage actor, not this field, so nothing reads it
         // today — but the SDK never populates `authInfo` itself, so leaving it
@@ -370,13 +393,14 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         // reading only the AuthInfo fields would otherwise get an identity
         // different from the one the audit rows record (security
         // re-verification + fix verification, 2026-08-20).
-        return await runWithIdentity(identity, () =>
+        const verified = identity;
+        return await runWithIdentity(verified, () =>
           handleMcp(c.req.raw, {
-            token,
-            clientId: identity.clientId,
+            token: bearer,
+            clientId: verified.clientId,
             scopes: [],
-            ...(identity.expiresAt === null ? {} : { expiresAt: identity.expiresAt }),
-            extra: { sub: identity.sub, tenantId: identity.tenantId },
+            ...(verified.expiresAt === null ? {} : { expiresAt: verified.expiresAt }),
+            extra: { sub: verified.sub, tenantId: verified.tenantId },
           }),
         );
       }

@@ -210,6 +210,17 @@ export async function keywordSearch(
     rowMode: "array",
     values: [scope.tenantId, scope.corpusId, query, scope.kinds, limit, scope.pinnedGeneration],
   });
+  // The same projection guard the hybrid arm gets via splitHits. Without it a
+  // dropped or reordered KEYWORD_SQL column silently mis-maps score /
+  // generation / permalink on the EMBED-OUTAGE path — the least-exercised
+  // read path, where a wrong generation would be least likely to be noticed
+  // (review, 2026-08-20).
+  if (result.fields.length !== HIT_COLUMNS) {
+    throw new TypeError(
+      `keyword projection drift: expected ${HIT_COLUMNS} columns, got ${result.fields.length} ` +
+        `ending in ${JSON.stringify(result.fields.at(-1)?.name)}`,
+    );
+  }
   return result.rows.map(rowToHit);
 }
 

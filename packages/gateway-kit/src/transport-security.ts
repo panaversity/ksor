@@ -1,9 +1,15 @@
 // The opt-in DNS-rebinding / Host+Origin gate, converted from the
 // predecessor's wiring.transport_security_from_env (decision 6 — the ONLY
 // piece of wiring.py that crosses; the product/bundle plane around it was
-// dropped). The result is the settings shape the MCP SDK's streamable-HTTP
-// transport accepts, and it must be passed wherever that transport is
-// configured so a set var is never a silent no-op. The MCP spec's
+// dropped). It parses KSOR_ALLOWED_HOSTS/ORIGINS into an allowlist pair.
+//
+// The shape still mirrors the SDK transport's own options, but since
+// decision 13 the gate is HONO MIDDLEWARE, not a transport option —
+// `enableDnsRebindingProtection` is therefore unread here, and SDK v2 has
+// itself deprecated those transport-level options in favour of external
+// middleware (corrected 2026-08-20: this header used to instruct readers to
+// pass the settings into the transport, a contract the code no longer has).
+// The MCP spec's
 // Origin-validation MUST is met by the DOOR, not the SDK: the content
 // gateway's resolveSecurity arms a default loopback Origin allowlist on every
 // loopback bind (the SDK's own DNS-rebinding gate is NOT enabled by that

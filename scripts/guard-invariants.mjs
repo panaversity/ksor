@@ -138,10 +138,13 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
 
 // Rule 5 — no workspace package declares a runtime dependency outside its
 // OWN allowlist. Keeping the runtime thin is a product guarantee (AGENTS.md
-// coding principle 3), and it is PER PACKAGE: `@panaversity/ksor` (the
-// published CLI) must stay at ZERO runtime deps, and a shared allowlist
-// would silently retire that (review finding, 2026-08-19 — adding zod to the
-// CLI would have passed). Each package is enrolled explicitly; an
+// coding principle 3), and it is PER PACKAGE, so one package's dependency can
+// never be silently inherited by another (review finding, 2026-08-19 — a
+// shared allowlist meant adding zod to the CLI would have passed).
+// `@panaversity/ksor` carried ZERO runtime deps until decision 12's
+// 2026-08-20 revision bundled the kernel into it; it now enrols the kernel's
+// externals explicitly, which is the point — enrolment is the record of that
+// reversal, not an exception to the rule. Each package is enrolled; an
 // unenrolled package with any runtime dep is a violation, and enrolment is a
 // decision with a name on it (decision 12).
 {
