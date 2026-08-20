@@ -18,6 +18,30 @@ export const DB_BACKOFF_S = 0.1;
 export type Gucs = Readonly<Record<string, string>>;
 
 /**
+ * A connection could not be ESTABLISHED in time — retryable.
+ *
+ * This is the other half of what `connectionTimeoutMillis` bounds, and
+ * conflating it with saturation is a production outage waiting for an idle
+ * period. A serverless endpoint suspends its compute after minutes of
+ * inactivity (Neon: 5 by default); ksor holds no idle connections, so the
+ * FIRST request after a quiet spell must open a fresh one, which wakes the
+ * compute. If that wake outruns the bound, pg raises the same timeout text a
+ * saturated pool raises — and treating it as saturation means the one request
+ * most likely to hit a cold start is the one request that is never retried.
+ * Measured against a black-holed endpoint before this split: failed at 10007ms
+ * after exactly one attempt, with five retries and a 30s budget unused.
+ */
+export class ConnectTimeoutError extends Error {
+  constructor(ms: number) {
+    super(
+      `could not establish a database connection within ${ms}ms — the endpoint may be ` +
+        "waking from suspend; this is retried",
+    );
+    this.name = "ConnectTimeoutError";
+  }
+}
+
+/**
  * The pool checkout timed out — never retried: under saturation a retry is
  * a thundering herd aimed at the component already drowning.
  */
@@ -45,6 +69,9 @@ const NEVER_RETRY_SQLSTATE = new Set([
  * errors are exactly that shape.
  */
 export function isOperationalError(error: unknown): boolean {
+  // A wake-from-suspend is the archetypal operational failure: transient, and
+  // healed by trying again a moment later.
+  if (error instanceof ConnectTimeoutError) return true;
   if (!(error instanceof Error)) return false;
   const code = (error as { code?: string }).code;
   if (code !== undefined) {
@@ -245,9 +272,26 @@ async function acquire(pool: pg.Pool): Promise<pg.PoolClient> {
   try {
     return await pool.connect();
   } catch (error) {
-    // A native checkout/connect timeout is a saturation SHED — surface it as
-    // the never-retried PoolTimeoutError so the classification holds.
-    if (isPgTimeout(error)) throw new PoolTimeoutError();
+    // `connectionTimeoutMillis` bounds TWO different failures and pg reports
+    // them with the same text. Which one it was is decided by the pool's own
+    // state at the moment it gave up:
+    //
+    //   every slot taken  -> we WAITED for a busy pool. Saturation: shed, and
+    //                        never retry, or the retry is a thundering herd
+    //                        aimed at the component already drowning.
+    //   slots to spare    -> the pool had room and the CONNECT itself failed.
+    //                        A cold start, a wake-from-suspend, a slow TLS
+    //                        handshake — all retryable, and all of them the
+    //                        normal first request against a serverless endpoint.
+    if (isPgTimeout(error)) {
+      const max = (pool as { options?: { max?: number } }).options?.max ?? Infinity;
+      const saturated = pool.totalCount >= max && pool.idleCount === 0;
+      if (saturated) throw new PoolTimeoutError();
+      const ms =
+        (pool as { options?: { connectionTimeoutMillis?: number } }).options
+          ?.connectionTimeoutMillis ?? 0;
+      throw new ConnectTimeoutError(ms);
+    }
     throw error;
   }
 }

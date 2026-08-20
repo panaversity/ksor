@@ -21,6 +21,16 @@ presence, and migrates an existing database forward — replacing "drop and
 recreate", which destroyed `retrieval_log` and `takedown_denylist`, the only two
 tables that cannot be rebuilt from markdown.
 
+**A wake-from-suspend is retried instead of failing the request.**
+`connectionTimeoutMillis` bounds two different failures and Postgres reports
+both with the same text: waiting for a slot in a saturated pool, and failing to
+establish a connection at all. ksor treated both as saturation, which is never
+retried — so on a serverless endpoint the first request after an idle period,
+the one most likely to hit a cold start, was the one request that got no
+retries. Measured against a black-holed endpoint: one attempt, 10s, with five
+retries and a 30s budget unused. The two are now told apart by the pool's own
+state and only saturation sheds.
+
 **A dropped connection no longer kills `ksor serve`.** pg-pool removes a
 client's error listener for the duration of a checkout, so a connection dying
 mid-query became an uncaught exception and exited the process — the failure mode

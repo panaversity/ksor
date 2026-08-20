@@ -1,4 +1,5 @@
 export {
+  ConnectTimeoutError,
   createPool,
   DB_BACKOFF_S,
   DB_RETRIES,

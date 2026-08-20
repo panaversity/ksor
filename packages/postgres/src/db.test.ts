@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ConnectTimeoutError,
+  PoolTimeoutError,
   isOperationalError,
   neverRetry,
   pooledEndpointFor,
-  PoolTimeoutError,
+  scopedTxn,
   tlsAdvisory,
 } from "./db.js";
 
@@ -78,5 +80,55 @@ describe("tlsAdvisory", () => {
   it("never throws on an unparseable DSN", () => {
     expect(tlsAdvisory("not a url")).toBeNull();
     expect(tlsAdvisory("")).toBeNull();
+  });
+});
+
+describe("connect timeout vs pool saturation", () => {
+  // `connectionTimeoutMillis` bounds both, and pg reports them with the same
+  // text. Only one of them is safe to retry.
+  const timeoutError = new Error("timeout exceeded when trying to connect");
+
+  const fakePool = (o: { max: number; total: number; idle: number }): unknown => ({
+    options: { max: o.max, connectionTimeoutMillis: 10_000 },
+    totalCount: o.total,
+    idleCount: o.idle,
+    connect: () => Promise.reject(timeoutError),
+  });
+
+  it("classifies a WAIT on a fully busy pool as saturation — never retried", async () => {
+    const pool = fakePool({ max: 4, total: 4, idle: 0 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      PoolTimeoutError,
+    );
+    expect(neverRetry(new PoolTimeoutError())).toBe(true);
+  });
+
+  it("classifies a failure with slots to spare as a CONNECT failure — retried", async () => {
+    const pool = fakePool({ max: 20, total: 1, idle: 0 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+    expect(neverRetry(new ConnectTimeoutError(10_000))).toBe(false);
+    expect(isOperationalError(new ConnectTimeoutError(10_000))).toBe(true);
+  });
+
+  it("an empty pool that cannot connect is a cold start, not saturation", async () => {
+    // The exact shape of the first request after a serverless endpoint suspends.
+    const pool = fakePool({ max: 20, total: 0, idle: 0 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+  });
+
+  it("a pool at max with an idle connection is not saturation either", async () => {
+    const pool = fakePool({ max: 4, total: 4, idle: 1 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+  });
+
+  it("says which bound it hit, so an operator can tell the two apart", () => {
+    expect(new ConnectTimeoutError(10_000).message).toMatch(/waking from suspend/);
+    expect(new PoolTimeoutError().message).toMatch(/saturated/);
   });
 });
