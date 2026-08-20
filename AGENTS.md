@@ -637,6 +637,7 @@ review findings were fixed or recorded, never quietly dropped.
   copying is not.
 - Do not create `knowledge/`, `governance/`, or `instance.md` at this repo's
   root — those belong to scaffolded projects (the fixture lives under
-  `workbench/`).
+  `workbench/`), and a root `instance.md` additionally makes `ksor init`
+  refuse `error: nested` anywhere inside the checkout (guard rule 10).
 - Do not create GitHub issues/comments or publish packages on your own
   initiative.

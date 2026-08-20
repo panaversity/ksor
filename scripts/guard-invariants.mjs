@@ -371,9 +371,33 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 10 — the repository root is not a scaffolded project. `knowledge/`,
+// `governance/` and `instance.md` are what `ksor init` emits into an ADOPTER's
+// repo; this repository's own corpus is the fixture under `workbench/`. The
+// rule was prose in AGENTS.md that nothing enforced until a checker probe was
+// committed at the root by accident (38f6ee8, removed in 750ddca) — and a root
+// instance.md is not merely untidy: `findAncestorProject` walks up from the
+// cwd, so it makes `ksor init` refuse `error: nested` anywhere inside the
+// checkout.
+{
+  for (const entry of ["instance.md", "knowledge", "governance"]) {
+    if (existsSync(path.join(repoRoot, entry))) {
+      violate(
+        10,
+        `${entry} exists at the repository root`,
+        "it belongs to a project ksor init emits, not to the framework that emits them" +
+          (entry === "instance.md"
+            ? " — and a root instance.md makes every `ksor init` inside this checkout refuse with error: nested, because init walks its ancestors looking for exactly this file"
+            : ""),
+        `remove ./${entry} (the repository's own fixture corpus lives at workbench/example-corpus/)`,
+      );
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error(`guard: ${violations.length} invariant violation(s):\n`);
   for (const v of violations) console.error(`  ${v}\n`);
   process.exit(1);
 }
-console.log("guard: ok (9 rules)");
+console.log("guard: ok (10 rules)");
