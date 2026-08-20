@@ -30,6 +30,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import { governanceFromFrontmatter, NO_GOVERNANCE } from "../governance.js";
 import {
   type Manifest,
   ManifestError,
@@ -209,6 +210,8 @@ export function buildManifestFromTree(
             kind: "section",
             parent: parentSid,
             position,
+            governance:
+              index === null ? NO_GOVERNANCE : governanceFromFrontmatter(meta, index.text),
           }),
         );
         if (index !== null) addFile(sid, [...dirSegs, index.name]);
@@ -225,6 +228,7 @@ export function buildManifestFromTree(
             kind: "document",
             parent: parentSid,
             position,
+            governance: governanceFromFrontmatter(meta, entry.text),
           }),
         );
         addFile(sid, [...relSegs, entry.name]);
@@ -244,6 +248,7 @@ export function buildManifestFromTree(
         title: titleOf(meta, rootName),
         kind: "document",
         position: 0,
+        governance: governanceFromFrontmatter(meta, rootIndex.text),
       }),
     );
     addFile(sid, [rootIndex.name]);

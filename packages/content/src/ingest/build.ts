@@ -96,8 +96,10 @@ export async function buildStructure(
   for (const n of topological(manifest.nodes)) {
     const res = await client.query(
       "INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug," +
-        " title, summary, keywords, position, permalink)" +
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING node_id",
+        " title, summary, keywords, position, permalink," +
+        " corpus_id, visibility, doc_status, owner, provenance, superseded_by)" +
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11," +
+        " $12, $13, $14, $15, $16, $17) RETURNING node_id",
       [
         tenantId,
         generation,
@@ -110,6 +112,15 @@ export async function buildStructure(
         n.keywords.length > 0 ? [...n.keywords] : null,
         n.position,
         n.permalink, // confirmed site route or NULL — never a guessed link
+        // Governance the document declared about itself (schema 2.2). Carried
+        // onto the record so the serving door can enforce what previously only
+        // the site's build-time staging could.
+        manifest.corpus_id,
+        n.governance.visibility,
+        n.governance.docStatus,
+        n.governance.owner,
+        n.governance.provenance === null ? null : JSON.stringify(n.governance.provenance),
+        n.governance.supersededBy,
       ],
     );
     nodeIds.set(n.stable_id, String(res.rows[0].node_id));
@@ -349,9 +360,19 @@ async function activeGenerationOf(
 
 /**
  * Do two generations hold the same corpus? Compared on the SET of
- * (stable_id, content_hash) pairs — identity plus content — so a moved
- * document, an edited body, an added or removed file all count as different,
- * while a rebuild of identical bytes does not.
+ * (stable_id, content_hash, title, position, governance) tuples — identity,
+ * content, AND everything the document declares about itself — so a moved
+ * document, an edited body, an added or removed file, a retitle, a reorder or a
+ * governance change all count as different, while a rebuild of identical bytes
+ * does not.
+ *
+ * The governance columns are in this key because they were the exact hole:
+ * hashing the frontmatter-STRIPPED body meant a retitle, a reorder, or a
+ * `status: draft` -> `approved` promotion changed no compared byte, so ingest
+ * reported "unchanged", published nothing, and exited 0 (review 2026-08-20).
+ * A `visibility:` change is a security control; deferring one silently until
+ * some unrelated document's body happens to change is not a thing a system of
+ * record may do.
  */
 async function sameCorpus(
   c: pg.PoolClient,
@@ -361,7 +382,9 @@ async function sameCorpus(
 ): Promise<boolean> {
   const r = await c.query(
     `WITH pair AS (
-       SELECT s.generation, n.stable_id, s.content_hash
+       SELECT s.generation, n.stable_id, s.content_hash,
+              n.title, n.position,
+              n.visibility, n.doc_status, n.owner, n.provenance, n.superseded_by
          FROM sources s JOIN content_nodes n
            ON n.tenant_id = s.tenant_id AND n.generation = s.generation AND n.node_id = s.node_id
         WHERE s.tenant_id = $1 AND s.generation IN ($2, $3)
@@ -371,7 +394,18 @@ async function sameCorpus(
         AND NOT EXISTS (
               SELECT 1 FROM pair x WHERE x.generation = $2
                AND NOT EXISTS (SELECT 1 FROM pair y WHERE y.generation = $3
-                                AND y.stable_id = x.stable_id AND y.content_hash = x.content_hash)
+                                AND y.stable_id = x.stable_id
+                                AND y.content_hash = x.content_hash
+                                AND y.title = x.title
+                                AND y.position = x.position
+                                -- NULL-safe: a governance key going from absent
+                                -- to set (or back) must count as a change, and
+                                -- plain = would evaluate NULL and match nothing.
+                                AND y.visibility IS NOT DISTINCT FROM x.visibility
+                                AND y.doc_status IS NOT DISTINCT FROM x.doc_status
+                                AND y.owner IS NOT DISTINCT FROM x.owner
+                                AND y.provenance IS NOT DISTINCT FROM x.provenance
+                                AND y.superseded_by IS NOT DISTINCT FROM x.superseded_by)
             ) AS same`,
     [tenantId, a, b],
   );

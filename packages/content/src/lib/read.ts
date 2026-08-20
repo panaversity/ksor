@@ -15,6 +15,7 @@
 
 import type pg from "pg";
 
+import { AUDIENCE_ALLOWED } from "./audience.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
@@ -40,12 +41,14 @@ tree AS (
            n.slug::text AS path
     FROM content_nodes n JOIN g ON n.generation = g.gen
     WHERE n.tenant_id = $1 AND n.parent_id IS NULL AND n.status = 'published'
+      AND ${AUDIENCE_ALLOWED}
   UNION ALL
     SELECT n.node_id, n.parent_id, n.slug, n.title, n.stable_id, n.generation, n.permalink,
            t.path || '/' || n.slug
     FROM content_nodes n
     JOIN tree t ON n.parent_id = t.node_id
     WHERE n.tenant_id = $1 AND n.generation = t.generation AND n.status = 'published'
+      AND ${AUDIENCE_ALLOWED}
 )
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink
 FROM tree n
@@ -68,7 +71,8 @@ export const NODE_BY_STABLE_ID_SQL: string = `
 WITH RECURSIVE ${GEN}, ${DENIED_CTE}
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
 FROM content_nodes n JOIN g ON n.generation = g.gen
-WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}`;
+WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}
+  AND ${AUDIENCE_ALLOWED}`;
 
 export const DOCUMENT_CHUNKS_SQL: string = `
 WITH ${GEN}
@@ -122,6 +126,7 @@ walk AS (
            n.slug::text AS heading_path
     FROM content_nodes n JOIN g ON n.generation = g.gen
     WHERE n.tenant_id = $1 AND n.status = 'published'
+      AND ${AUDIENCE_ALLOWED}
       AND (($4::uuid IS NULL AND n.parent_id IS NULL)
            OR ($4::uuid IS NOT NULL AND n.node_id = $4 AND ${DENY}))
   UNION ALL
@@ -131,11 +136,16 @@ walk AS (
     FROM content_nodes n
     JOIN walk w ON n.parent_id = w.node_id AND n.generation = w.generation
     WHERE n.tenant_id = $1 AND n.status = 'published' AND w.depth < $5
+      AND ${AUDIENCE_ALLOWED}
 )
 SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'
+           AND (coalesce(current_setting('app.audience_tiers', true), '') = ''
+                OR coalesce(ch.visibility,
+                            coalesce(current_setting('app.default_visibility', true), '')) =
+                   ANY (string_to_array(current_setting('app.audience_tiers', true), E'\\x1f')))
            AND ch.node_id NOT IN (SELECT node_id FROM denied)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
@@ -144,7 +154,7 @@ SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
 FROM walk w
 JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
-WHERE ${DENY}
+WHERE ${DENY} AND ${AUDIENCE_ALLOWED}
 ORDER BY w.sort_key
 LIMIT $6`;
 

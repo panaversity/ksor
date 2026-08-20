@@ -9,6 +9,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { NO_GOVERNANCE, type NodeGovernance } from "./governance.js";
+
 export const SUPPORTED_FORMATS: readonly number[] = [1];
 
 export interface ManifestNode {
@@ -28,6 +30,12 @@ export interface ManifestNode {
    * fidelity; ksor derives routes from paths, so adapters here leave it null.)
    */
   readonly permalink: string | null;
+  /**
+   * What the document declares ABOUT ITSELF — audience, authored status, owner,
+   * provenance, supersession. Carried onto the record (schema 2.2) so every
+   * surface reads one source instead of re-deriving governance from markdown.
+   */
+  readonly governance: NodeGovernance;
 }
 
 export interface ManifestFile {
@@ -65,6 +73,7 @@ export interface ManifestNodeInit {
   readonly summary?: string | null;
   readonly keywords?: readonly string[];
   readonly permalink?: string | null;
+  readonly governance?: NodeGovernance;
 }
 
 /** Mirrors the oracle dataclass defaults (parent/summary/permalink None, position 0, keywords ()). */
@@ -79,6 +88,7 @@ export function manifestNode(init: ManifestNodeInit): ManifestNode {
     summary: init.summary ?? null,
     keywords: init.keywords ?? [],
     permalink: init.permalink ?? null,
+    governance: init.governance ?? NO_GOVERNANCE,
   };
 }
 

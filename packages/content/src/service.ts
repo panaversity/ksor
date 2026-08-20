@@ -15,6 +15,7 @@ import { CHARS_PER_TOKEN, CHUNK_POLICY } from "./config.js";
 import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
+import { audienceGucs } from "./lib/audience.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type Hit } from "./lib/search.js";
 import {
   mint,
@@ -79,6 +80,26 @@ export interface ServiceContext {
   readonly embedQuery: (query: string) => Promise<readonly number[] | string>;
   /** The verified caller, or null → audited as "anonymous". */
   readonly actor?: () => string | null;
+  /**
+   * The audience tier this door serves. null = the record's least-privileged
+   * tier, which is the safe default: a door that cannot establish who is asking
+   * must not hand out the restricted half of the record. Ignored entirely when
+   * the instance declares no `audiences:` model.
+   */
+  readonly audience?: string | null;
+}
+
+/**
+ * The audience GUCs every serving statement's predicate reads. Computed per
+ * call from the instance's model and the door's tier, and folded into the same
+ * transaction-local `set_config` round trip as the tenant wall — so a path
+ * cannot serve without them the way it could not serve without the tenant id.
+ */
+function audienceScope(ctx: ServiceContext): Readonly<Record<string, string>> {
+  return audienceGucs(
+    { audiences: ctx.instance.audiences, defaultVisibility: ctx.instance.defaultVisibility },
+    ctx.audience ?? null,
+  );
 }
 
 export interface SearchHit {
@@ -243,7 +264,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ctx.pool,
       inst.tenantId,
       (client) => hybridSearch(client, scope, vec, query, kb),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...audienceScope(ctx) },
     );
     hits = result.hits;
     topCosine = result.topCosine;
@@ -261,8 +282,11 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   } else {
     // No vector floor declared → the gate was already off; the keyword
     // degrade serves exactly what an uncalibrated corpus always serves.
-    hits = await runRead(ctx.pool, inst.tenantId, (client) =>
-      keywordSearch(client, scope, query, kb),
+    hits = await runRead(
+      ctx.pool,
+      inst.tenantId,
+      (client) => keywordSearch(client, scope, query, kb),
+      audienceScope(ctx),
     );
     const topKw = hits[0]?.score ?? null;
     abstained = keywordAbstains(topKw, inst.abstain);
@@ -449,13 +473,18 @@ export async function readDocument(
   }
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
 
-  const { node, chunks } = await runRead(ctx.pool, inst.tenantId, async (client) => {
-    const found = await findDocument(client, scope, slug);
-    // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
-    // against active would find nothing (oracle rule, carried).
-    const pinnedScope = { ...scope, pinnedGeneration: found.generation };
-    return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
-  });
+  const { node, chunks } = await runRead(
+    ctx.pool,
+    inst.tenantId,
+    async (client) => {
+      const found = await findDocument(client, scope, slug);
+      // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
+      // against active would find nothing (oracle rule, carried).
+      const pinnedScope = { ...scope, pinnedGeneration: found.generation };
+      return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
+    },
+    audienceScope(ctx),
+  );
   if (chunks.length === 0) {
     throw new Error(`document ${JSON.stringify(slug)} has no readable content`);
   }
@@ -588,8 +617,11 @@ export async function outlineDocuments(
   // 2026-08-19); a drill-down shows at least the immediate children.
   const depth = root === null ? (options.depth ?? 0) : Math.max(1, options.depth ?? 1);
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: null };
-  const rows = await runRead(ctx.pool, inst.tenantId, (client) =>
-    outlineQuery(client, scope, { root, depth, limit: options.limit ?? 200 }),
+  const rows = await runRead(
+    ctx.pool,
+    inst.tenantId,
+    (client) => outlineQuery(client, scope, { root, depth, limit: options.limit ?? 200 }),
+    audienceScope(ctx),
   );
   await logRead(ctx.pool, {
     tenantId: inst.tenantId,

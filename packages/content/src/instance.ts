@@ -182,6 +182,10 @@ export interface ContentInstance {
   readonly instructions: string;
   /** Transport name (registry key, never persisted). */
   readonly embeddingProvider: string;
+  /** The record's reader audiences, least- to most-restricted; empty = no model. */
+  readonly audiences: readonly string[];
+  /** The tier a document takes when it declares none; null = none declared. */
+  readonly defaultVisibility: string | null;
   /** model + dim are the persisted IDENTITY of the embedding space. */
   readonly embeddingModel: string;
   readonly embeddingDim: number;
@@ -304,6 +308,8 @@ export function parseInstanceText(text: string): ContentInstance {
     abstain: { vectorFloor: retrieval.vector_floor, keywordFloor: retrieval.keyword_floor },
     maximumResponseCharacters: budgets.maximum_response_characters,
     instructions: fm.body.trim(),
+    audiences: fm.lists.get("audiences") ?? [],
+    defaultVisibility: fm.scalars.get("default_visibility") ?? null,
     embeddingProvider: embedding.provider,
     embeddingModel,
     embeddingDim: embedding.dim,

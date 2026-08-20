@@ -42,6 +42,8 @@ function instanceOf(tenantId: string, corpusId: string): ContentInstance {
     abstain: { vectorFloor: null, keywordFloor: null },
     maximumResponseCharacters: 120_000,
     instructions: "",
+    audiences: [],
+    defaultVisibility: null,
     embeddingProvider: "fake",
     embeddingModel: FAKE_EMBED_MODEL,
     embeddingDim: DIM,

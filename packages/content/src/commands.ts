@@ -19,7 +19,8 @@ import pg from "pg";
 
 import { contentPool, ContentStoreError, INGEST_ROLE } from "./db.js";
 import { parseInstance, InstanceParseError, type ContentInstance } from "./instance.js";
-import { applySchema, renderSchema } from "./schema.js";
+import { applySchema, renderSchema, schemaVersion } from "./schema.js";
+import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
@@ -40,7 +41,8 @@ Usage:
   ksor schema (--dim N | --instance PATH) [--apply]
       Print the rendered DDL for the embedding dimension to stdout.
       --instance reads the dimension from instance.md; --apply (with
-      --instance) applies the DDL to the instance's database instead.
+      --instance) provisions the instance's database, or migrates an
+      existing one forward through schema/migrations/.
   ksor ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
   ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
                          [--generation N] [--per-node N] [--min-chars N]
@@ -199,20 +201,78 @@ async function schemaCommand(args: string[]): Promise<number> {
   // had to REMEMBER whether they had taken, and made any setup sequence
   // non-repeatable. An already-provisioned database is success, reported as
   // such: the desired state is what the caller asked for (2026-08-20).
-  const already = await withPool(dsn, async (pool) => {
-    const r = await pool.query("SELECT schema_version FROM schema_meta LIMIT 1").catch(() => null);
-    return r === null ? null : String(r.rows[0]?.schema_version ?? "");
-  });
-  if (already !== null) {
+  //
+  // The state read is a VERSION, never a presence check. A bare
+  // `.catch(() => null)` here treated "unreachable", "wrong database" and
+  // "permission denied" as "schema not applied" and then tried to re-apply the
+  // DDL over live data; and any recorded version, however old, reported
+  // "nothing to do" while `serve` refused the same database (review 2026-08-20).
+  const required = schemaVersion();
+  const state = await withPool(dsn, (pool) => readSchemaState(pool));
+  if (state.kind === "uninitialized") {
+    await withPool(dsn, (pool) => applySchema(pool, dim));
     process.stdout.write(
-      `schema: already applied (schema_meta ${already}) — nothing to do; ` +
-        `drop the database to start over\n`,
+      `schema: applied ${required} at dim ${dim} (database named by ${instance.dsnEnv})\n`,
     );
     return 0;
   }
-  await withPool(dsn, (pool) => applySchema(pool, dim));
-  process.stdout.write(`schema: applied at dim ${dim} (database named by ${instance.dsnEnv})\n`);
+
+  const cmp = compareSchemaVersion(state.version, required);
+  if (cmp === 0) {
+    process.stdout.write(
+      `schema: already applied (schema_meta ${state.version}) — nothing to do\n`,
+    );
+    return 0;
+  }
+  if (cmp > 0) {
+    // A NEWER writer provisioned this database. Migrating backwards is not a
+    // thing; say so and let the operator upgrade the tool rather than silently
+    // proceeding against a shape this build does not know.
+    process.stdout.write(
+      `schema: database is ${state.version}, ahead of the ${required} this build writes — ` +
+        "nothing to do (upgrade ksor to match, or point at another database)\n",
+    );
+    return 0;
+  }
+
+  const report = await withPool(dsn, (pool) => runMigrations(pool, state.version, required));
+  if (report.applied.length === 0) {
+    process.stdout.write(
+      `schema: already applied (schema_meta ${state.version}) — nothing to do\n`,
+    );
+    return 0;
+  }
+  process.stdout.write(
+    `schema: migrated ${report.from} -> ${report.to} ` +
+      `(${report.applied.length} step${report.applied.length === 1 ? "" : "s"}: ` +
+      `${report.applied.join(", ")})\n`,
+  );
   return 0;
+}
+
+type SchemaState = { kind: "uninitialized" } | { kind: "applied"; version: string };
+
+/**
+ * What version this database carries — distinguishing "never initialized" from
+ * "cannot be read". Only the two SQLSTATEs that mean *reachable but
+ * uninitialized* (42P01 no such table, 3D000 no such database) count as
+ * uninitialized; everything else propagates, so a connection failure or a
+ * permission problem can never be mistaken for an empty database and answered
+ * by re-applying DDL over live rows.
+ */
+async function readSchemaState(pool: pg.Pool): Promise<SchemaState> {
+  try {
+    const r = await pool.query(
+      "SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1",
+    );
+    const version = (r.rows[0] as { schema_version?: string } | undefined)?.schema_version;
+    if (version === undefined || version === "") return { kind: "uninitialized" };
+    return { kind: "applied", version };
+  } catch (error) {
+    const code = (error as { code?: unknown }).code;
+    if (code === "42P01" || code === "3D000") return { kind: "uninitialized" };
+    throw error;
+  }
 }
 
 async function ingestCommand(args: string[]): Promise<number> {

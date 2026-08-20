@@ -1,6 +1,8 @@
 -- sor-content schema v2 — the generational corpus store (specs/platform/generations.md §2 is the
 -- design this implements; specs/platform/spec.md §5 the roles; the legacy schema the quarry).
--- ONE schema file; no migration runner (spec §9: compatibility is a RANGE, recorded in schema_meta).
+-- This file provisions a FRESH database at the current version; an EXISTING one moves forward
+-- through schema/migrations/<from>-<to>__<slug>.sql (spec §9: compatibility is a RANGE, recorded
+-- in schema_meta). Both halves are required — the file alone cannot migrate rows an adopter has.
 --
 -- Carried from legacy verbatim where the eval lock demands it: HNSW (m=16, ef_construction=64)
 -- cosine, 'english' generated tsvector, per-tenant one-embedding-model trigger, fail-closed tenant
@@ -59,6 +61,15 @@ CREATE TABLE content_nodes (
     position   INT  NOT NULL DEFAULT 0,
     permalink  TEXT,                                  -- CONFIRMED site route (/docs/…), sitemap-verified at publish; NULL = no proven page URL (a group, or an unlisted route) — never a guess
     status     TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published','draft','archived')),
+    -- Governance the AUTHOR declares, carried by the record itself (2.2) so every
+    -- surface reads one source instead of re-deriving it from markdown. `status`
+    -- above is the SERVING state of the row; `doc_status` is what the document says.
+    corpus_id     TEXT,                               -- which record this node belongs to
+    visibility    TEXT,                               -- audience tier; NULL = instance default_visibility
+    doc_status    TEXT,                               -- draft / approved / superseded, as authored
+    owner         TEXT,
+    provenance    JSONB,                              -- where the claims come from, as authored
+    superseded_by TEXT,                               -- stable_id of the replacement
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT nodes_stable_uniq  UNIQUE (tenant_id, generation, stable_id),
@@ -71,6 +82,9 @@ CREATE TABLE content_nodes (
 CREATE INDEX idx_nodes_gen      ON content_nodes (tenant_id, generation, kind);
 CREATE INDEX idx_nodes_parent   ON content_nodes (parent_id);
 CREATE INDEX idx_nodes_keywords ON content_nodes USING gin (keywords);
+-- The serving audience filter is (tenant, generation, visibility) — without this
+-- the audience predicate turns every search into a scan of the generation.
+CREATE INDEX idx_nodes_visibility ON content_nodes (tenant_id, generation, visibility);
 CREATE UNIQUE INDEX nodes_root_slug_uniq ON content_nodes (tenant_id, generation, slug) WHERE parent_id IS NULL;
 
 CREATE TABLE slug_aliases (
@@ -193,9 +207,12 @@ CREATE TABLE schema_meta (
     compatible_from TEXT NOT NULL,
     applied_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- 2.1 adds takedown_denylist.scope (decision 14); additive with a default, so
--- a 2.0 reader still reads a 2.1 database — compatible_from stays 2.0.
-INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.1', '2.0');
+-- 2.1 adds takedown_denylist.scope (decision 14). 2.2 puts governance on the node
+-- row (corpus_id, visibility, doc_status, owner, provenance, superseded_by).
+-- Both are additive and nullable, so a 2.0 reader still reads a 2.2 database —
+-- compatible_from stays 2.0. Existing databases move forward through
+-- schema/migrations/; schema.sql provisions a FRESH one at the current version.
+INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.2', '2.0');
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;

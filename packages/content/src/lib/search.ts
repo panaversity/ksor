@@ -10,6 +10,7 @@
 import type pg from "pg";
 
 import { MIN_CONTENT_CHARS, RRF_K } from "../config.js";
+import { AUDIENCE_ALLOWED } from "./audience.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 
 /**
@@ -43,7 +44,8 @@ const ARM_WHERE = `
           AND c.embedding_status = 'embedded' AND ${SERVABLE}
           AND n.status = 'published'
           AND ($5::text[] IS NULL OR n.kind = ANY($5::text[]))
-          AND ${DENY}`;
+          AND ${DENY}
+          AND ${AUDIENCE_ALLOWED}`;
 
 const JOINS = `
         FROM chunks c

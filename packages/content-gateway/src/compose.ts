@@ -132,6 +132,13 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // "anonymous" for a bearer-verified read proves nothing — review
     // finding 2026-08-19); the kit's AsyncLocalStorage carries it.
     actor: currentActor,
+    // Which half of the record this door serves. The SAME variable the site's
+    // per-audience build reads, so one record cannot mean two things across the
+    // two surfaces. Unset = the least-privileged tier: a door that cannot
+    // establish who is asking must not hand out the restricted half (before
+    // schema 2.2 it handed out ALL of it, because ingest dropped `visibility:`
+    // and the door had nothing to filter on — review 2026-08-20).
+    audience: process.env["KSOR_AUDIENCE"] || null,
   };
   return { ctx, instance, pool, spaceSkipReason, version };
 }
