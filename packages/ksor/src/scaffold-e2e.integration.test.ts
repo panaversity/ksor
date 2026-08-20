@@ -288,12 +288,29 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         .replace(/\s+/g, " ");
     };
 
+    // Scoped to the notice ELEMENT, never to the whole page: the sidebar and
+    // the prev/next pager both carry the successor's title and href, so a
+    // page-wide assertion passes even when successor resolution is completely
+    // broken — it certified the bug it was written to catch (round 3,
+    // 2026-08-20, proved by mutating the resolver and watching this stay green).
+    const noticeIn = (route: string): string => {
+      const html = readFileSync(
+        path.join(project, "system", "site", "out", route, "index.html"),
+        "utf8",
+      );
+      const found = /<aside[^>]*role="note"[\s\S]*?<\/aside>/.exec(html);
+      expect(found, `no supersession notice in ${route}`).not.toBeNull();
+      return found?.[0] ?? "";
+    };
+
+    const supersededNotice = noticeIn("docs/refund-policy");
+    expect(supersededNotice).toContain("Superseded");
+    expect(supersededNotice).toContain("replaced by");
+    expect(supersededNotice).toContain("Refund policy v5");
+    // The link must be IN the notice, not merely somewhere on the page.
+    expect(supersededNotice).toMatch(/href="\/docs\/refund-policy-v5\/?"/);
+
     const superseded = visible("docs/refund-policy");
-    // The supersession, named — the clause that is a correctness fix and not a
-    // presentation choice.
-    expect(superseded).toContain("Superseded");
-    expect(superseded).toContain("replaced by");
-    expect(superseded).toContain("Refund policy v5");
     expect(superseded).toMatch(/Status superseded/);
     expect(superseded).toMatch(/Owner Finance/);
     expect(superseded).toMatch(/Effective 2026-01-15/);
@@ -302,13 +319,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(superseded).toContain("Board minutes 2026-01-11");
     expect(superseded).toContain("Terms of service v4");
 
-    // The successor pointer resolves to a route that was really built — a dead
-    // link on a supersession notice strands the reader it just warned.
-    const supersededHtml = readFileSync(
-      path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
-      "utf8",
-    );
-    expect(supersededHtml).toMatch(/href="\/docs\/refund-policy-v5\/?"/);
+    // …and the route it points at was really built.
     expect(
       readFileSync(
         path.join(project, "system", "site", "out", "docs", "refund-policy-v5", "index.html"),
@@ -351,15 +362,11 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
 
     const withFolder = buildScaffold(project);
     expect(withFolder.status, `${withFolder.stdout}${withFolder.stderr}`.slice(-2000)).toBe(0);
-    const legal = readFileSync(
-      path.join(project, "system", "site", "out", "docs", "legal", "index.html"),
-      "utf8",
-    );
-    const notice = /<aside[^>]*role="note"[\s\S]*?<\/aside>/.exec(legal)?.[0] ?? "";
-    expect(notice).toMatch(/href="\/docs\/terms\/?"/);
-    expect(notice).toContain("Terms");
+    const legalNotice = noticeIn("docs/legal");
+    expect(legalNotice).toMatch(/href="\/docs\/terms\/?"/);
+    expect(legalNotice).toContain("Terms");
     // …and never the raw pointer, which is what the route-based resolver showed.
-    expect(notice).not.toContain("./terms.md");
+    expect(legalNotice).not.toContain("./terms.md");
 
     // `site: governance: false` — the record still declares owner and sources
     // (the agent surface and the audit trail want them); the published page
