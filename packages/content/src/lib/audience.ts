@@ -36,7 +36,20 @@ export class AudienceError extends Error {
  * passes everything.
  */
 export function visibleTiers(model: AudienceModel, viewer: string | null): string[] | null {
-  if (model.audiences.length === 0) return null;
+  if (model.audiences.length === 0) {
+    // A tier was ASKED for against a record that declares none. Ignoring it
+    // silently served the whole record to a caller who explicitly narrowed
+    // themselves — the site refuses this exact configuration by name
+    // (round-1 review of #43).
+    if (viewer !== null && viewer !== "") {
+      throw new AudienceError(
+        `an audience ${JSON.stringify(viewer)} was requested, but this record declares no ` +
+          "`audiences:` model — so nothing can be narrowed and the whole record would be " +
+          "served. Declare audiences: in instance.md, or unset KSOR_AUDIENCE.",
+      );
+    }
+    return null;
+  }
   const tier = viewer ?? model.audiences[0]!;
   const index = model.audiences.indexOf(tier);
   if (index < 0) {

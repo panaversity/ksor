@@ -58,3 +58,15 @@ function readInstanceTitle(): string {
 }
 
 export const appTitle: string = readInstanceTitle();
+
+/**
+ * Where this record's MCP surface is published, if the owner has said.
+ *
+ * `null` when they have not: an invented URL is worse than none, because an
+ * agent would try it and conclude the record is down rather than unpublished.
+ */
+export function mcpEndpoint(): string | null {
+  const declared = /^mcp_url:[ \t]*(.*)$/m.exec(instanceFrontmatter())?.[1] ?? "";
+  const value = declared.trim().replace(/^["']|["']$/g, "");
+  return value === "" ? null : value;
+}

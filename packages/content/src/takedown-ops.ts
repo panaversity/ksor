@@ -30,11 +30,14 @@ async function recordAct(
   instance: ContentInstance,
   detail: Record<string, unknown>,
   actor: string,
+  // Imposing and lifting must be distinguishable by the INDEXED column, not
+  // only by reading the JSON detail of every row (round-1 review of PR #43).
+  action: "takedown_applied" | "takedown_revoked" = "takedown_applied",
 ): Promise<void> {
   await client.query(
     "INSERT INTO retrieval_log (tenant_id, corpus_id, actor, action, detail)" +
-      " VALUES ($1, $2, $3, 'takedown_applied', $4::jsonb)",
-    [instance.tenantId, instance.corpusId, actor, JSON.stringify(detail)],
+      " VALUES ($1, $2, $3, $5, $4::jsonb)",
+    [instance.tenantId, instance.corpusId, actor, JSON.stringify(detail), action],
   );
 }
 
@@ -110,6 +113,7 @@ export async function revokeTakedown(
       instance,
       { stable_id: opts.stableId, change: changed ? "revoked" : "not-denied" },
       opts.actor,
+      "takedown_revoked",
     );
     return { stableId: opts.stableId, scope: "node" as TakedownScope, changed };
   });

@@ -65,9 +65,15 @@ describe("governanceFromFrontmatter", () => {
     expect(read(text).provenance).toEqual(["quoted source", "single"]);
   });
 
-  it("treats blank and whitespace-only values as absent, never as empty strings", () => {
-    expect(read(doc("title: T\nowner:   \nvisibility:")).owner).toBeNull();
-    expect(read(doc("title: T\nvisibility:")).visibility).toBeNull();
+  it("treats a blank non-security value as absent, never as an empty string", () => {
+    expect(read(doc("title: T\nowner:   ")).owner).toBeNull();
+  });
+
+  it("REFUSES a declared-but-unreadable visibility — it is a security control", () => {
+    // Reading it as absent gives the document the DEFAULT tier and serves it,
+    // while the site excludes it entirely. Fail closed instead.
+    expect(() => read(doc("title: T\nvisibility:"))).toThrow(/unreadable tier/i);
+    expect(() => read(doc("title: T\nvisibility:\n  - public"))).toThrow(/exactly one tier/i);
   });
 
   it("does NOT close the vocabulary — an unknown audience is carried, not refused", () => {

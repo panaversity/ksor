@@ -72,7 +72,20 @@ async function main(args: readonly string[]): Promise<number> {
   // --knowledge, --flip, --apply, --revoke, --export) were documented nowhere
   // the binary could reach (review 2026-08-20). A verb + --help is the verb's
   // question to answer.
-  if (wantsHelp && resolveCommand(args).verb === null) {
+  const helpVerb = resolveCommand(args).verb;
+  if (
+    wantsHelp &&
+    (helpVerb === null ||
+      helpVerb === "init" ||
+      helpVerb === "serve" ||
+      helpVerb === "dev" ||
+      helpVerb === "build")
+  ) {
+    // Only the CORPUS verbs answer their own --help (their dispatcher prints a
+    // per-verb block). Everything else answers HERE, because narrowing this to
+    // `verb === null` made `ksor serve --help` BOOT THE SERVER and
+    // `ksor init --help` refuse with bad-name — asking a question must never
+    // perform the act (round-1 review of PR #43).
     process.stdout.write(usage);
     return 0;
   }

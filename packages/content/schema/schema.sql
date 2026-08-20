@@ -185,7 +185,7 @@ CREATE TABLE retrieval_log (
     actor       TEXT NOT NULL,                       -- NO default: unset errors loudly (carried)
     action      TEXT NOT NULL CHECK (action IN
                   ('content_served','similarity_searched','corpus_seeded','outline_served',
-                   'search_abstained','generation_activated','takedown_applied')),
+                   'search_abstained','generation_activated','takedown_applied','takedown_revoked')),
     source_id   TEXT,
     -- spec §7 audit fields (explicit + queryable; free detail rides JSONB)
     content_hash           TEXT,

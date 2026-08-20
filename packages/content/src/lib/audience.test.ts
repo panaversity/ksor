@@ -13,9 +13,15 @@ const model = { audiences: ["public", "internal", "restricted"], defaultVisibili
 const noModel = { audiences: [], defaultVisibility: null };
 
 describe("visibleTiers", () => {
-  it("returns null when the record declares no audience model — nothing to filter", () => {
+  it("returns null when the record declares no audience model and none was asked for", () => {
     expect(visibleTiers(noModel, null)).toBeNull();
-    expect(visibleTiers(noModel, "public")).toBeNull();
+  });
+
+  it("REFUSES a tier asked for against a record that declares no model", () => {
+    // Ignoring it served the WHOLE record to a caller who had explicitly
+    // narrowed themselves; the site refuses this configuration by name.
+    expect(() => visibleTiers(noModel, "public")).toThrow(AudienceError);
+    expect(() => visibleTiers(noModel, "public")).toThrow(/declares no/i);
   });
 
   it("defaults to the LEAST-privileged tier when no viewer is named", () => {

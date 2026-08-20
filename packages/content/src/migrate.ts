@@ -150,7 +150,7 @@ export async function runMigrations(
     // Guarded checkout: a connection dying mid-migration must reject, not
     // become an uncaught 'error' on a listener-less client (see
     // withGuardedClient in @panaversity/ksor-postgres).
-    await withGuardedClient(pool, async (client) => {
+    const outcome = await withGuardedClient(pool, async (client) => {
       try {
         await client.query("BEGIN");
         // search_path is bound here for the same reason every other transaction
@@ -166,6 +166,20 @@ export async function runMigrations(
         await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
           "ksor-schema-migrate",
         ]);
+        // Re-read INSIDE the lock. The plan was computed before waiting for it,
+        // so a concurrent run may have already applied this exact step; a
+        // second application only survives today because both shipped
+        // migrations happen to be idempotent (round-1 review of #43).
+        const current = await client.query(
+          "SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1",
+        );
+        const at = String(
+          (current.rows[0] as { schema_version?: string } | undefined)?.schema_version ?? "",
+        );
+        if (at !== step.from) {
+          await client.query("COMMIT");
+          return "skipped";
+        }
         await client.query(sql);
         await client.query(
           // compatible_from is the range this SCHEMA supports, not the version
@@ -178,6 +192,7 @@ export async function runMigrations(
           [step.to, step.from],
         );
         await client.query("COMMIT");
+        return "applied";
       } catch (error) {
         try {
           await client.query("ROLLBACK");
@@ -187,7 +202,7 @@ export async function runMigrations(
         throw error;
       }
     });
-    applied.push(step.filename);
+    if (outcome === "applied") applied.push(step.filename);
   }
   return { from: current, to: plan.at(-1)?.to ?? current, applied };
 }

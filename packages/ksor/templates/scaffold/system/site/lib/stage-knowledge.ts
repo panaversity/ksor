@@ -164,6 +164,12 @@ interface StagePlan {
  * the database, and this build cannot tell "no takedowns" from "the export
  * never ran" — so a project that HAS a database refuses rather than guessing.
  */
+/** The shape `ksor takedown --export` writes. */
+interface DenylistManifest {
+  source?: string;
+  denied?: { stable_id?: string; scope?: string }[];
+}
+
 /** Where `ksor takedown --export` writes, relative to the project root. */
 const DENYLIST_FILE = ".ksor-denylist.json";
 
@@ -178,13 +184,26 @@ function declaresDatabase(): boolean {
   }
 }
 
-function deniedStableIds(recordDir: string): Set<string> {
+function deniedStableIds(recordDir: string): DenylistManifest {
   const manifestPath = path.join(recordDir, "..", DENYLIST_FILE);
   let raw: string;
   try {
     raw = readFileSync(manifestPath, "utf8");
   } catch {
     if (!declaresDatabase()) return new Set();
+    // `pnpm dev` never runs the export (it needs a live DSN), so refusing here
+    // stopped the site running locally at all for any record with a database —
+    // a governance guard that broke the everyday loop (round-1 review of #43).
+    // Development warns and shows everything; a BUILD, which is what publishes,
+    // still refuses.
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        `[ksor] ${DENYLIST_FILE} is absent, so this dev server shows the record UNFILTERED by ` +
+          `takedowns. Run \`ksor takedown --instance instance.md --export ${DENYLIST_FILE}\` ` +
+          "to see what a build would publish.",
+      );
+      return new Set();
+    }
     refuse(
       "ksor-denylist-missing",
       `instance.md declares a database but ${DENYLIST_FILE} is not there`,
@@ -203,16 +222,45 @@ function deniedStableIds(recordDir: string): Set<string> {
       `re-export it: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
     );
   }
-  return new Set((parsed.denied ?? []).map((d) => String(d.stable_id)));
+  return parsed;
 }
 
-/** The record's stable_id for a file, mirroring the kernel's path-derived id. */
-function stableIdOf(recordDir: string, file: string): string {
+/**
+ * Is this document denied? Node scope matches the id exactly; SUBTREE scope
+ * matches it and everything filed beneath it.
+ *
+ * Dropping `scope` left every descendant of a `--subtree` takedown published
+ * here while the MCP door denied them (round-1 review of #43).
+ */
+function isDenied(manifest: DenylistManifest, stableId: string): boolean {
+  return (manifest.denied ?? []).some((d) => {
+    const id = String(d.stable_id);
+    if (stableId === id) return true;
+    return d.scope === "subtree" && stableId.startsWith(`${id}/`);
+  });
+}
+
+/**
+ * The record's stable_id for a file, mirroring the kernel's adapter — INCLUDING
+ * the `sor_id:` frontmatter override.
+ *
+ * Deriving it from the path alone meant a takedown of any document carrying an
+ * `sor_id:` never matched here and it stayed published, while the MCP door
+ * denied it: the same decoupling decision 14 already records as the reason the
+ * subtree walk uses parent_id rather than a prefix (round-1 review of #43).
+ */
+function stableIdOf(recordDir: string, file: string, text: string): string {
+  const block = frontmatterBlock(text);
+  const override = /^sor_id:[ \t]*(.*)$/m
+    .exec(block)?.[1]
+    ?.trim()
+    .replace(/^["']|["']$/g, "");
+  if (override !== undefined && override !== "") return override;
   const rel = path.relative(recordDir, file).split(path.sep).join("/");
   return `${path.basename(recordDir)}/${rel.replace(/\.md$/i, "")}`;
 }
 
-function planStage(recordDir: string, denied: Set<string>): StagePlan {
+function planStage(recordDir: string, denied: DenylistManifest): StagePlan {
   const documents: string[] = [];
   const assets = new Set<string>();
   let total = 0;
@@ -225,7 +273,7 @@ function planStage(recordDir: string, denied: Set<string>): StagePlan {
     // what names the typo.
     if (!visibleInBuild(visibilityOf(text))) continue;
     // A takedown beats every other consideration, on every surface.
-    if (denied.has(stableIdOf(recordDir, file))) continue;
+    if (isDenied(denied, stableIdOf(recordDir, file, text))) continue;
     documents.push(file);
     // Body only: frontmatter carries no links in the record grammar, and
     // scanning it here while the other shell strips it staged different
@@ -241,7 +289,7 @@ function planStage(recordDir: string, denied: Set<string>): StagePlan {
 }
 
 /** Fill a clean stage with exactly the set this build may publish. */
-function fillStage(recordDir: string, stageDir: string, denied: Set<string>): void {
+function fillStage(recordDir: string, stageDir: string, denied: DenylistManifest): void {
   // The old stage goes first, before any refusal can throw: a refused build
   // that leaves the previous, more permissive stage on disk hands the next
   // careless build a filtered copy nothing governs (review finding,
@@ -300,7 +348,7 @@ function refuseVisibilityWithoutAudiences(recordDir: string): void {
  * that to a restart keeps dev honest in the direction that matters: the
  * published build is always staged from scratch.
  */
-function refreshStage(recordDir: string, stageDir: string, denied: Set<string>): void {
+function refreshStage(recordDir: string, stageDir: string, denied: DenylistManifest): void {
   const permitted = new Set(planStage(recordDir, denied).files);
   for (const staged of walkFiles(stageDir)) {
     const from = path.join(recordDir, path.relative(stageDir, staged));
@@ -360,7 +408,7 @@ export function knowledgeSourceDir(): string {
   // document still built into /docs and llms.txt on a record with no
   // audiences).
   const denied = deniedStableIds(recordDir);
-  if (audienceModel === null && denied.size === 0) {
+  if (audienceModel === null && (denied.denied ?? []).length === 0) {
     // Nothing to filter — serve the record itself, the level-0 fast path.
     // A stage left behind by an earlier model would be a filtered copy of the
     // record nothing governs any more — removed before the refusal below can

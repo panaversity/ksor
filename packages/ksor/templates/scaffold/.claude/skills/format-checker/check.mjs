@@ -728,6 +728,10 @@ const INSTANCE_KEYS = new Set([
   "site",
   "audiences",
   "default_visibility",
+  // Where this record's MCP surface is published. The site emits it as
+  // /.well-known/mcp/server.json so an agent can DISCOVER the record rather
+  // than being told the URL (AGENTS.md critical rule 3).
+  "mcp_url",
   "database",
   "embedding",
   "retrieval",

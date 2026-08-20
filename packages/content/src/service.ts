@@ -135,10 +135,11 @@ export function gateState(instance: ContentInstance): GateState {
   const floor = instance.abstain.vectorFloor;
   if (floor === "uncalibrated") return "uncalibrated";
   if (floor !== null) return { floor };
-  // A keyword floor gates the DEGRADED path. Reporting "off" while that floor
-  // is actively abstaining told the agent this record cannot decline, on a
-  // record that was declining (review of PR #43).
-  if (instance.abstain.keywordFloor !== null) return { floor: instance.abstain.keywordFloor };
+  // A keyword floor gates ONLY the degraded (embed-outage) path, so the healthy
+  // path really cannot abstain and "off" is the honest answer for it. Saying
+  // {floor} here would claim a gate that is not armed — the inverse error of
+  // the one being fixed. The degraded case is reported where it happens, via
+  // degraded_reason on the envelope.
   return "off";
 }
 

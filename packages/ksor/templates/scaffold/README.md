@@ -63,6 +63,19 @@ the agent kit in `.agents/skills/` knows how to interview you
 (`intake-interview`), convert your source material (`add-sources`), and keep
 the record well-formed (`format-checker`, also `pnpm check`).
 
+### A note on the lockfile
+
+The committed `pnpm-lock.yaml` covers the site. It cannot cover
+`@panaversity/ksor` itself, because the version pinned in `package.json` is
+stamped by the CLI that scaffolded this project and could not be resolved before
+that happened. So your FIRST `pnpm install` writes it — run it before you push,
+and commit the result.
+
+The deploy config already accounts for this (`vercel.json` installs with
+`--no-frozen-lockfile`), and the shipped `validate.yml` runs no install. If you
+add CI of your own, note that pnpm turns on `--frozen-lockfile` automatically
+whenever `CI` is set.
+
 ## The files, explained
 
 Nothing here is decoration, and the dotfiles are not ceremony — each one is a

@@ -17,6 +17,7 @@ import {
   checkEmbeddingSpace,
   contentPool,
   contentPoolMin,
+  visibleTiers,
   embedQueryVlit,
   EmbeddingSpaceMismatch,
   keyRingFromEnv,
@@ -123,6 +124,17 @@ export async function compose(instancePath: string, version: string): Promise<Co
     console.error(`embedding-space check skipped: ${spaceSkipReason}`);
   }
 
+  // Which half of the record this door serves — validated HERE, at boot. An
+  // unknown or un-narrowable tier used to surface per REQUEST, so a
+  // misconfigured deployment looked healthy and failed one caller at a time
+  // (round-1 review of #43).
+  const audience = process.env["KSOR_AUDIENCE"] || null;
+  visibleTiers(
+    { audiences: instance.audiences, defaultVisibility: instance.defaultVisibility },
+    audience,
+  );
+  if (audience !== null) console.error(`serving audience: ${audience}`);
+
   const advisory = tlsAdvisory(dsn);
   if (advisory !== null) console.error(advisory);
 
@@ -152,7 +164,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // establish who is asking must not hand out the restricted half (before
     // schema 2.2 it handed out ALL of it, because ingest dropped `visibility:`
     // and the door had nothing to filter on — review 2026-08-20).
-    audience: process.env["KSOR_AUDIENCE"] || null,
+    audience,
   };
   return { ctx, instance, pool, spaceSkipReason, version };
 }

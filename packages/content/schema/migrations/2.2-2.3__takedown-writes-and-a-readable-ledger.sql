@@ -55,3 +55,10 @@ DO $$
 BEGIN
   EXECUTE format('GRANT sor_content_auditor TO %I WITH SET TRUE', current_user);
 END $$;
+
+-- Lifting a denial must be distinguishable from imposing one by the INDEXED
+-- action column, not only by reading each row's JSON detail.
+ALTER TABLE retrieval_log DROP CONSTRAINT IF EXISTS retrieval_log_action_check;
+ALTER TABLE retrieval_log ADD CONSTRAINT retrieval_log_action_check CHECK (action = ANY (ARRAY[
+  'content_served','similarity_searched','corpus_seeded','outline_served',
+  'search_abstained','generation_activated','takedown_applied','takedown_revoked']));

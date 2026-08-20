@@ -84,10 +84,32 @@ export function frontmatterListValues(text: string, key: string): string[] | nul
  * they always were — this module widens what the record carries, it does not
  * narrow what a document may say.
  */
+export class GovernanceParseError extends Error {
+  override readonly name: string = "GovernanceParseError";
+}
+
 export function governanceFromFrontmatter(
   meta: Record<string, unknown>,
   text: string,
 ): NodeGovernance {
+  // `visibility:` is a SECURITY control, so a shape this reader cannot resolve
+  // must refuse — not read as "declared nothing" and take the default tier.
+  // The site excludes such a document entirely; reading it as absent served it
+  // (round-1 review of #43, and the same failing-open shape the visibility work
+  // already recorded fixing once).
+  if (frontmatterListValues(text, "visibility") !== null) {
+    throw new GovernanceParseError(
+      "a document declares `visibility:` as a LIST — a document belongs to exactly one tier. " +
+        "Write a single value, e.g. `visibility: internal`.",
+    );
+  }
+  if (Object.hasOwn(meta, "visibility") && scalar(meta, "visibility") === null) {
+    throw new GovernanceParseError(
+      "a document declares `visibility:` with no readable value — an unreadable tier reads as " +
+        "no tier, and no tier is the default tier, which is how a restricted document gets " +
+        "served. Write a single value, e.g. `visibility: internal`.",
+    );
+  }
   const provenanceScalar = scalar(meta, "provenance");
   const provenanceList = frontmatterListValues(text, "provenance");
   return {

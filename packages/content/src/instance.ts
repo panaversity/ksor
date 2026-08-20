@@ -243,6 +243,7 @@ const KERNEL_TOP_LEVEL_KEYS = new Set([
   "site",
   "audiences",
   "default_visibility",
+  "mcp_url",
 ]);
 
 export function parseInstanceText(text: string): ContentInstance {
