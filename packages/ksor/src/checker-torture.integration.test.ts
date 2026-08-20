@@ -403,6 +403,36 @@ describe("scaffolded format-checker — torture", () => {
       expect(quoted.status, quoted.output).toBe(0);
     });
 
+    it("matches YAML's timestamp grammar, not a padded-date shape", () => {
+      // The first version of this rule tested /^\d{4}-\d{2}-\d{2}[T ]./ — but
+      // js-yaml accepts one-digit month/day and `t`/tab as the separator, so
+      // every spelling in the gap still became a Date and still published the
+      // day before (round 2, 2026-08-20).
+      for (const value of [
+        "2026-4-1 00:00:00 +05:00",
+        "2026-04-01t00:00:00+05:00",
+        "2026-04-01\t00:00:00 +05:00",
+      ]) {
+        const result = probe({
+          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${value}\n---\n\nBody.\n`,
+        });
+        expect(result.status, `${value} → ${result.output}`).toBe(1);
+        expect(result.output).toContain("effective carries a time");
+      }
+    });
+
+    it("leaves free text that merely starts with a date alone", () => {
+      // YAML makes this a STRING, not a Date, so there is no timezone to shift
+      // — and the old rule's remedy ("write effective: 2026-04-01") would have
+      // silently deleted half the value.
+      for (const value of ["2026-04-01 for new customers", "2026-4-1", "2026-04-01"]) {
+        const result = probe({
+          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${value}\n---\n\nBody.\n`,
+        });
+        expect(result.status, `${value} → ${result.output}`).toBe(0);
+      }
+    });
+
     it("validates EVERY superseded_by, not only ones shaped like a path", () => {
       // `legal/terms` matched neither shape test, so it skipped existence, the
       // escape-the-record rule AND the cross-audience leak rule — and the

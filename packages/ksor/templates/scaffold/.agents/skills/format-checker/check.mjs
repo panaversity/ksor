@@ -661,11 +661,15 @@ if (!existsSync(knowledgeDir)) {
       // prints the day before the record's for any positive offset (found
       // 2026-08-20: `2026-04-01 00:00:00 +05:00` rendered 2026-03-31).
       const effective = fm.keys.get("effective");
-      if (
-        effective !== undefined &&
-        !fm.quoted.has("effective") &&
-        /^\d{4}-\d{2}-\d{2}[T ]./.test(effective)
-      ) {
+      // YAML's timestamp grammar EXACTLY (js-yaml YAML_TIMESTAMP_REGEXP): a
+      // one-or-two-digit month and day, and `T`, `t` or whitespace before the
+      // time. The narrower shape this replaces let `2026-4-1 00:00:00 +05:00`
+      // through — and refused `2026-04-01 for new customers`, which YAML never
+      // turns into a Date at all (both found 2026-08-20).
+      const yamlTimestamp =
+        /^\d{4}-\d\d?-\d\d?(?:(?:[Tt]|[ \t]+)(\d\d?):(\d\d):(\d\d)(?:\.\d*)?(?:[ \t]*(?:Z|[-+]\d\d?(?::\d\d)?))?)?$/;
+      const stamped = effective === undefined ? null : yamlTimestamp.exec(effective);
+      if (effective !== undefined && !fm.quoted.has("effective") && stamped?.[1] !== undefined) {
         problem(
           rel,
           `effective carries a time: ${effective}`,
