@@ -7,7 +7,7 @@
     "dev": "pnpm -C system/site dev",
     "build": "pnpm -C system/site build",
     "check": "node .agents/skills/format-checker/check.mjs",
-    "up": "pnpm schema && pnpm grant && pnpm ingest && pnpm serve",
+    "start": "pnpm schema && pnpm grant && pnpm ingest && pnpm serve",
     "schema": "ksor schema --instance instance.md --apply",
     "grant": "ksor grant --instance instance.md",
     "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip",

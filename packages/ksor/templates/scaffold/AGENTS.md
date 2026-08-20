@@ -93,14 +93,14 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 3. **Bring it up — one command:**
 
    ```sh
-   pnpm up      # schema → grant → ingest → serve
+   pnpm start   # schema → grant → ingest → serve
    ```
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing
    grant reports "already granted", and ingest builds a fresh generation.
 
-   **`pnpm up` ingests every time — but it re-EMBEDS nothing that has not
+   **`pnpm start` ingests every time — but it re-EMBEDS nothing that has not
    changed.** Chunks carry forward by content hash, so a rerun on an untouched
    corpus makes zero provider calls (`embedded 0, carried N` in the output).
    What it does spend is a generation: each run creates and activates a new one,
@@ -108,7 +108,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 
    | You want to                      | Run                                        |
    | -------------------------------- | ------------------------------------------ |
-   | set up, or refresh after an edit | `pnpm up`                                  |
+   | set up, or refresh after an edit | `pnpm start`                               |
    | just restart the server          | `pnpm serve` — no new generation           |
    | reap superseded generations      | `pnpm exec ksor gc --instance instance.md` |
 

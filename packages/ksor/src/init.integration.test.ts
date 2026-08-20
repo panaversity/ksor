@@ -188,10 +188,14 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(ignore, "the example is exempt from .env*").toContain("!.env.example");
 
     // One command for the whole served rung. Every step it chains is
-    // re-runnable, so it is also the refresh-after-editing command.
-    expect(pkg.scripts?.["up"], "one command brings the rung up").toBe(
+    // re-runnable, so it is also the refresh-after-editing command. It must
+    // NOT be called `up`: that is pnpm's own alias for `update`, so the script
+    // is shadowed and `pnpm up` silently upgrades the adopter's dependencies
+    // instead (shipped that way in 0.0.5; found live 2026-08-20).
+    expect(pkg.scripts?.["start"], "one command brings the rung up").toBe(
       "pnpm schema && pnpm grant && pnpm ingest && pnpm serve",
     );
+    expect(pkg.scripts?.["up"], "`up` collides with pnpm's built-in").toBeUndefined();
     const workspace = readFileSync(path.join(dir, "served-sor", "pnpm-workspace.yaml"), "utf8");
     // The pinned tool MUST be excluded from the scaffold's 48h release-age
     // quarantine, or the first install of a freshly-published ksor breaks for
