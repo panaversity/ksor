@@ -997,7 +997,11 @@ if (!existsSync(instanceMd)) {
           const raw = (fm.children.get("site")?.get("governance") ?? "").trim();
           const value = (/^["']/.test(raw) ? raw : raw.replace(/\s+#.*$/, ""))
             .trim()
-            .replace(/^(['"])(.*)\1$/, "$2");
+            .replace(/^(['"])(.*)\1$/, "$2")
+            // Case-folded: js-yaml reads `False` as false, and the site's own
+            // reader lowercases before comparing. A checker stricter than both
+            // surfaces is the very divergence this rule exists to stop.
+            .toLowerCase();
           if (value !== "true" && value !== "false") {
             problem(
               "instance.md",

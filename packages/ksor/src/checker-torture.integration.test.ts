@@ -379,6 +379,16 @@ describe("scaffolded format-checker — torture", () => {
       expect(commented.status, commented.output).toBe(0);
     });
 
+    it("accepts the capitalised booleans YAML and the site both accept", () => {
+      for (const value of ["False", "TRUE", "True"]) {
+        const result = probe({ "instance.md": instanceWith(`site:\n  governance: ${value}`) });
+        expect(result.status, `${value} → ${result.output}`).toBe(0);
+      }
+      // …and still refuses a value neither parser can read.
+      const nonsense = probe({ "instance.md": instanceWith("site:\n  governance: banana") });
+      expect(nonsense.status, nonsense.output).toBe(1);
+    });
+
     it("refuses a duplicated NESTED key: the map kept the last, the site reads the first", () => {
       const dup = probe({
         "instance.md": instanceWith("site:\n  governance: true\n  governance: false"),
