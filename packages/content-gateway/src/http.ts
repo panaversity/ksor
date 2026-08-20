@@ -1,9 +1,13 @@
 /**
- * The MCP door: the SDK's Web-standard transport (Request → Response,
- * STATELESS JSON — our standard is Streamable HTTP with JSON responses, not
- * SSE) behind Hono. The MCP surface is the product, so the door composes the
- * SDK's own HTTP shape instead of hand-rolling routing and body parsing —
- * the layer three findings landed in.
+ * The MCP door: the SDK v2 HTTP entry (Request → Response, stateless)
+ * behind Hono, serving the 2026-07-28 revision with 2025-era clients still
+ * answered through the stateless fallback. Modern exchanges are buffered JSON;
+ * the legacy leg answers over SSE (the SDK's own shape) and is DRAINED here
+ * before the concurrency slot is released.
+ *
+ * The MCP surface is the product, so the door composes the SDK's own HTTP
+ * shape instead of hand-rolling routing and body parsing — the layer three
+ * findings landed in.
  *
  * Contracts the hand-rolled door had earned and this one keeps (a framework
  * doesn't know them, so they are restored explicitly — review, 2026-08-19):
@@ -248,14 +252,56 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   const mcpHandler = createMcpHandler(() => buildServer(ctx, version), {
     legacy: "stateless",
     responseMode: "json",
-    onerror: (error) => console.error(`mcp handler: ${error.name}`),
+    onerror: (error) => console.error(`mcp handler: ${error.name}: ${error.message}`),
   });
-  const handleMcp = (request: Request): Promise<Response> => mcpHandler.fetch(request);
+
+  /**
+   * BUFFER the whole response before the caller's in-flight slot is released.
+   *
+   * `responseMode: "json"` governs only MODERN exchanges; v2's legacy fallback
+   * builds its transport with `sessionIdGenerator: undefined` alone, so 2025-era
+   * exchanges answer over SSE and their `Response` resolves as soon as dispatch
+   * STARTS — the search's embed call and pg queries then run outside the
+   * concurrency cap. A caller picks that leg by simply omitting the `_meta`
+   * envelope, which made KSOR_MAX_INFLIGHT bound nothing and let concurrent
+   * searches exhaust the pool — the same starvation /ready's coalescing exists
+   * to prevent (security re-verification, 2026-08-20). Draining here restores
+   * the pre-upgrade semantics: the slot is held until the work is actually
+   * done. Safe because every response this door serves terminates —
+   * `subscriptions/listen`, the one long-lived stream v2 offers, is refused
+   * below.
+   */
+  const handleMcp = async (
+    request: Request,
+    authInfo?: { token: string; clientId: string; scopes: string[]; expiresAt?: number },
+  ): Promise<Response> => {
+    const response = await mcpHandler.fetch(request, authInfo === undefined ? {} : { authInfo });
+    const body = await response.arrayBuffer();
+    return new Response(body, { status: response.status, headers: response.headers });
+  };
 
   const mcp = bodyLimit({
     maxSize: maxBodyBytes,
     onError: (c) => c.json({ error: "request body too large" }, 413),
   });
+
+  /** Does this POST name `subscriptions/listen`, in either era's shape? */
+  const isListen = async (request: Request): Promise<boolean> => {
+    // Modern requests declare the method in a header; legacy ones only in the
+    // body. Check the header first so a malformed body cannot smuggle a listen.
+    if (request.headers.get("mcp-method") === "subscriptions/listen") return true;
+    try {
+      const body: unknown = await request.json();
+      return (
+        typeof body === "object" &&
+        body !== null &&
+        (body as { method?: unknown }).method === "subscriptions/listen"
+      );
+    } catch {
+      // Unparseable body: not a listen — let the SDK produce the parse error.
+      return false;
+    }
+  };
 
   app.post("/mcp", mcp, async (c) => {
     if (inflight >= maxInflight) {
@@ -263,6 +309,23 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     }
     inflight += 1;
     try {
+      // `subscriptions/listen` holds an SSE stream open for the client's
+      // lifetime, and the concurrency cap cannot bound it (its Response
+      // resolves immediately) — the SDK's own 1024-stream default would be the
+      // only limit. This server declares `tools.listChanged` and never
+      // publishes a change event, so a listen stream is pure cost to both
+      // sides. Refuse it honestly rather than hold sockets for nothing
+      // (security re-verification, 2026-08-20).
+      if (await isListen(c.req.raw.clone())) {
+        return c.json(
+          {
+            error:
+              "subscriptions/listen is not served — this record publishes no change " +
+              "notifications; poll search/outline/read instead",
+          },
+          501,
+        );
+      }
       if (auth.mode === "public") {
         const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
         if (token === undefined) {
@@ -280,7 +343,19 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
             transient ? 503 : 401,
           );
         }
-        return await runWithIdentity(identity, () => handleMcp(c.req.raw));
+        // Hand the SDK the identity WE verified. ksor authorizes through the
+        // kit's AsyncLocalStorage actor, not this field, so nothing reads it
+        // today — but the SDK never populates `authInfo` itself, so leaving it
+        // undefined is a fail-open trap for any future tool that consults
+        // `extra.authInfo` (security re-verification, 2026-08-20).
+        return await runWithIdentity(identity, () =>
+          handleMcp(c.req.raw, {
+            token,
+            clientId: identity.clientId,
+            scopes: [],
+            ...(identity.expiresAt === null ? {} : { expiresAt: identity.expiresAt }),
+          }),
+        );
       }
       return await handleMcp(c.req.raw);
     } finally {
@@ -288,11 +363,10 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     }
   });
 
-  // We serve Streamable HTTP with JSON responses — no standalone SSE stream
-  // (stateless has no server-initiated messages to push), so GET/DELETE on
-  // /mcp are not offered.
+  // Stateless: no session to resume and no server-initiated push (this record
+  // publishes no change notifications), so GET/DELETE on /mcp are not offered.
   app.on(["GET", "DELETE"], "/mcp", (c) =>
-    c.json({ error: "method not allowed — POST JSON-RPC to /mcp (stateless JSON transport)" }, 405),
+    c.json({ error: "method not allowed — POST JSON-RPC to /mcp (stateless transport)" }, 405),
   );
 
   // AWAIT the bind: EADDRINUSE / EACCES / an unroutable host must reach the
@@ -325,12 +399,14 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // must not be torn down under in-flight work (review, 2026-08-19).
   const shutdown = (): void => {
     server.close(() => {
+      // Close the MCP handler INSIDE the listener's callback, beside the pool:
+      // once closed it throws "This MCP handler has been closed" for any new
+      // fetch, which would escape as a bare 500 for requests still in the drain
+      // window. The listener stops accepting first, in-flight exchanges finish,
+      // then both are torn down (security re-verification, 2026-08-20).
+      void mcpHandler.close().catch(() => undefined);
       void pool.end().catch(() => undefined);
     });
-    // The v2 handler owns the modern leg: aborting in-flight modern exchanges
-    // is its job, not the listener's (the legacy leg is per-request and holds
-    // nothing between exchanges).
-    void mcpHandler.close().catch(() => undefined);
     // close() waits for EXISTING connections to end; an idle keep-alive MCP
     // client (between requests) would keep its callback from ever firing — and
     // thus pool.end() from running — until SIGKILL. Close idle sockets so the

@@ -288,6 +288,59 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect((listed.result?.tools ?? []).map((t) => t.name)).toContain("search");
   });
 
+  it("refuses subscriptions/listen rather than holding a stream for nothing", async () => {
+    // v2's entry would serve `subscriptions/listen` as a long-lived SSE stream
+    // that the in-flight cap cannot bound (its Response resolves at once), and
+    // this record publishes no change notifications — so the stream is pure
+    // cost. Refused at the door in both eras' shapes (security
+    // re-verification, 2026-08-20).
+    for (const headers of [
+      { "content-type": "application/json" },
+      {
+        "content-type": "application/json",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "subscriptions/listen",
+      },
+    ]) {
+      const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+        method: "POST",
+        headers: { accept: "application/json, text/event-stream", ...headers },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "subscriptions/listen", params: {} }),
+      });
+      expect(response.status, `listen refused (headers: ${JSON.stringify(headers)})`).toBe(501);
+      expect(response.headers.get("content-type") ?? "").toContain("application/json");
+      expect(await response.text()).toContain("publishes no change");
+    }
+  });
+
+  it("drains a legacy exchange fully before answering — the in-flight cap must bound real work", async () => {
+    // The legacy leg answers over SSE and the SDK resolves its Response as soon
+    // as dispatch STARTS. If the door returned that unread, the concurrency
+    // slot would free while the embed + pg work still ran, so KSOR_MAX_INFLIGHT
+    // would bound nothing and concurrent searches could exhaust the pool
+    // (security re-verification, 2026-08-20: found MEDIUM, fixed by draining).
+    // A response whose body is already complete when the headers arrive is the
+    // observable form of "the slot was held to the end".
+    const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "search", arguments: { query: IN_CORPUS_QUERY, k: 1 } },
+      }),
+    });
+    expect(response.status).toBe(200);
+    // The work is finished by the time we are handed the response: the payload
+    // is fully materialized, not a stream still being produced.
+    const body = await response.text();
+    expect(body, `legacy tools/call body: ${body.slice(0, 200)}`).toContain("compensation");
+  });
+
   it("still serves 2025-era clients — the upgrade is not a cutoff", async () => {
     // `legacy: "stateless"` keeps the previous revision working, so an
     // assistant that has not moved yet is not broken by our upgrade.
