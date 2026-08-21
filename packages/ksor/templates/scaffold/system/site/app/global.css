@@ -59,3 +59,41 @@ html > body[data-scroll-locked] {
   font-weight: 500;
   color: var(--color-fd-muted-foreground);
 }
+
+/* ── The document's type ramp ────────────────────────────────────────────────
+   The shell sizes the title at 1.75em — 28px against 16px body, with normal
+   tracking. Measured against the description at 18px, that is four shades of
+   grey text rather than a document with structure: the title barely leads and
+   the description competes with it. The title takes the lead it should have,
+   the description steps back under it, and the body is left alone at 16/28,
+   which is right for long-form reading. Scoped to the shell's own page id, so
+   nothing depends on which order two arbitrary Tailwind sizes land in. */
+#nd-page > h1 {
+  font-size: 2.125rem;
+  line-height: 1.15;
+  letter-spacing: -0.021em;
+  text-wrap: balance;
+}
+
+#nd-page > p:first-of-type {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* ── The page pager ──────────────────────────────────────────────────────────
+   Fumadocs lays the neighbours out as a grid that becomes two columns when both
+   exist. With only one — the first or last document of the record — it stays a
+   single full-width column, so a lone "next" stretched the whole row with its
+   text jammed against the right edge and read as a broken card. Hold it to half
+   the row, on the side it points to: the next card is the one the shell marks
+   `text-end`. Full width on a narrow screen, where one column is correct. */
+@media (min-width: 48rem) {
+  #nd-page > [class*="@container"]:has(> a:only-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #nd-page > [class*="@container"] > a:only-child[class*="text-end"] {
+    grid-column: 2;
+  }
+}
