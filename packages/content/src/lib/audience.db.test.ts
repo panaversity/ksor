@@ -36,6 +36,8 @@ const VECTOR = `[${Array.from({ length: 1536 }, (_, i) => (i === 0 ? 1 : 0)).joi
 
 describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
   let pool: pg.Pool;
+  /** The test database's DSN, for a second pool the leak check needs. */
+  let dsn: string;
   let admin: pg.Pool;
 
   beforeAll(async () => {
@@ -43,9 +45,10 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
     admin = new Pool({ connectionString: adminDsn });
     await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
-    const dsn = new URL(adminDsn);
-    dsn.pathname = `/${DB}`;
-    pool = contentPool(dsn.toString(), 4);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB}`;
+    dsn = url.toString();
+    pool = contentPool(dsn, 4);
     await applySchema(pool, 1536);
 
     await pool.query(
@@ -196,13 +199,45 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
   });
 
   it("the audience GUCs are transaction-scoped — they never leak to the next borrower", async () => {
-    await runRead(pool, TENANT, async () => undefined, audienceGucs(MODEL, "restricted"));
-    // A later read that binds NO audience GUCs must behave as an unfiltered
-    // record, not inherit the previous transaction's restricted tier.
-    const after = await runRead(pool, TENANT, async (c) =>
-      (await keywordSearch(c, scope, "widgets", 20)).map((h) => h.slug),
-    );
-    expect(after.sort()).toEqual(["board-minutes", "open-notice", "staff-handbook", "undeclared"]);
+    // Read the GUC on the RAW connection, not through `runRead`.
+    //
+    // The first version of this test bound "restricted" in one `runRead` and
+    // then asserted a second `runRead` saw the whole record — but `runRead`
+    // binds WHOLE_RECORD_SCOPE by DEFAULT, so it overwrote whatever the first
+    // transaction left behind. The assertion was satisfied by the default
+    // binding, not by transaction scoping: changing `scopedTxn` to bind
+    // `app.audience_tiers` with `set_config(..., false)` — session scope,
+    // surviving the COMMIT and leaking to the next borrower of that pooled
+    // connection — left all nine tests in this file green (round-8 review of
+    // #43).
+    //
+    // maxSize 1 so "the next borrower" is guaranteed to be the SAME physical
+    // connection; with more, a leak could hide on a socket nobody checks.
+    const single = contentPool(dsn, 1);
+    try {
+      await runRead(single, TENANT, async () => undefined, audienceGucs(MODEL, "restricted"));
+      const client = await single.connect();
+      try {
+        const leaked = await client.query(
+          "SELECT current_setting('app.audience_tiers', true) AS tiers, " +
+            "current_setting('app.default_visibility', true) AS fallback",
+        );
+        const { tiers, fallback } = leaked.rows[0] as {
+          tiers: string | null;
+          fallback: string | null;
+        };
+        expect(
+          tiers ?? "",
+          `app.audience_tiers survived the COMMIT as ${JSON.stringify(tiers)} — the next ` +
+            "caller on this connection would inherit someone else's tier",
+        ).toBe("");
+        expect(fallback ?? "", "…and so would the default it resolves against").toBe("");
+      } finally {
+        client.release();
+      }
+    } finally {
+      await single.end().catch(() => undefined);
+    }
   });
 });
 

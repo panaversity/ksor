@@ -726,6 +726,7 @@ export async function outlineDocuments(
   limit: number;
   offset: number;
   next_offset: number | null;
+  content_advisory?: string;
 }> {
   const inst = ctx.instance;
   // A declared-but-uncalibrated floor REFUSES every serve — outline is a
@@ -766,7 +767,16 @@ export async function outlineDocuments(
     instanceDigest: ctx.instanceDigest,
     detail: { node: root, returned: rows.length, has_more, offset },
   });
+  // Titles and heading paths are corpus-authored text and reach the agent
+  // exactly as passage content does. `search` and `read` both flag directive-
+  // shaped payloads and outline did not, so an author-injected instruction in a
+  // heading arrived framed as structure rather than as quoted content
+  // (round-8 review of #43).
+  const advisory = rows.some(
+    (r) => instructionLike(r.title) || instructionLike(r.headingPath ?? ""),
+  );
   return {
+    ...(advisory ? { content_advisory: CONTENT_ADVISORY } : {}),
     has_more,
     limit,
     offset,

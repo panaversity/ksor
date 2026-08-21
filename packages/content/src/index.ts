@@ -133,3 +133,10 @@ export {
   GovernanceGateError,
   GOVERNANCE_SINCE,
 } from "./governance-gate.js";
+export {
+  isDenied,
+  scalarLike,
+  stableIdFrom,
+  recordPathFrom,
+  type DenylistManifest as SiteDenylistManifest,
+} from "./lib/denial-rule.js";

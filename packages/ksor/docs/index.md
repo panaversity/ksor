@@ -26,11 +26,11 @@ instead of their training memory. The corpus grows with each implemented verb.
   hosting.
 - `ksor serve` runs the MCP server over a built record — the climbed rung,
   needing Postgres and a provider key — alongside the write plane that keeps
-  the record current: `schema` (provision or migrate the database), `grant`
-  (authorize a tenant for ingest), `ingest` (build and publish a generation),
-  `takedown` (withdraw a document from EVERY surface, and export the manifest
-  the site build reads), `calibrate` (measure the abstention floor) and `gc`
-  (reap retired generations). Only `dev` and `build` remain designed, not
+  the record current: `ksor schema` (provision or migrate the database),
+  `ksor grant` (authorize a tenant for ingest), `ksor ingest` (build and publish
+  a generation), `ksor takedown` (withdraw a document from EVERY surface, and
+  export the manifest the site build reads), `ksor calibrate` (measure the
+  abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
   implemented: each prints an honest notice and exits `2`.
 - Exit codes are a contract: `1` refused (first stderr line is a stable
   slug such as `error: bad-name`, followed by a remedy), `2` designed but

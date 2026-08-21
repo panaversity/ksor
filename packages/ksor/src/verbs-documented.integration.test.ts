@@ -44,9 +44,10 @@ describe("the verb vocabulary is documented where it is claimed", () => {
     ["packages/ksor/docs/index.md", "the docs shipped inside the npm tarball"],
   ])("%s names every verb", (file, why) => {
     const text = read(file);
-    const missing = expected.filter(
-      (verb) => !new RegExp(`\`ksor ${verb}\`|\`${verb}\``).test(text),
-    );
+    // `ksor <verb>` only. The looser form also accepted a bare `` `serve` ``
+    // mentioned in any context, which is not the same as documenting the verb
+    // (round-8 review of #43).
+    const missing = expected.filter((verb) => !new RegExp(`\`ksor ${verb}\``).test(text));
     expect(missing, `${why} — missing: ${missing.join(", ")}`).toEqual([]);
   });
 });

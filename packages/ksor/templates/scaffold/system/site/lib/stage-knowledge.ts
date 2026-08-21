@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 
 import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience";
+import { isDenied, recordPathFrom, stableIdFrom, type DenylistManifest } from "./denial-rule";
 import { appName } from "./shared";
 
 // Both relative to the site directory — the directory every build runs from
@@ -165,15 +166,6 @@ interface StagePlan {
  * the database, and this build cannot tell "no takedowns" from "the export
  * never ran" — so a project that HAS a database refuses rather than guessing.
  */
-/** The shape `ksor takedown --export` writes. */
-interface DenylistManifest {
-  format?: number;
-  corpus_id?: string;
-  source?: string;
-  denied?: { stable_id?: string; scope?: string }[];
-  denied_subtrees?: string[];
-}
-
 /** No database, or a dev server without an export: nothing is denied. */
 const NOTHING_DENIED: DenylistManifest = { source: "none", denied: [], denied_subtrees: [] };
 
@@ -291,64 +283,26 @@ function deniedStableIds(recordDir: string): DenylistManifest {
  * locations on disk, and a document's location cannot be decoupled from itself
  * by a frontmatter `sor_id:` the way its id can.
  */
-function isDenied(manifest: DenylistManifest, stableId: string, relPath: string): boolean {
-  if ((manifest.denied ?? []).some((d) => String(d.stable_id) === stableId)) return true;
-  return (manifest.denied_subtrees ?? []).some((dir) => {
-    const prefix = String(dir).replace(/\\/g, "/");
-    if (prefix === "/") return true;
-    return relPath.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`);
-  });
+/**
+ * The record's stable_id and its record-frame path, for the denial check.
+ *
+ * The RULE itself lives in `./denial-rule`, a leaf with no imports — these
+ * wrappers only supply what this module knows: where the record directory is.
+ */
+function relativeToRecord(recordDir: string, file: string): string {
+  return path.relative(recordDir, file).split(path.sep).join("/");
 }
 
-/**
- * The record's stable_id for a file, mirroring the kernel's adapter — INCLUDING
- * the `sor_id:` frontmatter override.
- *
- * Deriving it from the path alone meant a takedown of any document carrying an
- * `sor_id:` never matched here and it stayed published, while the MCP door
- * denied it: the same decoupling decision 14 already records as the reason the
- * subtree walk uses parent_id rather than a prefix (round-1 review of #43).
- */
-/**
- * A plain scalar, read the way the kernel's frontmatter reader reads one.
- *
- * The two diverged on a TRAILING COMMENT: the kernel strips `# …` from an
- * unquoted scalar and the site kept it, so `sor_id: hr/policy # renamed 2026`
- * gave the kernel `hr/policy` and the site `hr/policy # renamed 2026`. A
- * takedown on the id the MCP door reports as `provenance.stable_id` was then
- * denied by the door and silently ignored by the site build, which kept
- * publishing the document to /docs and llms.txt (round-5 review of #43).
- *
- * A comment cannot appear inside a QUOTED scalar's value, so quoting is
- * resolved first — exactly the kernel's order.
- */
-function scalarLike(raw: string | undefined): string | undefined {
-  if (raw === undefined) return undefined;
-  const trimmed = raw.trim();
-  const dq = /^"(.*)"$/.exec(trimmed);
-  if (dq !== null) return (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-  const sq = /^'(.*)'$/.exec(trimmed);
-  if (sq !== null) return (sq[1] ?? "").replace(/''/g, "'");
-  return trimmed.replace(/[ \t]+#.*$/, "").trim();
-}
-
-/**
- * The file's path in the frame the RECORD uses — `sources.origin_path`, which
- * is project-root relative and therefore starts with the record directory's
- * own name. The exported subtree directories are in that frame, so the
- * comparison has to be too.
- */
 function recordPathOf(recordDir: string, file: string): string {
-  const rel = path.relative(recordDir, file).split(path.sep).join("/");
-  return `${path.basename(recordDir)}/${rel}`;
+  return recordPathFrom(path.basename(recordDir), relativeToRecord(recordDir, file));
 }
 
 function stableIdOf(recordDir: string, file: string, text: string): string {
-  const block = frontmatterBlock(text);
-  const override = scalarLike(/^sor_id:[ \t]*(.*)$/m.exec(block)?.[1]);
-  if (override !== undefined && override !== "") return override;
-  const rel = path.relative(recordDir, file).split(path.sep).join("/");
-  return `${path.basename(recordDir)}/${rel.replace(/\.md$/i, "")}`;
+  return stableIdFrom(
+    path.basename(recordDir),
+    relativeToRecord(recordDir, file),
+    frontmatterBlock(text),
+  );
 }
 
 function planStage(recordDir: string, denied: DenylistManifest): StagePlan {

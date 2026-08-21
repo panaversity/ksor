@@ -103,6 +103,11 @@ contains. Searches now return a third outcome, `reason: "unavailable"` with
 `degraded_reason` (which had no description at all, and named a keyword search
 that never ran).
 
+**`outline` frames its text as untrusted, like the other two tools.** Titles and
+heading paths are corpus-authored and reach the agent exactly as passage content
+does; `search` and `read` both said so and flagged directive-shaped payloads,
+and `outline` did neither.
+
 **`pnpm setup` never ran your setup.** The scaffold shipped a script named
 `setup` and three documents told the adopter to run it — but `pnpm setup` is
 pnpm's own installer, and it wins. The documented step printed "No changes to

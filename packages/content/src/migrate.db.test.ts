@@ -70,6 +70,20 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
       `ALTER TABLE content_nodes ${NEW_COLUMNS.map((c) => `DROP COLUMN ${c}`).join(", ")}`,
     );
     await pool.query("DROP INDEX IF EXISTS idx_nodes_visibility");
+    // …and back past 2.3 and 2.4 too, or those steps run against a database
+    // that ALREADY has what they add. Every migration file is idempotent
+    // (`ADD COLUMN IF NOT EXISTS`, `DROP POLICY IF EXISTS`, role guards), so
+    // they succeeded while doing NOTHING — and `applied.length > 0` could not
+    // tell one step from three. Replacing the whole 2.3 -> 2.4 file with
+    // `SELECT 1;` left the db tier green four runs in a row, which is exactly
+    // the "a missing step silently skips a schema change" failure decision 16
+    // names (round-8 review of #43).
+    await pool.query("ALTER TABLE ingestion_runs DROP COLUMN IF EXISTS schema_version");
+    await pool.query("DROP POLICY IF EXISTS takedown_write ON takedown_denylist");
+    await pool.query("DROP POLICY IF EXISTS tenant_read ON retrieval_log");
+    await pool.query("REVOKE INSERT, UPDATE, DELETE ON takedown_denylist FROM sor_content_ingest");
+    await pool.query("DROP OWNED BY sor_content_auditor").catch(() => undefined);
+    await pool.query("DROP ROLE IF EXISTS sor_content_auditor").catch(() => undefined);
     await pool.query("DELETE FROM schema_meta");
     await pool.query(
       "INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.1', '2.0')",
@@ -117,8 +131,45 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
     const report = await runMigrations(pool, "2.1", required);
     expect(report.from).toBe("2.1");
     expect(report.to).toBe(required);
-    expect(report.applied.length).toBeGreaterThan(0);
+    // The COUNT, not "more than zero": the chain is 2.1 -> 2.2 -> 2.3 -> 2.4,
+    // and a step that quietly does nothing is the failure this walk exists to
+    // catch. Update this number when a migration is added — deliberately, so
+    // adding one is a decision and not a drift.
+    expect(report.applied.length, `applied: ${report.applied.join(", ")}`).toBe(3);
     expect(await version()).toBe(required);
+  });
+
+  it("each step actually did its work — not just reported success", async () => {
+    // Every migration file is idempotent, so "it ran" and "it changed
+    // something" are different claims. Assert one artifact per step.
+    const has = async (sql: string, params: unknown[]): Promise<boolean> =>
+      (await pool.query(sql, params)).rowCount !== 0;
+
+    expect(
+      await has(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'content_nodes' AND column_name = 'visibility'",
+        [],
+      ),
+      "2.1 -> 2.2 puts governance on the node row",
+    ).toBe(true);
+
+    expect(
+      await has("SELECT 1 FROM pg_policies WHERE policyname = 'takedown_write'", []),
+      "2.2 -> 2.3 gives takedown a write plane",
+    ).toBe(true);
+    expect(
+      await has("SELECT 1 FROM pg_roles WHERE rolname = 'sor_content_auditor'", []),
+      "2.2 -> 2.3 gives the ledger a reader",
+    ).toBe(true);
+
+    expect(
+      await has(
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'ingestion_runs' AND column_name = 'schema_version'",
+        [],
+      ),
+      "2.3 -> 2.4 stamps a generation with the schema it was built against — the column " +
+        "assertGovernanceServable reads, so without it `serve` fails every boot check",
+    ).toBe(true);
   });
 
   it("adds every governance column", async () => {
