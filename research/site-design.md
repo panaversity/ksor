@@ -173,12 +173,15 @@ it, and Fumadocs hands it to us for a route file.
 
 ### F3 · Status is rendered on the page and invisible everywhere a reader _chooses_ — _governance_
 
-> **Mostly closed 2026-08-21.** The home page, every folder index, the sidebar
-> and the previous/next pager now carry a caveat status, so the moment a reader
-> chooses between a live document and its withdrawn predecessor, the record says
-> which is which. **Search results still do not**: that is a client dialog over a
-> static Orama index with no field for it, and the honest fix is a result
-> renderer, not a status smuggled into the indexed title.
+> **Closed 2026-08-21.** The home page, every folder index, the sidebar, the
+> previous/next pager AND search results now carry a caveat status, so the moment
+> a reader chooses between a live document and its withdrawn predecessor, the
+> record says which is which. Search took a result renderer, as predicted: the
+> dialog is composed from the shell's own exported primitives with one custom
+> `Item`, and the route → status map travels in the document because the static
+> index has no field for it. The status is NOT written into the index — that
+> would put a label inside the record's own titles, which the site does not
+> author.
 
 In the sidebar, "Purchase approval thresholds" and "Purchase approval thresholds
 (2019)" are pixel-identical rows. Same in search results, same in `llms.txt`,

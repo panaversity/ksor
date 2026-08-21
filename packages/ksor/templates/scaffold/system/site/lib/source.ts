@@ -223,3 +223,24 @@ function childrenOfFolder(url: string): Node[] {
   };
   return find(getSortedPageTree().children) ?? [];
 }
+
+/**
+ * Every document's caveat status, keyed by route — the small map the search
+ * dialog needs on the client.
+ *
+ * Search was the last surface where a withdrawn document and the one that
+ * replaced it looked identical, and its snippet quotes the withdrawn figure
+ * (research/site-design.md F3). The dialog runs in the browser over a static
+ * index that has no field for status, so the map travels to it as a prop
+ * instead: a few dozen bytes per caveat document, and nothing at all for a
+ * record whose documents are all approved.
+ */
+export function caveatStatusByUrl(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const page of source.getPages()) {
+    const raw: unknown = (page.data as unknown as Record<string, unknown>)["status"];
+    const status = caveatStatus(typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null);
+    if (status !== null) out[page.url] = status;
+  }
+  return out;
+}

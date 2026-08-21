@@ -12,8 +12,8 @@ line. An agent handed a document URL no longer has to scrape a React app to
 reach text the record holds verbatim.
 
 **Governance shows up where a reader chooses, not only after the click.** The
-sidebar, the previous/next pager, the home page and every folder index now carry
-a caveat status, so a withdrawn document and the one that replaced it stop
+sidebar, the previous/next pager, search results, the home page and every folder
+index now carry a caveat status, so a withdrawn document and the one that replaced it stop
 looking identical at the moment you pick between them.
 
 **A folder page lists what the folder holds**, and the home page lists the

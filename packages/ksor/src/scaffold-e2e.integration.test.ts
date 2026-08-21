@@ -366,6 +366,22 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       const at = html.indexOf("In this section");
       return at === -1 ? "" : html.slice(at);
     };
+    const anyPageHtml = readFileSync(
+      path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
+      "utf8",
+    );
+    // SEARCH results carry the status too. The dialog runs in the browser over
+    // a static index with no field for it, so the map travels in the document;
+    // asserting it here proves the bytes a reader's browser receives, which is
+    // the closest a static check gets to the dialog itself.
+    const statusMap = /id="ksor-statuses">([^<]*)</.exec(anyPageHtml)?.[1];
+    expect(statusMap, `no status map in the page: ${anyPageHtml.slice(0, 200)}`).toBeDefined();
+    const parsed = JSON.parse(statusMap ?? "{}") as Record<string, string>;
+    expect(parsed["/docs/refund-policy"], "the withdrawn document is marked").toBe("superseded");
+    // An approved document contributes nothing: a record with no caveats ships
+    // an empty map, and every row renders as the shipped dialog renders it.
+    expect(parsed["/docs/refund-policy-v5"]).toBeUndefined();
+
     // Every document is also emitted as MARKDOWN at a path-derived address, and
     // the page advertises it: an agent handed a document URL used to have to
     // scrape a React app to reach text the record holds verbatim
