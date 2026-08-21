@@ -142,10 +142,15 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // transient, so the door came up clean and 503'd each request naming
   // nothing. Discovery is memoized, so this is the same resolution the first
   // verification uses (issue #26).
+  const keyLines: string[] = [];
   if (auth.mode === "public") {
     const keys = await auth.jwks();
-    console.error(`auth: signing keys via ${keys.source} — ${keys.url}`);
-    if (keys.advisory !== null) console.error(keys.advisory);
+    // Held, not printed here: the boot report is ONE aligned block and this
+    // used to land in the middle of it unaligned, reading like a stray log line
+    // rather than part of the posture. Resolution still happens at boot — that
+    // is the point of the line — it is just said in its place.
+    keyLines.push(bootLine("keys", `${keys.source} — ${keys.url}`));
+    if (keys.advisory !== null) keyLines.push(bootLine("", keys.advisory));
   }
   // RFC 9728 / MCP auth: WWW-Authenticate's `resource_metadata` must be the URL
   // of the metadata DOCUMENT (served at /.well-known/oauth-protected-resource/mcp
@@ -548,6 +553,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     console.error(bootLine("identity", UNDESCRIBED_RECORD));
   }
   console.error(bootLine("auth", authPosture(auth.mode, bind.host)));
+  for (const line of keyLines) console.error(line);
   console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
   console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));
 

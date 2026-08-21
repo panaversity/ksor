@@ -220,7 +220,7 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
     // in the fallback ADVISORY. The looser form passed while the door was in
     // fact using the vendor guess and 503ing every request.
     expect(booted, `boot log:\n${booted}`).toContain(
-      `auth: signing keys via oauth-authorization-server — ${as.issuer}/jwks`,
+      `keys     oauth-authorization-server — ${as.issuer}/jwks`,
     );
     expect(booted, "a guess must not have been used").not.toContain("GUESS");
   }, 180_000);
