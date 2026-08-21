@@ -43,6 +43,13 @@ export interface ReportMeta {
   readonly model: string;
   readonly dim: number;
   readonly door: CalibrationDoor;
+  /**
+   * Where the OUT-OF-CORPUS probes came from. The built-in set can only ever be
+   * far-domain — scope-adjacency is a property of the corpus, and a set shipped
+   * in the binary does not know the corpus — so a separability verdict resting
+   * on it is measuring the easy half of the question.
+   */
+  readonly oocSource: "built-in" | "provided";
 }
 
 /** The report dict of the oracle's `calibrate()`, key for key. */
@@ -73,6 +80,8 @@ export interface CalibrationReport {
    * report so the renderer cannot hand out a number the maths just refused.
    */
   readonly separable: boolean;
+  /** See ReportMeta.oocSource. Carried so the renderer can qualify the verdict. */
+  readonly ooc_source: "built-in" | "provided";
   /** The precision target the ALT floor was measured at — reported, not assumed. */
   readonly target: number;
   /** When the measurement was taken: the invariant says the DATE rides beside the number. */
@@ -281,6 +290,36 @@ export const SYNTHESIZED_CAVEAT: string =
   "separation — treat the floor below as provisional until it has been checked against questions " +
   "the corpus did not write (--queries-file), and re-run if real questions score under it.";
 
+/**
+ * What a separability verdict is worth when the probes came from the binary.
+ *
+ * Every entry in BUILT_IN_OOC is far-domain — dinner, taxes, football, boiling
+ * an egg. Those score low against ANY corpus, so max-OOC comes out artificially
+ * low and the margin is inflated from that end, exactly as synthesized in-corpus
+ * queries inflate it from the other. Measured on one record, changing ONLY the
+ * probe set: built-ins reported "separable, margin 0.072" and recommended a
+ * floor; eight scope-adjacent near-misses on the same corpus and the same
+ * in-corpus questions reported "NOT separable, margin -0.030". The recommended
+ * floor then answered six of those eight near-misses live, with citations
+ * (2026-08-21).
+ *
+ * The tool already knows this — the not-separable branch tells the operator to
+ * "widen the probe set (scope-adjacent near-misses, not only far-domain
+ * questions)". It said so only AFTER weak probes had failed to bless a floor,
+ * which is the one case where the advice is least needed.
+ *
+ * A shipped set cannot be scope-adjacent, because adjacency depends on a corpus
+ * the binary has never seen. So this is stated whenever built-ins are used, on
+ * BOTH branches, rather than pretending a better default exists.
+ */
+export const BUILT_IN_OOC_CAVEAT: string =
+  "CAVEAT: the out-of-corpus probes are the BUILT-IN set, which is entirely far-domain — a " +
+  "shipped set cannot be scope-adjacent, because adjacency depends on a corpus it has never " +
+  "seen. Far-domain probes score low against anything, so this margin is an OVER-estimate and " +
+  "a floor it blesses may still answer near-misses just outside your scope. Re-run with " +
+  "--ooc-file naming questions a reader might plausibly ask that this record does NOT cover, " +
+  "and trust that verdict over this one.";
+
 export const QUERIES_FILE_CAVEAT: string =
   "CAVEAT: --queries-file floors are measured on human/gold-derived queries — section-weighted " +
   "eval targets, NOT per-node passage samples — so this floor's low tail is a different distribution " +
@@ -344,6 +383,7 @@ export function buildReport(
     // so a hair of overlap does not read as a clean zero.
     margin: pythonRound(marginOf(points), 4),
     separable,
+    ooc_source: meta.oocSource,
     target: rec.target,
     // "Never copy a calibrated constant between corpora. Recalibrate; record
     // the measurement and its DATE beside the number" — the date was the half
@@ -377,6 +417,7 @@ export function renderReport(report: CalibrationReport): string {
     `\nmeasured on generation ${gen} (${how}), model ${report.model}, door: ${report.door}`,
   );
   lines.push(report.door === "queries-file" ? QUERIES_FILE_CAVEAT : SYNTHESIZED_CAVEAT);
+  if (report.ooc_source === "built-in") lines.push(BUILT_IN_OOC_CAVEAT);
   lines.push(`AURC = ${pythonFloatRepr(report.aurc)}  (lower = better separation)`);
   // The margin is the number that decides, and it was the one number the block
   // never printed: `paste_why` names both ends, leaving the subtraction to the
