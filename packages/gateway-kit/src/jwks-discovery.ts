@@ -61,6 +61,12 @@ export function metadataUrls(ssoUrl: string): string[] {
   return [...new Set([rfc8414, oidcRoot, oidcAppended])];
 }
 
+/** `URL.hostname` keeps the brackets on an IPv6 literal. */
+function isLoopback(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
 type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
 
 async function readJwksUri(url: string, fetchImpl: FetchLike): Promise<string | null> {
@@ -75,7 +81,14 @@ async function readJwksUri(url: string, fetchImpl: FetchLike): Promise<string | 
     // The document is fetched over TLS from the AS, so its contents are as
     // trusted as the AS itself — but a cleartext jwks_uri would move the whole
     // trust root onto an unauthenticated channel, whatever the document says.
-    return new URL(uri).protocol === "https:" ? uri : null;
+    //
+    // Loopback is exempt, exactly as `assertHttpUrl` exempts it for the SSO
+    // base: a local dev AS is not a network path. Without the exemption a
+    // loopback AS advertises keys this resolver refuses, falls back to the
+    // vendor guess, and every request 503s — which is the very failure this
+    // module exists to end (found writing the adversarial suite, #33).
+    const parsed = new URL(uri);
+    return parsed.protocol === "https:" || isLoopback(parsed.hostname) ? uri : null;
   } catch {
     return null;
   } finally {

@@ -104,6 +104,22 @@ describe("resolveJwks", () => {
     expect(r.advisory).toContain("GUESS");
   });
 
+  it("ACCEPTS a cleartext jwks_uri on LOOPBACK — a local dev AS is not a network path", async () => {
+    // The same exemption `assertHttpUrl` makes for the SSO base. Without it a
+    // loopback AS advertises keys this resolver refuses, the vendor guess is
+    // used instead, and every request 503s.
+    const r = await resolveJwks(
+      { ssoUrl: "http://127.0.0.1:8080" },
+      serving({
+        "http://127.0.0.1:8080/.well-known/oauth-authorization-server": {
+          jwks_uri: "http://127.0.0.1:8080/jwks",
+        },
+      }),
+    );
+    expect(r.url).toBe("http://127.0.0.1:8080/jwks");
+    expect(r.source).toBe("oauth-authorization-server");
+  });
+
   it("REFUSES a cleartext jwks_uri, whatever the document says", async () => {
     // The document is trusted only as far as the AS is; a cleartext keys
     // endpoint would move the whole trust root onto an unauthenticated channel.
