@@ -38,14 +38,15 @@ Three layers, all before anything reaches the registry:
    $implement-spec): `pnpm pack` in `packages/ksor`, install the tarball into
    a fresh temp dir, run the actual binary — help exit 0, unknown verb exit 1
    with slug, designed verb exit 2, bundled docs present.
-3. **The Version PR review** — the human sign-off, and since 2026-08-21 the
-   ONLY pre-merge gate. A Version PR opened by the workflow's own token runs
-   **no** `pull_request` CI at all (`gh pr checks` on #48: "no checks
-   reported"); the four hand-opened ones before it ran the full eight-job gate
-   only because a human token opened them. Nothing is weaker for it — the
-   release job re-runs the whole gate after the merge and a red gate publishes
-   nothing — but the failure now surfaces AFTER you click merge rather than
-   before, so read the changelog and make sure main was green.
+3. **The Version PR review** — the human sign-off. Since the org toggle was
+   enabled (2026-08-21) this PR is opened by `github-actions[bot]`, and its CI
+   **waits for approval**: the run sits in `action_required` with zero jobs, so
+   `gh pr checks` answers "no checks reported on the 'changeset-release/main'
+   branch". That reads like a repo with no CI and is not — approve it and the
+   full eight-job gate runs (it passed on #48). Approve from the PR's Checks tab
+   or with `gh api -X POST repos/panaversity/ksor/actions/runs/<id>/approve`,
+   and do it before merging: after the merge the release job re-runs the whole
+   gate anyway, but then a failure costs you a red release instead of a red PR.
 
 To test _from the registry_ without touching `latest` (only when external
 testers need an installable build): changesets **snapshot releases** —
