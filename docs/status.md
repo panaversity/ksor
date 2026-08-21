@@ -2,32 +2,50 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-20.
+updated: 2026-08-22.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.7** on npm (trusted publishing, provenance
-attached). **In the currently published 0.0.7** it ships the working
-`ksor init` described below — including the visibility model and the deploy
-story — AND the bundled content kernel: `ksor serve`, `ksor ingest`,
-`ksor schema`, `ksor grant`, `ksor calibrate` and `ksor gc` all run from the
-one `ksor` binary. (`ksor takedown` is NOT in 0.0.7 — it lands with the
-governance branch; see the implemented list below.) Only `dev` and
-`build` still report "designed but not implemented" and exit `2`; an unknown
-verb is refused with exit `1` and a stable `error: unknown-verb` stderr slug.
-The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs
-ship inside the tarball under `docs/`.
+`@panaversity/ksor` **0.0.13** on npm (trusted publishing, provenance
+attached). It ships the working `ksor init` described below — including the
+visibility model and the deploy story — AND the bundled content kernel, so
+`ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
+`ksor calibrate` and `ksor gc` all run from the one `ksor` binary. Only `dev`
+and `build` still report "designed but not implemented" and exit `2`; an
+unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
+slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
+docs ship inside the tarball under `docs/`.
 
-Verified end to end against published 0.0.7 (2026-08-20, fresh `npm install`
-into a bare project, driven by a real MCP client over a live Neon Postgres and
-real Gemini embeddings): install · `schema` · `grant` · first `ingest` builds
-and flips · a **second ingest consumes nothing** ("unchanged — generation N
-already serves this corpus") · `serve` boots from `.env` alone · the server
-reports its real version · three MCP tools · `search` returns cited passages
-carrying their generation · `read` is byte-faithful. Two regressions repaired
-since 0.0.3 are covered by that walk: the version the server reported was inert
-(0.0.4 said `0.0.0`), and the scaffold's refresh script collided with pnpm's
-builtin `up`.
+Verified end to end against each published version (most recently 0.0.13,
+2026-08-22: fresh `npm install` into a bare project, driven by a real MCP
+client over live Postgres + pgvector with real Gemini embeddings). What that
+walk covers: install · `schema` · `grant` · first `ingest` builds and flips · a
+**second ingest consumes nothing** ("unchanged — generation N already serves
+this corpus") · the shrink guard refusing a catastrophic deletion · `serve`
+boots from `.env` alone · three MCP tools · `search` returns cited passages
+carrying their generation · `read` is byte-faithful · snapshot pinning survives
+a generation flip · both surfaces refuse a withdrawn document.
+
+### Retrieval, measured rather than asserted
+
+On real Gemini embeddings, against questions written so that the answer shares
+almost no vocabulary with the question (2026-08-21):
+
+- **vector arm: 8/8 correct at rank 1.**
+- **keyword arm: 0/8 — it returned nothing at all, 8 times out of 8.**
+  `websearch_to_tsquery` ANDs its terms, so a natural multi-word question
+  matches nothing. The shipped "hybrid" is empirically vector-only for the
+  query shape this product exists to serve; the keyword arm earns its place on
+  exact-term lookup, not on questions.
+
+**The vector index is NOT being used** (issue #59). `idx_chunks_hnsw` is built
+and maintained, and the query `ksor serve` sends plans a sequential scan plus a
+top-N heapsort instead: measured 814 ms at 20,001 chunks, against 1.2 ms for
+the same rows from the same index when the query is simple. Answers are
+correct; the work to get them grows with the corpus. Small records will not
+notice. A characterization test
+(`packages/content/src/lib/vector-plan.db.test.ts`) pins the bad plan so a fix
+cannot land unnoticed.
 
 ## Implemented (released in 0.0.7)
 
@@ -85,7 +103,7 @@ builtin `up`.
 - **Fixture**: `workbench/example-corpus/` — a tiny governed corpus exercising
   the same rules adopters will live under.
 
-## In this repository, not yet released
+## Released since 0.0.7
 
 - **The content kernel and the MCP gateway** (decision 11, in progress on
   the kernel-conversion branch): four workspace packages — postgres (Postgres access
@@ -112,7 +130,25 @@ builtin `up`.
     surface (decision 11 revision 2026-08-20), `ksor init` now declares
     `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
     version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
-    first-class in every new project. Not yet released.
+    first-class in every new project. **Released in 0.0.8-0.0.13.**
+
+- **Governance, honesty and measurement work (0.0.8-0.0.13, 2026-08-21/22).**
+  Reading order is one rule across the website, `llms.txt` and the MCP
+  `outline` tool — the door had been reading the predecessor's Docusaurus keys,
+  which no compliant record may declare. `ksor serve` reports its own posture
+  in one aligned block instead of forwarding the driver's and the SDK's
+  warnings; a remote `sslmode` is written out as `verify-full` rather than
+  warned about. Every 401 from the MCP door carries its `WWW-Authenticate`
+  challenge, not only the one for a missing token. A 503 refusal no longer puts
+  the database host, port or user on the wire. `ksor takedown` refuses a
+  governance act with no `--actor`. A refused ingest does not publish, and the
+  shrink guard covers the CLI's flip path again. Signing keys are discovered
+  from the authorization server's own metadata rather than one vendor's path.
+  **A provider outage is never reported as "the record does not cover this"**,
+  and `ksor calibrate` states what its measurement is worth: the door's
+  vocabulary bias, the separation margin with the probe counts behind it, the
+  generation it measured, and — when the out-of-corpus probes are the built-in
+  far-domain set — that a floor blessed by them may still leak near-misses.
 
 ## Known gaps in the kernel conversion (tracked, not blocking)
 
@@ -197,9 +233,8 @@ builtin `up`.
 - `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
   own `pnpm dev` / `pnpm build` work today without them.
   `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
-  `ksor calibrate` and `ksor gc` ARE implemented (`ksor takedown` lands with
-  this branch; the rest were released in 0.0.7) — the bundled kernel provides
-  them from the one `ksor` binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
+  `ksor calibrate` and `ksor gc` ARE implemented and released — the bundled
+  kernel provides them from the one `ksor` binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
   `3` with a remedy when it is missing).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
@@ -243,13 +278,18 @@ tests. Its failure record lives in `research/handover-vsor-to-ksor.md`.
 
 ## Pending owner actions
 
-- **`GEMINI_API_KEY`** is configured as a repository Actions secret (owner,
-  confirmed 2026-08-20) — the kernel conversion's gated live tiers (retrieval
-  - calibration evals) embed for real (decision 11).
-- Flip the org setting **"Allow GitHub Actions to create and approve pull
-  requests"** — until then every release's Version-PR needs the manual
-  rescue documented in the `$release` skill. (The npm Trusted Publisher is
-  configured — 0.0.1 published through it.)
+- **`GEMINI_API_KEY`** is a repository Actions secret and works (owner,
+  re-set 2026-08-21 after a rejected credential failed the gated live tiers
+  with `ACCESS_TOKEN_TYPE_UNSUPPORTED`). It must be a Gemini API key from
+  Google AI Studio — not a Vertex credential, an OAuth token, or a service
+  account. The live tiers skip silently without it and fail loudly with a bad
+  one, which is the right way round.
+- ~~Flip the org setting **"Allow GitHub Actions to create and approve pull
+  requests"**~~ — **done 2026-08-21.** The Release workflow opens the Version
+  PR itself; releases 0.0.7-0.0.11 were hand-rescued. One consequence to know:
+  a bot-opened Version PR's CI **waits for approval**, so `gh pr checks` reports
+  "no checks reported" until someone approves it — which reads like a repo with
+  no CI and is not. Runbook: `.agents/skills/release/SKILL.md`.
 - Repoint the **`vsor` PyPI Trusted Publisher** — it still names
   `panaversity/zia-vertical-system-of-record`, which no longer resolves; a
   release tag today passes every gate and fails at upload.
