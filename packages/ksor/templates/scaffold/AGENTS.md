@@ -147,19 +147,20 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    `knowledge/`**: an applied schema reports "already applied", an existing
    grant reports "already granted", and ingest builds a fresh generation.
 
-   **`pnpm serve` is the only command this rung needs.** Run it the first
-   time, run it after editing `knowledge/`, run it to bring the server back —
-   it is always the right answer, so there is nothing to decide. Every step it
-   chains reports the state it found rather than failing: an applied schema
-   says "already applied", an existing grant says "already granted", and
-   unchanged chunks carry forward by content hash, so a rerun on an untouched
-   corpus makes **zero provider calls** (`embedded 0, carried N`).
+   **`pnpm refresh` after editing `knowledge/`; `pnpm serve` to bring the
+   server up.** Two commands, and the split is the point: serving must not
+   publish, or a restart, a crash-loop or an autoscaling event each republishes
+   your record. Everything is re-runnable and reports the state it found rather
+   than failing — an applied schema says "already applied", an existing grant
+   says "already granted".
 
-   A rerun on an unchanged record costs **nothing at all**: ingest compares the
-   corpus it just read against the generation already serving and, when they
-   are identical at the same commit, consumes no generation and writes no rows
-   ("unchanged — generation N already serves this corpus"). Edit a document and
-   the next run builds a generation for it, re-embedding only what changed.
+   A refresh on an unchanged record costs **nothing at all**: ingest compares
+   the corpus it just read against the generation already serving and, when
+   they are identical at the same commit, consumes no generation and writes no
+   rows ("unchanged — generation N already serves this corpus"). Edit a
+   document and the next refresh builds a generation for it, re-embedding only
+   what changed and carrying the rest forward by content hash — so an ordinary
+   edit makes a handful of provider calls, not a corpus-worth.
 
    Generations do accumulate as you edit. Reap the superseded ones when you
    think of it, or on a schedule:
@@ -169,10 +170,10 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    ```
 
    The individual verbs (`pnpm schema`, `pnpm grant`, `pnpm ingest`,
-   `pnpm serve`) exist for pipelines and split duties — a deploy step that
-   ingests while a different process serves, or a DBA who holds the credentials
-   that authorize ingest. Reach for them when something else runs the steps;
-   not as a daily choice.
+   `pnpm gc`) are what `provision` and `refresh` are made of. Reach for them
+   when duties are split — a deploy step that ingests while a different process
+   serves, or a DBA who holds the credentials that authorize ingest — not as a
+   daily choice.
 
 4. **Turn the abstention gate on — deliberately, once it serves.** This is the
    step that makes "not in this corpus" a real answer, and it is measured, never

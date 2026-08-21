@@ -107,6 +107,61 @@ describe("the scaffold's runbooks name commands that exist", () => {
   });
 });
 
+/**
+ * No adopter-facing document may claim that `pnpm serve` publishes.
+ *
+ * `serve` was `pnpm schema && pnpm grant && pnpm ingest && ksor serve` and is
+ * now `ksor serve` alone. The prose describing the old chain has been corrected
+ * FOUR separate times — the README's deploy section, the README's file table,
+ * AGENTS.md's runbook, and instance.md's own comment — each time found by a
+ * person reading it, not by a test. The earlier guard cannot catch it: it
+ * checks that a named command EXISTS, and `pnpm serve` does exist. What is
+ * wrong is the claim attached to it.
+ *
+ * So the claim itself is the thing asserted. Publishing is `pnpm refresh`;
+ * serving is `pnpm serve`; a document that fuses them is wrong however it
+ * phrases it.
+ */
+describe("no document claims that serving publishes", () => {
+  const ADOPTER_FACING = [
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "instance.md",
+    ".env.example",
+  ] as const;
+
+  /** Shapes that assert the retired chain, in any of its phrasings. */
+  const FUSED: readonly RegExp[] = [
+    /schema\s*(?:→|->|&&)\s*grant/i,
+    /pnpm serve[^\r\n]{0,80}\bingest\b/i,
+    /`?pnpm serve`? is the only command/i,
+  ];
+
+  it.each(ADOPTER_FACING)("%s", (file) => {
+    const full = path.join(here, "..", "templates", "scaffold", file);
+    let text: string;
+    try {
+      text = readFileSync(full, "utf8");
+    } catch {
+      return; // not every name is present in every scaffold revision
+    }
+    for (const shape of FUSED) {
+      const hit = shape.exec(text);
+      expect(
+        hit,
+        `${file} still describes serving as publishing: ${JSON.stringify(hit?.[0] ?? "")}. ` +
+          "Publishing is `pnpm refresh`; `pnpm serve` is `ksor serve` and chains nothing.",
+      ).toBeNull();
+    }
+  });
+
+  it("…and the scripts themselves keep them separate", () => {
+    expect(manifest.scripts["serve"], "serving is one command").toBe("ksor serve");
+    expect(manifest.scripts["refresh"], "publishing is its own act").toContain("ingest");
+  });
+});
+
 describe("the scaffold's npm scripts are all reachable", () => {
   it("no script is named after a pnpm command", () => {
     const shadowed = Object.keys(manifest.scripts).filter((name) => PNPM_COMMANDS.has(name));

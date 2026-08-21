@@ -6,7 +6,10 @@ ksor:
   scaffolded: "KSOR-STAMP-VERSION"
 # The served MCP rung needs ONE required block: the NAME of the environment
 # variable holding your Postgres DSN — never the DSN itself. Uncomment it, copy
-# .env.example to .env, then run `pnpm serve`. Nothing else here is required:
+# .env.example to .env, then: `pnpm provision` once (schema + grant), then
+# `pnpm refresh` to PUBLISH the record, then `pnpm serve`. Serving does not
+# publish — that is deliberate, and skipping refresh serves nothing.
+# Nothing else here is required:
 # `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
 # `retrieval:` out starts you with the abstention gate off and honest about it
 # (turn it on afterwards with `ksor calibrate`, once the record is serving).
