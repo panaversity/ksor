@@ -217,7 +217,38 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
     const code = error.code === undefined ? "" : ` ${error.code}`;
     console.error(`db pool: idle client error (${error.name}${code}) — connection discarded`);
   });
+
+  // How many clients are CHECKED OUT and actually connected.
+  //
+  // pg-pool's `totalCount` cannot answer that: `newClient` pushes the client
+  // into `_clients` BEFORE the connect resolves (pg-pool 3.14 index.js:242,
+  // `totalCount` is `_clients.length`), so a pool whose every slot is still
+  // completing a TCP+TLS+auth handshake reports itself full. Using it to
+  // detect saturation therefore called a COLD BURST against a waking compute
+  // "saturated" and shed those requests permanently — the precise opposite of
+  // what the classification exists to do (round-4 review of #43).
+  //
+  // `acquire` fires only after a client is connected and handed to a caller,
+  // and `release` fires when it comes back, so the difference is the number of
+  // live, working connections. Public events only — no private fields.
+  const counted = pool as pg.Pool & { ksorBusy?: number };
+  counted.ksorBusy = 0;
+  pool.on("acquire", () => {
+    counted.ksorBusy = (counted.ksorBusy ?? 0) + 1;
+  });
+  pool.on("release", () => {
+    counted.ksorBusy = Math.max(0, (counted.ksorBusy ?? 0) - 1);
+  });
   return pool;
+}
+
+/**
+ * Connections that are established RIGHT NOW: idle ones plus checked-out ones.
+ * Distinct from `totalCount`, which also counts sockets still handshaking.
+ */
+export function connectedCount(pool: pg.Pool): number {
+  const busy = (pool as pg.Pool & { ksorBusy?: number }).ksorBusy ?? 0;
+  return pool.idleCount + busy;
 }
 
 /**
@@ -292,7 +323,10 @@ async function acquire(pool: pg.Pool): Promise<pg.PoolClient> {
     //                        normal first request against a serverless endpoint.
     if (isPgTimeout(error)) {
       const max = (pool as { options?: { max?: number } }).options?.max ?? Infinity;
-      const saturated = pool.totalCount >= max && pool.idleCount === 0;
+      // Saturation means the pool's connections are ESTABLISHED and all busy.
+      // Counting sockets that are merely mid-handshake made a cold burst look
+      // like load (round-4 review of #43).
+      const saturated = connectedCount(pool) >= max && pool.idleCount === 0;
       if (saturated) throw new PoolTimeoutError();
       const ms =
         (pool as { options?: { connectionTimeoutMillis?: number } }).options
@@ -403,6 +437,20 @@ export async function runScopedIn<T>(
   op: (client: pg.PoolClient) => Promise<T>,
   options: RetryOptions = {},
 ): Promise<T> {
+  return withPgRetry(() => scopedTxn(pool, gucs, op), options);
+}
+
+/**
+ * The retry POLICY on its own, for work that is not a scoped transaction.
+ *
+ * It was inlined in `runScopedIn`, so anything else that touches the database
+ * — the boot schema gate, notably — either reimplemented it or, in practice,
+ * ran once and treated a cold start as a permanent verdict. A serverless
+ * compute takes a measured 4-10s to wake, so one attempt at boot is a coin
+ * flip, and the gate that swallowed it stayed off for the process's whole life
+ * (round-4 review of #43). One policy, one place.
+ */
+export async function withPgRetry<T>(op: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
   const retry = options.retry ?? true;
   const attempts = retry ? (options.attempts ?? DB_RETRIES) : 1;
   const backoffS = options.backoffS ?? DB_BACKOFF_S;
@@ -410,7 +458,7 @@ export async function runScopedIn<T>(
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await scopedTxn(pool, gucs, op);
+      return await op();
     } catch (error) {
       lastError = error;
       const pastDeadline = deadline !== null && Date.now() >= deadline;

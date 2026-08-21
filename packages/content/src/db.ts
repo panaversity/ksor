@@ -164,8 +164,15 @@ export async function runRead<T>(
 }
 
 /** The /ready and /health path: bounded budgets so a saturated pool reports fast. */
+export class ProbeDeadlineError extends Error {
+  constructor(ms: number) {
+    super(`readiness probe did not answer within ${ms}ms`);
+    this.name = "ProbeDeadlineError";
+  }
+}
+
 export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
-  return runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, PROBE_STATEMENT_TIMEOUT_MS), op, {
+  const work = runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, PROBE_STATEMENT_TIMEOUT_MS), op, {
     retry: true,
     // A readiness probe must ANSWER, not persist. Once a connect timeout became
     // retryable (right for a request, wrong for a probe), /ready took ~30s to
@@ -174,6 +181,30 @@ export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>):
     // "not ready" (round-3 review of #43).
     deadlineMs: PROBE_DEADLINE_MS,
   });
+
+  // …and a WALL-CLOCK bound on top, because `deadlineMs` alone cannot deliver
+  // one: `runScopedIn` only consults it BETWEEN attempts, so the first attempt
+  // is bounded by the pool's connectionTimeoutMillis (10s) — larger than this
+  // budget. Against a black-holed endpoint the probe answered at ~10s, not 8s,
+  // and the round-3 note that introduced the constant claimed the opposite
+  // (round-4 review of #43, found independently by two reviewers).
+  //
+  // The losing attempt is left to finish and release its own checkout; its
+  // rejection is absorbed so it cannot surface as an unhandled rejection. The
+  // point is to stop WAITING, not to cancel work that is already in flight.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ProbeDeadlineError(PROBE_DEADLINE_MS)), PROBE_DEADLINE_MS);
+    // Never hold the event loop open on a probe's behalf: an unref'd timer
+    // cannot delay a clean shutdown.
+    timer.unref();
+  });
+  work.catch(() => undefined);
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 /** The AUDITOR path: reads the §7 ledger under the read-only auditor role. */

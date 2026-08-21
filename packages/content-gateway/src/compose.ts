@@ -9,7 +9,12 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type pg from "pg";
-import { pooledEndpointFor, prewarmPool, tlsAdvisory } from "@panaversity/ksor-postgres";
+import {
+  pooledEndpointFor,
+  prewarmPool,
+  tlsAdvisory,
+  withPgRetry,
+} from "@panaversity/ksor-postgres";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertSchemaCompatible,
@@ -35,6 +40,21 @@ export interface Composition {
   /** null when checked-clean; a reason string when skipped (rides /health). */
   readonly spaceSkipReason: string | null;
   readonly version: string;
+  /**
+   * Re-runs the schema compatibility gate, or resolves immediately once it has
+   * passed. `null` when boot already verified it.
+   *
+   * The gate is the only fail-closed check that the database is new enough, and
+   * at boot it could only be a WARNING when the store was unreachable — which
+   * on a serverless compute is the ordinary cold start, not an exception. It
+   * then never ran again, so an instance that skipped it stayed unverified for
+   * its whole life: with a too-old schema every tool call fails on a missing
+   * column while `/health` and `/ready` both report green (round-4 review of
+   * #43). Handing the retry to the readiness probe closes that: an instance
+   * whose schema is unverified is NOT ready, which is exactly what the word
+   * means, and the check keeps trying until the database answers.
+   */
+  readonly verifySchema: (() => Promise<void>) | null;
 }
 
 export async function compose(instancePath: string, version: string): Promise<Composition> {
@@ -95,13 +115,25 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // `ksor schema --apply` (which now migrates it forward), instead of erroring
   // per-request on a missing column while /health reports healthy. An UNREACHABLE store is not this
   // gate's concern — it is a warning, handled by the space check below.
+  let verifySchema: (() => Promise<void>) | null = null;
   try {
-    await assertSchemaCompatible(pool);
+    // Retried like a serving read, not attempted once: a cold serverless
+    // compute takes a measured 4-10s to wake and the first connection fails at
+    // the connection level, which is precisely when a deploy runs.
+    await withPgRetry(() => assertSchemaCompatible(pool), { attempts: 3 });
   } catch (error) {
     if (error instanceof SchemaVersionError) throw error;
     console.error(
-      `schema version check skipped: content store unreachable (${error instanceof Error ? error.name : "Error"})`,
+      `schema version check DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
+        "this instance reports NOT READY until the check passes",
     );
+    let verified = false;
+    verifySchema = async (): Promise<void> => {
+      if (verified) return;
+      await assertSchemaCompatible(pool);
+      verified = true;
+      console.error("schema version check passed on retry — instance is now ready");
+    };
   }
 
   // A proven mismatch refuses to boot; an unreachable database is a warning
@@ -169,5 +201,5 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // and the door had nothing to filter on — review 2026-08-20).
     audience,
   };
-  return { ctx, instance, pool, spaceSkipReason, version };
+  return { ctx, instance, pool, spaceSkipReason, version, verifySchema };
 }

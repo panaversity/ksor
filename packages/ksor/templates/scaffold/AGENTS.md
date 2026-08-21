@@ -129,14 +129,16 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    mints a new signing key, so citations pinned before a scale-down stop
    validating after it.
 
-   **`pnpm serve` is the local loop, not the container command.** It re-ingests
-   the whole record before the port opens, which is what you want at your desk
-   and not what you want as a cold start — and it would demand ingest
-   privileges at runtime. When you deploy, run `pnpm setup` and `pnpm ingest`
-   as DEPLOY steps and run bare `ksor serve` in the container; it honours
-   `$PORT` and binds `0.0.0.0` there. Set `KSOR_SNAPSHOT_KEYS` too: without it
-   a cold start mints a new signing key, so citations pinned before a
-   scale-down stop validating after it.
+   **`pnpm serve` serves; it does not publish.** It is `ksor serve` and nothing
+   else — it opens the port against whatever generation is already active and
+   needs no ingest privileges. Publishing is `pnpm ingest` (or `pnpm refresh`),
+   and it is a separate step ON PURPOSE: a container that re-ingested on boot
+   would pay the whole record's embedding cost on every cold start and would
+   need write credentials at runtime. So in a deployment, run `pnpm setup` and
+   `pnpm ingest` as DEPLOY steps and run `ksor serve` in the container, where
+   it honours `$PORT` and binds `0.0.0.0`. If you skip the ingest step, the
+   container serves the last generation you flipped — and on a FIRST deploy,
+   that is nothing at all.
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing

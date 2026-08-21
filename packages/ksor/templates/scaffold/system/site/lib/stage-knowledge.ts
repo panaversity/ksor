@@ -225,6 +225,20 @@ function deniedStableIds(recordDir: string): DenylistManifest {
       `re-export it: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
     );
   }
+  // The `source` field is the manifest's own account of WHO answered, and
+  // until round 4 of the #43 review nothing read it — so file presence was the
+  // entire fail-closed gate, and any path that created a file defeated it. A
+  // record that declares a database can only be answered BY that database:
+  // `source: "none"` here is a contradiction, and it is precisely the shape a
+  // build host with no DSN used to write before exiting 0.
+  if (parsed.source !== "database" && declaresDatabase()) {
+    refuse(
+      "ksor-denylist-not-from-database",
+      `${DENYLIST_FILE} reports source=${JSON.stringify(parsed.source ?? "(absent)")}, but instance.md declares a database`,
+      "a takedown lives in that database, so a manifest that did not come from it cannot say what is withdrawn — and a manifest claiming nothing is denied is exactly what a build host with no DSN would write",
+      `export the DSN for this build and re-export: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
+    );
+  }
   return parsed;
 }
 

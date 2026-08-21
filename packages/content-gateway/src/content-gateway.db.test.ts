@@ -577,6 +577,32 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect((third.structuredContent as { ok: boolean }).ok).toBe(true);
   }, 120_000);
 
+  it("/ready shares ONE probe however slow it is — coalescing keyed on the answer, not the start", async () => {
+    // /ready is unauthenticated and outside /mcp's in-flight cap, so it is the
+    // one door a flood can use to drain the pool. The cache was keyed on the
+    // probe's START against a 1s TTL, so a probe SLOWER than 1s stopped being
+    // shared — coalescing failed exactly when the database was unhealthy, which
+    // is the only time it matters. Against a waking compute one probe per
+    // second accumulated concurrent checkouts until the pool was gone
+    // (round-4 review of #43, found by two reviewers independently).
+    const burst = await Promise.all(
+      Array.from({ length: 12 }, () => fetch(`http://127.0.0.1:${port}/ready`)),
+    );
+    for (const r of burst) expect(r.status, "a healthy store answers ready").toBe(200);
+
+    // The real assertion is on the pool: twelve simultaneous probes must not
+    // have opened twelve connections. With coalescing, the whole burst shares
+    // at most a couple of checkouts.
+    const peak = await admin.query(
+      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [dbName],
+    );
+    expect(
+      peak.rows[0].n,
+      `12 concurrent /ready probes opened ${peak.rows[0].n} backends — they are not being shared`,
+    ).toBeLessThan(6);
+  }, 60_000);
+
   it("outline lists the record; read reconstructs a document byte-exact with provenance", async () => {
     const outline = await client.callTool({ name: "outline", arguments: {} });
     const nodes = (outline.structuredContent as { nodes: { slug: string }[] }).nodes;

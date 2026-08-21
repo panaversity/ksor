@@ -1,105 +1,121 @@
 /**
- * The saturation test the review asked for: a small pool under more
- * concurrent load than it has slots must SHED the excess fast (a bounded
- * PoolTimeoutError), never hang, and drain back to idle with no leaked
- * clients — the "thousands of users" axis every other db test leaves
- * uncontended. Gated on KSOR_DB_URL (its own throwaway database).
+ * A cold burst is not saturation, and the difference decides whether a request
+ * is retried or thrown away.
+ *
+ * `acquire` splits a connect timeout two ways: a pool whose connections are
+ * established and all busy is SATURATED (shed it — retrying aims a thundering
+ * herd at the component already drowning), while a pool with room whose
+ * CONNECT timed out is a cold start (retry it — that is the ordinary first
+ * request against a compute that suspends).
+ *
+ * The split was first written against `pool.totalCount`, which cannot express
+ * it: pg-pool pushes a client into `_clients` before its connect resolves
+ * (3.14 index.js:242), so twenty sockets mid-handshake report a full pool.
+ * A burst arriving at a waking database was therefore classified as load and
+ * shed permanently — the exact requests the split exists to keep (round-4
+ * review of #43).
  */
 
-import { randomBytes } from "node:crypto";
-import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createPool, PoolTimeoutError, runScopedIn } from "./db.js";
+import { connectedCount, createPool, ConnectTimeoutError, PoolTimeoutError } from "./db.js";
+import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
+const DB = "ksor_saturation_test";
 
-describe.runIf(adminDsn !== "")("pool saturation", () => {
+/**
+ * TEST-NET-1 (RFC 5737), reserved for documentation and not routable: packets
+ * are DROPPED, so every connect runs to its timeout. A refused port would not
+ * do — ECONNREFUSED is instant and is not a timeout at all.
+ */
+const BLACK_HOLE = "postgresql://nobody@192.0.2.1:5432/nothing";
+
+describe.runIf(adminDsn !== "")("connect timeout: saturation vs cold start (db)", () => {
   let admin: pg.Pool;
-  let pool: pg.Pool;
-  let dbName: string;
+  let dsn: string;
+  const pools: pg.Pool[] = [];
+  const track = (p: pg.Pool): pg.Pool => {
+    pools.push(p);
+    return p;
+  };
 
   beforeAll(async () => {
-    dbName = `ksor_sat_${randomBytes(4).toString("hex")}`;
-    admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
-    await admin.query(`CREATE DATABASE ${dbName}`);
+    const { Pool } = (await import("pg")).default;
+    admin = new Pool({ connectionString: adminDsn });
+    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
+    await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
-    url.pathname = `/${dbName}`;
-    // max 4 slots kept warm (minSize 4), a 2s native checkout bound: with the
-    // 4 connections already established, the excess sheds well inside the slow
-    // query's runtime without racing a Neon cold-connect.
-    // Wake the fresh database's compute with a generous one-off client first
-    // (a Neon cold-connect exceeds any tight bound — that is the production
-    // retry loop's job, not this test's). Then a bounded pool fills warm.
-    const warm = new pg.Client({
-      connectionString: url.toString(),
-      connectionTimeoutMillis: 30_000,
-    });
-    await warm.connect();
-    await warm.query("SELECT 1");
-    await warm.end();
-    pool = createPool(url.toString(), { maxSize: 4, minSize: 4, connectionTimeoutMs: 8_000 });
-    await Promise.all(
-      Array.from({ length: 4 }, () => runScopedIn(pool, {}, (c) => c.query("SELECT 1"))),
-    );
-  }, 120_000);
+    url.pathname = `/${DB}`;
+    dsn = url.toString();
+  }, 180_000);
 
   afterAll(async () => {
-    await pool?.end();
-    if (admin !== undefined) {
-      await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`).catch(() => undefined);
-      await admin.end();
-    }
+    for (const p of pools) await p.end().catch(() => undefined);
+    await admin?.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
+    await admin?.end().catch(() => undefined);
+  });
+
+  it("counts CONNECTED clients, not sockets that are still handshaking", async () => {
+    const pool = track(
+      createPool(BLACK_HOLE, { maxSize: 2, minSize: 0, connectionTimeoutMs: 400 }),
+    );
+    const attempts = [pool.connect(), pool.connect()].map((p) => p.catch(() => null));
+    // Mid-handshake against an address that answers nothing: pg-pool already
+    // calls the pool full, and NOTHING is connected.
+    expect(pool.totalCount, "pg-pool counts the handshaking sockets").toBeGreaterThan(0);
+    expect(connectedCount(pool), "…and none of them is a working connection").toBe(0);
+    await Promise.all(attempts);
   }, 60_000);
 
-  it("sheds excess with a bounded PoolTimeoutError; nothing hangs; the pool drains", async () => {
-    const slow = (): Promise<number> =>
-      runScopedIn(
-        pool,
-        {},
-        async (client) => {
-          await client.query("SELECT pg_sleep(12)"); // holds the slot for 12s
-          return 1;
-        },
-        { retry: false },
+  it("a COLD BURST at a black-holed endpoint is retryable, never shed", async () => {
+    // maxSize 2 with 4 callers: two handshake, two queue. Under the old rule
+    // the two that queued got PoolTimeoutError (never retried) purely because
+    // they arrived second.
+    const pool = track(
+      createPool(BLACK_HOLE, { maxSize: 2, minSize: 0, connectionTimeoutMs: 400 }),
+    );
+    const { runScopedIn } = await import("./db.js");
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        runScopedIn(pool, {}, async (c) => c.query("SELECT 1"), { retry: false }).then(
+          () => "ok",
+          (error: unknown) => (error as Error).constructor.name,
+        ),
+      ),
+    );
+    expect(
+      results.filter((r) => r === PoolTimeoutError.name),
+      `nothing was saturated — every failure here is a failed CONNECT: ${JSON.stringify(results)}`,
+    ).toEqual([]);
+    expect(
+      results.every((r) => r === ConnectTimeoutError.name),
+      `all four must be retryable connect failures: ${JSON.stringify(results)}`,
+    ).toBe(true);
+  }, 60_000);
+
+  it("a genuinely BUSY pool still sheds — the classification did not just invert", async () => {
+    // Real connections, all checked out and held: this IS saturation.
+    const pool = track(createPool(dsn, { maxSize: 1, minSize: 0, connectionTimeoutMs: 400 }));
+    const held = await pool.connect();
+    try {
+      expect(connectedCount(pool), "one live connection, checked out").toBe(1);
+      const { runScopedIn } = await import("./db.js");
+      const verdict = await runScopedIn(pool, {}, async (c) => c.query("SELECT 1"), {
+        retry: false,
+      }).then(
+        () => "ok",
+        (error: unknown) => (error as Error).constructor.name,
       );
-
-    const started = Date.now();
-    const results = await Promise.allSettled(Array.from({ length: 20 }, () => slow()));
-    const elapsed = Date.now() - started;
-
-    const fulfilled = results.filter((r) => r.status === "fulfilled");
-    const shed = results.filter(
-      (r): r is PromiseRejectedResult =>
-        r.status === "rejected" && (r.reason as Error) instanceof PoolTimeoutError,
-    );
-    const other = results.filter(
-      (r): r is PromiseRejectedResult =>
-        r.status === "rejected" && !((r.reason as Error) instanceof PoolTimeoutError),
-    );
-
-    // Every request resolved one way or the other — none hung (the whole
-    // batch finished; a hang would have tripped the test timeout).
-    expect(fulfilled.length + shed.length, JSON.stringify(other.map((o) => String(o.reason)))).toBe(
-      20,
-    );
-    // The 4 warm slots serve the 12s query; the other 16 wait for a slot
-    // and shed at the 8s checkout bound (before any 12s query frees one).
-    expect(fulfilled.length, "slots that served").toBeGreaterThanOrEqual(4);
-    expect(shed.length, "excess shed as PoolTimeoutError").toBeGreaterThanOrEqual(1);
-    // Shedding is FAST: the whole batch finishes within a couple of query
-    // rounds, not 20 × 3s serialized.
-    expect(elapsed, `elapsed ${elapsed}ms`).toBeLessThan(25_000);
-
-    // The pool drains: after everything settles, no clients remain checked
-    // out (waitingCount 0, and idle ≤ pool size).
-    expect(pool.waitingCount, "no waiters left").toBe(0);
-    expect(pool.totalCount - pool.idleCount, "no leaked checked-out clients").toBe(0);
-  }, 45_000);
+      expect(verdict, "a full pool of WORKING connections sheds").toBe(PoolTimeoutError.name);
+    } finally {
+      held.release();
+    }
+  }, 60_000);
 });
 
-describe.runIf(adminDsn === "")("pool saturation (gated)", () => {
-  it("skipped — set KSOR_DB_URL", () => {
+describe.runIf(adminDsn === "")("connect timeout classification (db) — gated", () => {
+  it("skips without KSOR_DB_URL", () => {
     expect(adminDsn).toBe("");
   });
 });

@@ -187,14 +187,24 @@ describe("takedown --export: answers for a record with no database, fails loudly
     }
   });
 
-  it("a declared database whose env var is unset also exports source=none", () => {
+  it("a declared database whose env var is UNSET refuses — it is unreachable, not absent", () => {
+    // "This record has no database" and "this host cannot reach the record's
+    // database" are opposite answers, and conflating them published a
+    // withdrawn document: the site's isDenied reads only `denied`, never
+    // `source`, so file PRESENCE is the whole fail-closed gate — and writing
+    // source="none" here created the file. The live shape is a Vercel build,
+    // where the site is database-free by design and the DSN exists only in the
+    // serving runtime (round-4 review of #43).
     const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
     try {
       const { result, out } = exportTo(dir, write(dir, DECLARED), {
         KSOR_EXPORT_TEST_DSN: "",
       });
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(JSON.parse(readFileSync(out, "utf8")).source).toBe("none");
+      expect(result.status, "a build must not publish while it cannot ask").not.toBe(0);
+      expect(existsSync(out), "and must leave nothing that looks like an answer").toBe(false);
+      expect(result.stderr, "the refusal names the variable and the fix").toContain(
+        "KSOR_EXPORT_TEST_DSN",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -215,12 +225,15 @@ describe("takedown --export: answers for a record with no database, fails loudly
   it("a FAILED export leaves NO manifest, so the site fails closed instead of trusting a stale one", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
     try {
-      const instance = write(dir, DECLARED);
-      // First, a successful export writes one.
-      expect(exportTo(dir, instance, { KSOR_EXPORT_TEST_DSN: "" }).result.status).toBe(0);
+      // First, a successful export writes one (level-0: no database to ask).
+      const instance = write(dir, "");
+      expect(exportTo(dir, instance, {}).result.status).toBe(0);
       const out = path.join(dir, ".ksor-denylist.json");
       expect(existsSync(out)).toBe(true);
-      // Then the database breaks. The stale answer must not survive.
+      // The record then grows a database, and it is unreachable. The stale
+      // answer — written when there was genuinely nothing to ask — must not
+      // survive to be published as though it still applied.
+      write(dir, DECLARED);
       const { result } = exportTo(dir, instance, {
         KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
       });

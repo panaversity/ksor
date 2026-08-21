@@ -88,15 +88,31 @@ describe("connect timeout vs pool saturation", () => {
   // text. Only one of them is safe to retry.
   const timeoutError = new Error("timeout exceeded when trying to connect");
 
-  const fakePool = (o: { max: number; total: number; idle: number }): unknown => ({
+  /**
+   * `total` and `busy` are DIFFERENT numbers and the split lives on the gap
+   * between them. pg-pool's `totalCount` counts sockets that are still
+   * completing their handshake (it pushes the client before connect resolves,
+   * 3.14 index.js:242), while `busy` — tracked from the pool's own
+   * acquire/release events — counts connections that actually work. A pool can
+   * be "full" by the first and empty by the second: that is a cold burst
+   * against a waking compute, and shedding it was the round-4 defect.
+   */
+  const fakePool = (o: { max: number; total: number; idle: number; busy?: number }): unknown => ({
     options: { max: o.max, connectionTimeoutMillis: 10_000 },
     totalCount: o.total,
     idleCount: o.idle,
+    ksorBusy: o.busy ?? 0,
     connect: () => Promise.reject(timeoutError),
   });
 
   it("classifies a WAIT on a fully busy pool as saturation — never retried", async () => {
-    const pool = fakePool({ max: 4, total: 4, idle: 0 }) as Parameters<typeof scopedTxn>[0];
+    // Four connections that CONNECTED and are all checked out.
+    const pool = fakePool({
+      max: 4,
+      total: 4,
+      idle: 0,
+      busy: 4,
+    }) as Parameters<typeof scopedTxn>[0];
     await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
       PoolTimeoutError,
     );
@@ -110,6 +126,22 @@ describe("connect timeout vs pool saturation", () => {
     );
     expect(neverRetry(new ConnectTimeoutError(10_000))).toBe(false);
     expect(isOperationalError(new ConnectTimeoutError(10_000))).toBe(true);
+  });
+
+  it("a pool FULL of handshaking sockets is a cold burst, not saturation", async () => {
+    // Every slot taken by pg-pool's count, and NOTHING connected: the shape of
+    // a burst arriving at a suspended compute. Shedding these threw away the
+    // requests the classification exists to keep, and gave identical callers
+    // opposite verdicts depending on arrival order (round-4 review of #43).
+    const pool = fakePool({
+      max: 20,
+      total: 20,
+      idle: 0,
+      busy: 0,
+    }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
   });
 
   it("an empty pool that cannot connect is a cold start, not saturation", async () => {

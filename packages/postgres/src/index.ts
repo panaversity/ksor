@@ -1,5 +1,6 @@
 export {
   ConnectTimeoutError,
+  connectedCount,
   createPool,
   DB_BACKOFF_S,
   DB_RETRIES,
@@ -12,5 +13,6 @@ export {
   scopedTxn,
   tlsAdvisory,
   withGuardedClient,
+  withPgRetry,
 } from "./db.js";
 export type { DomainPoolOptions, Gucs, RetryOptions } from "./db.js";

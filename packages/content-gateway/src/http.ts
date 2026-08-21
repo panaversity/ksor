@@ -48,7 +48,18 @@ import type { Composition } from "./compose.js";
 // 8s, not 10: a container runtime that scales to zero typically allows ~10s
 // between SIGTERM and SIGKILL (Cloud Run's default), so a 10s deadline lands
 // exactly on the kill and never gets to run. Leave headroom for the exit.
-const DRAIN_TIMEOUT_MS = envInt(process.env, "KSOR_DRAIN_TIMEOUT_MS", 8_000, { minimum: 100 });
+//
+// Read inside runHttp, NOT at module scope. `cli.ts` imports this module
+// statically, so a module-level env read evaluates before `main()` calls
+// `loadDotEnv()` — the knob would be frozen at its default and an adopter
+// setting KSOR_DRAIN_TIMEOUT_MS in `.env` would silently change nothing. This
+// is the same ESM-ordering trap that shipped a different setting inert in
+// 0.0.4, and the two sibling knobs below (`maxBodyBytes`, `maxInflight`) are
+// read inside the function for exactly this reason (round-4 review of #43,
+// confirmed independently by two reviewers against the shipped bundle:
+// dist/cli.mjs initialises the const ~5000 lines before loadDotEnv runs).
+const drainTimeoutMs = (): number =>
+  envInt(process.env, "KSOR_DRAIN_TIMEOUT_MS", 8_000, { minimum: 100 });
 
 export interface Security {
   /** Allowed Host header values; null = do not Host-gate (public, bearer-gated). */
@@ -147,7 +158,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     );
   }
   const security = resolveSecurity(bind);
-  const { ctx, instance, pool, spaceSkipReason, version } = composition;
+  const { ctx, instance, pool, spaceSkipReason, version, verifySchema } = composition;
 
   // Fail-soft env (envInt), never Number(env ?? default): a set-but-empty
   // var (routine with `gcloud --set-env-vars`) or a typo must fall back, not
@@ -165,18 +176,49 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // cached ~1s: a load balancer still gets a fresh-enough answer, and a flood
   // shares the single in-flight probe instead of multiplying pool checkouts.
   const READY_TTL_MS = 1000;
-  let readyProbe: { at: number; verdict: Promise<boolean> } | null = null;
+  // `settledAt` is null while the probe is IN FLIGHT and a timestamp once it
+  // finishes. Both halves matter, and the first was missing: keying the TTL on
+  // the probe's START meant a probe SLOWER than the TTL stopped being shared —
+  // so coalescing failed exactly when the database was unhealthy, which is the
+  // only time it matters. Against a black-holed endpoint a connect attempt runs
+  // to the pool's 10s timeout, so one probe per second accumulated ~10
+  // concurrent checkouts, and /ready is unauthenticated and outside /mcp's
+  // in-flight cap — the pool-exhaustion amplifier this was written to prevent,
+  // rebuilt by an off-by-one-field (round-4 review of #43).
+  let readyProbe: { settledAt: number | null; verdict: Promise<boolean> } | null = null;
   const readiness = (): Promise<boolean> => {
-    const now = Date.now();
-    if (readyProbe !== null && now - readyProbe.at < READY_TTL_MS) return readyProbe.verdict;
-    const verdict = runProbe(pool, instance.tenantId, (client) =>
-      client.query("SELECT 1 FROM corpora LIMIT 1"),
-    ).then(
-      () => true,
-      () => false,
-    );
-    readyProbe = { at: now, verdict };
-    return verdict;
+    if (readyProbe !== null) {
+      // In flight: share it, however long it takes.
+      if (readyProbe.settledAt === null) return readyProbe.verdict;
+      // Settled recently: serve the cached verdict.
+      if (Date.now() - readyProbe.settledAt < READY_TTL_MS) return readyProbe.verdict;
+    }
+    const entry: { settledAt: number | null; verdict: Promise<boolean> } = {
+      settledAt: null,
+      // An instance whose schema could not be verified at boot is NOT ready —
+      // that is what the word means, and reporting green let a platform route
+      // traffic to an instance where every tool call fails on a missing column
+      // (round-4 review of #43). The check retries here until the database
+      // answers, so a cold start becomes a slow ready rather than a permanent
+      // unverified state. A schema that is genuinely too old keeps failing,
+      // which keeps the instance out of rotation instead of serving errors.
+      verdict: (verifySchema === null ? Promise.resolve() : verifySchema())
+        .then(() =>
+          runProbe(pool, instance.tenantId, (client) =>
+            client.query("SELECT 1 FROM corpora LIMIT 1"),
+          ),
+        )
+        .then(
+          () => true,
+          () => false,
+        ),
+    };
+    // Stamp on COMPLETION, so the TTL measures the age of an ANSWER.
+    void entry.verdict.then(() => {
+      entry.settledAt = Date.now();
+    });
+    readyProbe = entry;
+    return entry.verdict;
   };
 
   const app = new Hono();
@@ -455,6 +497,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // Drain: close the listener FIRST, then the pool in its callback — the pool
   // must not be torn down under in-flight work (review, 2026-08-19).
   let draining = false;
+  const drainDeadlineMs = drainTimeoutMs();
   const shutdown = (): void => {
     // A second signal must not re-enter: `process.once` covers one signal each,
     // but SIGTERM followed by SIGINT called this twice and ended the pool twice.
@@ -474,9 +517,9 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     const deadline = setTimeout(() => {
       // Non-zero: the drain did NOT finish, and a supervisor reading exit 0
       // would record a clean stop for one that dropped work.
-      console.error(`ksor gateway: drain exceeded ${DRAIN_TIMEOUT_MS}ms — exiting anyway`);
+      console.error(`ksor gateway: drain exceeded ${drainDeadlineMs}ms — exiting anyway`);
       process.exit(75);
-    }, DRAIN_TIMEOUT_MS);
+    }, drainDeadlineMs);
     deadline.unref();
 
     server.close(() => {

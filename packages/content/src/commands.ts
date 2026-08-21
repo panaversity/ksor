@@ -650,8 +650,26 @@ async function takedownCommand(args: string[]): Promise<number> {
   if (typeof loaded === "number") return loaded;
   const instance = loaded;
 
+  // NOT a no-database case. A record that DECLARES a database has one; this
+  // host merely cannot reach it, and those are opposite answers. Writing
+  // `source: "none"` here published a withdrawn document: the site's `isDenied`
+  // reads only `manifest.denied` and never `source`, so file PRESENCE is the
+  // whole fail-closed gate — and this path created the file. The live shape is
+  // a Vercel build (the site is database-free by decision 11, so the DSN lives
+  // only in the serving runtime): `pnpm build` printed "nothing denied",
+  // exited 0, and shipped the withdrawn document to /docs and llms.txt
+  // (round-4 review of #43 — a hole this very branch had just opened).
   if (values.export !== undefined && (process.env[instance.dsnEnv] ?? "") === "") {
-    return exportNothing(instance.corpusId, `${instance.dsnEnv} is unset`);
+    return fail(
+      ENVIRONMENT,
+      `${instance.dsnEnv} is unset, and instance.md declares a database (named by ` +
+        `database.dsn_env)\n` +
+        "  why: a takedown lives in that database. Without it this build cannot tell 'nothing " +
+        "is denied' from 'nobody asked', and publishing a withdrawn document is the failure " +
+        "this export exists to prevent\n" +
+        `  fix: export ${instance.dsnEnv}='postgresql://...' for the build, or remove the ` +
+        "database: block if this record has no database",
+    );
   }
 
   const dsn = resolveDsn(instance);
