@@ -118,6 +118,21 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
+ * The sslmode the DRIVER will use, which is the LAST one written.
+ *
+ * `URLSearchParams.get` returns the FIRST value; `pg` takes the last. On
+ * `?sslmode=require&sslmode=disable` those disagree, and reading the first made
+ * the pin treat an explicitly disabled connection as a weak one — collapsing the
+ * duplicates into a single `verify-full`, turning TLS on, and printing "verified"
+ * at an operator whose DSN ended in `disable`. The direction was safe; silently
+ * overruling an explicit opt-out and then misreporting it is not (found by
+ * sweeping the driver's own parser, 2026-08-21).
+ */
+function effectiveSslMode(url: URL): string {
+  return (url.searchParams.getAll("sslmode").at(-1) ?? "").toLowerCase();
+}
+
+/**
  * The DSN ksor actually connects with — the weak sslmode SPELLED OUT.
  *
  * pg 8 treats `sslmode=require|prefer|verify-ca` as aliases for `verify-full`,
@@ -141,8 +156,7 @@ export function pinnedTlsDsn(dsn: string): string {
     return dsn;
   }
   if (isLoopbackHost(url.hostname)) return dsn;
-  const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
-  if (!WEAK_SSLMODES.includes(mode)) return dsn;
+  if (!WEAK_SSLMODES.includes(effectiveSslMode(url))) return dsn;
   url.searchParams.set("sslmode", "verify-full");
   return url.toString();
 }
@@ -159,7 +173,7 @@ export function tlsPosture(dsn: string): string | null {
     return null;
   }
   if (isLoopbackHost(url.hostname)) return null;
-  const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
+  const mode = effectiveSslMode(url);
   if (mode === "disable") return "TLS off (sslmode=disable)";
   if (mode === "no-verify") return "TLS UNVERIFIED (sslmode=no-verify)";
   if (WEAK_SSLMODES.includes(mode)) return `TLS verified (sslmode=${mode} pinned to verify-full)`;
@@ -217,7 +231,7 @@ export function tlsOptionsFor(dsn: string): { rejectUnauthorized: boolean } | un
     return undefined;
   }
   if (isLoopbackHost(url.hostname)) return undefined;
-  const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
+  const mode = effectiveSslMode(url);
   if (mode === "disable" || mode === "no-verify") return undefined;
   return { rejectUnauthorized: true };
 }

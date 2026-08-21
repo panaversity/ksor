@@ -153,7 +153,22 @@ walk AS (
     -- gates each row on its OWN visibility (round-9 review of PR 43).
     WHERE n.tenant_id = $1 AND n.status = 'published' AND w.depth < $5
 )
-SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
+-- The rank among the siblings THIS CALLER CAN SEE, not the stored one.
+--
+-- content_nodes.position is the rank in the whole record, so a tier that
+-- cannot see a sibling saw a GAP where it sat -- 1, 3, 4 -- which discloses
+-- that a document exists and roughly where, to a caller the record refuses to
+-- show it to. The same row's child_count was already computed over visible
+-- children only, so one response object disagreed with itself about whether
+-- hidden siblings are disclosed (found live 2026-08-21).
+--
+-- Computed as a WINDOW over the filtered set: window functions run after WHERE
+-- and before LIMIT/OFFSET, so the rank is the true visible sibling rank on
+-- every page and at every depth. Doing it in JS would have to renumber a page
+-- at a time -- which is how this query already produced two paging defects.
+SELECT w.slug, w.kind, w.title, w.heading_path,
+       row_number() OVER (PARTITION BY w.parent_id ORDER BY w.sort_key)::int AS position,
+       w.depth,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'

@@ -6,6 +6,7 @@ import {
   bootHeader,
   bootLine,
   SDK_RESPONSE_MODE_WARNING,
+  UNDESCRIBED_RECORD,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
 
@@ -106,5 +107,15 @@ describe("withoutSdkResponseModeWarning — narrow, and only for the call", () =
 
   it("returns the body's value", () => {
     expect(withoutSdkResponseModeWarning(() => 42)).toBe(42);
+  });
+});
+
+describe("UNDESCRIBED_RECORD", () => {
+  it("states the runtime consequence, not just the omission", () => {
+    // A level-0 record is ALLOWED to be undescribed. What the operator needs to
+    // know is that the omission reaches every agent, not that a file is unedited.
+    expect(UNDESCRIBED_RECORD).toContain("scope is unstated");
+    expect(UNDESCRIBED_RECORD).toContain("intake interview");
+    expect(UNDESCRIBED_RECORD).not.toMatch(/error|must|failed/i);
   });
 });

@@ -86,12 +86,27 @@ const FRAMEWORK_INSTRUCTIONS = `You are answering from a Knowledge System of Rec
  */
 const TEMPLATE_MARKER = "_fill this in; it is";
 
+/**
+ * Has the owner said what this record is FOR yet?
+ *
+ * The MCP door already answers honestly when they have not — it replaces the
+ * template with a plain statement that the scope is unstated. But the operator
+ * starting the server was told nothing, so a record serving with no declared
+ * identity looked exactly like one that had been described. The boot report is
+ * where that belongs, beside the abstention posture: both are answers to "how
+ * much should I trust what this thing says".
+ */
+export function recordIsUndescribed(authored: string): boolean {
+  const body = authored.trim();
+  return body === "" || body.includes(TEMPLATE_MARKER);
+}
+
 export function composeInstructions(authored: string): string {
   const body = authored.trim();
   // An unedited scaffold body is worse than an empty one: it tells the agent to
   // go run an intake interview. Say plainly that the record has not been
   // defined rather than passing build-time authoring guidance to a runtime agent.
-  const unedited = body === "" || body.includes(TEMPLATE_MARKER);
+  const unedited = recordIsUndescribed(authored);
   return unedited
     ? `${FRAMEWORK_INSTRUCTIONS}
 
@@ -192,8 +207,17 @@ const OUTLINE_OUTPUT = z.object({
       kind: z.string(),
       title: z.string(),
       heading_path: z.string(),
-      position: z.number().int(),
-      depth: z.number().int(),
+      position: z
+        .number()
+        .int()
+        .describe(
+          "Rank among the siblings YOU can see, from 1. Rows already arrive in reading " +
+            "order, so this is for citing a place, not for sorting.",
+        ),
+      depth: z
+        .number()
+        .int()
+        .describe("Levels below the record's root, so rows are self-locating."),
       child_count: z.number().int(),
       permalink: z
         .string()

@@ -41,9 +41,10 @@ import {
   abstainPosture,
   authPosture,
   bootLine,
+  UNDESCRIBED_RECORD,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
-import { buildServer } from "./server.js";
+import { buildServer, recordIsUndescribed } from "./server.js";
 import type { Composition } from "./compose.js";
 
 /**
@@ -543,6 +544,9 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   });
   // The two lines that decide whether an operator should trust what happens
   // next, said plainly: who may ask, and what the record will refuse.
+  if (recordIsUndescribed(instance.instructions)) {
+    console.error(bootLine("identity", UNDESCRIBED_RECORD));
+  }
   console.error(bootLine("auth", authPosture(auth.mode, bind.host)));
   console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
   console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));

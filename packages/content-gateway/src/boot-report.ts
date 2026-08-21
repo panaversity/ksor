@@ -84,3 +84,16 @@ export function abstainPosture(floor: number | "uncalibrated" | null): string {
   }
   return `floor ${floor} — below it, this record abstains`;
 }
+
+/**
+ * What the boot report says when instance.md is still the scaffold template.
+ *
+ * Not a scolding: a level-0 record is allowed to be undescribed and this is not
+ * an error. It is stated because the instance.md body IS the agent surface's
+ * system prompt, so leaving it unwritten is a decision with a runtime effect —
+ * every agent is told this record's scope is unstated — and an operator should
+ * learn that from the server rather than from an agent's answer.
+ */
+export const UNDESCRIBED_RECORD: string =
+  "instance.md is still the scaffold template — agents are told this record's scope is " +
+  "unstated; run the intake interview to describe it";

@@ -289,6 +289,35 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
     expect(listed, "…while the public document IS listed").toContain("public-handbook");
   });
 
+  it("the outline's positions do not leak that a hidden sibling exists", async () => {
+    // content_nodes.position is the rank in the WHOLE record, so a public
+    // caller used to receive 1, 3, 4 — a gap exactly where the internal
+    // document sits, disclosing that something is there and roughly where, to
+    // the caller the record refuses to show it to. The same row's child_count
+    // was already computed over visible children only, so one response
+    // disagreed with itself about whether hidden siblings are disclosed (found
+    // live 2026-08-21).
+    const publicRows = (await outlineDocuments(doorFor("public"), {})).nodes;
+    const internalRows = (await outlineDocuments(doorFor("internal"), {})).nodes;
+
+    expect(
+      internalRows.length,
+      "precondition: the internal tier must see MORE, or this asserts nothing",
+    ).toBeGreaterThan(publicRows.length);
+
+    const dense = (n: number): number[] => Array.from({ length: n }, (_, i) => i + 1);
+    expect(
+      publicRows.map((r) => r.position),
+      `positions must be dense for the rows returned: ${JSON.stringify(publicRows.map((r) => [r.slug, r.position]))}`,
+    ).toEqual(dense(publicRows.length));
+    expect(internalRows.map((r) => r.position)).toEqual(dense(internalRows.length));
+
+    // And the ORDER is unchanged — renumbering must not reshuffle anything.
+    expect(publicRows.map((r) => r.slug)).toEqual(
+      internalRows.map((r) => r.slug).filter((s) => publicRows.some((r) => r.slug === s)),
+    );
+  });
+
   it("LINK 3 — an INTERNAL door sees it, so the filter is a tier and not a mute button", async () => {
     const door = doorFor("internal");
 

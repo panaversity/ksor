@@ -42,3 +42,10 @@ act on it.
 Ask your coding agent to run the **intake interview** (it knows how — see
 `.agents/skills/intake-interview/`), answer its questions, and let it write
 this document with you.
+
+Until you do, `ksor serve` says so — at boot, and to every agent that connects:
+the MCP surface replaces this template with a plain statement that the record's
+scope is unstated, rather than passing authoring guidance to a runtime agent as
+if it were instructions. Nothing breaks, and the record still answers with
+citations; it just cannot tell an agent what it is authoritative FOR, which is
+the one thing that makes an answer worth trusting.
