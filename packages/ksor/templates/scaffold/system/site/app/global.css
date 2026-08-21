@@ -16,6 +16,29 @@
   --color-fd-ring: #7fb0f9;
 }
 
+/* ── The left rail ───────────────────────────────────────────────────────────
+   The docs grid is `offset | sidebar | main | toc | offset`, and the sidebar
+   panel spans BOTH the offset and the sidebar column: its surface runs to the
+   window edge while its contents are pinned to the 268px column (`items-end`,
+   children `w-(--fd-sidebar-width)`). Each offset is half of whatever the
+   viewport has over `--fd-layout-width`, which the shell defaults to 97rem —
+   so on a wide display the offset is real: measured at a 1728px viewport it
+   was 88px, and the first nav item began 103px from the window edge with
+   nothing but sidebar-coloured space to its left. That reads as a panel
+   somebody forgot to align rather than as the window's rail.
+
+   `100%` leaves the grid definition untouched and takes both offsets to zero,
+   so the rail is flush and only the record's own padding stands before the
+   first link. The main column absorbs exactly what the offsets held, so the
+   prose does not move (measured at 1728px: the article starts at x=548 either
+   way). Below 97rem nothing changes — the offsets were already zero. Percent
+   rather than `100vw` on purpose: `vw` includes the scrollbar the stable
+   gutter below reserves, which would overflow the row by its width. The home
+   layout sets this variable on its own container, so its centring is its own. */
+:root {
+  --fd-layout-width: 100%;
+}
+
 html {
   scrollbar-gutter: stable;
 }

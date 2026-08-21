@@ -41,3 +41,9 @@ clickable href.
 **The sidebar footer no longer renders an empty input-shaped box.** The theme
 switch shipped inside a bordered bar that stretched to the sidebar width around
 one 61px control; it now sits on the footer row beside the mark.
+
+**The left rail is flush with the window again.** The docs grid gives the
+sidebar panel the centring offset as well as its own column, so above 97rem the
+panel's surface ran to the window edge with the first nav item starting 103px
+inside it (measured at 1728px). The layout width is now `100%`: the offsets go
+to zero, the rail starts where the window does, and the prose does not move.
