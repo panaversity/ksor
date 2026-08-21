@@ -627,6 +627,44 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(JSON.stringify(missing.content)).toContain("outline");
   });
 
+  it("outline PAGES to the end — a partial list is never mistaken for the record", async () => {
+    // A truncated outline with no continuation manufactures a false "not in
+    // the record": the agent asks for the structure, gets a partial list, and
+    // concludes a document is absent. `has_more` announced the truncation and
+    // nothing let the caller past it — the only recourse was re-asking with a
+    // bigger limit, and above the maximum the tail was unreachable at all
+    // (round-6 review of #43).
+    const whole = await client.callTool({ name: "outline", arguments: {} });
+    const all = (whole.structuredContent as { nodes: { slug: string }[]; has_more: boolean }).nodes;
+    expect(all.length, "the fixture needs at least two rows to page through").toBeGreaterThan(1);
+
+    const seen: string[] = [];
+    let offset = 0;
+    let pages = 0;
+    for (;;) {
+      const page = await client.callTool({ name: "outline", arguments: { limit: 1, offset } });
+      const body = page.structuredContent as {
+        nodes: { slug: string }[];
+        has_more: boolean;
+        offset: number;
+        next_offset: number | null;
+      };
+      expect(body.offset, "the page states where it started").toBe(offset);
+      seen.push(...body.nodes.map((n) => n.slug));
+      pages += 1;
+      expect(pages, "paging must terminate").toBeLessThan(all.length + 5);
+      if (!body.has_more) {
+        expect(body.next_offset, "the last page offers no continuation").toBeNull();
+        break;
+      }
+      expect(body.next_offset, "has_more means there IS a continuation").not.toBeNull();
+      offset = body.next_offset!;
+    }
+    expect(seen, "paging one row at a time reconstructs the whole outline").toEqual(
+      all.map((n) => n.slug),
+    );
+  }, 60_000);
+
   it("abstains on the out-of-corpus question — the only passing answer", async () => {
     const result = await client.callTool({
       name: "search",
