@@ -1,5 +1,98 @@
 # @panaversity/ksor
 
+## 0.0.13
+
+### Patch Changes
+
+- 8c5013b: A provider outage is never reported as "the record does not cover this"
+
+  When the embedding provider is down, the vector arm does not run — so an empty
+  result says nothing about coverage. It says we could not look. That distinction
+  was fixed once for records with a calibrated floor, and the condition was the
+  bug: it left the case out that matters most.
+
+  An **uncalibrated** record is the default state of every fresh scaffold. There
+  the emptiness came from the keyword arm, which abstains when it returns no rows
+  — and it returns nothing for almost every natural-language question, because
+  `websearch_to_tsquery` ANDs its terms (measured 12 of 12 on real questions). So
+  during any outage an uncalibrated record answered every question with
+  `abstained: true`, while the tool description instructs the agent to state that
+  as fact and never fall back on its own knowledge.
+
+  It reached this release because the existing test asked a question the keyword
+  arm could answer, so the degraded path served real hits and looked correct. Ask
+  the way a person asks and it did not. That case is now covered.
+
+  Found live against the published 0.0.12 with an invalid key — the same state a
+  rejected CI key had produced that morning, which is how likely this is.
+
+  **`ksor calibrate` also stops blessing a floor on far-domain evidence alone.**
+  The built-in out-of-corpus probes are all far-domain — dinner, taxes, boiling an
+  egg — and a shipped set cannot be scope-adjacent, because adjacency depends on a
+  corpus it has never seen. Far-domain probes score low against anything, so the
+  margin comes out inflated. Measured on one record, changing only the probe set:
+  built-ins reported "separable, margin 0.072" and recommended a floor; eight
+  scope-adjacent near-misses reported "NOT separable, margin -0.030" — and that
+  floor then answered six of the eight live, with citations. The tool already knew
+  to say "widen the probe set", but said it only on the not-separable branch, which
+  is when it is least needed. It now says it whenever the built-ins are used.
+
+- 692d296: `ksor ingest` says how much of the record no search will return
+
+  A chunk shorter than the navigation threshold is stored, embedded and readable —
+  and excluded from every retrieval arm by the serving predicate. That rule exists
+  for a good reason: a "See also: [a] [b] [c]" block should never be a search hit.
+  But it decides by LENGTH ALONE, so a short _substantive_ paragraph is caught by
+  it too — and a policy handbook is made of short substantive statements.
+
+  Measured on a realistic five-document operations handbook with real embeddings:
+  **10 of 16 chunks unsearchable, and one entire document that `outline` lists and
+  `read` returns in full but `search` can never find.** A complete policy
+  statement — "Probation: six months, with a written review at three and six" —
+  is 191 characters, so the record treats it as navigation. The ingest line
+  reported a cheerful `16 chunks; embedded 16` and said nothing.
+
+  It says it now:
+
+  ```
+  ingest: generation 1 — 2 nodes, 4 chunks; embedded 4, carried 0, failed 0
+    not searchable: 3 of 4 chunk(s) (75%) are shorter than the navigation
+      threshold — stored and readable, but no search returns them
+    FOUND ONLY BY NAME: knowledge/onboarding:prose — no searchable chunk at all
+  ```
+
+  This does **not** change the threshold, and nothing that was searchable stops
+  being so. Where that line belongs needs a gold-set measurement, which is issue
+  #55. What is fixed here is the silence — because the silence is what let a
+  record ship most of itself unfindable, and told its owner everything was fine.
+
+  The count is computed with the serving predicate's own admission test, and a db
+  test compares it against what the SQL actually admits: a report the database
+  disagrees with would be worse than none.
+
+- c4976dd: Two defects introduced in 0.0.12, found by verifying the published package live
+
+  **The discovery document became invalid exactly when a record became real.** The
+  MCP registry schema caps `ServerDetail.description` at **100 characters**
+  (2025-12-11). 0.0.12 started generating that description from the record's own
+  prose — a real improvement over the hard-coded sentence it replaced — and capped
+  it at 300. The unfilled placeholder is 88 characters and validates; a described
+  record's title plus scope sentence is routinely 150-350 and does not. So
+  `/.well-known/mcp/server.json` passed validation until the owner did the thing
+  the scaffold asks for, then silently stopped, with nothing in the build to say
+  so. It is now assembled inside the schema's budget and trimmed at a word
+  boundary rather than mid-word.
+
+  **The boot report reassured the operator in the one configuration that needs a
+  warning.** `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` permits an unauthenticated
+  public bind, and the auth line kept printing `DISABLED — 0.0.0.0 only, and a
+public bind will refuse to boot` — false on both counts, at the moment the whole
+  record is being served to anyone who can reach the port. It now says that,
+  naming the variable responsible.
+
+  Both shipped in 0.0.12 and both were mine; the aligned boot report and the
+  self-describing discovery document are otherwise unchanged.
+
 ## 0.0.12
 
 ### Patch Changes
