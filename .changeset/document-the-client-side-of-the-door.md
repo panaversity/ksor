@@ -4,7 +4,7 @@
 
 The scaffold documents what a CLIENT has to do to reach a public MCP door
 
-`ksor serve` implements the OAuth Resource Server handshake in full — an
+`ksor serve` implements the OAuth Resource Server handshake — an
 unauthenticated request gets a 401 carrying
 `WWW-Authenticate: Bearer resource_metadata="…"`, and that document names the
 record's resource identifier and its authorization server, so a client discovers
