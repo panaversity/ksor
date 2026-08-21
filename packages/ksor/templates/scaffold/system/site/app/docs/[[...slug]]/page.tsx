@@ -65,13 +65,22 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
-      // A document with no headings has no table of contents, but the shell
-      // still RESERVED its column: the page grid measured
-      // `88px 268px 1016px 268px 88px` with the TOC element itself
-      // `display: none`, so 268px of the viewport was held for something that
-      // never rendered and the prose sat off-centre (measured, 2026-08-21).
-      // Governed records are full of short documents with no headings at all.
-      tableOfContent={{ enabled: page.data.toc.length > 0 }}
+      // The table-of-contents column is HELD on every page, including the many
+      // in a governed record that have no headings at all and render nothing
+      // into it. Collapsing it for those documents (which this file did, from
+      // 2026-08-21) bought a wider column at the price of a moving one: the
+      // article is centred in whatever the column leaves, so the prose jumped
+      // 134px sideways between a document with headings and one without
+      // (measured at 1728px: text at x=446 against x=580). A reader clicking
+      // through a record saw the page slide under them.
+      //
+      // Held, the grid is `0 | 268 | main | 268 | 0` — sidebar and rail the
+      // same width, so the main column is centred in the viewport and the
+      // reading measure capped in global.css sits centred inside it, in the
+      // same place on every document. The rail is the natural home for the
+      // governance facts this record already carries; until it holds them it
+      // is quiet space on the side, which is what the earlier collapse was
+      // really objecting to — the 900px measure beside it, since fixed.
     >
       {successor === null ? null : <SupersededNotice successor={successor} />}
       <DocsTitle>{page.data.title}</DocsTitle>

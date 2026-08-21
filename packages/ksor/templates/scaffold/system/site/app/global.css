@@ -39,6 +39,23 @@
   --fd-layout-width: 100%;
 }
 
+/* ── The reading measure ─────────────────────────────────────────────────────
+   The shell caps the article at 900px, which at the body's 16px puts 78
+   characters on a line (measured) — half again the 45–75 that reading research
+   and every typographic manual settle on, and the reason the page read as a
+   slab. 46rem holds the text to 672px, about 66 characters, and the article
+   still centres itself in the main column.
+
+   It is also half of what stops the column moving: the other half is holding
+   the table-of-contents column on every page (app/docs/[[...slug]]/page.tsx).
+   Sidebar and rail are both 268px, so main is centred in the viewport and this
+   measure is centred in main — the same place on a document with headings and
+   one without. `data-full` is the shell's own escape hatch for a page that
+   asked for the whole width; it keeps it. */
+#nd-page:not([data-full="true"]) {
+  max-width: 46rem;
+}
+
 html {
   scrollbar-gutter: stable;
 }

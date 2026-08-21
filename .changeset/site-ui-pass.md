@@ -54,3 +54,12 @@ pager landed mid-screen — 265px above the bottom edge on the policies index,
 measured — reading as more content rather than as the end of the page. It now
 takes the free space as margin above it, and stays exactly where it was on any
 document taller than the viewport.
+
+**The reading column stopped moving, and stopped being a slab.** The shell caps
+the article at 900px — 78 characters a line at the body's 16px — and centres it
+in whatever the table-of-contents column leaves, so the prose ALSO jumped 134px
+sideways between a document with headings and one without (measured: text at
+x=446 against x=580). The measure is now 46rem, about 66 characters, and the
+TOC column is held on every page, so sidebar and rail are the same width and the
+column lands in the same place on every document: x=464, 672px wide, on a
+document with a table of contents and on one without, verified in both.
