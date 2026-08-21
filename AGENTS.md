@@ -415,6 +415,59 @@ gateway` package, serve-by-spawn) is superseded._
     retires "drop and recreate", which destroyed the two tables that cannot be
     rebuilt from markdown. Reversed only with a recorded replacement.
 
+17. **A pool with a floor of ZERO — not a connection per call, not a pinned
+    set** (owner-directed, 2026-08-21). The question the owner asked is the
+    right one for a product that will run on Cloud Run against a serverless
+    Postgres: who holds a connection, and for how long. Three postures were
+    weighed and the middle one is ours.
+
+    _Connect per call_ pays a full handshake on every request. Measured
+    locally (Postgres 17.7, loopback, no TLS, n=30): a fresh connect + trivial
+    query is **3.02ms** median against **0.15ms** on an open one — a **2.87ms**
+    floor under every request that does no work at all. A remote TLS endpoint
+    is materially worse, because the handshake adds round trips this local
+    number does not contain. Paying that per request buys nothing an idle
+    timeout does not already buy.
+
+    _A pinned pool_ (`min: 2`, which ksor inherited from the predecessor) is
+    the posture the owner objected to, and the objection was correct — more so
+    than it looked. pg-pool reaps an idle connection ONLY while the pool is
+    above `min` (pg-pool 3.14 `index.js:409`), and it does not open anything
+    eagerly. So a non-zero `min` does not prewarm: it pins that many sockets
+    open forever and prewarms nothing. The predecessor's psycopg pool DID
+    prewarm, which is why 2 was reasonable there; ksor took the number without
+    the mechanism and got the cost with none of the benefit. Against a compute
+    that suspends on idle, those pinned sockets are also the ones most likely
+    to be dead on the next request.
+
+    **What ships: `min: 0` with a 10-second idle timeout.** A server that is
+    quiet for ten seconds holds NOTHING — no socket, no backend, nothing for a
+    suspend to kill and nothing billed on a per-connection plan — which is the
+    "connections are closed" property, obtained by expiry rather than by
+    per-request teardown. Inside a burst, connections are reused and the
+    handshake is paid once. `prewarmPool` exists for the deployment that wants
+    warm sockets and asks for them explicitly; it is never implied by `min`.
+
+    This posture is only safe because the reconnect path is real, so it is
+    part of the decision: `withGuardedClient` keeps an error listener attached
+    for the whole checkout (pg-pool removes the client's own during one, and a
+    socket dying mid-statement then reaches Node as an uncaught exception and
+    exits the process), and `acquire` distinguishes a saturated pool from a
+    slow connect so a cold reconnect is retried rather than reported as
+    exhaustion. Held by `idle.db.test.ts`, `checkout-error.db.test.ts`, and an
+    MCP-client suspend/resume test that terminates every backend and asserts
+    none survived before the next call answers.
+
+    Walked live 2026-08-21 against a served record: Postgres stopped under the
+    running gateway → the in-flight request returned "content store temporarily
+    unavailable" and the process stayed up; Postgres restarted → the FIRST
+    request answered with cited hits; SIGTERM → drained in 0.34s with the port
+    released and no orphan.
+
+    Reversed if a deployment target makes per-request connection genuinely
+    cheaper (a local pooler sidecar would), or if a measurement here shows the
+    idle window costing more than it saves.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

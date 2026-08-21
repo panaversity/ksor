@@ -512,6 +512,71 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(body.snapshot.token.length).toBeGreaterThan(20);
   });
 
+  it("survives the managed-Postgres suspend/resume cycle a Neon deployment lives in", async () => {
+    // Neon suspends compute after ~5 minutes idle and every open connection is
+    // dropped with 57P01 (admin_shutdown). Terminating every backend of this
+    // database reproduces exactly that against a RUNNING gateway, driven by a
+    // real MCP client — the shape a deployment meets on the FIRST request after
+    // any quiet period, which for a low-traffic record is most requests.
+    //
+    // Walked live too (2026-08-21, Postgres 17.7 stopped and restarted under a
+    // served record): the request during suspension returned "content store
+    // temporarily unavailable", the first request after resume answered, and
+    // the process never died. This test holds the same guarantee in CI.
+    const answered = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    expect((answered.structuredContent as { ok: boolean }).ok, "warm baseline").toBe(true);
+
+    // SUSPEND: drop every backend this database holds, gateway's included.
+    // ASSERT that it killed something — the gateway keeps min:0 and reaps idle
+    // connections, so a version of this test that terminated NOTHING would pass
+    // trivially by opening a fresh connection, proving no reconnect at all.
+    const killed = await admin.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [dbName],
+    );
+    expect(
+      killed.rowCount ?? 0,
+      "nothing was terminated, so this test would prove nothing — the gateway held no connection " +
+        "to drop at this moment",
+    ).toBeGreaterThan(0);
+    // Stronger: NOTHING survives. Whatever the next call uses, it cannot be a
+    // connection that existed before the suspend, so a pass here is a real
+    // reconnect and not a lucky reuse.
+    const survivors = await admin.query(
+      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [dbName],
+    );
+    expect(survivors.rows[0].n, "a surviving connection would make the reconnect untested").toBe(0);
+
+    // RESUME is implicit — Postgres is still listening, as Neon is once the
+    // compute wakes. The next call must reconnect and answer, NOT surface the
+    // dead socket and NOT take the process down.
+    const afterResume = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    const body = afterResume.structuredContent as {
+      ok: boolean;
+      hits: { slug: string; provenance: { generation: number } }[];
+    };
+    expect(
+      body.ok,
+      `the first call after a suspend must answer: ${JSON.stringify(afterResume.content)}`,
+    ).toBe(true);
+    expect(body.hits.length, "and answer with real hits, not an empty success").toBeGreaterThan(0);
+    expect(body.hits[0]?.provenance.generation, "still citing the published generation").toBe(1);
+
+    // And it keeps working — the discarded client was replaced, not reused.
+    const third = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    expect((third.structuredContent as { ok: boolean }).ok).toBe(true);
+  }, 120_000);
+
   it("outline lists the record; read reconstructs a document byte-exact with provenance", async () => {
     const outline = await client.callTool({ name: "outline", arguments: {} });
     const nodes = (outline.structuredContent as { nodes: { slug: string }[] }).nodes;
