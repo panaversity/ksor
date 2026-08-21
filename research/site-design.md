@@ -163,6 +163,12 @@ it, and Fumadocs hands it to us for a route file.
 
 ### F3 · Status is rendered on the page and invisible everywhere a reader _chooses_ — _governance_
 
+> **Half closed 2026-08-21.** The home page and every folder index now list what
+> is below them with the caveat status on the card, so the choice between a live
+> document and its withdrawn predecessor shows the difference. The **sidebar and
+> search results still do not** — both are Fumadocs surfaces needing their own
+> component overrides.
+
 In the sidebar, "Purchase approval thresholds" and "Purchase approval thresholds
 (2019)" are pixel-identical rows. Same in search results, same in `llms.txt`,
 same on the home page. The governance appears only _after_ the reader has
@@ -178,6 +184,11 @@ reach the history the record deliberately kept. RFC has shown both directions
 since 1969.
 
 ### F5 · Provenance URLs are not links — _governance_
+
+> **Closed 2026-08-21.** An entry that IS an http(s) URL renders as a link; a
+> citation stays text. Narrow on purpose: the whole entry must be the URL, and
+> non-http schemes are refused because `provenance` is authored content and a
+> `javascript:` entry in an href would execute on click.
 
 Measured: 0 of 3 provenance entries are anchors; a bare `https://intranet…` URL
 renders as text. Provenance is load-bearing (product principle 6); a source a
@@ -195,6 +206,13 @@ available.
 
 ### F7 · The home page speaks in ksor's voice, not the record's — _contract tension_
 
+> **Half closed 2026-08-21.** The framework's marketing line is gone from the
+> adopter's home page. The record's own authority sentence does not yet replace
+> it: the shipped `instance.md` opens with guidance prose for the owner, so
+> publishing its first paragraph would print scaffold instructions onto the page.
+> Reordering that template so the authority sentence comes first — it is also the
+> MCP system prompt — is the remaining half.
+
 The scaffolded home page renders the line "Knowledge you can govern. Answers you
 can trace. Boundaries agents can respect." — framework-authored marketing copy,
 on the adopter's site, above their record. Critical rule 1 of the scaffolded
@@ -207,9 +225,27 @@ and invisible to people.
 
 ### F8 · The right rail is empty whenever a document has no headings — _craft_
 
+> **Refused 2026-08-21, with evidence.** The proposed fix — move the governance
+> strip into `tableOfContent.header` — is wrong. Measured in the shipped shell,
+> the TOC rail is `hidden xl:…`: it does not exist below 1280px. Governance moved
+> there would vanish on every tablet and phone, which the spec's own negative
+> promise forbids ("degrades everywhere … no governance fact may exist only
+> inside an interactive control"). Duplicating the strip into both places is
+> worse than the dead space. The rail stays empty until there is a use for it
+> that is not load-bearing.
+
 The TOC column renders nothing for a document without `##` headings, and roughly
 a quarter of the viewport goes unused while governance sits crowded under the
 title. Fumadocs exposes `tableOfContent.header` / `.footer` for exactly this.
+
+### F11 · The sidebar footer rendered an empty input-shaped box — _craft_
+
+> **Closed 2026-08-21.** Found in a browser pass, not in the original ten. The
+> theme switch ships inside a bordered bar that stretched to the sidebar width
+> around a single 61px control — 236px wide, 74% empty, reading as a broken text
+> input on every document page. The bar carries `empty:hidden`, so disabling the
+> built-in switch removes it entirely; the control moved onto the footer row
+> beside the mark.
 
 ### F9 · The supersession notice is `role="note"` — _accessibility_
 
