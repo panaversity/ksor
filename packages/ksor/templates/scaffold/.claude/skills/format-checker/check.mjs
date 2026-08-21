@@ -732,6 +732,10 @@ const INSTANCE_KEYS = new Set([
   // /.well-known/mcp/server.json so an agent can DISCOVER the record rather
   // than being told the URL (AGENTS.md critical rule 3).
   "mcp_url",
+  // The record's published semver. The MCP discovery document REQUIRES a
+  // version, so this key has to be declarable — and therefore accepted here,
+  // or `pnpm check` refuses the very thing the site needs.
+  "version",
   "database",
   "embedding",
   "retrieval",

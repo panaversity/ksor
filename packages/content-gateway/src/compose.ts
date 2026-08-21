@@ -19,6 +19,7 @@ import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertGovernanceServable,
   assertSchemaCompatible,
+  GovernanceGateError,
   buildShippedProvider,
   checkEmbeddingSpace,
   contentPool,
@@ -42,20 +43,22 @@ export interface Composition {
   readonly spaceSkipReason: string | null;
   readonly version: string;
   /**
-   * Re-runs the schema compatibility gate, or resolves immediately once it has
-   * passed. `null` when boot already verified it.
+   * Re-runs EVERY fail-closed boot check — schema compatibility and the
+   * governance gate — or resolves immediately once they have passed. `null`
+   * when boot already verified them.
    *
-   * The gate is the only fail-closed check that the database is new enough, and
-   * at boot it could only be a WARNING when the store was unreachable — which
-   * on a serverless compute is the ordinary cold start, not an exception. It
-   * then never ran again, so an instance that skipped it stayed unverified for
-   * its whole life: with a too-old schema every tool call fails on a missing
-   * column while `/health` and `/ready` both report green (round-4 review of
-   * #43). Handing the retry to the readiness probe closes that: an instance
-   * whose schema is unverified is NOT ready, which is exactly what the word
-   * means, and the check keeps trying until the database answers.
+   * These are the only fail-closed checks that the database is new enough and
+   * that its governance can be honoured, and at boot they can only be WARNINGS
+   * when the store is unreachable — which on a serverless compute is the
+   * ordinary cold start, not an exception. They then never ran again, so an
+   * instance that skipped them stayed unverified for its whole life: every tool
+   * call failing on a missing column, or the restricted half served, while
+   * `/health` and `/ready` both report green (rounds 4 and 6 of the #43
+   * review). Handing the retry to the readiness probe closes that: an instance
+   * whose boot checks have not passed is NOT ready, which is exactly what the
+   * word means, and they keep trying until the database answers.
    */
-  readonly verifySchema: (() => Promise<void>) | null;
+  readonly verifyBoot: (() => Promise<void>) | null;
 }
 
 export async function compose(instancePath: string, version: string): Promise<Composition> {
@@ -111,29 +114,44 @@ export async function compose(instancePath: string, version: string): Promise<Co
   );
   const pool = contentPool(dsn);
 
-  // Fail closed on a database OLDER than this build needs: a reachable,
-  // too-old schema refuses to boot with a legible exit-3 message naming
-  // `ksor schema --apply` (which now migrates it forward), instead of erroring
-  // per-request on a missing column while /health reports healthy. An UNREACHABLE store is not this
-  // gate's concern — it is a warning, handled by the space check below.
-  let verifySchema: (() => Promise<void>) | null = null;
+  // EVERY fail-closed boot check, in one place, so that deferring them defers
+  // ALL of them and retrying retries ALL of them.
+  //
+  // They were two separate things and the governance gate ran only on the
+  // branch where the schema check had SUCCEEDED — so a cold start whose first
+  // connect failed skipped governance permanently, and the readiness retry
+  // re-ran only the schema half. Proved live: with the store down at boot and
+  // up twelve seconds later, /ready answered {"ready":true} and `read` returned
+  // a `visibility: internal` document in full from a record declaring no
+  // audience model (round-6 review of #43 — a hole in round 5's own fix).
+  //
+  // A too-old schema and a governance violation are both REFUSALS and throw
+  // from here; only an unreachable store defers.
+  const bootChecks = async (): Promise<void> => {
+    await assertSchemaCompatible(pool);
+    await assertGovernanceServable(pool, instance);
+  };
+
+  let verifyBoot: (() => Promise<void>) | null = null;
   try {
     // Retried like a serving read, not attempted once: a cold serverless
     // compute takes a measured 4-10s to wake and the first connection fails at
     // the connection level, which is precisely when a deploy runs.
-    await withPgRetry(() => assertSchemaCompatible(pool), { attempts: 3 });
+    await withPgRetry(bootChecks, { attempts: 3 });
   } catch (error) {
-    if (error instanceof SchemaVersionError) throw error;
+    // A refusal is a refusal whenever it is discovered — never deferred into a
+    // "maybe later" that lets the door open in the meantime.
+    if (error instanceof SchemaVersionError || error instanceof GovernanceGateError) throw error;
     console.error(
-      `schema version check DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
-        "this instance reports NOT READY until the check passes",
+      `boot checks DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
+        "this instance reports NOT READY until schema AND governance both verify",
     );
     let verified = false;
-    verifySchema = async (): Promise<void> => {
+    verifyBoot = async (): Promise<void> => {
       if (verified) return;
-      await assertSchemaCompatible(pool);
+      await bootChecks();
       verified = true;
-      console.error("schema version check passed on retry — instance is now ready");
+      console.error("boot checks passed on retry — instance is now ready");
     };
   }
 
@@ -171,19 +189,6 @@ export async function compose(instancePath: string, version: string): Promise<Co
   );
   if (audience !== null) console.error(`serving audience: ${audience}`);
 
-  // Two states the SITE refuses to build in, which the door used to serve in:
-  // a generation built before governance reached the node row (every document
-  // then reads as the widest tier), and a document declaring `visibility:` in a
-  // record that declares no model (an author restricted something and nothing
-  // enforces it). Fail closed at BOOT, so a misconfiguration is one loud
-  // refusal rather than a leak per request (round-5 review of #43).
-  //
-  // Skipped when the store is unreachable: that is the deferred-schema case
-  // above, and readiness already withholds this instance until it can answer.
-  if (verifySchema === null) {
-    await assertGovernanceServable(pool, instance);
-  }
-
   const advisory = tlsAdvisory(dsn);
   if (advisory !== null) console.error(advisory);
 
@@ -215,5 +220,5 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // and the door had nothing to filter on — review 2026-08-20).
     audience,
   };
-  return { ctx, instance, pool, spaceSkipReason, version, verifySchema };
+  return { ctx, instance, pool, spaceSkipReason, version, verifyBoot };
 }

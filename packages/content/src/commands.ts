@@ -19,6 +19,7 @@ import { parseArgs } from "node:util";
 import pg from "pg";
 
 import { contentPool, ContentStoreError, INGEST_ROLE } from "./db.js";
+import { assertGovernanceServable } from "./governance-gate.js";
 import {
   parseInstance,
   InstanceParseError,
@@ -453,8 +454,8 @@ async function ingestCommand(args: string[]): Promise<number> {
   });
   if (report.unchanged) {
     // The record already serves these exact bytes at this commit: no
-    // generation consumed, nothing embedded. `ksor serve` runs ingest on every
-    // start, so a restart of an unedited record must cost nothing.
+    // generation consumed, nothing embedded. Re-running ingest is the ordinary
+    // refresh loop, so an unedited record must cost nothing to re-ingest.
     process.stdout.write(
       `ingest: unchanged — generation ${report.generation} already serves this corpus\n`,
     );
@@ -471,6 +472,25 @@ async function ingestCommand(args: string[]): Promise<number> {
       `embedded ${report.embedded}, carried ${report.carried}, failed ${report.failed}\n`,
   );
   if (report.refusal !== null) return fail(REFUSED, report.refusal);
+
+  // The act that CREATES the record must refuse where serving it would.
+  // `ingest --flip` exited 0 on a generation `ksor serve` then refused to boot
+  // on, so the deploy step was green and the container crash-looped — with the
+  // site and `pnpm check` both reporting the problem and the publishing act
+  // silent (round-6 review of #43).
+  const governance = await withPool(dsn, (pool) =>
+    assertGovernanceServable(pool, instance, report.generation).then(
+      () => null,
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    ),
+  );
+  if (governance !== null) {
+    return fail(
+      REFUSED,
+      `generation ${report.generation} was built, but no surface can serve it\n` +
+        `  ${governance.split("\n").join("\n  ")}`,
+    );
+  }
   // A flip was already narrated by the build log ("FLIPPED active generation
   // -> N"); only the withheld state still needs saying.
   if (!report.flipped) process.stdout.write("ready; flip withheld (pass --flip to activate)\n");

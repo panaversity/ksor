@@ -173,8 +173,18 @@ export type SearchResult =
     }
   | {
       readonly ok: false;
-      readonly abstained: true;
-      readonly reason: "abstained";
+      /**
+       * TRUE only when the record genuinely does not cover the question.
+       *
+       * FALSE with `reason: "unavailable"` means retrieval could not be
+       * performed — the embedding provider is down on a record whose floor is a
+       * COSINE floor, so the gate cannot be evaluated and nothing may be served
+       * past it. Withholding is right; calling it an abstention told the agent
+       * the record does not cover something it does, for the whole outage
+       * (round-6 review of #43).
+       */
+      readonly abstained: boolean;
+      readonly reason: "abstained" | "unavailable";
       readonly gate: GateState;
       /** The measured signal beside the floor that rejected it — an operator
        * can tell "genuinely out of corpus" from "the embedding space is
@@ -280,6 +290,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   // provider's incident, not the record's).
   let queryVector: readonly number[] | string | null = null;
   let degradedReason: string | undefined;
+  let embedFailed = false;
   try {
     queryVector = await ctx.embedQuery(query);
   } catch (error) {
@@ -290,7 +301,12 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       throw new EmptyQueryError();
     }
     queryVector = null;
-    degradedReason = "embed_unavailable_keyword_only";
+    // Which degrade this becomes is decided BELOW, by whether a floor is
+    // declared. It used to be stamped "keyword_only" here, before the branch
+    // was chosen — and the calibrated branch abstains WITHOUT running a
+    // keyword search, so the envelope described a search that never happened
+    // (round-6 review of #43).
+    embedFailed = true;
   }
 
   let hits: Hit[];
@@ -310,6 +326,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     topCosine = result.topCosine;
     abstained = vectorAbstains(topCosine, inst.abstain) || hits.length === 0;
   } else if (inst.abstain.vectorFloor !== null) {
+    degradedReason = "embed_unavailable";
     // A calibrated corpus gates on the VECTOR floor, and an embed outage
     // means that floor cannot be evaluated at all. Serving keyword results
     // ungated here would answer out-of-corpus questions during the outage
@@ -320,6 +337,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     hits = [];
     abstained = true;
   } else {
+    degradedReason = "embed_unavailable_keyword_only";
     // No vector floor declared → the gate was already off; the keyword
     // degrade serves exactly what an uncalibrated corpus always serves.
     hits = await runRead(
@@ -355,10 +373,19 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         degraded: degradedReason !== undefined,
       },
     });
+    // "The record does not cover this" and "I could not look properly" are
+    // DIFFERENT answers, and only the first is an abstention. When the embed
+    // provider is down on a calibrated record the floor cannot be evaluated at
+    // all, so withholding is right — but reporting it as an abstention told the
+    // agent the record does not cover a question it does cover, for the whole
+    // outage, and the tool description instructs the agent to state exactly
+    // that and not fall back (round-6 review of #43, reproduced live with a
+    // bogus provider key against a corpus that contains the answer).
+    const unavailable = embedFailed && inst.abstain.vectorFloor !== null;
     return {
       ok: false,
-      abstained: true,
-      reason: "abstained",
+      abstained: !unavailable,
+      reason: unavailable ? "unavailable" : "abstained",
       gate: gateState(inst),
       top_cosine: topCosine,
       hits: [],
@@ -662,8 +689,14 @@ export interface OutlineNodeWire {
 
 export async function outlineDocuments(
   ctx: ServiceContext,
-  options: { node?: string | null; depth?: number | null; limit?: number } = {},
-): Promise<{ nodes: OutlineNodeWire[]; has_more: boolean; limit: number }> {
+  options: { node?: string | null; depth?: number | null; limit?: number; offset?: number } = {},
+): Promise<{
+  nodes: OutlineNodeWire[];
+  has_more: boolean;
+  limit: number;
+  offset: number;
+  next_offset: number | null;
+}> {
   const inst = ctx.instance;
   // A declared-but-uncalibrated floor REFUSES every serve — outline is a
   // serve (it hands out the whole record structure: slugs, titles, root-
@@ -682,6 +715,7 @@ export async function outlineDocuments(
   // Clamp HERE, where the caller's request is, not inside the query where the
   // truncation probe would be clamped away with it.
   const limit = Math.max(1, Math.min(options.limit ?? 200, MAX_OUTLINE_LIMIT));
+  const offset = Math.max(0, options.offset ?? 0);
   // One MORE than asked for, so truncation is DETECTED rather than inferred.
   // A silently cut outline manufactures a false "not in the record" — the
   // agent asks for the structure, gets a partial list with no signal, and
@@ -689,7 +723,7 @@ export async function outlineDocuments(
   const rows = await runRead(
     ctx.pool,
     inst.tenantId,
-    (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1 }),
+    (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1, offset }),
     audienceScope(ctx),
   );
   const has_more = rows.length > limit;
@@ -700,11 +734,15 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { node: root, returned: rows.length, has_more },
+    detail: { node: root, returned: rows.length, has_more, offset },
   });
   return {
     has_more,
     limit,
+    offset,
+    // The value to pass back as `offset` for the next page, or null at the end
+    // — so continuing is a field the caller copies, not arithmetic they infer.
+    next_offset: has_more ? offset + rows.length : null,
     nodes: rows.map((r) => ({
       slug: r.slug,
       kind: r.kind,

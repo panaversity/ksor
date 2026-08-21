@@ -265,6 +265,11 @@ const KERNEL_TOP_LEVEL_KEYS = new Set([
   "audiences",
   "default_visibility",
   "mcp_url",
+  // The record's published semver, for the MCP discovery document — whose
+  // schema REQUIRES a version. The kernel does not consume it; it must tolerate
+  // it, or an adopter who fills in the discovery surface breaks `ksor serve`
+  // (round-6 review of #43).
+  "version",
 ]);
 
 export function parseInstanceText(text: string): ContentInstance {

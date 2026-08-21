@@ -24,10 +24,14 @@ instead of their training memory. The corpus grows with each implemented verb.
   at `http://localhost:3000`; `pnpm build` writes a fully static export to
   `system/site/out/`. `KSOR_BASE_PATH=/repo pnpm build` targets sub-path
   hosting.
-- `ksor serve` runs the MCP server over a built record (with
-  `ingest`/`schema`/`calibrate`/`gc`) — the climbed rung, needing Postgres and
-  a provider key. Only `dev` and `build` remain designed, not implemented:
-  each prints an honest notice and exits `2`.
+- `ksor serve` runs the MCP server over a built record — the climbed rung,
+  needing Postgres and a provider key — alongside the write plane that keeps
+  the record current: `schema` (provision or migrate the database), `grant`
+  (authorize a tenant for ingest), `ingest` (build and publish a generation),
+  `takedown` (withdraw a document from EVERY surface, and export the manifest
+  the site build reads), `calibrate` (measure the abstention floor) and `gc`
+  (reap retired generations). Only `dev` and `build` remain designed, not
+  implemented: each prints an honest notice and exits `2`.
 - Exit codes are a contract: `1` refused (first stderr line is a stable
   slug such as `error: bad-name`, followed by a remedy), `2` designed but
   not implemented, `3` the environment cannot run ksor

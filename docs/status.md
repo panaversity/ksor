@@ -10,7 +10,7 @@ updated: 2026-08-20.
 attached). **In the currently published 0.0.7** it ships the working
 `ksor init` described below — including the visibility model and the deploy
 story — AND the bundled content kernel: `serve`, `ingest`, `schema`, `grant`,
-`calibrate`, and `gc` all run from the one `ksor` binary. Only `dev` and
+`takedown`, `calibrate`, and `gc` all run from the one `ksor` binary. Only `dev` and
 `build` still report "designed but not implemented" and exit `2`; an unknown
 verb is refused with exit `1` and a stable `error: unknown-verb` stderr slug.
 The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs
@@ -194,8 +194,9 @@ builtin `up`.
 
 - `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
   own `pnpm dev` / `pnpm build` work today without them.
-  `ksor serve`, `ingest`, `schema`, `grant`, `calibrate`, `gc` ARE implemented
-  and RELEASED in 0.0.7 — the bundled kernel provides them from the one `ksor`
+  `ksor serve`, `ingest`, `schema`, `grant`, `takedown`, `calibrate`, `gc` ARE
+  implemented (`takedown` lands with this branch; the rest were released in
+  0.0.7) — the bundled kernel provides them from the one `ksor`
   binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
   `3` with a remedy when it is missing).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.

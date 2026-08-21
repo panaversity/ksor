@@ -116,7 +116,7 @@ up AS (
 )
 SELECT path, climbed FROM up WHERE parent_id IS NULL ORDER BY path LIMIT 1`;
 
-/** Anchor $4 (uuid, NULL = browse roots), depth bound $5, limit $6. */
+/** Anchor $4 (uuid, NULL = browse roots), depth bound $5, limit $6, offset $7. */
 export const OUTLINE_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
@@ -153,7 +153,7 @@ JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
 WHERE ${DENY} AND ${AUDIENCE_ALLOWED}
 ORDER BY w.sort_key
-LIMIT $6`;
+LIMIT $6 OFFSET $7`;
 
 /**
  * A TYPED not-found — composition roots relabel it for their own door by
@@ -429,6 +429,16 @@ export interface OutlineOptions {
   readonly root?: string | null;
   readonly depth?: number;
   readonly limit?: number;
+  /**
+   * Rows to skip, so a truncated outline has a way to continue.
+   *
+   * `has_more` told a caller the list was partial and nothing let them see the
+   * rest: the only recourse was re-asking with a larger `limit`, and above the
+   * maximum the tail was unreachable at all. An agent that cannot reach the
+   * tail concludes the record does not contain it — the false "not in the
+   * record" the truncation probe exists to prevent (round-6 review of #43).
+   */
+  readonly offset?: number;
 }
 
 /**
@@ -446,6 +456,7 @@ export async function outline(
   const root = options.root ?? null;
   const depth = Math.max(0, options.depth ?? 0);
   const limit = Math.max(1, Math.min(options.limit ?? 200, OUTLINE_CEILING));
+  const offset = Math.max(0, options.offset ?? 0);
   let pinned = scope.pinnedGeneration;
   let anchor: string | null = null;
   if (root !== null) {
@@ -490,6 +501,7 @@ export async function outline(
       anchor,
       depth,
       root === null ? limit : limit + 1,
+      offset,
     ],
   });
   const rows = outlineRows(result);

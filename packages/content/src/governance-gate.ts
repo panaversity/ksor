@@ -51,14 +51,25 @@ export class GovernanceGateError extends Error {
 export async function assertGovernanceServable(
   pool: pg.Pool,
   instance: ContentInstance,
+  /**
+   * Which generation to judge. Omitted = the ACTIVE one, which is what serving
+   * asks about. `ksor ingest` passes the generation it just built, so the act
+   * that CREATES an unservable record refuses at the moment it happens instead
+   * of leaving a green publish step and a crash-looping container behind
+   * (round-6 review of #43).
+   */
+  targetGeneration?: number,
 ): Promise<void> {
   const declaresModel = instance.audiences.length > 0;
 
   const state = await runRead(pool, instance.tenantId, async (client) => {
-    const active = await client.query(
-      "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
-      [instance.tenantId, instance.corpusId],
-    );
+    const active =
+      targetGeneration === undefined
+        ? await client.query(
+            "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+            [instance.tenantId, instance.corpusId],
+          )
+        : { rows: [{ active_generation: targetGeneration }] };
     const generation = Number(active.rows[0]?.active_generation ?? 0);
     if (generation === 0) return { generation, builtAt: null, restricted: 0 };
 

@@ -158,7 +158,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     );
   }
   const security = resolveSecurity(bind);
-  const { ctx, instance, pool, spaceSkipReason, version, verifySchema } = composition;
+  const { ctx, instance, pool, spaceSkipReason, version, verifyBoot } = composition;
 
   // Fail-soft env (envInt), never Number(env ?? default): a set-but-empty
   // var (routine with `gcloud --set-env-vars`) or a typo must fall back, not
@@ -195,7 +195,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     }
     const entry: { settledAt: number | null; verdict: Promise<boolean> } = {
       settledAt: null,
-      // An instance whose schema could not be verified at boot is NOT ready —
+      // An instance whose boot checks could not run is NOT ready —
       // that is what the word means, and reporting green let a platform route
       // traffic to an instance where every tool call fails on a missing column
       // (round-4 review of #43). The check retries here until the database
@@ -208,7 +208,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       // only the probe let /ready answer in 10.25s while claiming 8 (found
       // live, 2026-08-21).
       verdict: withProbeDeadline(
-        (verifySchema === null ? Promise.resolve() : verifySchema()).then(() =>
+        (verifyBoot === null ? Promise.resolve() : verifyBoot()).then(() =>
           runProbe(pool, instance.tenantId, (client) =>
             client.query("SELECT 1 FROM corpora LIMIT 1"),
           ),
@@ -343,6 +343,38 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     // silently drifts if upstream adds a required field.
     authInfo?: AuthInfo,
   ): Promise<Response> => {
+    // The boot checks gate EVERY REQUEST, not just /ready.
+    //
+    // Reporting not-ready keeps a platform from ROUTING traffic; it does not
+    // stop anything that reaches the port. Proved live: with the store down at
+    // boot and up moments later, /ready answered {"ready":false} and a direct
+    // `read` still returned a `visibility: internal` document in full. A
+    // governance guarantee cannot rest on a health probe an attacker, a
+    // sidecar, or a stale load-balancer target is free to ignore — fail-closed
+    // has to mean refusing the REQUEST (round-6 review of #43, and the live
+    // walk of its own fix).
+    //
+    // Once verified this is a resolved promise, so the steady-state cost is a
+    // single await.
+    if (verifyBoot !== null) {
+      try {
+        await verifyBoot();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: {
+              code: -32001,
+              message: `this record cannot be served: ${message.split("\n")[0]}`,
+              data: { detail: message },
+            },
+            id: null,
+          }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        );
+      }
+    }
     const response = await mcpHandler.fetch(request, authInfo === undefined ? {} : { authInfo });
     const body = await response.arrayBuffer();
     // A null-body status (204/205/304) throws if handed even a 0-byte buffer.

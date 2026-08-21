@@ -266,9 +266,15 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     }
 
     // Embed outage WITH a declared floor: the gate cannot be evaluated, so
-    // the only honest answer is to ABSTAIN — serving ungated keyword results
-    // would answer out-of-corpus questions during the outage (review finding
-    // #5, 2026-08-19; ts_rank_cd does not separate in- from out-of-corpus).
+    // nothing may be served past it — serving ungated keyword results would
+    // answer out-of-corpus questions during the outage (review finding #5,
+    // 2026-08-19; ts_rank_cd does not separate in- from out-of-corpus).
+    //
+    // But WITHHOLDING is not ABSTAINING. "The record does not cover this" and
+    // "I could not look" are different answers, and the tool description tells
+    // the agent to state the first as fact and not fall back — so reporting an
+    // outage as an abstention made the agent assert the record lacks something
+    // it contains, for the whole outage (round-6 review of #43).
     const down = async (): Promise<never> => {
       throw new Error("provider down");
     };
@@ -276,8 +282,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const outage = await search(degraded, "onboarding checklist", 5);
     expect(outage.ok, "declared floor + embed outage must fail closed").toBe(false);
     if (!outage.ok) {
-      expect(outage.reason).toBe("abstained");
-      expect(outage.degraded_reason).toBe("embed_unavailable_keyword_only");
+      expect(outage.reason, "an outage is not an abstention").toBe("unavailable");
+      expect(outage.abstained, "and must not claim the record was checked").toBe(false);
+      // Named for what actually happened: this branch runs NO keyword search,
+      // so the previous "keyword_only" described a search that never ran.
+      expect(outage.degraded_reason).toBe("embed_unavailable");
     }
 
     // Embed outage with NO declared floor (gate already off): the keyword
