@@ -235,11 +235,14 @@ Two things worth being deliberate about:
 - **Set `KSOR_SSO_ISSUER` when your SSO stamps a stable `iss`.** Audience is
   always enforced against `KSOR_JWT_ALLOWED_AUDIENCES`; naming the issuer adds
   one more check for the cost of one variable.
-- **Set `KSOR_JWKS_URL` unless your SSO is Better Auth.** The signing keys are
-  fetched from `<KSOR_SSO_URL>/api/auth/jwks` by default, which is Better
-  Auth's layout. Auth0, Okta, Entra, Keycloak and Cognito publish theirs
-  elsewhere, and a wrong JWKS URL fails as a transient fetch error — the door
-  boots clean and every request 503s with nothing naming the cause.
+- **The signing keys are DISCOVERED; you rarely set `KSOR_JWKS_URL`.** The door
+  reads your SSO's own metadata document — RFC 8414
+  (`/.well-known/oauth-authorization-server`), then OpenID Discovery
+  (`/.well-known/openid-configuration`) — so Auth0, Okta, Entra, Keycloak,
+  Cognito, Google and Better Auth all work unmodified. The boot report's `keys`
+  line names which document answered and where the keys came from; set
+  `KSOR_JWKS_URL` only to override that, or when your SSO publishes no metadata
+  at all.
 
 ## Withdrawing a document — `ksor takedown`
 
@@ -258,8 +261,12 @@ pnpm exec ksor takedown --instance instance.md --revoke <stable-id>
 The stable id is what a search result reports as `provenance.stable_id` — for
 most documents that is `knowledge/<path-without-.md>`. `--subtree` withdraws a
 section and everything beneath it, including documents added later.
-`--actor NAME` names who performed the act in the ledger; it defaults to the
-operating user.
+`--actor NAME` names who performed the act in the ledger, and a denial or a
+revocation is REFUSED without it. There is no default: a name taken from the
+environment reads like a person and is whatever the shell happened to be
+(`runner` under CI, `root` in a container), which is worse than no name at all
+in the one row that exists to record who did this. Read-only modes
+(`--list`, `--ledger`, `--export`) need nothing.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
 build** — the site reads a file, not the database, and `pnpm build` refreshes
@@ -329,8 +336,10 @@ Details in README → Deploying.
   takes the position that page declares.
 - Sidebar position is the governed `order:` key: documents that declare it come
   first, ascending; the rest follow in name order.
-- One order drives the sidebar, `llms.txt`, and the home page's first-document
-  link — set it once and every surface agrees.
+- One order drives every surface — the sidebar, `llms.txt`, the home page's
+  first-document link, and the MCP `outline` tool an agent reads to decide what
+  to read first. Set it once and they agree. The door picks up a reorder at the
+  next `pnpm refresh`, which costs no embedding: only the ordering changed.
 - Never `meta.json` or `sidebar_position`: the checker refuses framework files
   in the record, which has to read the same without the site.
 

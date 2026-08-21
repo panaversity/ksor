@@ -343,13 +343,30 @@ function planStage(recordDir: string, denied: DenylistManifest): StagePlan {
   return { files: [...documents, ...assets], documents: documents.length, total };
 }
 
+/**
+ * Remove the stage, asking for the retries this exact failure needs.
+ *
+ * `force: true` suppresses ENOENT; it does NOT retry anything. Node retries
+ * EBUSY / EMFILE / ENFILE / ENOTEMPTY / EPERM only when `maxRetries` is set,
+ * and it defaults to zero. The build evaluates `source.config.ts` more than
+ * once when the bundler wants it in more than one place, so two runs can
+ * overlap: one removing the stage while the other is still copying into it.
+ * That surfaced as `ENOTEMPTY` out of `rmSync` and failed the whole site build
+ * (CI, 2026-08-21) — a race that is safe to lose, because the stage is a
+ * deterministic function of the record and the denylist, so redoing it produces
+ * the same bytes.
+ */
+function removeStage(stageDir: string): void {
+  rmSync(stageDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+}
+
 /** Fill a clean stage with exactly the set this build may publish. */
 function fillStage(recordDir: string, stageDir: string, denied: DenylistManifest): void {
   // The old stage goes first, before any refusal can throw: a refused build
   // that leaves the previous, more permissive stage on disk hands the next
   // careless build a filtered copy nothing governs (review finding,
   // 2026-08-19).
-  rmSync(stageDir, { recursive: true, force: true });
+  removeStage(stageDir);
   const plan = planStage(recordDir, denied);
   // An empty record is its own problem, reported by the page that renders it;
   // an empty AUDIENCE is a misconfiguration that would otherwise surface as
@@ -468,7 +485,7 @@ export function knowledgeSourceDir(): string {
     // A stage left behind by an earlier model would be a filtered copy of the
     // record nothing governs any more — removed before the refusal below can
     // throw, so a refused build never leaves one behind either.
-    rmSync(stageDir, { recursive: true, force: true });
+    removeStage(stageDir);
     refuseVisibilityWithoutAudiences(recordDir);
     return RECORD_DIR;
   }
