@@ -63,3 +63,13 @@ x=446 against x=580). The measure is now 46rem, about 66 characters, and the
 TOC column is held on every page, so sidebar and rail are the same width and the
 column lands in the same place on every document: x=464, 672px wide, on a
 document with a table of contents and on one without, verified in both.
+
+**The site is a shadcn/ui project.** `components.json` and `lib/utils.ts` ship
+with the scaffold, so `pnpm dlx shadcn@latest add <name>` writes a component the
+adopter then owns, and Fumadocs reads the same palette through its `shadcn` CSS
+preset — one set of tokens for the shell and for anything added from the
+registry, with `--primary` carrying the brand. It also ends a real defect: the
+`neutral` preset painted the page and the sidebar it sits against 1.6% apart, so
+the reading surface never read as a page. The shadcn CLI itself is deliberately
+NOT a dependency (578 extra packages, measured); the ones the site actually uses
+cost +2.

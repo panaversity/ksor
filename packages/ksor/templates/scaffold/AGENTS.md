@@ -298,9 +298,16 @@ You own `system/site/` outright — these are the seams, cheapest first:
 - **Display title** — `instance.md`'s body `# H1` (the intake interview
   writes it). Headline, navbar, and browser title follow on restart.
 - **Accent color** — the one brand pair in `system/site/app/global.css`
-  (`--color-fd-primary`, light and dark); every accented element follows.
+  (`--primary` and `--primary-foreground`, light and dark); every accented
+  element follows, in the shell and in every shadcn component alike.
 - **Logo and favicon** — replace `system/site/app/icon.png`; the tab icon
   and the home-page mark are the same file.
+- **Components** — the site is a shadcn/ui project (`system/site/components.json`),
+  so `pnpm dlx shadcn@latest add <name>` writes a component into
+  `system/site/components/ui/` that you then own like everything else here.
+  Fumadocs reads the same tokens (its `shadcn` preset maps every `--color-fd-*`
+  onto the shadcn variable of the same role), so a registry component and the
+  documentation shell around it stay one palette.
 - **Anything deeper** — edit the site like the Next.js app it is; the only
   rule that survives customization is critical rule 1. The whole shell is
   replaceable behind a five-clause contract (a themed Docusaurus shell with

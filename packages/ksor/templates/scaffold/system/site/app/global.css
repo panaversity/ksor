@@ -1,19 +1,157 @@
-@import "tailwindcss";
-@import "fumadocs-ui/css/neutral.css";
-@import "fumadocs-ui/css/preset.css";
+/* shadcn/ui is the component system (`components.json`, `pnpm dlx shadcn@latest
+   add <name>`), and Fumadocs reads its colours: the `shadcn` preset maps every
+   `--color-fd-*` token onto the shadcn variable of the same role, so one
+   palette dresses the shell and anything added from the registry. `neutral`
+   stood here before and painted both — the page and the sidebar it sits
+   against — hsl(0 0% 96%) and 94.7%, 1.6% apart, which is no separation at
+   all; shadcn's neutral gives the page white and the rail its own surface.
 
-/* The KSoR default accent, drawn from the mark — the one brand value here.
-   Re-brand by changing this pair; every accented element follows. */
+   `shadcn init` also writes `@import "shadcn/tailwind.css"`, which is dropped
+   here: that import makes the shadcn CLI a runtime dependency of every
+   scaffolded project, and the CLI carries Babel, ts-morph, dotenvx and an MCP
+   SDK — 578 extra packages in the lockfile, measured, against 2 for the four
+   deps this file actually needs. `components.json` therefore names the classic
+   `new-york` style, whose components compile against plain Tailwind utilities
+   and the tokens below (verified by adding one). An adopter who wants the
+   preset styles adds the import and the dependency in their own repo. */
+@import "tailwindcss";
+@import "fumadocs-ui/css/shadcn.css";
+@import "fumadocs-ui/css/preset.css";
+@import "tw-animate-css";
+
+/* next-themes switches the theme by class, so `dark:` must follow the class
+   rather than the OS setting. Nothing here uses a `dark:` utility — the theme
+   is tokens — but a component added from the registry will. */
+@custom-variant dark (&:is(.dark *));
+
+/* The shadcn neutral palette, as `shadcn init` writes it, with ONE pair
+   changed: `--primary` (and the ring that follows it) carries the KSoR accent
+   drawn from the mark. That pair is the whole brand — re-brand by changing it
+   and every accented element follows, in the shell and in every shadcn
+   component alike, because Fumadocs now reads `--primary` too. */
 :root {
-  --color-fd-primary: #1d4ed8;
-  --color-fd-primary-foreground: #ffffff;
-  --color-fd-ring: #1d4ed8;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: #1d4ed8;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: #1d4ed8;
 }
 
 .dark {
-  --color-fd-primary: #7fb0f9;
-  --color-fd-primary-foreground: #081226;
-  --color-fd-ring: #7fb0f9;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: #7fb0f9;
+  --primary-foreground: #081226;
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: #7fb0f9;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: #7fb0f9;
+}
+
+/* The token → utility mapping shadcn components compile against, as
+   `shadcn init` writes it MINUS its two font lines: those pointed at a
+   `--font-sans` that only exists when a next/font face is loaded in the
+   layout, and this scaffold deliberately loads none (see app/layout.tsx —
+   a Google face is fetched at BUILD time, which costs the offline build and
+   byte-identical rebuilds). Tailwind's own system stack stands. */
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
 /* ── The left rail ───────────────────────────────────────────────────────────

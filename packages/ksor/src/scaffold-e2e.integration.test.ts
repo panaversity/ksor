@@ -157,7 +157,18 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
           () => getComputedStyle(document.body).backgroundColor,
         );
         // The four-defects rule: assert computed style, and print what we saw.
-        expect(background, `computed body background in ${colorScheme}`).toMatch(/^rgb/);
+        // The FUNCTION, not the notation: this pinned /^rgb/ while the theme
+        // was hsl(), and the shadcn palette (oklch tokens) made Chromium report
+        // `lab(100 0 0)` for a body that paints perfectly — the assertion
+        // failed on a working page (found live 2026-08-22). What must hold is
+        // that a colour resolved at all: no empty string, and never the
+        // transparent body that means the theme never landed.
+        expect(background, `computed body background in ${colorScheme}`).toMatch(
+          /^(rgb|rgba|color|lab|oklab|oklch|hsl)\(/,
+        );
+        expect(background, `body is painted in ${colorScheme}`).not.toMatch(
+          /^rgba\(0, 0, 0, 0\)$|^transparent$/,
+        );
         backgrounds[colorScheme] = background;
         expect(
           consoleErrors,
