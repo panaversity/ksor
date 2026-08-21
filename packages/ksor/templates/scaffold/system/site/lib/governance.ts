@@ -374,3 +374,45 @@ export function sourceHref(entry: string): string | null {
   // render an href pointing nowhere.
   return url.host === "" ? null : value;
 }
+
+/** A document's supersession pointer, as the record declares it. */
+export interface SupersessionPointer {
+  /** Path under `knowledge/`, e.g. `policies/purchase-approval-2019.md`. */
+  readonly path: string;
+  /** Its `superseded_by:` value, or null. */
+  readonly supersededBy: string | null;
+}
+
+/**
+ * The routes of every document that names THIS page as its successor.
+ *
+ * Supersession ran one way: the withdrawn document names its replacement, and
+ * the replacement said nothing about what it replaced, so a reader on the
+ * current policy could not reach the history the record deliberately kept. RFC
+ * has carried both directions since 1969 (`Obsoletes:` on the new document,
+ * `Obsoleted by:` on the old).
+ *
+ * Derived, never declared — there is no new frontmatter key. Each pointer is
+ * resolved through the same path-relative rule the forward notice uses, so the
+ * two directions can never disagree about what points where.
+ */
+export function predecessorsOf(
+  currentUrl: string,
+  pages: readonly RecordPage[],
+  pointers: readonly SupersessionPointer[],
+): string[] {
+  const byPath = new Map(pages.map((page) => [page.path.replaceAll("\\", "/"), page] as const));
+  const found: string[] = [];
+  for (const pointer of pointers) {
+    if (pointer.supersededBy === null) continue;
+    const resolved = resolveSuccessorUrl(pointer.supersededBy, pointer.path, pages);
+    if (resolved === null || resolved.split("#")[0] !== currentUrl) continue;
+    // A document that supersedes itself would otherwise render "Replaces: this
+    // page" on the page you are reading. `pnpm check` refuses it; this is the
+    // second lock.
+    const self = byPath.get(pointer.path.replaceAll("\\", "/"));
+    if (self !== undefined && self.url === currentUrl) continue;
+    if (self !== undefined) found.push(self.url);
+  }
+  return found;
+}

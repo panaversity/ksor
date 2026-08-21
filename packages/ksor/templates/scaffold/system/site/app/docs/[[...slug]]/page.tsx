@@ -11,7 +11,7 @@ import {
   SupersededNotice,
   type Successor,
 } from "@/components/governance";
-import { readGovernance, resolveSuccessorUrl } from "@/lib/governance";
+import { predecessorsOf, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
 import { showGovernance } from "@/lib/shared";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -41,12 +41,28 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
     successor = { href, label: target?.data.title ?? governance.supersededBy };
   }
 
+  // What this document replaced, derived by asking every document in the record
+  // where its successor pointer lands (research/site-design.md F4). No new
+  // frontmatter key: the record already says it, in the other direction.
+  const allPages = getSortedPages();
+  const replaces = predecessorsOf(
+    page.url,
+    allPages,
+    allPages.map((candidate) => ({
+      path: candidate.path,
+      supersededBy: readGovernance(candidate.data, candidate.path).supersededBy,
+    })),
+  ).map((url) => ({
+    href: url,
+    label: allPages.find((candidate) => candidate.url === url)?.data.title ?? url,
+  }));
+
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
       {successor === null ? null : <SupersededNotice successor={successor} />}
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
-      {showGovernance ? <GovernanceMeta governance={governance} /> : null}
+      {showGovernance ? <GovernanceMeta governance={governance} replaces={replaces} /> : null}
       <DocsBody>
         <MDX
           components={getMDXComponents({

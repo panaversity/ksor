@@ -16,6 +16,7 @@ import {
   caveatStatus,
   governanceVisible,
   isCalendarDate,
+  predecessorsOf,
   readGovernance,
   resolveSuccessorUrl,
   sourceHref,
@@ -526,5 +527,66 @@ describe("caveatStatus", () => {
     // `pnpm check` holds status to a closed set, so this is a record that
     // skipped the checker. Showing what it wrote beats hiding it.
     expect(caveatStatus("retired")).toBe("retired");
+  });
+});
+
+// Supersession ran one way: a withdrawn document names its successor, and the
+// successor said nothing about what it replaced. RFC has carried both
+// directions since 1969 — "Obsoletes:" on the new, "Obsoleted by:" on the old —
+// so a reader on the current policy can reach the history the record kept
+// (research/site-design.md F4).
+describe("predecessorsOf", () => {
+  const pages = [
+    { path: "policies/purchase-approval.md", url: "/docs/policies/purchase-approval" },
+    { path: "policies/purchase-approval-2019.md", url: "/docs/policies/purchase-approval-2019" },
+    { path: "policies/purchase-approval-2015.md", url: "/docs/policies/purchase-approval-2015" },
+    { path: "unrelated.md", url: "/docs/unrelated" },
+  ];
+  const withPointer = (path: string, pointer: string | null) => ({ path, supersededBy: pointer });
+
+  it("finds the document this one replaced", () => {
+    const found = predecessorsOf("/docs/policies/purchase-approval", pages, [
+      withPointer("policies/purchase-approval-2019.md", "./purchase-approval.md"),
+    ]);
+    expect(found).toEqual(["/docs/policies/purchase-approval-2019"]);
+  });
+
+  it("finds every predecessor, in the order the record lists them", () => {
+    // A document may replace more than one — two policies merged into one.
+    const found = predecessorsOf("/docs/policies/purchase-approval", pages, [
+      withPointer("policies/purchase-approval-2019.md", "./purchase-approval.md"),
+      withPointer("policies/purchase-approval-2015.md", "./purchase-approval.md"),
+    ]);
+    expect(found).toEqual([
+      "/docs/policies/purchase-approval-2019",
+      "/docs/policies/purchase-approval-2015",
+    ]);
+  });
+
+  it("ignores a document that points somewhere else", () => {
+    expect(
+      predecessorsOf("/docs/policies/purchase-approval", pages, [
+        withPointer("policies/purchase-approval-2019.md", "./purchase-approval-2015.md"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("ignores documents that declare no pointer at all — the common case", () => {
+    expect(
+      predecessorsOf("/docs/policies/purchase-approval", pages, [
+        withPointer("unrelated.md", null),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("never reports the document as replacing itself", () => {
+    // `pnpm check` refuses a self-supersession, so this is defense in depth
+    // against a record that skipped the checker — it would otherwise render
+    // "Replaces: <this page>" on the page you are reading.
+    expect(
+      predecessorsOf("/docs/policies/purchase-approval", pages, [
+        withPointer("policies/purchase-approval.md", "./purchase-approval.md"),
+      ]),
+    ).toEqual([]);
   });
 });

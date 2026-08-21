@@ -24,3 +24,21 @@ html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
 }
+
+/* The supersession notice's own colour. It used to wear --color-fd-primary,
+   which is also the link colour, the primary button and the focus ring — so
+   "stop trusting this document" was painted in exactly the blue that means
+   "go here". A caution needs a role of its own; this is the only place it is
+   used, and the word "Superseded" still carries the meaning without it
+   (GOV.UK's rule: never rely on colour alone). */
+.ksor-caution {
+  --ksor-caution: #9c3f24;
+  border-color: color-mix(in oklab, var(--ksor-caution) 32%, transparent);
+  border-left-color: var(--ksor-caution);
+  background-color: color-mix(in oklab, var(--ksor-caution) 8%, transparent);
+}
+
+.dark .ksor-caution {
+  --ksor-caution: #e0906e;
+  background-color: color-mix(in oklab, var(--ksor-caution) 12%, transparent);
+}

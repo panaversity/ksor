@@ -299,12 +299,18 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         path.join(project, "system", "site", "out", route, "index.html"),
         "utf8",
       );
-      const found = /<aside[^>]*role="note"[\s\S]*?<\/aside>/.exec(html);
+      // role="region" with aria-labelledby, not role="note": a screen-reader
+      // user must be able to reach the most consequential thing on the page by
+      // landmark, which a note is not (GOV.UK's own pattern).
+      const found = /<aside[^>]*role="region"[\s\S]*?<\/aside>/.exec(html);
       expect(found, `no supersession notice in ${route}`).not.toBeNull();
       return found?.[0] ?? "";
     };
 
     const supersededNotice = noticeIn("docs/refund-policy");
+    expect(supersededNotice, "the notice is labelled for landmark navigation").toContain(
+      'aria-labelledby="ksor-superseded"',
+    );
     expect(supersededNotice).toContain("Superseded");
     expect(supersededNotice).toContain("replaced by");
     expect(supersededNotice).toContain("Refund policy v5");
@@ -440,6 +446,19 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const approved = visible("docs/refund-policy-v5");
     expect(approved).toMatch(/Owner Finance/);
     expect(approved).not.toContain("Status");
+    // Supersession runs BOTH ways: the withdrawn document names its successor
+    // above the title, and the successor names what it replaced — derived from
+    // the record, with no new frontmatter key (research/site-design.md F4).
+    expect(approved, "the successor names what it replaced").toMatch(/Replaces Refund policy/);
+    expect(
+      readFileSync(
+        path.join(project, "system", "site", "out", "docs", "refund-policy-v5", "index.html"),
+        "utf8",
+      ),
+      "…and links to it",
+    ).toMatch(/href="\/docs\/refund-policy\/?"/);
+    // The withdrawn document must NOT claim to replace anything here.
+    expect(superseded).not.toContain("Replaces");
 
     // Nothing inferred: the shipped example declares only title/status/order,
     // so it renders its status and NO other governance furniture — never an

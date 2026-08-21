@@ -40,15 +40,22 @@ export interface Successor {
 export function SupersededNotice({ successor }: { successor: Successor }): ReactElement {
   return (
     <aside
-      role="note"
-      // Tinted with the brand accent and ruled down the left edge, NOT filled
-      // with fd-muted: the shipped light theme defines --color-fd-muted and
+      // A landmark, not a note: GOV.UK ships this as role="region" with
+      // aria-labelledby so a screen-reader user can reach the most consequential
+      // thing on the page by landmark, rather than only meeting it in reading
+      // order. role="note" is announced but not navigable.
+      role="region"
+      aria-labelledby="ksor-superseded"
+      // Tinted and ruled down the left edge in the CAUTION role, never
+      // --color-fd-muted: the shipped light theme defines --color-fd-muted and
       // --color-fd-background as the same value, so the callout composited to
       // exactly the page and had no visible surface at all (measured in
       // Chromium, 2026-08-20). The one thing this notice cannot be is missable.
-      className="mb-8 rounded-lg border border-fd-primary/30 border-l-4 border-l-fd-primary bg-fd-primary/10 px-4 py-3 text-sm"
+      className="ksor-caution mb-8 rounded-lg border border-l-4 px-4 py-3 text-sm"
     >
-      <p className="font-medium text-fd-foreground">Superseded</p>
+      <p id="ksor-superseded" className="font-medium text-fd-foreground">
+        Superseded
+      </p>
       <p className="mt-1 text-fd-muted-foreground">
         This document has been replaced by{" "}
         {successor.href === null ? (
@@ -88,12 +95,15 @@ function Fact({
  */
 export function GovernanceMeta({
   governance,
+  replaces = [],
 }: {
   governance: DocumentGovernance;
+  /** Documents this one replaced — derived from the record, never declared. */
+  replaces?: readonly Successor[];
 }): ReactElement | null {
   const { owner, effective } = governance;
   const status = caveatStatus(governance.status);
-  if (status === null && owner === null && effective === null) return null;
+  if (status === null && owner === null && effective === null && replaces.length === 0) return null;
 
   return (
     <dl className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-fd-border pb-4 text-xs">
@@ -105,6 +115,31 @@ export function GovernanceMeta({
         </Fact>
       )}
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
+      {replaces.length === 0 ? null : (
+        // The other half of a supersession. The withdrawn document names its
+        // successor above the title; this is the successor naming what it
+        // replaced, so the history the record kept is reachable from the
+        // current document instead of only from the retired one.
+        <Fact label={replaces.length === 1 ? "Replaces" : "Replaces"}>
+          <>
+            {replaces.map((entry, index) => (
+              <span key={entry.href ?? `${index}-${entry.label}`}>
+                {index === 0 ? null : ", "}
+                {entry.href === null ? (
+                  entry.label
+                ) : (
+                  <Link
+                    href={entry.href}
+                    className="underline underline-offset-4 transition-colors hover:text-fd-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+                  >
+                    {entry.label}
+                  </Link>
+                )}
+              </span>
+            ))}
+          </>
+        </Fact>
+      )}
       {effective === null ? null : (
         <Fact label="Effective">
           {/* The machine attribute is stamped only for a real day on the
