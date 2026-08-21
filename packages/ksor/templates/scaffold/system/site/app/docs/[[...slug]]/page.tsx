@@ -66,8 +66,16 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
       {successor === null ? null : <SupersededNotice successor={successor} />}
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
-      {showGovernance ? <GovernanceMeta governance={governance} replaces={replaces} /> : null}
-      <DocsBody>
+      {showGovernance ? (
+        <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
+      ) : null}
+      {/* grow-0, against the shell's own `flex-1`: the article is a flex column
+          stretched to the viewport, so the body inflated from ~150px of text to
+          402px and pushed Sources and everything after it to the bottom of the
+          screen — a governance block floating 400px below the document it
+          describes (measured, 2026-08-21). Short documents now end where their
+          text ends. */}
+      <DocsBody style={{ flexGrow: 0 }}>
         <MDX
           components={getMDXComponents({
             // relative links between documents in knowledge/ resolve to
@@ -82,15 +90,6 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           for a leaf document, which renders nothing. */}
       <RecordIndex entries={entriesUnder(page.url)} heading="In this section" />
       {showGovernance ? <Provenance entries={governance.provenance} /> : null}
-      <p className="mt-8 text-xs text-fd-muted-foreground">
-        <a
-          href={markdownUrl}
-          className="underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-        >
-          This document as markdown
-        </a>{" "}
-        — the record's own bytes, for an agent or a prompt.
-      </p>
     </DocsPage>
   );
 }

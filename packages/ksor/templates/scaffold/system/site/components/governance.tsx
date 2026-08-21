@@ -96,17 +96,21 @@ function Fact({
 export function GovernanceMeta({
   governance,
   replaces = [],
+  markdownUrl,
 }: {
   governance: DocumentGovernance;
   /** Documents this one replaced — derived from the record, never declared. */
   replaces?: readonly Successor[];
+  /** The document's markdown twin, offered beside its governance. */
+  markdownUrl?: string;
 }): ReactElement | null {
   const { owner, effective } = governance;
   const status = caveatStatus(governance.status);
-  if (status === null && owner === null && effective === null && replaces.length === 0) return null;
+  const bare = status === null && owner === null && effective === null && replaces.length === 0;
+  if (bare && markdownUrl === undefined) return null;
 
   return (
-    <dl className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-fd-border pb-4 text-xs">
+    <dl className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1.5 border-b border-fd-border pb-4 text-[0.8125rem]">
       {status === null ? null : (
         <Fact label="Status">
           <span className="rounded border border-fd-border px-1.5 py-0.5 font-medium">
@@ -154,6 +158,17 @@ export function GovernanceMeta({
             <span>{effective}</span>
           )}
         </Fact>
+      )}
+      {markdownUrl === undefined ? null : (
+        // On the governance row, not as a footnote below the sources: it is
+        // how a reader hands this document to an agent, and it was previously
+        // the smallest text on the page, last (research/site-design.md F2).
+        <a
+          href={markdownUrl}
+          className="ms-auto inline-flex items-center gap-1 rounded border border-fd-border px-1.5 py-0.5 font-medium text-fd-muted-foreground transition-colors hover:border-fd-primary/40 hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+        >
+          Markdown
+        </a>
       )}
     </dl>
   );
