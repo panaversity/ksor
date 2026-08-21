@@ -60,6 +60,14 @@ export interface CalibrationReport {
   readonly paste: number;
   readonly paste_why: string;
   /**
+   * min(in-corpus scores) − max(out-of-corpus scores): how much room the floor
+   * has before a real question falls under it or a probe climbs over it.
+   * NEGATIVE when the two distributions overlap, which is exactly the
+   * `separable: false` case — carried as a number so the size of the overlap is
+   * legible, not just its existence.
+   */
+  readonly margin: number;
+  /**
    * Did the measurement separate in-corpus from out-of-corpus at all? When it
    * did NOT, there is no floor to paste — only a diagnosis. Carried on the
    * report so the renderer cannot hand out a number the maths just refused.
@@ -250,6 +258,29 @@ export const BUILT_IN_OOC = [
   "How do I write a resignation letter?",
 ] as const;
 
+/**
+ * The synthesized door's caveat — the DEFAULT door, and the one whose bias has
+ * a direction.
+ *
+ * Every synthesized query is generated FROM a passage and then scored against
+ * the corpus containing that passage, so it shares that passage's vocabulary in
+ * a way a reader's question does not. The in-corpus distribution is therefore
+ * shifted UP relative to real traffic, and the separation this door measures is
+ * an upper bound on the separation a record will actually see.
+ *
+ * Found live 2026-08-21: a real record calibrated through this door reported
+ * min in-corpus 0.682 against max OOC 0.580 and recommended 0.631. Questions
+ * the record demonstrably answers then scored 0.530-0.606 — every one of them
+ * below the recommended floor. Pasting it would have made the record abstain on
+ * questions whose answers it had just cited. Nothing in the block said the
+ * measurement had an easier question set than production would.
+ */
+export const SYNTHESIZED_CAVEAT: string =
+  "CAVEAT: synthesized queries are written FROM the passages they are then scored against, so " +
+  "they share vocabulary a reader's question will not. This door measures an UPPER BOUND on " +
+  "separation — treat the floor below as provisional until it has been checked against questions " +
+  "the corpus did not write (--queries-file), and re-run if real questions score under it.";
+
 export const QUERIES_FILE_CAVEAT: string =
   "CAVEAT: --queries-file floors are measured on human/gold-derived queries — section-weighted " +
   "eval targets, NOT per-node passage samples — so this floor's low tail is a different distribution " +
@@ -267,6 +298,18 @@ export const QUERIES_FILE_CAVEAT: string =
  * len(in_queries) / len(ooc_probes), since every query is scored or the run
  * dies (requireScore).
  */
+/**
+ * The gap between the two distributions' facing edges. Both classes are
+ * guaranteed non-empty by `pasteValue`, which throws first on a one-sided
+ * measurement; this is defensive only, and NaN would be a lie either way.
+ */
+function marginOf(points: readonly Scored[]): number {
+  const inScores = points.filter((p) => p.in_corpus).map((p) => p.score);
+  const oocScores = points.filter((p) => !p.in_corpus).map((p) => p.score);
+  if (!inScores.length || !oocScores.length) return 0;
+  return Math.min(...inScores) - Math.max(...oocScores);
+}
+
 export function buildReport(
   detail: readonly ScoredQuery[],
   meta: ReportMeta,
@@ -297,6 +340,9 @@ export function buildReport(
     target_precision: rec.target_precision,
     paste,
     paste_why,
+    // Rounded like every other printed statistic; the sign survives rounding,
+    // so a hair of overlap does not read as a clean zero.
+    margin: pythonRound(marginOf(points), 4),
     separable,
     target: rec.target,
     // "Never copy a calibrated constant between corpora. Recalibrate; record
@@ -330,10 +376,17 @@ export function renderReport(report: CalibrationReport): string {
   lines.push(
     `\nmeasured on generation ${gen} (${how}), model ${report.model}, door: ${report.door}`,
   );
-  if (report.door === "queries-file") {
-    lines.push(QUERIES_FILE_CAVEAT);
-  }
+  lines.push(report.door === "queries-file" ? QUERIES_FILE_CAVEAT : SYNTHESIZED_CAVEAT);
   lines.push(`AURC = ${pythonFloatRepr(report.aurc)}  (lower = better separation)`);
+  // The margin is the number that decides, and it was the one number the block
+  // never printed: `paste_why` names both ends, leaving the subtraction to the
+  // reader. The probe counts ride with it because a margin measured over six
+  // probes is not the same claim as the same margin over sixty — both were on
+  // the report already and neither reached the page.
+  lines.push(
+    `separation margin: ${pythonFormatFixed(report.margin, 3)} ` +
+      `(over ${report.in_corpus_queries} in-corpus / ${report.ooc_probes} out-of-corpus probes)`,
+  );
   if (z) {
     lines.push(
       `zero-FA floor (never refuse a real question): ${pythonFormatFixed(z.floor, 3)} -> coverage ${pythonFormatFixed(z.coverage, 3)}, ooc leak ${pythonFormatFixed(z.risk, 3)}`,

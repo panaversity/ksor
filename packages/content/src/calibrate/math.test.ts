@@ -125,6 +125,36 @@ describe("report assembly and the printed recommendation block", () => {
     }
   });
 
+  it("the SYNTHESIZED door carries its caveat — it is the DEFAULT and the biased one", () => {
+    // Found live 2026-08-21: an agent calibrated a real record through the
+    // synthesized door, was told "separable" with a floor of 0.631, and then
+    // measured real questions the corpus answers scoring 0.530-0.606. Pasting
+    // that floor would have made the record refuse questions whose answers it
+    // had just returned. A synthesized query is written FROM the passage it is
+    // scored against, so in-corpus scores are systematically higher than a
+    // human's phrasing of the same question — and the door with the bias was
+    // the only one with no caveat printed.
+    const cases = fixture.report_cases.filter((x) => x.meta.door === "synthesized");
+    expect(cases.length, "the fixture covers the synthesized door").toBeGreaterThan(0);
+    for (const c of cases) {
+      expect(c.rendered, c.name).toContain("CAVEAT");
+      expect(c.rendered, c.name).toMatch(/written FROM the passages/);
+    }
+  });
+
+  it("every report states the margin and the number of probes behind it", () => {
+    // paste_why names max-OOC and min-in-corpus; the SUBTRACTION is the number
+    // that decides, and a margin measured over six probes is not the same claim
+    // as the same margin over sixty. Both were on the report and neither was
+    // printed.
+    for (const c of fixture.report_cases) {
+      const line = c.rendered.split("\n").find((l) => l.startsWith("separation margin:"));
+      expect(line, `case ${c.name}`).toBeDefined();
+      expect(line, `case ${c.name}`).toContain(`${c.expected.in_corpus_queries} in-corpus`);
+      expect(line, `case ${c.name}`).toContain(`${c.expected.ooc_probes} out-of-corpus`);
+    }
+  });
+
   it("the ALT line reports the precision it was MEASURED at, never a constant", () => {
     // The oracle read a key its report never carried, so this line always said
     // 0.95 whatever was measured — a report describing a different measurement
