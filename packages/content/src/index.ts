@@ -124,3 +124,6 @@ export {
 export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 
 export { runContentCli } from "./commands.js";
+
+export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
+export { decideVisible, type AudienceModel as SiteAudienceModel } from "./lib/audience-rule.js";

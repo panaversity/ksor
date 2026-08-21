@@ -468,6 +468,25 @@ gateway` package, serve-by-spawn) is superseded._
     cheaper (a local pooler sidecar would), or if a measurement here shows the
     idle window costing more than it saves.
 
+18. **One rule, two surfaces, one table** (2026-08-21, from the visibility
+    leak's fourth recurrence). The site and the kernel enforce the SAME
+    visibility rule in two languages — TypeScript in the site's build, SQL in
+    the serving predicate — and it drifted four separate times while each
+    side's own tests stayed green, because each side was internally consistent
+    with itself. So the rule stops living in two heads: `AUDIENCE_CASES`
+    (`packages/content/src/lib/audience-conformance.ts`) IS the rule, as a
+    decision table; the SQL predicate is asserted against every row through
+    real Postgres, and the TypeScript half against the same rows.
+    The TypeScript rule itself is ONE canonical file
+    (`packages/content/src/lib/audience-rule.ts`), copied byte-identically into
+    the scaffold — the site cannot import the kernel, whose package carries pg
+    and the embedding providers, so the copy is asserted by a drift test rather
+    than trusted. A surface that drifts now fails on the ROW it broke.
+    Extends to any guarantee two surfaces must both honour; the next one is
+    takedown, which is already single-seam on the serving side. Reversed if the
+    site ever can import the rule directly, which would make the table a
+    convenience rather than a guard.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as
