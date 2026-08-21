@@ -32,6 +32,27 @@ export class InstanceParseError extends Error {
   }
 }
 
+/**
+ * A record that declares no `database:` block at all — the level-0 shape
+ * `ksor init` emits, and a legitimate state, not a typo.
+ *
+ * It carries the instance NAME because one caller needs to answer FOR such a
+ * record rather than refuse: `ksor takedown --export` runs inside `pnpm build`,
+ * and a level-0 project must be able to build. Everyone else catches
+ * `InstanceParseError` and refuses exactly as before (found live, round 4 of
+ * the #43 review: removing the scaffold's `|| true` made `pnpm build` fail on a
+ * freshly scaffolded record, because the refusal fires before the DSN is ever
+ * consulted).
+ */
+export class NoDatabaseDeclared extends InstanceParseError {
+  readonly instanceName: string;
+  constructor(instanceName: string, what: string, why: string, fix: string) {
+    super(what, why, fix);
+    this.name = "NoDatabaseDeclared";
+    this.instanceName = instanceName;
+  }
+}
+
 function unknownKey(key: string): never {
   throw new InstanceParseError(
     `instance.md declares an unknown top-level key: ${key}`,
@@ -286,7 +307,8 @@ export function parseInstanceText(text: string): ContentInstance {
     );
   }
   if (database === null) {
-    throw new InstanceParseError(
+    throw new NoDatabaseDeclared(
+      name,
       "instance.md declares no database: block",
       "the kernel serves from a Postgres corpus store; without database.dsn_env there is nothing to open",
       "add:\n  database:\n    dsn_env: KSOR_DB_URL\nand export that variable with the DSN",

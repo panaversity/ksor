@@ -6,6 +6,7 @@ export {
   parseInstanceText,
   parseFrontmatter,
   InstanceParseError,
+  NoDatabaseDeclared,
   SUPPORTED_FORMATS,
   type ContentInstance,
 } from "./instance.js";

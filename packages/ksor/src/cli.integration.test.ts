@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -139,5 +139,98 @@ describe("ksor CLI (built artifact)", () => {
     expect(result.stdout, "the dimension reaches the rendered vector column").toContain(
       "VECTOR(8)",
     );
+  });
+});
+
+/**
+ * `ksor takedown --export` is the ONE takedown mode that runs inside
+ * `pnpm build`, so its failure modes decide whether a withdrawn document gets
+ * published. The scaffold used to wrap it in `|| true`, which turned a real
+ * database outage into a silent empty manifest; removing that wrapper then
+ * broke `pnpm build` on a level-0 record, because "declares no database" is a
+ * legitimate state that refuses during PARSING. Both were found live (rounds 3
+ * and 4 of the #43 review), so all four shapes are pinned here.
+ */
+describe("takedown --export: answers for a record with no database, fails loudly for a broken one", () => {
+  const write = (dir: string, database: string): string => {
+    const file = path.join(dir, "instance.md");
+    writeFileSync(
+      file,
+      `---\nformat: 1\nname: acme-export\n${database}---\n\n# Record\n\nBody.\n`,
+      "utf8",
+    );
+    return file;
+  };
+  const DECLARED = "database:\n  dsn_env: KSOR_EXPORT_TEST_DSN\n";
+
+  const exportTo = (dir: string, instance: string, env: Record<string, string>) => {
+    const out = path.join(dir, ".ksor-denylist.json");
+    const result = spawnSync(
+      process.execPath,
+      [distCli, "takedown", "--instance", instance, "--export", out],
+      { encoding: "utf8", env: { ...process.env, ...env } },
+    );
+    return { result, out };
+  };
+
+  it("a level-0 record (no database: block) exports source=none and exits 0", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+    try {
+      const { result, out } = exportTo(dir, write(dir, ""), {});
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      const manifest = JSON.parse(readFileSync(out, "utf8"));
+      expect(manifest.source, "a level-0 record has no database to ask").toBe("none");
+      expect(manifest.denied).toEqual([]);
+      expect(manifest.corpus_id, "the corpus id survives the refusal").toBe("acme-export");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a declared database whose env var is unset also exports source=none", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+    try {
+      const { result, out } = exportTo(dir, write(dir, DECLARED), {
+        KSOR_EXPORT_TEST_DSN: "",
+      });
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(JSON.parse(readFileSync(out, "utf8")).source).toBe("none");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("an UNREACHABLE database exits non-zero — the case `|| true` used to swallow", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+    try {
+      const { result } = exportTo(dir, write(dir, DECLARED), {
+        KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
+      });
+      expect(result.status, "a build must halt, not publish an empty denylist").not.toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a FAILED export leaves NO manifest, so the site fails closed instead of trusting a stale one", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+    try {
+      const instance = write(dir, DECLARED);
+      // First, a successful export writes one.
+      expect(exportTo(dir, instance, { KSOR_EXPORT_TEST_DSN: "" }).result.status).toBe(0);
+      const out = path.join(dir, ".ksor-denylist.json");
+      expect(existsSync(out)).toBe(true);
+      // Then the database breaks. The stale answer must not survive.
+      const { result } = exportTo(dir, instance, {
+        KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
+      });
+      expect(result.status).not.toBe(0);
+      expect(
+        existsSync(out),
+        "a stale manifest looks authoritative and can predate the takedown being published",
+      ).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

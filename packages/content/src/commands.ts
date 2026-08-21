@@ -14,12 +14,17 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
 import { contentPool, ContentStoreError, INGEST_ROLE } from "./db.js";
-import { parseInstance, InstanceParseError, type ContentInstance } from "./instance.js";
+import {
+  parseInstance,
+  InstanceParseError,
+  NoDatabaseDeclared,
+  type ContentInstance,
+} from "./instance.js";
 import { applySchema, renderSchema, schemaVersion } from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
@@ -592,27 +597,61 @@ async function takedownCommand(args: string[]): Promise<number> {
       actor: { type: "string" },
     },
   });
+  // A failed export must leave NO manifest, not a stale one. The site fails
+  // CLOSED on a missing manifest (it cannot tell "nothing denied" from "nobody
+  // asked") and fails OPEN on a stale one, which looks authoritative and can
+  // predate the very takedown being published. So the target is removed BEFORE
+  // the attempt: every path that does not write a fresh answer leaves none.
+  // The scaffold used to do this in the npm script; a governance guarantee does
+  // not belong in a shell string the adopter owns and can edit (found live,
+  // round 4 of the #43 review — an unreachable database exited 3 and left the
+  // previous run's manifest in place).
+  if (values.export !== undefined) rmSync(values.export, { force: true });
+
+  // --export runs inside `pnpm build`, so it is the ONE takedown mode that must
+  // ANSWER for a record with no database instead of refusing — a level-0
+  // project has to be able to build. It writes `source: "none"`, the shape the
+  // site reads as "no database declared, nothing can be denied", and exits 0.
+  //
+  // Two no-database shapes reach here and BOTH are legitimate: the level-0
+  // record that declares no `database:` block (which refuses during PARSING,
+  // before any DSN is consulted — found live in round 4, after removing the
+  // scaffold's `|| true` made `pnpm build` fail on a freshly scaffolded record),
+  // and a record that declares one whose env var is unset.
+  //
+  // Everything else — database configured and unreachable, permission denied,
+  // a malformed instance.md — still exits non-zero. That is precisely what the
+  // `|| true` used to swallow: the export "succeeded", wrote nothing, and the
+  // site build then refused with a remedy pointing back at the command that had
+  // just silently failed (round-3 review of #43).
+  const exportNothing = (corpusId: string, why: string): number => {
+    const manifest = denylistManifest(corpusId, [], new Date(), "none");
+    writeFileSync(values.export!, JSON.stringify(manifest, null, 2) + "\n");
+    process.stdout.write(
+      `takedown: ${why}, so this record has no database to ask. ` +
+        `Wrote source="none" (nothing denied) to ${values.export}.\n`,
+    );
+    return 0;
+  };
+
+  if (values.export !== undefined && values.instance !== undefined) {
+    try {
+      parseInstance(values.instance);
+    } catch (exc) {
+      if (exc instanceof NoDatabaseDeclared) {
+        return exportNothing(exc.instanceName, "instance.md declares no database: block");
+      }
+      // Any other parse failure is a real refusal — fall through to loadInstance,
+      // which reports it with its remedy.
+    }
+  }
+
   const loaded = loadInstance(values.instance);
   if (typeof loaded === "number") return loaded;
   const instance = loaded;
 
-  // --export runs inside `pnpm build`, so it is the ONE takedown mode that has
-  // to answer honestly on a record with no database rather than refuse. It
-  // writes `source: "none"` — the shape the site reads as "no database
-  // declared, nothing can be denied" — and exits 0. Every OTHER failure
-  // (database configured but unreachable, permission denied) still exits
-  // non-zero, which is what the scaffold's `|| true` used to swallow: the
-  // export "succeeded", wrote nothing, and the site build then refused with a
-  // remedy that pointed back at the command that had just silently failed
-  // (round-3 review of #43).
   if (values.export !== undefined && (process.env[instance.dsnEnv] ?? "") === "") {
-    const manifest = denylistManifest(instance.corpusId, [], new Date(), "none");
-    writeFileSync(values.export, JSON.stringify(manifest, null, 2) + "\n");
-    process.stdout.write(
-      `takedown: ${instance.dsnEnv} is unset, so this record has no database to ask. ` +
-        `Wrote source="none" (nothing denied) to ${values.export}.\n`,
-    );
-    return 0;
+    return exportNothing(instance.corpusId, `${instance.dsnEnv} is unset`);
   }
 
   const dsn = resolveDsn(instance);
