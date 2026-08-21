@@ -24,10 +24,31 @@ describe("renderSchema against the shipped DDL", () => {
     expect(/vector\(1536\)/i.test(rendered)).toBe(false);
   });
 
-  it("refuses out-of-range dimensions with the ceiling in the message", () => {
+  it("refuses out-of-range dimensions, and scopes the ceiling to the shape we index", () => {
     expect(() => renderSchema(0)).toThrowError(/1\.\.2000/);
-    expect(() => renderSchema(2001)).toThrowError(/HNSW ceiling/);
     expect(() => renderSchema(1.5)).toThrowError(/integer/);
+
+    const message = (() => {
+      try {
+        renderSchema(2001);
+        return "";
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    })();
+    expect(message).toMatch(/1\.\.2000/);
+    // The refusal must say WHICH shape 2000 applies to. It used to read
+    // "(pgvector vector + HNSW ceiling)", which reads as pgvector's own limit —
+    // and pgvector indexes a `halfvec` to 4000 via an expression index on the
+    // cast, verified live against a real database (2026-08-21, issue #49). An
+    // adopter reading the old wording could conclude their model was
+    // unusable over a wall that is not one.
+    expect(message, `the ceiling must be scoped to the vector column: ${message}`).toMatch(
+      /vector column/i,
+    );
+    expect(message, "and must not present 2000 as pgvector's own ceiling").not.toMatch(
+      /pgvector vector \+ HNSW ceiling/,
+    );
   });
 
   it("refuses a drifted template, naming the counts it saw", () => {

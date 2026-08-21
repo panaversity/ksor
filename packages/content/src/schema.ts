@@ -14,7 +14,27 @@ import type pg from "pg";
 import { EMBED_DIM } from "./config.js";
 import { ContentStoreError } from "./db.js";
 
-/** pgvector vector + HNSW ceiling. */
+/**
+ * The largest embedding dimension this schema will render.
+ *
+ * It is the ceiling for the shape we USE, not pgvector's ceiling: `schema.sql`
+ * declares two `VECTOR(dim)` columns and indexes one of them directly, and
+ * pgvector's HNSW and IVFFlat take a `vector` to 2000. They take a `halfvec` to
+ * **4000**, reachable by indexing an expression — `hnsw ((embedding::halfvec(N))
+ * halfvec_cosine_ops)` — which we do not do, so 2000 binds here.
+ *
+ * Said precisely because the old wording ("pgvector vector + HNSW ceiling")
+ * read as pgvector's own limit and sent a reader off to change providers over a
+ * wall that is not one (verified live against a real database, 2026-08-21:
+ * a halfvec(3072) expression index plans an Index Scan).
+ *
+ * Raising it is a decision, not a constant: every query site would have to use
+ * the same cast as the index or fall silently back to a sequential scan, and
+ * the halfvec arm's float16 rounding lands on the score the abstention gate
+ * reads. Recorded in issue #49, along with why 1536 stays — Google's own MTEB
+ * table has 1536 at 68.17 against 2048's 68.16, so there is no quality
+ * gradient to climb up there.
+ */
 export const EMBED_DIM_MAX = 2000;
 
 /** The schema version schema.sql declares — parsed from the DDL so code and
@@ -157,7 +177,7 @@ export function renderSchemaText(
 ): string {
   if (!Number.isInteger(dim) || dim < 1 || dim > EMBED_DIM_MAX) {
     throw new Error(
-      `dim must be an integer in 1..${EMBED_DIM_MAX} (pgvector vector + HNSW ceiling), got ${JSON.stringify(dim)}`,
+      `dim must be an integer in 1..${EMBED_DIM_MAX} — this schema indexes a vector column directly, and pgvector's HNSW takes a vector to 2000 — got ${JSON.stringify(dim)}`,
     );
   }
   verifyTemplate(text, EMBED_DIM);

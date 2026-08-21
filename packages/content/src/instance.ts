@@ -22,6 +22,8 @@ import { z } from "zod";
 import { EMBED_DIM, EMBED_MODEL } from "./config.js";
 import type { AbstainConfig } from "./lib/abstain.js";
 
+/** Mirrors `schema.ts`'s ceiling, so a bad `dim:` is refused when instance.md is
+ *  PARSED rather than when the DDL is rendered. The why lives there. */
 export const EMBED_DIM_MAX = 2000;
 export const SUPPORTED_FORMATS: readonly number[] = [1];
 

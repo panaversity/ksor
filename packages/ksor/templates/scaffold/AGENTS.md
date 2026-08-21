@@ -65,8 +65,12 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    `provider: gemini`, `model: gemini-embedding-001`, `dim: 1536`; write it out
    only to pin the space explicitly or to change it — and note that model and
    dim are the PERSISTED identity of the embedding space, so changing either
-   later means re-embedding the whole corpus. Keep `dim` at or below 2000: the
-   pgvector HNSW index refuses more, and `gemini-embedding-001` can emit 3072.
+   later means re-embedding the whole corpus. Keep `dim` at or below 2000 — the
+   schema indexes a `vector` column directly and pgvector's HNSW takes a
+   `vector` to 2000. `gemini-embedding-001` emits 3072 by default, so ksor asks
+   it for 1536; per Google's own MTEB table that costs nothing measurable
+   (1536 scores 68.17, 2048 scores 68.16), and 768 costs 0.18 if you want the
+   storage back.
 
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
