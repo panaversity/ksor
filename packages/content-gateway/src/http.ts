@@ -130,6 +130,16 @@ export function resolveSecurity(bind: { host: string; port: number }): Security 
 
 export async function runHttp(composition: Composition): Promise<ServerType> {
   const auth: Auth = buildAuth(process.env);
+  // Say where the signing keys come from, at BOOT. Appending one vendor's path
+  // to KSOR_SSO_URL meant every other AS failed the fetch — classified
+  // transient, so the door came up clean and 503'd each request naming
+  // nothing. Discovery is memoized, so this is the same resolution the first
+  // verification uses (issue #26).
+  if (auth.mode === "public") {
+    const keys = await auth.jwks();
+    console.error(`auth: signing keys via ${keys.source} — ${keys.url}`);
+    if (keys.advisory !== null) console.error(keys.advisory);
+  }
   // RFC 9728 / MCP auth: WWW-Authenticate's `resource_metadata` must be the URL
   // of the metadata DOCUMENT (served at /.well-known/oauth-protected-resource/mcp
   // below), NOT the resource identifier — a client that follows the resource URL
