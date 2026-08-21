@@ -3,8 +3,8 @@ import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import type { Node, Root } from "fumadocs-core/page-tree";
 
-import { orderValue } from "./order-rule.js";
-import { sortNodes } from "./page-order.js";
+import { orderValue } from "./order-rule";
+import { sortNodes } from "./page-order";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({

@@ -13,7 +13,7 @@
  * one file serve both the real page tree and the table's fixtures.
  */
 
-import { compareSiblings, UNORDERED } from "./order-rule.js";
+import { compareSiblings, UNORDERED } from "./order-rule";
 
 /** The members of a page-tree node that reading order depends on. */
 export interface OrderNode {
