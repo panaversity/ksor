@@ -30,18 +30,26 @@ const COPY = path.resolve(
   "audience-rule.ts",
 );
 
+/**
+ * Line endings are NORMALIZED before comparing, because they are a property of
+ * the checkout rather than of the rule. `.gitattributes` pins
+ * `packages/ksor/templates/**` to LF — the templates are the published bytes —
+ * while the kernel's copy takes the platform default, so on Windows the two
+ * differ by \r on every line and nothing about the rule has changed. Caught by
+ * CI's Windows job on the first run (2026-08-21).
+ */
+const ruleText = (file: string): string => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+
 describe("the audience rule is one rule", () => {
   it("the scaffold's copy matches the kernel's canonical file exactly", () => {
-    const canonical = readFileSync(CANONICAL, "utf8");
-    const copy = readFileSync(COPY, "utf8");
     expect(
-      copy,
+      ruleText(COPY),
       "the site's copy has drifted from the kernel's — copy packages/content/src/lib/audience-rule.ts over it",
-    ).toBe(canonical);
+    ).toBe(ruleText(CANONICAL));
   });
 
   it("and it is genuinely a leaf — no imports, so importing it has no side effects", () => {
-    const canonical = readFileSync(CANONICAL, "utf8");
+    const canonical = ruleText(CANONICAL);
     expect(
       /^import\s/m.test(canonical),
       "an import here would make the rule untestable in isolation, which is why it was extracted",
