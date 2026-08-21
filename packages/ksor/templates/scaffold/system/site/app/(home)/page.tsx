@@ -4,7 +4,7 @@ import Link from "next/link";
 // asset. Replace it with your own and the tab icon changes with the page.
 import mark from "@/app/icon.png";
 import { FooterMark } from "@/components/footer-mark";
-import { appName, appTitle } from "@/lib/shared";
+import { appName, appPurpose, appTitle } from "@/lib/shared";
 import { basePath, entriesUnder, getSortedPages } from "@/lib/source";
 import { RecordIndex } from "@/components/record-index";
 
@@ -36,6 +36,13 @@ export default function HomePage() {
         <h1 className="text-4xl font-semibold tracking-tight text-balance break-words sm:text-5xl">
           {appTitle}
         </h1>
+        {/* The record's own words — instance.md's first paragraph, which is
+            also what `ksor serve` gives the MCP server as its instructions. The
+            framework's marketing line used to sit here, which put ksor's voice
+            above somebody else's knowledge (research/site-design.md F7). */}
+        {appPurpose === null ? null : (
+          <p className="mt-3 text-lg text-fd-muted-foreground text-pretty">{appPurpose}</p>
+        )}
 
         {first ? (
           <div className="mt-8 flex flex-col gap-4">

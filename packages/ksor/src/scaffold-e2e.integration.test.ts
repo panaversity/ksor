@@ -383,6 +383,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // …and the framework's own marketing copy is gone from the adopter's page:
     // critical rule 1 says the site never contains authored content.
     expect(homeHtml).not.toContain("Knowledge you can govern");
+    // …and the record's own authority sentence stands in its place: the first
+    // paragraph of instance.md, which is also what `ksor serve` hands the MCP
+    // server as its instructions, so both surfaces open on one sentence.
+    expect(homeHtml, "the home page publishes the record's own purpose").toContain(
+      "authoritative for",
+    );
 
     // The AGENT surface carries the same governance, or the record has two
     // truths (research/site-design.md F1): before this, llms.txt listed a

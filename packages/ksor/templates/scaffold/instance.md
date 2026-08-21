@@ -8,13 +8,14 @@ ksor:
 
 # Knowledge System of Record
 
+This Knowledge System of Record is authoritative for — fill this in. It is the
+single most important sentence in the project, it is the first thing the site
+publishes, and it is what tells an agent where this record's authority ends.
+
 The heading above is this record's **display title** — the human name every
 page leads with. The intake interview replaces it with the real one
 ("Acme Operations Handbook"); the machine identity stays `KSOR-STAMP-NAME`
 in the frontmatter, and that is what agents and citations use.
-
-This Knowledge System of Record is authoritative for — _fill this in; it is
-the single most important sentence in the project._
 
 Everything below this frontmatter is the identity of this instance: what the
 corpus covers, who it serves, and how strictly it should decline questions it

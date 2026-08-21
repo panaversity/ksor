@@ -67,3 +67,32 @@ export const appTitle: string = readInstanceTitle();
  * start, like the identity above — restart `pnpm dev` after changing it.
  */
 export const showGovernance: boolean = governanceVisible(instanceFrontmatter());
+
+/**
+ * The record's own statement of what it is authoritative for: the first
+ * paragraph of instance.md's body, below the display title.
+ *
+ * The home page used to carry a line of ksor's marketing copy instead — the
+ * framework's voice above somebody else's knowledge, which the project's own
+ * critical rule 1 forbids. This is the record speaking for itself, and it is
+ * the same prose `ksor serve` hands the MCP server as its instructions, so the
+ * two surfaces open with one sentence.
+ *
+ * Null when the body says nothing yet; the page then renders nothing rather
+ * than inventing a purpose.
+ */
+function readInstancePurpose(): string | null {
+  const text = readFileSync(findInstance(process.cwd()), "utf8");
+  const body = text.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
+  const afterTitle = body.replace(/^#[ \t]+.*$/m, "");
+  const paragraph = afterTitle
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .find((block) => block !== "");
+  if (paragraph === undefined) return null;
+  // One paragraph, as one line: the body wraps at 80 columns for the file's
+  // sake, and those newlines are not sentence breaks.
+  return paragraph.replaceAll(/\s*\n\s*/g, " ").trim();
+}
+
+export const appPurpose: string | null = readInstancePurpose();
