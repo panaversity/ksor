@@ -123,9 +123,12 @@ function handoff(io: InitIo, name: string, targetWasDot: boolean): void {
       enter +
       "  pnpm install\n" +
       "  pnpm dev        # the site, live at http://localhost:3000\n" +
-      "  pnpm provision  # once, for the agent surface: uncomment `database:` in instance.md,\n" +
-      "                  #   copy .env.example to .env, then this applies the schema\n" +
-      "  pnpm serve      # the MCP server for agents\n" +
+      "\n" +
+      "Then, for the agent surface (needs Postgres and a provider key):\n" +
+      "  pnpm provision  # once: uncomment `database:` in instance.md, copy\n" +
+      "                  #   .env.example to .env, then apply the schema\n" +
+      "  pnpm refresh    # PUBLISH the record — ingest knowledge/ into a generation\n" +
+      "  pnpm serve      # the MCP server, over what you just published\n" +
       "\n" +
       "no pnpm? run: npm install -g pnpm — or `corepack enable pnpm` on Nodes that bundle corepack\n" +
       "\n" +

@@ -29,14 +29,20 @@ The result is not merely a documentation site, knowledge base, vector database, 
 >
 > **`ksor init` is implemented**: one command scaffolds a complete governed knowledge
 > project — the record, a working site, and the agent kit. `ksor serve` runs the
-> MCP server over your built record (plus `ingest`/`schema`/`calibrate`/`gc`) —
-> the climbed rung, needing Postgres and a provider key. Only `dev` and `build`
+> MCP server over your published record, alongside the write plane that keeps it
+> current (`ksor schema`, `ksor grant`, `ksor ingest`, `ksor takedown`,
+> `ksor calibrate`, `ksor gc`) — the climbed rung, needing Postgres and a
+> provider key. Only `dev` and `build`
 > remain designed, not implemented; running them prints an honest notice and
 > exits 2. Inside a scaffolded project, `pnpm dev` and `pnpm build` work today
 > without them. See [`docs/status.md`](docs/status.md) for the exact released
 > version.
 
 ---
+
+## Start here
+
+Node 24 or newer and pnpm (`npm install -g pnpm`). Then:
 
 ```bash
 npx @panaversity/ksor init my-knowledge-sor
@@ -46,8 +52,32 @@ pnpm install
 pnpm dev
 ```
 
-The site serves your governed record at `http://localhost:3000`, hot-reloading
-as you edit `knowledge/`.
+Your governed record is now live at `http://localhost:3000`, hot-reloading as
+you edit `knowledge/`. What you have is a real project — the record, a working
+site, adopter CI, and the rules and skills a coding agent needs — and it is
+yours outright: nothing is downloaded at build time and nothing phones home.
+
+**Then open the project in the coding agent you already use and tell it what
+this record is for.** That is the interface. The scaffold ships `AGENTS.md`
+(`CLAUDE.md` is a symlink to it) carrying the working rules, and an intake
+interview the agent runs with you to replace the placeholder identity in
+`instance.md` with your real one. You write knowledge in plain Markdown, in any
+language you write in; the agent handles the governance ladder around it.
+
+Two commands are worth knowing on day one:
+
+```bash
+pnpm check    # the format checker — run before handing off any knowledge change
+pnpm build    # a fully static site into system/site/out/, deployable anywhere
+```
+
+**When you want agents to query it**, climb one rung — that needs Postgres and
+an embedding key, and it is three deliberate steps: `pnpm provision` once, then
+`pnpm refresh` to publish, then `pnpm serve`. See
+[Serve to AI Agents](#serve-to-ai-agents) below for the whole path.
+
+Everything after this section is *why* it is built this way. If you would rather
+read the reference, jump to [Requirements](#requirements).
 
 ---
 
@@ -533,15 +563,29 @@ database:
   dsn_env: KSOR_DB_URL
 ```
 
-Then fill in the environment and bring it up:
+Then fill in the environment and bring it up — three steps, deliberately
+separate:
 
 ```bash
-cp .env.example .env   # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
-pnpm serve             # schema → grant → ingest → serve
+cp .env.example .env   # KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
+
+pnpm provision         # ONCE: apply the schema, authorize this tenant to ingest
+pnpm refresh           # PUBLISH: ingest knowledge/ into a generation, collect old ones
+pnpm serve             # SERVE: the MCP server, over what you just published
 ```
+
+They are separate on purpose. Applying DDL and granting ingest are acts an
+operator performs once; **publishing is the act a system of record exists to
+make deliberate**, not a side effect of starting a server. Re-run `pnpm refresh`
+whenever you have edited `knowledge/` — everything is re-runnable, and an
+unchanged corpus costs nothing.
 
 That serves MCP at `http://127.0.0.1:8080/mcp`, announcing its posture as it
 boots (`auth: disabled, abstain gate: OFF (no floor)`).
+
+Skip `pnpm refresh` and the server comes up with nothing published: every search
+answers `ok: false, reason: "unpublished"` — the record is empty, which is a
+different answer from "not in the record".
 
 The agent projection exposes the governed KSoR through MCP: `search`, `outline`,
 and `read` over stateless Streamable HTTP, with cited passages, snapshot

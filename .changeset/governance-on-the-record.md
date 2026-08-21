@@ -103,6 +103,15 @@ contains. Searches now return a third outcome, `reason: "unavailable"` with
 `degraded_reason` (which had no description at all, and named a keyword search
 that never ran).
 
+**A new user is told how to start, and the instructions work.** The README's
+only description of how to reach the agent surface was `pnpm serve # schema →
+grant → ingest → serve` — a chain that no longer exists, so following it
+literally serves an empty record. It is now the three deliberate steps
+(`provision`, `refresh`, `serve`) with the reason they are separate, and
+`ksor init`'s own handoff names the publish step it was skipping. The README
+opens with a Start here section that gets you to a running site and then says
+what to do next — open the project in your coding agent, which is the interface.
+
 **`KSOR_DB_CONNECT_PER_REQUEST=1` closes each connection when its call
 finishes.** Off by default, because the default measures better: a quiet server
 already holds zero connections, and inside a burst the handshake is paid once
