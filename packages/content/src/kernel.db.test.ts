@@ -304,6 +304,35 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       expect(kwServed.hits[0]?.slug).toBe("yak");
     }
 
+    // …and the case that was NOT covered, which is the common one. The test
+    // above picks a query the keyword arm can answer, so the degrade serves
+    // real hits. Ask the way a person actually asks and that arm returns
+    // NOTHING — `websearch_to_tsquery` ANDs its terms, so one word absent from
+    // the corpus empties the result (measured 12/12 on natural questions,
+    // 2026-08-21). The empty result then reached `keywordAbstains`, which
+    // abstains on no rows, and the envelope reported "abstained".
+    //
+    // So during any provider outage an UNCALIBRATED record — the default state
+    // of every fresh scaffold — told every caller it covered nothing, while the
+    // tool description instructs the agent to state that as fact and never fall
+    // back. The vector arm never ran; an empty result says nothing about
+    // coverage. Found live against published 0.0.12 with an invalid key.
+    const noKeywordMatch = await search(uncalibrated, "what does the flurbish protocol require", 5);
+    expect(
+      noKeywordMatch.ok,
+      "an outage with nothing to serve must not be a success envelope",
+    ).toBe(false);
+    if (!noKeywordMatch.ok) {
+      expect(
+        noKeywordMatch.reason,
+        `an outage is not an abstention, calibrated or not: ${JSON.stringify(noKeywordMatch)}`,
+      ).toBe("unavailable");
+      expect(
+        noKeywordMatch.abstained,
+        "and must never claim the record was checked and found wanting",
+      ).toBe(false);
+    }
+
     // The §7 rows exist for every act above (admin read bypasses RLS).
     const rows = await pool.query(
       "SELECT action, count(*)::int AS n FROM retrieval_log GROUP BY action",

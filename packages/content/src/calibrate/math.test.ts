@@ -142,6 +142,26 @@ describe("report assembly and the printed recommendation block", () => {
     }
   });
 
+  it("says so whenever the OUT-OF-CORPUS probes came from the binary", () => {
+    // A shipped probe set cannot be scope-adjacent — adjacency depends on a
+    // corpus it has never seen — so a separability verdict resting on it is
+    // measuring the easy half. Measured on one record, changing ONLY the probe
+    // set: built-ins said "separable, margin 0.072" and recommended a floor;
+    // eight scope-adjacent near-misses said "NOT separable, margin -0.030", and
+    // that floor then answered six of the eight live, with citations.
+    const cases = fixture.report_cases.filter((c) => c.expected.ooc_source === "built-in");
+    expect(cases.length, "the fixture covers the built-in probe set").toBeGreaterThan(0);
+    for (const c of cases) {
+      expect(c.rendered, c.name).toContain("BUILT-IN set");
+      expect(c.rendered, "and names the way out").toContain("--ooc-file");
+    }
+    // On BOTH branches — the advice used to appear only after weak probes had
+    // already failed to bless a floor, which is when it is least needed.
+    const separable = cases.filter((c) => c.expected.separable);
+    expect(separable.length, "including a SEPARABLE case").toBeGreaterThan(0);
+    for (const c of separable) expect(c.rendered).toContain("OVER-estimate");
+  });
+
   it("every report states the margin and the number of probes behind it", () => {
     // paste_why names max-OOC and min-in-corpus; the SUBTRACTION is the number
     // that decides, and a margin measured over six probes is not the same claim

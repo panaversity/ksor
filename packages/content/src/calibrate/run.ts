@@ -223,6 +223,7 @@ export async function runCalibration(
     inQueries = normalizeQueries(synthesized);
   }
 
+  const oocSource = options.oocProbes === undefined ? "built-in" : "provided";
   const ooc = normalizeQueries(options.oocProbes ?? BUILT_IN_OOC);
   const detail = [
     ...(await scoreQueries(pool, scope, options.provider, inQueries, true)),
@@ -238,6 +239,7 @@ export async function runCalibration(
       model: options.provider.modelId,
       dim: options.provider.dim,
       door,
+      oocSource,
     },
     options.targetPrecision ?? 0.95,
   );

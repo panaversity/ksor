@@ -405,13 +405,25 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
 
     // "The record does not cover this" and "I could not look properly" are
     // DIFFERENT answers, and only the first is an abstention. When the embed
-    // provider is down on a calibrated record the floor cannot be evaluated at
-    // all, so withholding is right — but reporting it as an abstention told the
-    // agent the record does not cover a question it does cover, for the whole
-    // outage, and the tool description instructs the agent to state exactly
-    // that and not fall back (round-6 review of #43, reproduced live with a
-    // bogus provider key against a corpus that contains the answer).
-    const unavailable = embedFailed && inst.abstain.vectorFloor !== null;
+    // provider is down the vector arm did not run at all, so an empty result is
+    // not evidence about coverage — it is evidence that we could not look.
+    //
+    // This was first fixed for CALIBRATED records only, on the reasoning that a
+    // declared floor cannot be evaluated without an embedding (round-6 review of
+    // #43). The condition was the bug: an UNCALIBRATED record is the default
+    // state of every fresh scaffold, and there the emptiness comes from
+    // `keywordAbstains`, which abstains whenever the keyword arm returns no
+    // rows — and that arm returns nothing for almost every natural-language
+    // question, because `websearch_to_tsquery` ANDs its terms (measured 12/12
+    // on real questions, 2026-08-21). So during any provider outage an
+    // uncalibrated record told every caller it covered nothing, while the tool
+    // description instructs the agent to state exactly that and never fall back
+    // on its own knowledge. Found live against the published 0.0.12 with an
+    // invalid key — the same state a CI key rejection produced that morning.
+    //
+    // The floor is irrelevant to the question being asked here. What matters is
+    // whether we were able to look.
+    const unavailable = embedFailed;
     const reason = unavailable ? "unavailable" : unpublished ? "unpublished" : "abstained";
     return {
       ok: false,
