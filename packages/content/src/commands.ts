@@ -494,6 +494,34 @@ async function ingestCommand(args: string[]): Promise<number> {
     `ingest: generation ${report.generation} — ${report.nodes} nodes, ${report.chunks} chunks; ` +
       `embedded ${report.embedded}, carried ${report.carried}, failed ${report.failed}\n`,
   );
+  // SAY what will not be found. A chunk shorter than the navigation threshold is
+  // stored, embedded and readable — and excluded from every retrieval arm. The
+  // rule is there to keep link lists out of search and it is length-only, so
+  // short SUBSTANTIVE paragraphs are caught by it too: a real handbook measured
+  // 10 of 16 chunks unsearchable and one whole document that `read` and
+  // `outline` return but `search` can never find, while this line reported a
+  // cheerful "16 chunks; embedded 16" (issue #55).
+  //
+  // Not a refusal — a short record can be perfectly healthy, and the threshold
+  // is not yet decided. But "honest absence, never silent weakness" applies to
+  // the act of publishing as much as to answering, and an adopter should not
+  // need SQL to learn that most of their record cannot be found.
+  if (report.unsearchable > 0) {
+    const pct = Math.round((report.unsearchable / Math.max(report.chunks, 1)) * 100);
+    process.stdout.write(
+      `  not searchable: ${report.unsearchable} of ${report.chunks} chunk(s) (${pct}%) are shorter ` +
+        `than the navigation threshold — stored and readable, but no search returns them\n`,
+    );
+    if (report.unsearchableSources.length > 0) {
+      const named = report.unsearchableSources.slice(0, 10).join(", ");
+      const more =
+        report.unsearchableSources.length - Math.min(10, report.unsearchableSources.length);
+      process.stdout.write(
+        `  FOUND ONLY BY NAME: ${named}${more > 0 ? `, and ${more} more` : ""} — ` +
+          "no searchable chunk at all; lengthen these sections or read them by slug\n",
+      );
+    }
+  }
   if (report.refusal !== null) return fail(REFUSED, report.refusal);
 
   // The act that CREATES the record must refuse where serving it would.
