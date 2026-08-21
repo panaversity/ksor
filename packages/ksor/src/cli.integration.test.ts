@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -217,6 +217,66 @@ describe("takedown --export: answers for a record with no database, fails loudly
         KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
       });
       expect(result.status, "a build must halt, not publish an empty denylist").not.toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when the project cannot CONSUME the manifest — the upgrade path", () => {
+    // A scaffold is adopter-owned (decision 4), so upgrading the CLI does not
+    // touch their system/site or their package.json. A project scaffolded
+    // before the manifest existed has neither the build step that exports it
+    // nor the staging code that reads it — so a takedown was imposed, the
+    // CLI's own remedy was followed exactly, the site rebuilt, and the
+    // withdrawn document was still in out/docs/ and llms.txt while the MCP
+    // door on the same database refused it (round-7 review of #43).
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+    try {
+      const instance = write(dir, "");
+      writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({ scripts: { build: "pnpm -C system/site build" } }),
+        "utf8",
+      );
+      const libDir = path.join(dir, "system", "site", "lib");
+      mkdirSync(libDir, { recursive: true });
+      writeFileSync(path.join(libDir, "stage-knowledge.ts"), "// no denylist read\n", "utf8");
+
+      const { result } = exportTo(dir, instance, {});
+      expect(result.status, "the export itself still succeeds").toBe(0);
+      expect(result.stderr, "the build never runs the export").toContain("package.json never runs");
+      expect(result.stderr, "and the site would not read it anyway").toContain("does not read");
+      // The warning has to be actionable, not just alarming.
+      expect(result.stderr).toContain('"export-denylist": "ksor takedown');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("stays SILENT for a project that does consume it", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+    try {
+      const instance = write(dir, "");
+      writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({
+          scripts: {
+            "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
+            build: "pnpm export-denylist && pnpm -C system/site build",
+          },
+        }),
+        "utf8",
+      );
+      const libDir = path.join(dir, "system", "site", "lib");
+      mkdirSync(libDir, { recursive: true });
+      writeFileSync(
+        path.join(libDir, "stage-knowledge.ts"),
+        'const DENYLIST_FILE = ".ksor-denylist.json";\n',
+        "utf8",
+      );
+      const { result } = exportTo(dir, instance, {});
+      expect(result.status).toBe(0);
+      expect(result.stderr, "a current scaffold must not be nagged").not.toContain("WARNING");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

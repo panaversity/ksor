@@ -94,7 +94,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 3. **Bring it up.** Once, then every time:
 
    ```sh
-   pnpm setup   # schema (or migrate) + grant — the privileged acts, run once
+   pnpm provision   # schema (or migrate) + grant — the privileged acts, run once
    pnpm refresh # ingest the record, collect retired generations
    pnpm serve   # the MCP server (one supervised process)
    ```
@@ -134,7 +134,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    needs no ingest privileges. Publishing is `pnpm ingest` (or `pnpm refresh`),
    and it is a separate step ON PURPOSE: a container that re-ingested on boot
    would pay the whole record's embedding cost on every cold start and would
-   need write credentials at runtime. So in a deployment, run `pnpm setup` and
+   need write credentials at runtime. So in a deployment, run `pnpm provision` and
    `pnpm ingest` as DEPLOY steps and run `ksor serve` in the container, where
    it honours `$PORT` and binds `0.0.0.0`. If you skip the ingest step, the
    container serves the last generation you flipped — and on a FIRST deploy,

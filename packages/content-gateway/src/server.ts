@@ -37,6 +37,9 @@ different things:
   served past it. This is NOT evidence about coverage. Say the record could not be
   searched right now, and retry later; never report it as "not in the record". The
   "degraded_reason" field names the specific failure.
+- ok=false, reason="unpublished": this record has NOTHING published yet — no generation
+  has been ingested. There is nothing for the question to be absent from. Say the record
+  is empty, not that it does not cover the question.
 
 Every envelope carries "gate", the state of this record's abstention floor:
 - {"floor": N}: calibrated. ok=true means the passages cleared a measured floor.
@@ -130,15 +133,16 @@ const SEARCH_OUTPUT = z.object({
     .boolean()
     .describe(
       "True ONLY when the record does not cover the question. False with " +
-        'reason="unavailable" means retrieval could not run — say so, do not report it as ' +
-        "absence.",
+        'reason="unavailable" or "unpublished" means coverage was never established — say ' +
+        "so, and do not report either as absence.",
     ),
   reason: z
-    .enum(["abstained", "unavailable"])
+    .enum(["abstained", "unavailable", "unpublished"])
     .optional()
     .describe(
       '"abstained" = the record does not cover this. "unavailable" = retrieval could not be ' +
-        "performed (see degraded_reason); this says NOTHING about coverage.",
+        'performed (see degraded_reason). "unpublished" = nothing has been ingested into this ' +
+        "record yet. Only the first says anything about coverage.",
     ),
   gate: GATE,
   top_cosine: z.number().nullable().optional(),

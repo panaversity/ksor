@@ -179,12 +179,17 @@ export type SearchResult =
        * FALSE with `reason: "unavailable"` means retrieval could not be
        * performed — the embedding provider is down on a record whose floor is a
        * COSINE floor, so the gate cannot be evaluated and nothing may be served
-       * past it. Withholding is right; calling it an abstention told the agent
-       * the record does not cover something it does, for the whole outage
-       * (round-6 review of #43).
+       * past it (round-6 review of #43).
+       *
+       * FALSE with `reason: "unpublished"` means the record has no active
+       * generation: nothing has been ingested yet, so there is nothing to be
+       * absent FROM (round-7 review of #43).
+       *
+       * Both were reported as abstentions, which told the agent the record does
+       * not cover something — a claim about coverage neither state supports.
        */
       readonly abstained: boolean;
-      readonly reason: "abstained" | "unavailable";
+      readonly reason: "abstained" | "unavailable" | "unpublished";
       readonly gate: GateState;
       /** The measured signal beside the floor that rejected it — an operator
        * can tell "genuinely out of corpus" from "the embedding space is
@@ -373,6 +378,30 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         degraded: degradedReason !== undefined,
       },
     });
+    // A record with NO PUBLISHED GENERATION is a third thing again: nothing has
+    // ever been ingested, so every question gets "the record does not cover
+    // this" and the agent states it as fact about a record that is simply
+    // empty. Following `ksor init`'s own next-steps reaches this state — it
+    // provisions and serves without publishing — and /ready answered
+    // {"ready":true} the whole time (round-7 review of #43, reproduced live).
+    //
+    // Asked ONLY on the empty path, where there is nothing to pin, so a served
+    // answer pays nothing for it.
+    const unpublished =
+      generation === undefined &&
+      (await runRead(
+        ctx.pool,
+        inst.tenantId,
+        async (client) => {
+          const r = await client.query(
+            "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+            [inst.tenantId, inst.corpusId],
+          );
+          return Number(r.rows[0]?.active_generation ?? 0) === 0;
+        },
+        audienceScope(ctx),
+      ));
+
     // "The record does not cover this" and "I could not look properly" are
     // DIFFERENT answers, and only the first is an abstention. When the embed
     // provider is down on a calibrated record the floor cannot be evaluated at
@@ -382,10 +411,11 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     // that and not fall back (round-6 review of #43, reproduced live with a
     // bogus provider key against a corpus that contains the answer).
     const unavailable = embedFailed && inst.abstain.vectorFloor !== null;
+    const reason = unavailable ? "unavailable" : unpublished ? "unpublished" : "abstained";
     return {
       ok: false,
-      abstained: !unavailable,
-      reason: unavailable ? "unavailable" : "abstained",
+      abstained: reason === "abstained",
+      reason,
       gate: gateState(inst),
       top_cosine: topCosine,
       hits: [],

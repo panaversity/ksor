@@ -103,6 +103,28 @@ contains. Searches now return a third outcome, `reason: "unavailable"` with
 `degraded_reason` (which had no description at all, and named a keyword search
 that never ran).
 
+**`pnpm setup` never ran your setup.** The scaffold shipped a script named
+`setup` and three documents told the adopter to run it — but `pnpm setup` is
+pnpm's own installer, and it wins. The documented step printed "No changes to
+the environment were made", exited 0, applied no DDL, and the next command
+failed with `relation "corpora" does not exist`, blaming the database for a step
+that never ran. The script is now `pnpm provision`, and a test rejects any
+scaffold script named after a pnpm command.
+
+**A takedown that the site cannot honour says so.** A scaffold is adopter-owned,
+so upgrading the CLI does not touch their `system/site` or their `package.json`.
+A project scaffolded before the denylist manifest existed has neither the build
+step that exports it nor the staging code that reads it — so a takedown was
+imposed, the CLI's own remedy was followed exactly, the site rebuilt, and the
+withdrawn document was still published while the MCP door refused it. `--export`
+now detects both halves and prints the exact edit for each.
+
+**A record with nothing published no longer answers "not in the record".**
+Following `ksor init`'s printed next-steps reaches a provisioned but never
+ingested record, where every question got `abstained` — an assertion about
+coverage for a record that is simply empty. That is now
+`reason: "unpublished"`.
+
 **A door whose boot checks have not passed refuses requests.** Reporting
 not-ready keeps a platform from routing traffic; it does not stop anything that
 reaches the port. A gateway that started against an unreachable database and

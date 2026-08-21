@@ -31,7 +31,7 @@ part of `pnpm dev`. The ordered path is:
 
 ```sh
 cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
-pnpm setup             # once: apply the schema, authorize ingest
+pnpm provision         # once: apply the schema, authorize ingest
 pnpm refresh           # ingest the record, collect retired generations
 pnpm serve             # the MCP server
 ```
@@ -47,7 +47,7 @@ config:
 `retrieval:` out starts you with the abstention gate off and honest about it
 (turn it on afterwards with `ksor calibrate`, once the record is serving).
 
-`pnpm setup` runs once — it applies the schema (or migrates it forward) and
+`pnpm provision` runs once — it applies the schema (or migrates it forward) and
 authorizes ingest, the two privileged acts that should not happen on every
 boot. After that: `pnpm refresh` publishes what you have edited, and `pnpm serve`
 runs the server. They are separate because publishing is an act, not a side

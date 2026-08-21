@@ -198,8 +198,18 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     // granted the tool its own ingest authorization on EVERY boot — grant.ts
     // argues at length that a flag is not authorization, and here the tool was
     // its own authorizer once per start (review 2026-08-20). The privileged,
-    // once-only acts moved to `pnpm setup`; the daily loop stays one command.
-    expect(pkg.scripts?.["setup"], "the privileged acts, run once by a human").toBe(
+    // once-only acts moved to their own script; the daily loop stays one
+    // command.
+    //
+    // NOT named `setup`: `pnpm setup` is pnpm's own installer and shadows a
+    // script of that name, so the documented step printed "No changes to the
+    // environment were made", exited 0, applied no DDL, and the next command
+    // failed blaming the database (round-7 review of #43, reproduced live).
+    // `scaffold-scripts.test.ts` holds the general rule.
+    expect(pkg.scripts?.["setup"], "`pnpm setup` is a pnpm command — it cannot be a script").toBe(
+      undefined,
+    );
+    expect(pkg.scripts?.["provision"], "the privileged acts, run once by a human").toBe(
       "pnpm schema && pnpm grant",
     );
     // ONE command, not a chain. A chain runs the server under the shell pnpm

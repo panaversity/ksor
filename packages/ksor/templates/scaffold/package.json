@@ -8,7 +8,7 @@
     "build": "pnpm export-denylist && pnpm -C system/site build",
     "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
     "check": "node .agents/skills/format-checker/check.mjs",
-    "setup": "pnpm schema && pnpm grant",
+    "provision": "pnpm schema && pnpm grant",
     "serve": "ksor serve",
     "refresh": "pnpm ingest && pnpm gc",
     "schema": "ksor schema --instance instance.md --apply",

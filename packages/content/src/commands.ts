@@ -15,6 +15,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
@@ -497,6 +498,56 @@ async function ingestCommand(args: string[]): Promise<number> {
   return 0;
 }
 
+/**
+ * Does this project actually READ the manifest we just wrote?
+ *
+ * A scaffold is adopter-owned (decision 4), so upgrading the CLI does not touch
+ * their `system/site` or their `package.json`. A project scaffolded before the
+ * manifest existed has neither the build step that exports it nor the staging
+ * code that reads it — so a takedown was imposed, the CLI's own remedy line was
+ * followed exactly, the site was rebuilt, and the withdrawn document was still
+ * in `out/docs/` and `llms.txt` while the MCP door on the same database refused
+ * it. Decision 19 says a surface that refuses must refuse on BOTH surfaces, and
+ * the upgrade path broke that silently (round-7 review of #43, reproduced).
+ *
+ * Detecting it is cheap and the export is the only place that can: it is the
+ * moment the operator is looking, and it knows both ends.
+ */
+function manifestConsumerWarnings(instancePath: string, exportPath: string): string[] {
+  const root = dirname(resolve(instancePath));
+  const out: string[] = [];
+  const readIf = (rel: string): string | null => {
+    try {
+      return readFileSync(join(root, rel), "utf8");
+    } catch {
+      return null;
+    }
+  };
+
+  const manifestName = basename(exportPath);
+  const pkg = readIf("package.json");
+  if (pkg !== null && !/takedown[^"]*--export|export-denylist/.test(pkg)) {
+    out.push(
+      `  WARNING: this project's package.json never runs the export, so a plain \`pnpm build\`\n` +
+        `  publishes the site WITHOUT it. Add to "scripts":\n` +
+        `    "export-denylist": "ksor takedown --instance instance.md --export ${manifestName}"\n` +
+        `  and chain it: "build": "pnpm export-denylist && pnpm -C system/site build"\n`,
+    );
+  }
+
+  const staging = readIf(join("system", "site", "lib", "stage-knowledge.ts"));
+  if (staging !== null && !staging.includes(manifestName)) {
+    out.push(
+      `  WARNING: this project's system/site/lib/stage-knowledge.ts does not read\n` +
+        `  ${manifestName}, so the site will publish withdrawn documents no matter how often\n` +
+        `  you export. The site is yours (it is copied into your repo, not linked), so an\n` +
+        `  upgrade does not update it: re-scaffold that file from a current \`ksor init\`,\n` +
+        `  or port the denylist read into it.\n`,
+    );
+  }
+  return out;
+}
+
 function parseGeneration(raw: string | undefined): number | null {
   if (raw === undefined) return null;
   return intFlag("--generation", raw);
@@ -652,6 +703,14 @@ async function takedownCommand(args: string[]): Promise<number> {
       `takedown: ${why}, so this record has no database to ask. ` +
         `Wrote source="none" (nothing denied) to ${values.export}.\n`,
     );
+    // The consumer check is about the PROJECT, not the database: a level-0
+    // project upgrading has the same broken chain, and this is the moment the
+    // operator is looking.
+    if (values.instance !== undefined) {
+      for (const warning of manifestConsumerWarnings(values.instance, values.export!)) {
+        process.stderr.write(warning);
+      }
+    }
     return 0;
   };
 
@@ -714,6 +773,9 @@ async function takedownCommand(args: string[]): Promise<number> {
     process.stdout.write(
       `takedown: exported ${rows.length} denial(s)${also} to ${values.export}\n`,
     );
+    for (const warning of manifestConsumerWarnings(values.instance!, values.export)) {
+      process.stderr.write(warning);
+    }
     return 0;
   }
 
