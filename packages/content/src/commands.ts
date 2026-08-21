@@ -189,6 +189,66 @@ function composeProvider(instance: ContentInstance): EmbeddingProvider | number 
  * is not installed, still records the honest sentinel rather than failing an
  * ingest over provenance metadata.
  */
+/**
+ * WHY a generation could not name the commit that produced it.
+ *
+ * Three different states used to collapse into one word, and the message built
+ * from it named only the first: "knowledge/ is not in a git repository". For a
+ * freshly scaffolded project that is FALSE — `ksor init` runs `git init`
+ * (`init/index.ts:95`), so the repository exists and merely has no commit yet,
+ * and `rev-parse HEAD` fails with "unknown revision" rather than because
+ * nothing is there. The reader was sent to `git init`, which they had already
+ * done, in the one message that governs provenance.
+ */
+export type ProvenanceGap = "no-repo" | "no-commit" | "no-git" | "not-asked";
+
+export function provenanceGap(knowledgeDir: string | undefined): ProvenanceGap {
+  if (knowledgeDir === undefined) return "not-asked";
+  const run = (args: readonly string[]): { ok: boolean; out: string } => {
+    try {
+      return {
+        ok: true,
+        out: execFileSync("git", ["-C", knowledgeDir, ...args], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim(),
+      };
+    } catch {
+      return { ok: false, out: "" };
+    }
+  };
+  // `git --version` distinguishes "git is not installed" from "this is not a
+  // repository" — `ksor init` already warns about the former and must not be
+  // contradicted here.
+  if (!run(["--version"]).ok && !run(["rev-parse", "--git-dir"]).ok) return "no-git";
+  if (!run(["rev-parse", "--git-dir"]).ok) return "no-repo";
+  return "no-commit";
+}
+
+/** The remedy for each, because the reader's next command differs. */
+export function provenanceNotice(gap: ProvenanceGap): string {
+  const why = "so this generation cannot be traced back to a reviewed commit";
+  switch (gap) {
+    case "no-commit":
+      return (
+        `source: unspecified — knowledge/ is in a git repository with no commits yet, ${why}.\n` +
+        "  fix: commit the record (git add knowledge && git commit) and re-run"
+      );
+    case "no-repo":
+      return (
+        `source: unspecified — knowledge/ is not in a git repository, ${why}.\n` +
+        "  fix: git init, commit the record, and re-run"
+      );
+    case "no-git":
+      return (
+        `source: unspecified — git is not installed, ${why}.\n` +
+        "  fix: install git, or pass --source-commit <sha> if the record is versioned elsewhere"
+      );
+    case "not-asked":
+      return `source: unspecified — no knowledge directory was given, ${why}.`;
+  }
+}
+
 export function detectSourceCommit(knowledgeDir: string | undefined): string {
   if (knowledgeDir === undefined) return "unspecified";
   try {
@@ -486,8 +546,7 @@ async function ingestCommand(args: string[]): Promise<number> {
   }
   process.stdout.write(
     sourceCommit === "unspecified"
-      ? "source: unspecified — knowledge/ is not in a git repository, so this generation " +
-          "cannot be traced back to a reviewed commit\n"
+      ? provenanceNotice(provenanceGap(values.knowledge)) + "\n"
       : `source: ${sourceCommit}\n`,
   );
   process.stdout.write(
