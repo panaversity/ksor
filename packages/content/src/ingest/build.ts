@@ -22,6 +22,7 @@ import { resolve, sep } from "node:path";
 import type pg from "pg";
 
 import { envFloat } from "../env.js";
+import { MIN_CONTENT_CHARS } from "../config.js";
 
 import { runIngest } from "../db.js";
 import type { ContentInstance } from "../instance.js";
@@ -55,6 +56,16 @@ const CHUNK_INSERT_PREFIX =
   " chunk_hash, heading_path, heading_path_text, anchor, labels, embedding_status)" +
   " VALUES ";
 const CHUNK_PARAMS = 10;
+/**
+ * Dense character count — whitespace removed, exactly as the serving
+ * predicate's `length(regexp_replace(c.content, '\s', '', 'g'))` computes it.
+ * Written here rather than approximated so the ingest report and the SQL admit
+ * the same chunks.
+ */
+function denseLength(content: string): number {
+  return content.replace(/\s/g, "").length;
+}
+
 /** 500 rows × 10 params stays far under Postgres's 65535 bind-parameter cap. */
 const CHUNK_ROWS_PER_STATEMENT = 500;
 
@@ -64,6 +75,25 @@ export interface BuildStats {
   readonly chunks: number;
   readonly carried: number;
   readonly pending: number;
+  /**
+   * How much of what we just stored NO SEARCH WILL EVER RETURN.
+   *
+   * The serving predicate admits a chunk only when it is `prose` and has at
+   * least MIN_CONTENT_CHARS of dense text (`lib/search.ts`'s SERVABLE). A
+   * chunk shorter than NAV_MAX_CHARS is classified `nav` — the rule exists to
+   * keep link lists and breadcrumbs out of retrieval, and it is length-only,
+   * so a short SUBSTANTIVE paragraph is caught by it too.
+   *
+   * Counted and reported because it was previously silent: a real handbook
+   * measured 10 of 16 chunks unsearchable and one whole document findable by
+   * `read` and `outline` but never by `search`, with the ingest line reporting
+   * a cheerful "16 chunks; embedded 16" (issue #55). Whatever the right
+   * threshold turns out to be, an adopter should not have to run SQL to
+   * discover that most of their record cannot be found.
+   */
+  readonly unsearchable: number;
+  /** Sources with NO searchable chunk at all — findable by slug, never by search. */
+  readonly unsearchableSources: readonly string[];
 }
 
 /**
@@ -130,6 +160,8 @@ export async function buildStructure(
   const treeRoot = resolve(opts.treeRoot);
   let nSources = 0;
   let nChunks = 0;
+  let nUnsearchable = 0;
+  const unsearchableSources: string[] = [];
   const chunkRows: unknown[][] = [];
   for (const f of manifest.files) {
     // The manifest's file paths are UNTRUSTED input to the kernel (the oracle's
@@ -175,6 +207,7 @@ export async function buildStructure(
       ],
     );
     nSources += 1;
+    let sourceServable = 0;
     for (const chunk of chunkText(body)) {
       chunkRows.push([
         tenantId,
@@ -189,7 +222,15 @@ export async function buildStructure(
         JSON.stringify({ source_type: chunk.sourceType }),
       ]);
       nChunks += 1;
+      // Exactly the serving predicate's admission test, computed here so the
+      // report cannot drift from what search will actually do.
+      if (chunk.sourceType === "prose" && denseLength(chunk.content) >= MIN_CONTENT_CHARS) {
+        sourceServable += 1;
+      } else {
+        nUnsearchable += 1;
+      }
     }
+    if (sourceServable === 0 && nChunks > 0) unsearchableSources.push(sid);
   }
 
   // All sources are inserted per-row ABOVE, so the chunk→source FK holds;
@@ -248,6 +289,8 @@ export async function buildStructure(
     chunks: nChunks,
     carried,
     pending: health.pending,
+    unsearchable: nUnsearchable,
+    unsearchableSources,
   };
 }
 
@@ -323,6 +366,10 @@ export interface BuildReport {
   readonly ready: boolean;
   readonly centroids: number;
   readonly flipped: boolean;
+  /** Chunks stored but excluded from every retrieval arm — see BuildStats. */
+  readonly unsearchable: number;
+  /** Sources with NO searchable chunk: readable by slug, never found by search. */
+  readonly unsearchableSources: readonly string[];
   /**
    * Why the generation is NOT serving: the not-ready line or the flip-guard
    * refusal. null when it flipped, or when the flip was deliberately withheld
@@ -579,6 +626,8 @@ export async function buildGeneration(
         ready: true,
         centroids: 0,
         flipped: false,
+        unsearchable: 0,
+        unsearchableSources: [],
         refusal: null,
         health: { ok: true, reasons: [] } as unknown as GenerationHealth,
         unchanged: true,
@@ -676,6 +725,8 @@ export async function buildGeneration(
     ready: fin.ready,
     centroids: fin.centroids,
     flipped: fin.flipped,
+    unsearchable: stats.unsearchable,
+    unsearchableSources: stats.unsearchableSources,
     refusal: fin.refusal,
     health: fin.health,
     unchanged: false,
