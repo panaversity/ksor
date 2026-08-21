@@ -255,6 +255,18 @@ announced but not navigable. One attribute pair.
 
 ### F10 · `llms.txt` is flat — _scale_
 
+> **Refused 2026-08-21, with the conflict that killed it.** Grouping was built
+> and then reverted. The shell-conformance suite pins llms.txt's canonical
+> reading order across BOTH shells, and that order is interleaved — a folder's
+> index and its children sit between two loose root documents
+> (`/docs/example` → `/docs/hr` → `/docs/hr/leave` → `/docs/01-intro`). Headings
+> therefore force a choice: reorder the file, which breaks the one-reading-order
+> guarantee the two-shell suite exists to protect, or leave root documents
+> stranded under whichever heading came before them, which is worse than flat.
+> The flat list is the price of one order shared by both shells, and that
+> guarantee is worth more than headings. Revisit only if the canonical order
+> stops interleaving.
+
 One ungrouped list. Anthropic groups ~600 entries under `##`/`###`. At 200
 documents ours is an undifferentiated wall, and the record's own folder
 structure — which we already sort by the governed `order:` key — is the grouping,

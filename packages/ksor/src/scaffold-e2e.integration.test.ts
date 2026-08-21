@@ -366,6 +366,17 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       const at = html.indexOf("In this section");
       return at === -1 ? "" : html.slice(at);
     };
+    // The SIDEBAR carries a caveat status too — it is where a reader chooses,
+    // and two documents that differ only in whether one was withdrawn were
+    // identical rows there (research/site-design.md F3).
+    const anyDocHtml = readFileSync(
+      path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
+      "utf8",
+    );
+    const sidebar = anyDocHtml.slice(0, anyDocHtml.indexOf("<article"));
+    expect(sidebar, "the sidebar marks a withdrawn document").toContain("superseded");
+    expect(sidebar, "…and a draft one").toContain("draft");
+
     const sectionListing = listingIn("docs/refund-policy-v5");
     // refund-policy-v5 is a leaf, so it lists nothing at all.
     expect(sectionListing, "a leaf document must not grow an empty listing").toBe("");

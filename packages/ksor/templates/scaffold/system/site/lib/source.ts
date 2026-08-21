@@ -4,6 +4,7 @@ import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import type { Node, Root } from "fumadocs-core/page-tree";
 
 import { agentFrontmatter, caveatStatus, readGovernance, resolveSuccessorUrl } from "./governance";
+import { withStatus } from "@/components/sidebar-status";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
@@ -76,9 +77,33 @@ function sortNodes(nodes: readonly Node[], orders: ReadonlyMap<string, number>):
  * state and mutating it would survive a hot reload.
  */
 export function getSortedPageTree(): Root {
-  const orders = new Map(source.getPages().map((page) => [page.url, orderOf(page)] as const));
+  const pages = source.getPages();
+  const orders = new Map(pages.map((page) => [page.url, orderOf(page)] as const));
+  // A caveat status rides the row itself, so the reader sees it before the
+  // click rather than after (research/site-design.md F3).
+  const statuses = new Map(
+    pages.map((page) => {
+      const raw: unknown = (page.data as unknown as Record<string, unknown>)["status"];
+      return [
+        page.url,
+        caveatStatus(typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null),
+      ] as const;
+    }),
+  );
   const tree = source.getPageTree();
-  return { ...tree, children: sortNodes(tree.children, orders) };
+  return { ...tree, children: labelNodes(sortNodes(tree.children, orders), statuses) };
+}
+
+/** Decorate each page row with its caveat status; folders keep their own name. */
+function labelNodes(nodes: readonly Node[], statuses: ReadonlyMap<string, string | null>): Node[] {
+  return nodes.map((node) => {
+    if (node.type === "folder") {
+      return { ...node, children: labelNodes(node.children, statuses) };
+    }
+    if (node.type !== "page") return node;
+    const status = statuses.get(node.url) ?? null;
+    return status === null ? node : { ...node, name: withStatus(node.name, status) };
+  });
 }
 
 function collectUrls(nodes: readonly Node[], urls: string[]): void {
