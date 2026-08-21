@@ -206,5 +206,5 @@ jobs:
       # take the platform default). They moved from the unit tier to this one
       # — AGENTS.md assigns repo-tree scans here — so name them explicitly or
       # Windows stops running the checks it is best placed to catch.
-      - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/audience-rule-drift.integration.test.ts packages/ksor/src/denial-rule-drift.integration.test.ts packages/ksor/src/scaffold-scripts.integration.test.ts
+      - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/audience-rule-drift.integration.test.ts packages/ksor/src/denial-rule-drift.integration.test.ts packages/ksor/src/scaffold-scripts.integration.test.ts packages/ksor/src/discovery-document.integration.test.ts
       - run: pnpm test:unit

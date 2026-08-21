@@ -56,6 +56,16 @@ const CASES: readonly { name: string; frontmatter: string }[] = [
     frontmatter: "owner:\n  name: HR\nsor_id: hr/policy",
   },
   { name: "an override beside a comment line", frontmatter: "# a note\nsor_id: hr/policy" },
+  // Values the kernel TYPES rather than returning as strings, so `stableIdOf`
+  // drops the override and falls back to the path. The site returned them as
+  // strings (round-10 review of #43).
+  { name: "a NUMERIC override", frontmatter: "sor_id: 4711" },
+  { name: "a FLOAT override", frontmatter: "sor_id: 1.5" },
+  { name: "a YAML-BOOLEAN override (no)", frontmatter: "sor_id: no" },
+  { name: "a YAML-boolean override (true)", frontmatter: "sor_id: true" },
+  { name: "a NULL override", frontmatter: "sor_id: ~" },
+  // …and a quoted number IS a string, on both sides.
+  { name: "a QUOTED numeric override is an id", frontmatter: `sor_id: "4711"` },
   { name: "an override beside a blank line", frontmatter: "title: Policy\n\nsor_id: hr/policy" },
 ];
 
@@ -71,13 +81,18 @@ describe("one stable_id, both surfaces", () => {
     ).toBe(kernel);
   });
 
-  it("the map readers agree on every case, key for key", () => {
-    // The id is one consumer; the map is what the two readers actually share.
+  it("the map readers agree on every STRING-valued key", () => {
+    // The comparison is over string values, not raw keys: the kernel types a
+    // bool/null/int/float and keeps the key with a non-string value, while this
+    // map holds strings only. What both sides must agree on is which keys yield
+    // a STRING and what that string is — everything downstream (ids, taken-down
+    // paths) reads strings.
     for (const { name, frontmatter } of CASES) {
       const text = doc(frontmatter);
-      const kernelKeys = Object.keys(frontmatterMeta(text)).sort();
-      const siteKeys = Object.keys(frontmatterMap(blockOf(text))).sort();
-      expect(siteKeys, name).toEqual(kernelKeys);
+      const kernelStrings = Object.fromEntries(
+        Object.entries(frontmatterMeta(text)).filter(([, v]) => typeof v === "string"),
+      );
+      expect(frontmatterMap(blockOf(text)), name).toEqual(kernelStrings);
     }
   });
 

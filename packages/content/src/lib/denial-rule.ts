@@ -80,27 +80,66 @@ export function isDenied(
 export function scalarLike(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   const parsed = readScalar(raw.trim());
-  return parsed.ok ? parsed.value : undefined;
+  return parsed.kind === "string" ? parsed.value : undefined;
 }
 
+/**
+ * Plain scalars the kernel's reader converts to a bool, null, int or float —
+ * never a string, so they can never be an id.
+ */
+const YAML_TYPED =
+  /^(?:true|True|TRUE|false|False|FALSE|yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF|~|null|Null|NULL|[-+]?[0-9][0-9_]*|[-+]?(?:\.[0-9]+|[0-9][0-9_]*\.[0-9_]*)(?:[eE][-+]?[0-9]+)?)$/;
+
+/**
+ * Three outcomes, because the kernel's reader has three:
+ *
+ *   string    a plain or quoted string — usable as an id.
+ *   typed     a bool, null, int or float. The kernel KEEPS the key with a
+ *             non-string value, and `stableIdOf` requires a string, so the
+ *             override is dropped. The key exists; it just is not an id.
+ *   refused   a shape the reader will not read at all. The kernel POISONS the
+ *             whole map on one of these.
+ *
+ * Collapsing `typed` into `refused` would empty the map for a document whose
+ * `order: 3` is perfectly ordinary — which the kernel does not do.
+ */
 interface ScalarRead {
-  readonly ok: boolean;
+  readonly kind: "string" | "typed" | "refused";
   readonly value: string;
 }
 
 function readScalar(raw: string): ScalarRead {
+  // An EMPTY value is `null` to the kernel — the key exists and is not a
+  // string, exactly like a bool or a number.
+  if (raw === "") return { kind: "typed", value: "" };
   const dq = /^"(.*)"$/.exec(raw);
   if (dq !== null)
-    return { ok: true, value: (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\") };
+    return { kind: "string", value: (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\") };
   const sq = /^'(.*)'$/.exec(raw);
-  if (sq !== null) return { ok: true, value: (sq[1] ?? "").replace(/''/g, "'") };
+  if (sq !== null) return { kind: "string", value: (sq[1] ?? "").replace(/''/g, "'") };
   const plain = raw.replace(/[ \t]+#.*$/, "").trim();
-  // The shapes the kernel's reader refuses in a plain value position. Kept in
-  // step with `scalarValue` in ingest/adapters/plain-tree.ts, and bound to it
-  // by `stable-id-conformance.test.ts`.
-  if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { ok: false, value: "" };
-  if (/^[|>&*!{[]/.test(plain)) return { ok: false, value: "" };
-  return { ok: true, value: plain };
+  // The shapes the kernel's reader does not hand back as a STRING. Two groups,
+  // and both matter for the same reason:
+  //
+  //   refused    a flow collection, an anchor, a block scalar, a plain value
+  //              containing ": " — the kernel returns ok:false and poisons the
+  //              whole map.
+  //   typed      a YAML bool, null, int or float — the kernel returns them as
+  //              non-strings, and `stableIdOf` requires a string, so it DROPS
+  //              the override. `sor_id: 4711` therefore resolved to the path on
+  //              the kernel and to "4711" here: a takedown honoured by the door
+  //              and ignored by the site build, the same divergence round 9
+  //              closed for comments and flow lists, in the same function
+  //              (round-10 review of PR 43).
+  //
+  // Both are `ok: false` here because both end with the site NOT taking an
+  // override — which is what the kernel does. Kept in step with `scalarValue`
+  // in ingest/adapters/plain-tree.ts and bound to it by
+  // `stable-id-conformance.test.ts`.
+  if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { kind: "refused", value: "" };
+  if (/^[|>&*!{[]/.test(plain)) return { kind: "refused", value: "" };
+  if (YAML_TYPED.test(plain)) return { kind: "typed", value: "" };
+  return { kind: "string", value: plain };
 }
 
 /**
@@ -131,8 +170,11 @@ export function frontmatterMap(block: string): Record<string, string> {
     const key = kv?.[1];
     if (key === undefined) return {};
     const parsed = readScalar((kv?.[2] ?? "").trim());
-    if (!parsed.ok) return {};
-    map[key] = parsed.value;
+    if (parsed.kind === "refused") return {};
+    // A typed value is present in the kernel's map and is not a string; this
+    // map holds strings, so the key is simply absent — which is what every
+    // consumer here needs to know about it.
+    if (parsed.kind === "string") map[key] = parsed.value;
   }
   return map;
 }

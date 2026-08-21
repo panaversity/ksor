@@ -121,6 +121,22 @@ and anything that can serve files can serve it.
   outside it), build with `pnpm build`, serve `system/site/out/`. If the
   build image's pnpm predates the `packageManager` pin, set the
   `ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
+**Once `instance.md` declares a `database:`, the BUILD needs the DSN too.**
+`pnpm build` first runs `pnpm export-denylist`, which asks the record's
+database what has been withdrawn (`ksor takedown --export`) and writes
+`.ksor-denylist.json` for the site to read. Without it the build stops:
+
+```
+KSOR_DB_URL is unset, and instance.md declares a database
+  why: a takedown lives in that database. Without it this build cannot tell
+  'nothing is denied' from 'nobody asked'
+```
+
+That is deliberate — a site built without asking would publish a document you
+withdrew. Give the build environment the same `KSOR_DB_URL` your server uses
+(read access is enough), or keep the record database-free, where the export
+writes "nothing denied" and exits 0.
+
 - **GitHub Pages, nginx, S3, anything static** — run `pnpm build` and
   upload `system/site/out/`. Hosted under a sub-path (like
   `user.github.io/repo`)? Build with `KSOR_BASE_PATH=/repo pnpm build`.

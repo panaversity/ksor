@@ -236,6 +236,10 @@ export async function deniedStableIds(pool: pg.Pool, instance: ContentInstance):
  * root, and `startsWith` then covers subdirectories added later too. A denial
  * with no descendants contributes nothing, which is correct: its subtree is
  * itself, and the flat id list already holds it.
+ *
+ * The seed's OWN file counts when the seed has children, and only then — see
+ * the SQL comment: a container's index.md names its directory, a leaf's file
+ * names its parent's.
  */
 export async function deniedSubtreeDirs(
   pool: pg.Pool,
@@ -267,9 +271,25 @@ export async function deniedSubtreeDirs(
          JOIN content_nodes n ON n.node_id = w.node_id
          JOIN sources s ON s.tenant_id = n.tenant_id AND s.generation = n.generation
                        AND s.node_id = n.node_id
-         -- The SEED's own file is excluded: for a leaf denial its directory is
-         -- the parent, which would deny every sibling.
-        WHERE w.node_id NOT IN (SELECT node_id FROM seed)`,
+         -- The seed's own file counts only when the seed HAS CHILDREN.
+         --
+         -- Excluding every seed stopped a LEAF denial emitting its parent
+         -- directory and denying every sibling — right for a leaf, wrong for a
+         -- container. A section's own index.md is the file that names the
+         -- section's DIRECTORY, so a section whose other descendants all live
+         -- one level down contributed only the subdirectory, and a document
+         -- written directly under the withdrawn section published to /docs and
+         -- llms.txt (round-10 review of PR 43).
+         --
+         -- "Has children" is the right test, not "kind = section": it is the
+         -- property that decides whether the node's directory is its subtree
+         -- or its parent's.
+        WHERE w.node_id NOT IN (
+                SELECT s2.node_id FROM seed s2
+                 WHERE NOT EXISTS (SELECT 1 FROM content_nodes kid
+                                    JOIN gen ON kid.generation = gen.g
+                                   WHERE kid.tenant_id = $1 AND kid.parent_id = s2.node_id)
+              )`,
       [instance.tenantId, instance.corpusId],
     );
     return (result.rows as { origin_path: string }[]).map((r) => String(r.origin_path));

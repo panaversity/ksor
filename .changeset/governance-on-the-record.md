@@ -179,9 +179,9 @@ Also: every envelope now reports the abstention `gate` and the measured
 `top_cosine`, so `ok=true` from an uncalibrated record can no longer be read as
 coverage; the MCP server states four framework rules in its instructions instead
 of serving the unedited scaffold placeholder; `ingest` records the git commit it
-ingested instead of the literal string `unspecified`; `pnpm setup` separates
-applying DDL and granting ingest from starting a server, and `pnpm serve` now
-collects retired generations; the scaffold ships the `database:` block its own
+ingested instead of the literal string `unspecified`; `pnpm provision`
+separates applying DDL and granting ingest from starting a server, and
+`pnpm refresh` (ingest then gc) collects retired generations; the scaffold ships the `database:` block its own
 runbook requires, and `env.example` documents the production variables the code
 actually reads; shutdown logs and has a deadline; pool sizing and the TLS posture
 are chosen rather than inherited; `ksor takedown --export` reads through the

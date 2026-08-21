@@ -240,11 +240,41 @@ Two things worth being deliberate about:
   elsewhere, and a wrong JWKS URL fails as a transient fetch error — the door
   boots clean and every request 503s with nothing naming the cause.
 
+## Withdrawing a document — `ksor takedown`
+
+A takedown is the one governance act that must reach EVERY surface at once.
+It needs the database (the denial is a row, not a file), so it belongs to the
+served rung.
+
+```sh
+pnpm exec ksor takedown --instance instance.md <stable-id> --reason "legal request 2026-08"
+pnpm exec ksor takedown --instance instance.md <stable-id> --reason "..." --subtree
+pnpm exec ksor takedown --instance instance.md --list      # what is currently denied
+pnpm exec ksor takedown --instance instance.md --ledger    # who denied what, when
+pnpm exec ksor takedown --instance instance.md --revoke <stable-id>
+```
+
+The stable id is what a search result reports as `provenance.stable_id` — for
+most documents that is `knowledge/<path-without-.md>`. `--subtree` withdraws a
+section and everything beneath it, including documents added later.
+`--actor NAME` names who performed the act in the ledger; it defaults to the
+operating user.
+
+**The MCP door stops serving it immediately. The SITE stops at its next
+build** — the site reads a file, not the database, and `pnpm build` refreshes
+that file for you (`pnpm export-denylist`). So after a takedown, rebuild and
+redeploy the site, or the human surface keeps publishing what the agent
+surface already refuses.
+
 ## Publishing
 
 `pnpm build` emits a fully static site (`system/site/out/`) deployable to
 any host — Vercel reads the shipped `vercel.json` (deploy from the repo
 ROOT, never `system/site/`), and every other host just serves the folder.
+Once `instance.md` declares a `database:`, `pnpm build` needs `KSOR_DB_URL` as
+well: it runs `pnpm export-denylist` first, which asks the database what has
+been withdrawn and writes `.ksor-denylist.json`. Without the DSN the build
+refuses rather than publish a document someone took down.
 `KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With
 `audiences:` declared, plain `pnpm build` is always the public tier;
 `KSOR_AUDIENCE=<audience> pnpm build` builds a wider tier that belongs

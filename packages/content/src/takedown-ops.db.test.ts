@@ -224,6 +224,85 @@ describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
     });
   });
 
+  it("a section whose children are all SUBSECTIONS still yields its own directory", async () => {
+    // The residual hole in the round-5 fix. The seed's own source was excluded
+    // wholesale, to stop a LEAF denial emitting its parent directory and
+    // denying every sibling. But a section's own index.md is the file that
+    // names the section's directory — so a section whose other descendants all
+    // live one level down contributed only the SUBdirectory, and a document
+    // written directly under the withdrawn section published to /docs and
+    // llms.txt (round-10 review of #43).
+    const tree = [
+      {
+        stable: "knowledge/handbook/index",
+        slug: "handbook",
+        kind: "section",
+        path: "knowledge/handbook/index.md",
+        parent: null as string | null,
+      },
+      {
+        stable: "knowledge/handbook/2024/index",
+        slug: "2024",
+        kind: "section",
+        path: "knowledge/handbook/2024/index.md",
+        parent: "knowledge/handbook/index",
+      },
+      {
+        stable: "knowledge/handbook/2024/a",
+        slug: "a",
+        kind: "document",
+        path: "knowledge/handbook/2024/a.md",
+        parent: "knowledge/handbook/2024/index",
+      },
+    ];
+    const ids = new Map<string, string>();
+    await runIngest(pool, TENANT, async (client) => {
+      for (const node of tree) {
+        const r = await client.query(
+          "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, parent_id)" +
+            " VALUES ($1, $1, 1, $2, $3, $4, $5, 0, $6) RETURNING node_id",
+          [
+            TENANT,
+            node.stable,
+            node.slug,
+            node.slug,
+            node.kind,
+            ids.get(node.parent ?? "") ?? null,
+          ],
+        );
+        const nodeId = String(r.rows[0].node_id);
+        ids.set(node.stable, nodeId);
+        await client.query(
+          "INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path," +
+            " content_hash, embedding_model, chunk_policy) VALUES ($1, 1, $2, $3, $4, $5, 'h', 'fake-embed-001', 'p')",
+          [TENANT, `${node.path}:prose`, nodeId, node.slug, node.path],
+        );
+      }
+    });
+    await applyTakedown(pool, instance, {
+      stableId: "knowledge/handbook/index",
+      scope: "subtree",
+      reason: "legal hold",
+      actor: "ops@example.com",
+    });
+
+    const dirs = await deniedSubtreeDirs(pool, instance);
+    expect(
+      dirs,
+      "the withdrawn section's OWN directory must be denied, not just the subsection's",
+    ).toEqual(["knowledge/handbook/"]);
+    // The document an author writes next, under the withdrawn section.
+    expect(
+      dirs.some((d) => "knowledge/handbook/newpolicy.md".startsWith(d)),
+      `a document added directly under the withdrawn section must be covered: ${JSON.stringify(dirs)}`,
+    ).toBe(true);
+
+    await revokeTakedown(pool, instance, {
+      stableId: "knowledge/handbook/index",
+      actor: "ops@example.com",
+    });
+  });
+
   it("a --subtree denial on a LEAF contributes no directory — its subtree is itself", async () => {
     // Otherwise the leaf's own directory would be emitted and every sibling in
     // it would be denied.

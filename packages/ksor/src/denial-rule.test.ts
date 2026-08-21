@@ -148,9 +148,22 @@ describe("scalarLike — the kernel's reading of a plain scalar", () => {
     ["value\t# comment", "value"],
     ['"quoted # inside"', "quoted # inside"],
     ["'single quoted'", "single quoted"],
-    ["", ""],
   ])("%s -> %s", (raw, expected) => {
     expect(scalarLike(raw)).toBe(expected);
+  });
+
+  it.each([
+    // Values the kernel does not hand back as a STRING: an empty value is
+    // null, and a bool/number is typed. None of them can be an id, so the
+    // site must not read one where the kernel would not (round-10 review).
+    [""],
+    ["4711"],
+    ["1.5"],
+    ["no"],
+    ["true"],
+    ["~"],
+  ])("%s is not a string value", (raw) => {
+    expect(scalarLike(raw)).toBeUndefined();
   });
 
   it("undefined stays undefined — a key that is absent is not one that is empty", () => {

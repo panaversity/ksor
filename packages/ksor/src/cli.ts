@@ -72,7 +72,19 @@ async function main(args: readonly string[]): Promise<number> {
   // --knowledge, --flip, --apply, --revoke, --export) were documented nowhere
   // the binary could reach (review 2026-08-20). A verb + --help is the verb's
   // question to answer.
-  const helpVerb = resolveCommand(args).verb;
+  const { word: helpWord, verb: helpVerb } = resolveCommand(args);
+  // An UNKNOWN word is refused even under --help. `ksor takedwon --help`
+  // printed the usage and exited 0, which tells a caller the word was valid —
+  // a script or an agent checking the exit code concludes the verb exists. The
+  // refusal lists the vocabulary anyway, so it is both correct and MORE
+  // informative (round-10 review of PR 43). `ksor --help` with no word at all
+  // is still the generic usage.
+  if (wantsHelp && helpVerb === null && helpWord !== null) {
+    process.stderr.write(
+      `error: unknown-verb\n"${helpWord}" is not a ksor verb. The vocabulary is: ${verbs.join(", ")}.\n`,
+    );
+    return 1;
+  }
   if (
     wantsHelp &&
     (helpVerb === null ||
