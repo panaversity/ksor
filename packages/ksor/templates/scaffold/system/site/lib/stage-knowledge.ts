@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 
 import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience";
+import { appName } from "./shared";
 
 // Both relative to the site directory — the directory every build runs from
 // (`pnpm build` is `pnpm -C system/site build`), which is also how fumadocs
@@ -166,12 +167,15 @@ interface StagePlan {
  */
 /** The shape `ksor takedown --export` writes. */
 interface DenylistManifest {
+  format?: number;
+  corpus_id?: string;
   source?: string;
   denied?: { stable_id?: string; scope?: string }[];
+  denied_subtrees?: string[];
 }
 
 /** No database, or a dev server without an export: nothing is denied. */
-const NOTHING_DENIED: DenylistManifest = { source: "none", denied: [] };
+const NOTHING_DENIED: DenylistManifest = { source: "none", denied: [], denied_subtrees: [] };
 
 /** Where `ksor takedown --export` writes, relative to the project root. */
 const DENYLIST_FILE = ".ksor-denylist.json";
@@ -214,7 +218,7 @@ function deniedStableIds(recordDir: string): DenylistManifest {
       `run: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
     );
   }
-  let parsed: { source?: string; denied?: { stable_id?: string }[] };
+  let parsed: DenylistManifest;
   try {
     parsed = JSON.parse(raw) as typeof parsed;
   } catch {
@@ -231,6 +235,28 @@ function deniedStableIds(recordDir: string): DenylistManifest {
   // record that declares a database can only be answered BY that database:
   // `source: "none"` here is a contradiction, and it is precisely the shape a
   // build host with no DSN used to write before exiting 0.
+  // WHOSE record is this? The manifest names its corpus and nothing checked
+  // it, so a file exported against a different instance — or copied between two
+  // records in one repo — passed the fail-closed gate and applied the wrong
+  // denial set: this record's withdrawn documents published while unrelated ids
+  // were filtered (round-5 review of #43).
+  const expected = appName;
+  if (parsed.corpus_id !== undefined && parsed.corpus_id !== expected) {
+    refuse(
+      "ksor-denylist-wrong-record",
+      `${DENYLIST_FILE} was exported for ${JSON.stringify(parsed.corpus_id)}, but this record is ${JSON.stringify(expected)}`,
+      "denials are identities within ONE record, so another record's list filters the wrong documents and publishes this record's withdrawn ones",
+      `re-export it for this record: ksor takedown --instance instance.md --export ${DENYLIST_FILE}`,
+    );
+  }
+  if (parsed.format !== undefined && parsed.format !== 1) {
+    refuse(
+      "ksor-denylist-format",
+      `${DENYLIST_FILE} declares format ${JSON.stringify(parsed.format)}, which this site cannot read`,
+      "a manifest shape this build does not understand cannot be trusted to say what is withdrawn",
+      "upgrade the site, or re-export with a matching ksor version",
+    );
+  }
   if (parsed.source !== "database" && declaresDatabase()) {
     refuse(
       "ksor-denylist-not-from-database",
@@ -243,17 +269,35 @@ function deniedStableIds(recordDir: string): DenylistManifest {
 }
 
 /**
- * Is this document denied? EXACT ids only.
+ * Is this document denied? Exact ids, plus the directories a `--subtree`
+ * takedown governs.
  *
  * `ksor takedown --export` expands a `--subtree` denial to its actual
- * descendants by walking parent_id, where the tree lives. Interpreting scope
- * HERE meant prefix-matching, and a section's stable_id ends in `/index` (or
- * `#section`), so the prefix never matched its children and every descendant
- * kept publishing — the failure decision 14 already records as the reason its
- * own walk uses parent_id rather than a prefix (round-2 review of #43).
+ * descendants by walking parent_id, where the tree lives. Interpreting SCOPE
+ * here meant prefix-matching stable_ids, and a section's stable_id ends in
+ * `/index` (or `#section`), so the prefix never matched its children and every
+ * descendant kept publishing — the failure decision 14 records as the reason
+ * its own walk uses parent_id rather than a prefix (round-2 review of #43).
+ *
+ * But an expanded list can only name what the ACTIVE GENERATION contains, and
+ * this build reads DISK. A document added under a withdrawn section after the
+ * last ingest is on disk and not in the database, so it published to /docs and
+ * llms.txt under a section that had been explicitly withdrawn — while decision
+ * 14 states outright that a subtree deny must cover descendants a future
+ * re-ingest adds (round-5 review of #43).
+ *
+ * So subtree denials also arrive as DIRECTORIES. That is not the rejected
+ * prefix match: these paths come from `sources.origin_path`, so they are real
+ * locations on disk, and a document's location cannot be decoupled from itself
+ * by a frontmatter `sor_id:` the way its id can.
  */
-function isDenied(manifest: DenylistManifest, stableId: string): boolean {
-  return (manifest.denied ?? []).some((d) => String(d.stable_id) === stableId);
+function isDenied(manifest: DenylistManifest, stableId: string, relPath: string): boolean {
+  if ((manifest.denied ?? []).some((d) => String(d.stable_id) === stableId)) return true;
+  return (manifest.denied_subtrees ?? []).some((dir) => {
+    const prefix = String(dir).replace(/\\/g, "/");
+    if (prefix === "/") return true;
+    return relPath.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`);
+  });
 }
 
 /**
@@ -265,12 +309,43 @@ function isDenied(manifest: DenylistManifest, stableId: string): boolean {
  * denied it: the same decoupling decision 14 already records as the reason the
  * subtree walk uses parent_id rather than a prefix (round-1 review of #43).
  */
+/**
+ * A plain scalar, read the way the kernel's frontmatter reader reads one.
+ *
+ * The two diverged on a TRAILING COMMENT: the kernel strips `# …` from an
+ * unquoted scalar and the site kept it, so `sor_id: hr/policy # renamed 2026`
+ * gave the kernel `hr/policy` and the site `hr/policy # renamed 2026`. A
+ * takedown on the id the MCP door reports as `provenance.stable_id` was then
+ * denied by the door and silently ignored by the site build, which kept
+ * publishing the document to /docs and llms.txt (round-5 review of #43).
+ *
+ * A comment cannot appear inside a QUOTED scalar's value, so quoting is
+ * resolved first — exactly the kernel's order.
+ */
+function scalarLike(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  const dq = /^"(.*)"$/.exec(trimmed);
+  if (dq !== null) return (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  const sq = /^'(.*)'$/.exec(trimmed);
+  if (sq !== null) return (sq[1] ?? "").replace(/''/g, "'");
+  return trimmed.replace(/[ \t]+#.*$/, "").trim();
+}
+
+/**
+ * The file's path in the frame the RECORD uses — `sources.origin_path`, which
+ * is project-root relative and therefore starts with the record directory's
+ * own name. The exported subtree directories are in that frame, so the
+ * comparison has to be too.
+ */
+function recordPathOf(recordDir: string, file: string): string {
+  const rel = path.relative(recordDir, file).split(path.sep).join("/");
+  return `${path.basename(recordDir)}/${rel}`;
+}
+
 function stableIdOf(recordDir: string, file: string, text: string): string {
   const block = frontmatterBlock(text);
-  const override = /^sor_id:[ \t]*(.*)$/m
-    .exec(block)?.[1]
-    ?.trim()
-    .replace(/^["']|["']$/g, "");
+  const override = scalarLike(/^sor_id:[ \t]*(.*)$/m.exec(block)?.[1]);
   if (override !== undefined && override !== "") return override;
   const rel = path.relative(recordDir, file).split(path.sep).join("/");
   return `${path.basename(recordDir)}/${rel.replace(/\.md$/i, "")}`;
@@ -289,7 +364,8 @@ function planStage(recordDir: string, denied: DenylistManifest): StagePlan {
     // what names the typo.
     if (!visibleInBuild(visibilityOf(text))) continue;
     // A takedown beats every other consideration, on every surface.
-    if (isDenied(denied, stableIdOf(recordDir, file, text))) continue;
+    if (isDenied(denied, stableIdOf(recordDir, file, text), recordPathOf(recordDir, file)))
+      continue;
     documents.push(file);
     // Body only: frontmatter carries no links in the record grammar, and
     // scanning it here while the other shell strips it staged different

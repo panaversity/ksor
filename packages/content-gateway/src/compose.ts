@@ -17,6 +17,7 @@ import {
 } from "@panaversity/ksor-postgres";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
+  assertGovernanceServable,
   assertSchemaCompatible,
   buildShippedProvider,
   checkEmbeddingSpace,
@@ -169,6 +170,19 @@ export async function compose(instancePath: string, version: string): Promise<Co
     audience,
   );
   if (audience !== null) console.error(`serving audience: ${audience}`);
+
+  // Two states the SITE refuses to build in, which the door used to serve in:
+  // a generation built before governance reached the node row (every document
+  // then reads as the widest tier), and a document declaring `visibility:` in a
+  // record that declares no model (an author restricted something and nothing
+  // enforces it). Fail closed at BOOT, so a misconfiguration is one loud
+  // refusal rather than a leak per request (round-5 review of #43).
+  //
+  // Skipped when the store is unreachable: that is the deferred-schema case
+  // above, and readiness already withholds this instance until it can answer.
+  if (verifySchema === null) {
+    await assertGovernanceServable(pool, instance);
+  }
 
   const advisory = tlsAdvisory(dsn);
   if (advisory !== null) console.error(advisory);

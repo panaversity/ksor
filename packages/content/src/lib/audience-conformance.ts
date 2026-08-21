@@ -8,11 +8,22 @@
  * site and the kernel implemented the same rule twice and drifted — and each
  * side's own tests stayed green, because each side was self-consistent.
  *
- * So the rule stops living in two heads. This table is the rule; the kernel's
- * SQL predicate is asserted against it in `audience.db.test.ts`, and the site's
- * `visibleInBuild` is asserted against the same rows in the scaffold's
- * conformance suite. A surface that drifts now fails on the row it broke,
- * naming the case rather than the symptom.
+ * So the rule stops living in two heads. This table is the rule, and both
+ * implementations are asserted against it:
+ *
+ *   SQL   `audience-conformance.db.test.ts` runs the real predicate in
+ *         Postgres, with the GUCs bound as `runRead` binds them.
+ *   TS    `packages/ksor/src/audience-conformance.test.ts` runs
+ *         `decideVisible`, the canonical rule the scaffold copies verbatim
+ *         (`audience-rule-drift.test.ts` fails if the copy drifts).
+ *
+ * What the table does NOT cover, stated so it is not mistaken for coverage:
+ * the site's `visibilityOf` (how a `visibility:` is read out of frontmatter)
+ * and `buildAudience` (how KSOR_AUDIENCE resolves) are the INPUTS to the rule,
+ * tested where they live. The table is about the decision, not the reading.
+ *
+ * A surface that drifts fails on the row it broke, naming the case rather than
+ * the symptom.
  *
  * Product principle 2: one source, two surfaces — never let them read
  * different truths.
@@ -118,6 +129,18 @@ export const AUDIENCE_CASES: readonly AudienceCase[] = [
     visibility: "",
     viewer: "public",
     visible: false,
+  },
+  {
+    // The row that DISTINGUISHES the two readings. With default_visibility
+    // public, "empty means the default" is visible and "empty is a tier named
+    // ''" is not — so a surface that gets this wrong now fails, where the row
+    // above passed under both readings for different reasons.
+    name: "…and an empty visibility: with a PUBLIC default is published",
+    audiences: MODEL,
+    defaultVisibility: "public",
+    visibility: "",
+    viewer: "public",
+    visible: true,
   },
 
   // ── an unidentified caller gets the LEAST privilege, never the most ────

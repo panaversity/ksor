@@ -487,6 +487,21 @@ gateway` package, serve-by-spawn) is superseded._
     site ever can import the rule directly, which would make the table a
     convenience rather than a guard.
 
+19. **A surface that refuses must refuse on BOTH surfaces** (2026-08-21, from
+    the governance review). Product principle 2 says the site and the MCP door
+    render the same corpus; the sharper form is that they must also REFUSE the
+    same corpus. Two states had the site stopping by name while the door came
+    up clean and served the restricted half: a generation built before
+    governance reached the node row (schema 2.2 added `visibility` and a
+    migration cannot backfill frontmatter, so every carried-forward node reads
+    as the widest tier), and a document declaring `visibility:` in a record
+    that declares no `audiences:` (an author restricted something and nothing
+    enforced it). Both are now boot checks in `assertGovernanceServable`, and
+    schema 2.4 stamps each generation with the schema it was built against so
+    the first is detectable at all. When a new refusal lands on either surface,
+    the question to answer is what the OTHER surface does in that state.
+    Reversed only by an owner decision recorded here.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

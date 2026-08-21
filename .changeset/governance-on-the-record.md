@@ -64,6 +64,42 @@ which no HNSW index scan can satisfy, so every search computed the distance for
 every chunk and sorted. Measured on PostgreSQL 17.7 / pgvector 0.8.2 at 20k rows:
 452 ms → 39 ms, with the index actually used.
 
+**`ksor serve` refuses where `pnpm build` refuses.** Two states had the site
+stopping by name while the agent door came up clean and served the restricted
+half. A database migrated to 2.2 carries the governance columns but no VALUES —
+a migration cannot read frontmatter — and a NULL visibility reads as
+`default_visibility`, the widest tier, so an adopter who migrated without
+re-ingesting served every restricted document to every agent with the schema
+check green. Schema 2.4 stamps each generation with the schema it was built
+against, and serve refuses a generation older than the governance columns,
+naming `ksor ingest` as the fix. A document declaring `visibility:` in a record
+with no `audiences:` block is refused too, matching the site's
+`ksor-visibility-without-audiences`.
+
+**A `--subtree` takedown now reaches documents added after it.** The exported
+manifest could only name what the active generation contained, and the site
+builds from disk — so a document written under a withdrawn section and not yet
+ingested was published to `/docs` and `llms.txt` with no warning anywhere. The
+manifest now carries the DIRECTORIES a subtree denial governs, derived from its
+descendants' recorded file paths. The site also checks the manifest belongs to
+this record: one exported for a different instance used to pass every gate and
+apply the wrong denial set.
+
+**The readiness probe answers, and means something.** `/ready` reports NOT ready
+while the schema is unverified, instead of green on an instance where every tool
+call would fail on a missing column; the boot check is retried like a serving
+read rather than treated as permanently unknown after one cold start; the whole
+readiness chain shares one wall-clock budget (measured: 10.25s → 8.07s against
+an unreachable endpoint); and concurrent probes share one in-flight check
+however slow it is, instead of stacking a connection each.
+
+**A cold burst is no longer mistaken for an overloaded pool.** pg-pool counts a
+socket that is still completing its handshake as a full slot, so a burst of
+requests arriving at a waking database looked like saturation and was shed
+permanently — with identical requests getting opposite verdicts depending on
+arrival order. Saturation is now measured by connections that actually
+connected.
+
 Also: every envelope now reports the abstention `gate` and the measured
 `top_cosine`, so `ok=true` from an uncalibrated record can no longer be read as
 coverage; the MCP server states four framework rules in its instructions instead
@@ -73,4 +109,7 @@ applying DDL and granting ingest from starting a server, and `pnpm serve` now
 collects retired generations; the scaffold ships the `database:` block its own
 runbook requires, and `env.example` documents the production variables the code
 actually reads; shutdown logs and has a deadline; pool sizing and the TLS posture
-are chosen rather than inherited.
+are chosen rather than inherited; `ksor takedown --export` reads through the
+runtime role rather than the ingest role, so a site build host no longer needs
+write access to the record; and `KSOR_DRAIN_TIMEOUT_MS` is read when the server
+starts rather than when the module loads, which is what made it inert in `.env`.

@@ -127,3 +127,9 @@ export { runContentCli } from "./commands.js";
 
 export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
 export { decideVisible, type AudienceModel as SiteAudienceModel } from "./lib/audience-rule.js";
+export { withProbeDeadline, ProbeDeadlineError } from "./db.js";
+export {
+  assertGovernanceServable,
+  GovernanceGateError,
+  GOVERNANCE_SINCE,
+} from "./governance-gate.js";

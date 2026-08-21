@@ -43,6 +43,12 @@ CREATE TABLE ingestion_runs (
     started_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
     heartbeat_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at            TIMESTAMPTZ,
+    -- The schema version in force when this generation was BUILT. A generation
+    -- carried forward across the 2.1 -> 2.2 migration has NULL visibility on
+    -- every node, which the serving predicate reads as the widest tier — so a
+    -- record with an audience model must refuse to serve such a generation
+    -- rather than quietly publish restricted documents (2.4).
+    schema_version         TEXT,
     UNIQUE (tenant_id, corpus_id, generation)
 );
 
@@ -213,10 +219,13 @@ CREATE TABLE schema_meta (
 -- 2.1 adds takedown_denylist.scope (decision 14). 2.2 puts governance on the node
 -- row (corpus_id, visibility, doc_status, owner, provenance, superseded_by).
 -- 2.3 gives takedown a write plane and the ledger a reader (sor_content_auditor).
+-- 2.4 stamps each generation with the schema it was built against, so a
+-- generation predating the governance columns can be REFUSED rather than served
+-- at default_visibility.
 -- Both are additive and nullable, so a 2.0 reader still reads a 2.2 database —
 -- compatible_from stays 2.0. Existing databases move forward through
 -- schema/migrations/; schema.sql provisions a FRESH one at the current version.
-INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.3', '2.0');
+INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.4', '2.0');
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;

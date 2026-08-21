@@ -171,6 +171,33 @@ export class ProbeDeadlineError extends Error {
   }
 }
 
+/**
+ * Bound ANY readiness work by the wall clock, not just a single probe.
+ *
+ * Readiness has ONE budget and everything it does shares it. Bounding only the
+ * probe left a hole the moment readiness gained a second step: the deferred
+ * schema check ran first as a bare query with no deadline of its own, and
+ * /ready answered in 10.25s against an unreachable endpoint while claiming 8
+ * (found live, 2026-08-21, driving the real server).
+ *
+ * The losing work is left to finish and release its own checkout; its rejection
+ * is absorbed. The point is to stop WAITING, not to cancel work in flight.
+ */
+export async function withProbeDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ProbeDeadlineError(PROBE_DEADLINE_MS)), PROBE_DEADLINE_MS);
+    // Never hold the event loop open on a probe's behalf.
+    timer.unref();
+  });
+  work.catch(() => undefined);
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>): Promise<T> {
   const work = runScopedIn(pool, gucsFor(tenantId, RUNTIME_ROLE, PROBE_STATEMENT_TIMEOUT_MS), op, {
     retry: true,
@@ -188,23 +215,7 @@ export async function runProbe<T>(pool: pg.Pool, tenantId: string, op: DbOp<T>):
   // budget. Against a black-holed endpoint the probe answered at ~10s, not 8s,
   // and the round-3 note that introduced the constant claimed the opposite
   // (round-4 review of #43, found independently by two reviewers).
-  //
-  // The losing attempt is left to finish and release its own checkout; its
-  // rejection is absorbed so it cannot surface as an unhandled rejection. The
-  // point is to stop WAITING, not to cancel work that is already in flight.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new ProbeDeadlineError(PROBE_DEADLINE_MS)), PROBE_DEADLINE_MS);
-    // Never hold the event loop open on a probe's behalf: an unref'd timer
-    // cannot delay a clean shutdown.
-    timer.unref();
-  });
-  work.catch(() => undefined);
-  try {
-    return await Promise.race([work, deadline]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
+  return withProbeDeadline(work);
 }
 
 /** The AUDITOR path: reads the §7 ledger under the read-only auditor role. */

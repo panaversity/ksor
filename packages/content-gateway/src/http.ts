@@ -35,7 +35,7 @@ import {
   type Auth,
   type VerifiedIdentity,
 } from "@panaversity/ksor-gateway-kit";
-import { runProbe } from "@panaversity/ksor-content";
+import { runProbe, withProbeDeadline } from "@panaversity/ksor-content";
 
 import { buildServer } from "./server.js";
 import type { Composition } from "./compose.js";
@@ -202,16 +202,21 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       // answers, so a cold start becomes a slow ready rather than a permanent
       // unverified state. A schema that is genuinely too old keeps failing,
       // which keeps the instance out of rotation instead of serving errors.
-      verdict: (verifySchema === null ? Promise.resolve() : verifySchema())
-        .then(() =>
+      //
+      // The WHOLE chain shares one budget: the deferred schema check runs
+      // first and is a bare query with no deadline of its own, so bounding
+      // only the probe let /ready answer in 10.25s while claiming 8 (found
+      // live, 2026-08-21).
+      verdict: withProbeDeadline(
+        (verifySchema === null ? Promise.resolve() : verifySchema()).then(() =>
           runProbe(pool, instance.tenantId, (client) =>
             client.query("SELECT 1 FROM corpora LIMIT 1"),
           ),
-        )
-        .then(
-          () => true,
-          () => false,
         ),
+      ).then(
+        () => true,
+        () => false,
+      ),
     };
     // Stamp on COMPLETION, so the TTL measures the age of an ANSWER.
     void entry.verdict.then(() => {

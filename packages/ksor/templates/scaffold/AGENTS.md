@@ -263,8 +263,12 @@ Details in README → Deploying.
 - `visibility:` names the one audience a document belongs to — a single value
   from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
   (an approved document can be restricted, and a draft is not hidden). Leave
-  it off and the document takes `default_visibility`. The key does nothing
-  until `instance.md` declares `audiences:`; once it does, `pnpm check`
+  it off and the document takes `default_visibility`. Using the key WITHOUT
+  an `audiences:` block is refused on both surfaces — `pnpm build` stops with
+  `ksor-visibility-without-audiences` and `pnpm serve` refuses to boot —
+  because a document marked restricted while nothing enforces it is the one
+  shape where the frontmatter is the only trace of a restriction that is not
+  happening. Once `audiences:` is declared, `pnpm check`
   refuses any link or `superseded_by:` pointing from a wider audience at a
   narrower one — the leak no single build can catch, because the build that
   publishes the link has already dropped its target.

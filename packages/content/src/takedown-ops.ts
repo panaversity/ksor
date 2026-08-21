@@ -16,7 +16,7 @@
 
 import type pg from "pg";
 
-import { runAuditRead, runIngest } from "./db.js";
+import { runAuditRead, runIngest, runRead } from "./db.js";
 import type { ContentInstance } from "./instance.js";
 
 /**
@@ -176,7 +176,11 @@ export async function readLedger(
  * (round-2 review of #43).
  */
 export async function deniedStableIds(pool: pg.Pool, instance: ContentInstance): Promise<string[]> {
-  return runIngest(pool, instance.tenantId, async (client) => {
+  // The RUNTIME role, not ingest. `pnpm build` now runs this on every site
+  // build host, and a host that needs to read a denial list must not hold
+  // SELECT/INSERT/UPDATE/DELETE on the whole record — a build environment
+  // could rewrite or drop the corpus (round-5 review of #43).
+  return runRead(pool, instance.tenantId, async (client) => {
     const result = await client.query(
       `WITH RECURSIVE gen AS (
          SELECT active_generation AS g FROM corpora WHERE tenant_id = $1 AND corpus_id = $2
@@ -208,11 +212,81 @@ export async function deniedStableIds(pool: pg.Pool, instance: ContentInstance):
   });
 }
 
+/**
+ * The knowledge-relative DIRECTORIES that `--subtree` denials govern.
+ *
+ * Derived from the DESCENDANTS' `sources.origin_path`, never from the denied
+ * node's own id or path, because neither works:
+ *
+ *   a section has no source     `knowledge/policies#section` is synthetic — the
+ *                               tree node for a directory. Joining `sources` on
+ *                               the denied node itself yields nothing, and a
+ *                               section is the ordinary target of `--subtree`.
+ *   a leaf's directory is not   `--subtree` on one document would emit that
+ *   its subtree                 document's directory and deny every sibling.
+ *
+ * So: walk the descendants, take the directory of each one's file, and keep the
+ * SHALLOWEST — a directory that contains another in the set is the subtree
+ * root, and `startsWith` then covers subdirectories added later too. A denial
+ * with no descendants contributes nothing, which is correct: its subtree is
+ * itself, and the flat id list already holds it.
+ */
+export async function deniedSubtreeDirs(
+  pool: pg.Pool,
+  instance: ContentInstance,
+): Promise<string[]> {
+  const paths = await runRead(pool, instance.tenantId, async (client) => {
+    const result = await client.query(
+      `WITH RECURSIVE gen AS (
+         SELECT active_generation AS g FROM corpora WHERE tenant_id = $1 AND corpus_id = $2
+       ),
+       seed AS (
+         SELECT n.node_id
+           FROM takedown_denylist d
+           JOIN content_nodes n ON n.tenant_id = d.tenant_id AND n.stable_id = d.stable_id
+           JOIN gen ON n.generation = gen.g
+          WHERE d.tenant_id = $1 AND d.corpus_id = $2 AND d.scope = 'subtree'
+       ),
+       walk AS (
+         SELECT node_id FROM seed
+         UNION ALL
+         SELECT c.node_id
+           FROM content_nodes c
+           JOIN walk w ON c.parent_id = w.node_id
+           JOIN gen ON c.generation = gen.g
+          WHERE c.tenant_id = $1
+       )
+       SELECT DISTINCT s.origin_path
+         FROM walk w
+         JOIN content_nodes n ON n.node_id = w.node_id
+         JOIN sources s ON s.tenant_id = n.tenant_id AND s.generation = n.generation
+                       AND s.node_id = n.node_id
+         -- The SEED's own file is excluded: for a leaf denial its directory is
+         -- the parent, which would deny every sibling.
+        WHERE w.node_id NOT IN (SELECT node_id FROM seed)`,
+      [instance.tenantId, instance.corpusId],
+    );
+    return (result.rows as { origin_path: string }[]).map((r) => String(r.origin_path));
+  });
+
+  const dirs = new Set<string>();
+  for (const raw of paths) {
+    const normalized = raw.replace(/\\/g, "/");
+    const slash = normalized.lastIndexOf("/");
+    // A file at the record root means the whole record is denied.
+    dirs.add(slash === -1 ? "/" : `${normalized.slice(0, slash)}/`);
+  }
+  // Keep only the shallowest: a directory contained by another in the set is
+  // already covered by it, and the outer one is the actual subtree root.
+  const all = [...dirs];
+  return all.filter((dir) => !all.some((other) => other !== dir && dir.startsWith(other))).sort();
+}
+
 export async function listTakedowns(
   pool: pg.Pool,
   instance: ContentInstance,
 ): Promise<TakedownRow[]> {
-  return runIngest(pool, instance.tenantId, async (client) => {
+  return runRead(pool, instance.tenantId, async (client) => {
     const result = await client.query(
       "SELECT stable_id, scope, reason, created_at FROM takedown_denylist" +
         " WHERE tenant_id = $1 AND corpus_id = $2 ORDER BY created_at, stable_id",
@@ -247,6 +321,24 @@ export interface DenylistManifest {
   readonly source: "database" | "none";
   readonly exported_at: string;
   readonly denied: readonly { stable_id: string; scope: TakedownScope }[];
+  /**
+   * Directories a `--subtree` takedown governs, as knowledge-relative paths
+   * ending in "/".
+   *
+   * The expanded id list above can only name what the ACTIVE generation
+   * contains, and decision 14 chose serving-time resolution precisely because
+   * "a subtree deny must also cover descendants a FUTURE re-ingest adds". The
+   * site builds from DISK, where those files already exist while the database
+   * has never seen them: a document added under a withdrawn section published
+   * to /docs and llms.txt with no warning anywhere (round-5 review of #43).
+   *
+   * A directory is the right handle for the site because the site's tree IS the
+   * file tree — this is not the stable_id prefix matching decision 14 rejects,
+   * which fails because a frontmatter `sor_id:` decouples an id from its path.
+   * These paths come from `sources.origin_path`, so they are the real
+   * locations on disk regardless of any id override.
+   */
+  readonly denied_subtrees: readonly string[];
 }
 
 export function denylistManifest(
@@ -254,11 +346,13 @@ export function denylistManifest(
   stableIds: readonly string[],
   now: Date,
   source: DenylistManifest["source"] = "database",
+  deniedSubtrees: readonly string[] = [],
 ): DenylistManifest {
   return {
     format: 1,
     corpus_id: corpusId,
     source,
+    denied_subtrees: [...deniedSubtrees].sort(),
     exported_at: now.toISOString(),
     // Already EXPANDED: every id here is denied outright, so the consumer
     // matches exact strings and never has to interpret scope.

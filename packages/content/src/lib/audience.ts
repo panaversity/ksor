@@ -109,10 +109,21 @@ const SEP = "\u001f";
  * UNBOUND means nobody stated a scope, and the predicate matches nothing —
  * fail closed, so a forgotten binding is an outage rather than a leak.
  */
+/**
+ * `nullif(…, '')` because an EMPTY `visibility:` means the same as declaring
+ * none, and the TypeScript half of this rule has always said so. The SQL left
+ * `''` alone, so it matched no tier and the document was served to nobody while
+ * the site published it at `default_visibility` — a disagreement decision 18's
+ * shared table is supposed to make impossible, and did not catch because the
+ * one empty-string row expected `false` under both readings for different
+ * reasons (round-5 review of #43). Not reachable today — both frontmatter
+ * readers reject an empty `visibility:` earlier — which is exactly why it had
+ * to be fixed before something made it reachable.
+ */
 export function audienceAllowed(alias: string): string {
   return `(
     current_setting('app.audience_tiers', true) = '${NO_MODEL}'
-    OR coalesce(${alias}.visibility, coalesce(current_setting('app.default_visibility', true), '')) =
+    OR coalesce(nullif(${alias}.visibility, ''), coalesce(current_setting('app.default_visibility', true), '')) =
        ANY (string_to_array(coalesce(current_setting('app.audience_tiers', true), ''), E'\\x1f'))
 )`;
 }

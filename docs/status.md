@@ -163,7 +163,7 @@ builtin `up`.
   for the swap.
 
 - **Schema migrations — DONE.** `schema.sql` provisions a FRESH database at the
-  current version (2.3); an existing one moves forward through
+  current version (2.4); an existing one moves forward through
   `schema/migrations/<from>-<to>__<slug>.sql`, applied by a runner keyed on
   `schema_meta`. The chain is WALKED, not sorted, so a missing step refuses
   rather than being skipped, and each step commits with the `schema_meta` row
@@ -171,6 +171,24 @@ builtin `up`.
   presence. This retires the "drop and recreate the database" remedy, which
   destroyed `retrieval_log` and `takedown_denylist` — the only two tables that
   cannot be rebuilt from markdown.
+
+- **The governance boot gate — DONE.** `ksor serve` refuses two states the SITE
+  already refuses to build in, because a door that serves where the site stops
+  is the two surfaces reading different truths. A generation built before
+  schema 2.2 carries no `visibility` at all — the 2.1 → 2.2 migration added the
+  column and cannot backfill frontmatter — and the serving predicate reads a
+  NULL as `default_visibility`, the WIDEST tier; 2.4 stamps each generation
+  with the schema it was built against, so that state is detectable and
+  refused. A document declaring `visibility:` in a record that declares no
+  `audiences:` is refused too, matching the site's
+  `ksor-visibility-without-audiences`.
+
+- **Subtree takedowns reach the site — DONE.** The exported manifest carries
+  the DIRECTORIES a `--subtree` denial governs alongside the expanded id list,
+  derived from the descendants' `sources.origin_path`. The id list can only
+  name what the active generation holds, and the site builds from disk: a
+  document added under a withdrawn section after the last ingest was published
+  to `/docs` and `llms.txt` with no warning.
 
 ## Designed, not implemented
 

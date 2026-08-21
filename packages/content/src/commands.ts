@@ -31,6 +31,7 @@ import { grantIngest, revokeIngest } from "./grant.js";
 import {
   applyTakedown,
   deniedStableIds,
+  deniedSubtreeDirs,
   denylistManifest,
   listTakedowns,
   readLedger,
@@ -680,10 +681,19 @@ async function takedownCommand(args: string[]): Promise<number> {
 
   if (values.export !== undefined) {
     // EXPANDED here, where the tree lives: the site has no parent_id to walk.
-    const rows = await withPool(dsn, (pool) => deniedStableIds(pool, instance));
-    const manifest = denylistManifest(instance.corpusId, rows, new Date());
+    // The subtree DIRECTORIES go too, because the expanded list can only name
+    // what the active generation contains — and the site builds from disk,
+    // where a document added under a withdrawn section already exists.
+    const { rows, subtrees } = await withPool(dsn, async (pool) => ({
+      rows: await deniedStableIds(pool, instance),
+      subtrees: await deniedSubtreeDirs(pool, instance),
+    }));
+    const manifest = denylistManifest(instance.corpusId, rows, new Date(), "database", subtrees);
     writeFileSync(values.export, JSON.stringify(manifest, null, 2) + "\n");
-    process.stdout.write(`takedown: exported ${rows.length} denial(s) to ${values.export}\n`);
+    const also = subtrees.length === 0 ? "" : ` and ${subtrees.length} subtree(s)`;
+    process.stdout.write(
+      `takedown: exported ${rows.length} denial(s)${also} to ${values.export}\n`,
+    );
     return 0;
   }
 
