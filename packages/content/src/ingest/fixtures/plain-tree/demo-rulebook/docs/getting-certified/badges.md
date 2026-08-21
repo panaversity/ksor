@@ -1,6 +1,7 @@
 ---
 title: "Rule 10: Machine Badges"
 position: 1
+order: 1
 ---
 
 # Rule 10: Machine Badges

@@ -1,6 +1,7 @@
 ---
 title: Getting Certified
 position: 1
+order: 1
 ---
 
 # Getting Certified

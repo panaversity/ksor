@@ -118,17 +118,40 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
- * Warn once when a remote DSN's TLS posture is inherited rather than chosen.
+ * The DSN ksor actually connects with — the weak sslmode SPELLED OUT.
  *
- * With pg 8, `sslmode=require|prefer|verify-ca` all resolve to full
- * verification — so ksor gets verified TLS today by accident of a default, not
- * by decision, and nothing in the repo states or tests the posture. The driver
- * itself warns that those modes adopt libpq semantics (NO certificate
- * verification) in pg 9, which would silently downgrade every adopter on a
- * dependency bump. `pg` is pinned `^8.23.0` so semver blocks that today; this
- * makes the posture legible now and names the one-word fix.
+ * pg 8 treats `sslmode=require|prefer|verify-ca` as aliases for `verify-full`,
+ * and says so by emitting a multi-line `process.emitWarning` on every boot
+ * telling the operator those modes adopt libpq semantics (NO certificate
+ * verification) in pg 9. That warning is correct and its remedy is one word:
+ * write `verify-full`. So ksor writes it, instead of printing a warning at an
+ * adopter who did nothing wrong — the connection is UNCHANGED today (the
+ * driver was already resolving these three to full verification, which is the
+ * whole content of its warning) and cannot silently downgrade when the driver
+ * bumps. Acting on a warning beats forwarding it.
+ *
+ * Loopback and the explicit opt-outs (`disable`, `no-verify`) are left exactly
+ * as the operator wrote them: those state a posture, they do not inherit one.
  */
-export function tlsAdvisory(dsn: string): string | null {
+export function pinnedTlsDsn(dsn: string): string {
+  let url: URL;
+  try {
+    url = new URL(dsn);
+  } catch {
+    return dsn;
+  }
+  if (isLoopbackHost(url.hostname)) return dsn;
+  const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
+  if (!WEAK_SSLMODES.includes(mode)) return dsn;
+  url.searchParams.set("sslmode", "verify-full");
+  return url.toString();
+}
+
+/**
+ * The one-phrase TLS posture for the boot report. Says what IS, never what
+ * might go wrong later — the pin above removed the "might".
+ */
+export function tlsPosture(dsn: string): string | null {
   let url: URL;
   try {
     url = new URL(dsn);
@@ -137,12 +160,10 @@ export function tlsAdvisory(dsn: string): string | null {
   }
   if (isLoopbackHost(url.hostname)) return null;
   const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
-  if (!WEAK_SSLMODES.includes(mode)) return null;
-  return (
-    `db TLS: sslmode=${mode} is verified TODAY (pg 8 treats it as verify-full) but becomes ` +
-    "UNVERIFIED under libpq semantics in pg 9 — write sslmode=verify-full in the DSN to say so " +
-    "explicitly and keep the guarantee across a driver upgrade."
-  );
+  if (mode === "disable") return "TLS off (sslmode=disable)";
+  if (mode === "no-verify") return "TLS UNVERIFIED (sslmode=no-verify)";
+  if (WEAK_SSLMODES.includes(mode)) return `TLS verified (sslmode=${mode} pinned to verify-full)`;
+  return "TLS verified";
 }
 
 /**
@@ -259,7 +280,8 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
   // complete and bounce" — so we use the native mechanism, not a Promise.race.
   const tls = tlsOptionsFor(dsn);
   const pool = new pg.Pool({
-    connectionString: dsn,
+    // Spelled out, not inherited — see pinnedTlsDsn.
+    connectionString: pinnedTlsDsn(dsn),
     // Stated, not inherited — see tlsOptionsFor. Omitted entirely when TLS is
     // not in play, so a loopback dev database is untouched.
     ...(tls === undefined ? {} : { ssl: tls }),

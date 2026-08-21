@@ -10,7 +10,7 @@
  *     nodes;
  *   - `index.md` (or `README.md`) inside a directory is that SECTION's own
  *     content, not a child;
- *   - ordering: frontmatter `position` (or `sidebar_position`) wins, else name
+ *   - ordering: the governed `order:` frontmatter key, else name (lib/order-rule.ts)
  *     sort;
  *   - titles: frontmatter `title`, else the filename humanized;
  *   - stable ids: frontmatter `sor_id`, else the tree-relative path;
@@ -31,6 +31,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { governanceFromFrontmatter, NO_GOVERNANCE } from "../governance.js";
+import { compareSiblings, orderValue, tieKey, type Sibling } from "../../lib/order-rule.js";
 import {
   type Manifest,
   ManifestError,
@@ -43,8 +44,6 @@ import {
 } from "../manifest.js";
 
 const INDEX_NAMES: readonly string[] = ["index.md", "index.mdx", "README.md"];
-/** Frontmatter-position fallback for entries that declare none (oracle plain_tree.py:107,114). */
-const POSITION_FALLBACK = 10_000;
 
 export interface TreeFile {
   readonly kind: "file";
@@ -161,7 +160,7 @@ export function buildManifestFromTree(
       else if (e.kind === "dir") dirs.push(e);
     }
 
-    const ordered: { position: number; nameLower: string; entry: TreeFile | TreeDir }[] = [];
+    const ordered: (Sibling & { entry: TreeFile | TreeDir })[] = [];
     for (const f of docs) {
       if (f.name.startsWith(".") || f.name.startsWith("_")) {
         skipped.push(fullPath(relSegs, f.name));
@@ -169,8 +168,8 @@ export function buildManifestFromTree(
       }
       if (INDEX_NAMES.includes(f.name)) continue; // the parent section's own content — handled by the caller
       ordered.push({
-        position: positionOf(frontmatterMeta(f.text), POSITION_FALLBACK),
-        nameLower: f.name.toLowerCase(),
+        order: orderValue(frontmatterMeta(f.text)["order"]),
+        tie: tieKey(f.name),
         entry: f,
       });
     }
@@ -182,13 +181,14 @@ export function buildManifestFromTree(
       const index = indexOf(d, fullPath(relSegs, d.name));
       const dirMeta = index === null ? {} : frontmatterMeta(index.text);
       ordered.push({
-        position: positionOf(dirMeta, POSITION_FALLBACK),
-        nameLower: d.name.toLowerCase(),
+        order: orderValue(dirMeta["order"]),
+        tie: tieKey(d.name),
         entry: d,
       });
     }
 
-    ordered.sort((x, y) => x.position - y.position || codePointCompare(x.nameLower, y.nameLower));
+    // ONE rule, shared with the site — see lib/order-rule.ts (decision 18).
+    ordered.sort(compareSiblings);
     let position = 0;
     for (const { entry } of ordered) {
       position += 1;
@@ -350,15 +350,6 @@ function titleOf(meta: Record<string, unknown>, fallbackStem: string): string {
   if (t === undefined || t === null || t === "" || t === 0 || t === false)
     return humanize(fallbackStem);
   return String(t);
-}
-
-function positionOf(meta: Record<string, unknown>, fallback: number): number {
-  for (const key of ["position", "sidebar_position"]) {
-    const val = meta[key];
-    // booleans never parse as positions; int() truncation parity via trunc
-    if (typeof val === "number" && Number.isFinite(val)) return Math.trunc(val);
-  }
-  return fallback;
 }
 
 /** Python compares strings by code point; JS `<` compares UTF-16 units — they differ on astral names. */

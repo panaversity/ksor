@@ -12,7 +12,7 @@ import type pg from "pg";
 import {
   pooledEndpointFor,
   prewarmPool,
-  tlsAdvisory,
+  tlsPosture,
   withPgRetry,
 } from "@panaversity/ksor-postgres";
 import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
@@ -36,6 +36,8 @@ import {
   type ContentInstance,
   type ServiceContext,
 } from "@panaversity/ksor-content";
+
+import { bootHeader, bootLine } from "./boot-report.js";
 
 export interface Composition {
   readonly ctx: ServiceContext;
@@ -110,10 +112,15 @@ export async function compose(instancePath: string, version: string): Promise<Co
     throw error;
   }
 
-  // Classification only — logged with the REASON, never the DSN.
-  console.error(
-    `db endpoint: ${pooledEndpointFor(dsn) ? "transaction-pooled" : "direct"} (classified from the DSN shape)`,
-  );
+  // Classification only — logged with the REASON, never the DSN. The TLS half
+  // states what ksor DID (see pinnedTlsDsn); it is not a warning forwarded at
+  // an adopter who wrote a perfectly ordinary connection string.
+  console.error(bootHeader(instance.corpusId));
+  {
+    const endpoint = pooledEndpointFor(dsn) ? "transaction-pooled endpoint" : "direct endpoint";
+    const tls = tlsPosture(dsn);
+    console.error(bootLine("db", tls === null ? `${endpoint} · local` : `${endpoint} · ${tls}`));
+  }
   const pool = contentPool(dsn);
 
   // EVERY fail-closed boot check, in one place, so that deferring them defers
@@ -221,10 +228,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
     { audiences: instance.audiences, defaultVisibility: instance.defaultVisibility },
     audience,
   );
-  if (audience !== null) console.error(`serving audience: ${audience}`);
-
-  const advisory = tlsAdvisory(dsn);
-  if (advisory !== null) console.error(advisory);
+  if (audience !== null) console.error(bootLine("audience", audience));
 
   // Prewarm is OPT-IN (KSOR_CONTENT_POOL_MIN, default 0). `min` alone cannot
   // do this — pg-pool never opens connections eagerly — so the dial is honoured
@@ -233,7 +237,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
   const floor = contentPoolMin();
   if (floor > 0) {
     const opened = await prewarmPool(pool, floor);
-    console.error(`db pool: prewarmed ${opened} connection(s)`);
+    console.error(bootLine("db pool", `prewarmed ${opened} connection(s)`));
   }
 
   const ctx: ServiceContext = {

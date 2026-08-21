@@ -1,6 +1,7 @@
 ---
 title: Machine Rules
 position: 2
+order: 2
 ---
 
 # Machine Rules

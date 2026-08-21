@@ -1,6 +1,7 @@
 ---
 title: "Rule 31: Power Cuts and Fire"
 position: 2
+order: 2
 ---
 
 # Rule 31: Power Cuts and Fire

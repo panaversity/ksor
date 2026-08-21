@@ -37,6 +37,12 @@ import {
 } from "@panaversity/ksor-gateway-kit";
 import { runProbe, withProbeDeadline } from "@panaversity/ksor-content";
 
+import {
+  abstainPosture,
+  authPosture,
+  bootLine,
+  withoutSdkResponseModeWarning,
+} from "./boot-report.js";
 import { buildServer } from "./server.js";
 import type { Composition } from "./compose.js";
 
@@ -325,11 +331,16 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // between them. `responseMode: "json"` keeps the response a single buffered
   // JSON body — we emit no mid-call notifications, and a stream would race the
   // per-request teardown (review, 2026-08-19).
-  const mcpHandler = createMcpHandler(() => buildServer(ctx, version), {
-    legacy: "stateless",
-    responseMode: "json",
-    onerror: (error) => console.error(`mcp handler: ${error.name}: ${error.message}`),
-  });
+  // The SDK warns about `responseMode: "json"` on every construction. It is our
+  // decision, recorded (decision 13) and true for this record, so it is not the
+  // adopter's warning to read — see withoutSdkResponseModeWarning.
+  const mcpHandler = withoutSdkResponseModeWarning(() =>
+    createMcpHandler(() => buildServer(ctx, version), {
+      legacy: "stateless",
+      responseMode: "json",
+      onerror: (error) => console.error(`mcp handler: ${error.name}: ${error.message}`),
+    }),
+  );
 
   /**
    * BUFFER the whole response before the caller's in-flight slot is released.
@@ -530,16 +541,11 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     });
     s.once("error", reject);
   });
-  console.error(
-    `ksor gateway serving ${instance.corpusId} on http://${bind.host}:${bind.port}/mcp ` +
-      `(auth: ${auth.mode}, abstain gate: ${
-        instance.abstain.vectorFloor === null
-          ? "OFF (no floor)"
-          : instance.abstain.vectorFloor === "uncalibrated"
-            ? "REFUSING (uncalibrated)"
-            : `floor ${instance.abstain.vectorFloor}`
-      })`,
-  );
+  // The two lines that decide whether an operator should trust what happens
+  // next, said plainly: who may ask, and what the record will refuse.
+  console.error(bootLine("auth", authPosture(auth.mode, bind.host)));
+  console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
+  console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));
 
   // Drain: close the listener FIRST, then the pool in its callback — the pool
   // must not be torn down under in-flight work (review, 2026-08-19).

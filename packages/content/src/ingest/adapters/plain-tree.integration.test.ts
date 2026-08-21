@@ -3,6 +3,14 @@
 // adversarial trees that cannot be committed portably (built in tmp dirs).
 // Golden captured 2026-08-19 by running the oracle's build_manifest
 // (plain_tree.py @ b554f91) over the exact committed fixture tree.
+//
+// The golden has never been regenerated. When ksor moved ordering to the
+// governed `order:` key (2026-08-21 — the predecessor's `position:` /
+// `sidebar_position:` are Docusaurus keys that no compliant record may declare,
+// so the door was reading keys that never appear), the FIXTURE gained `order:`
+// beside each `position:` with the same value, and the oracle's manifest still
+// reproduces exactly. That is the honest way round: the same tree, said in
+// ksor's vocabulary, still builds the predecessor's structure.
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

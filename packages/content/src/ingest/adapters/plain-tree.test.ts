@@ -34,51 +34,56 @@ function build(root: TreeDir, onSkip?: (line: string) => void): PlainTreeResult 
 }
 
 describe("ordering", () => {
-  it("honors frontmatter position over name order", () => {
+  // The rule itself, and its full decision table, live in lib/order-rule.ts and
+  // lib/order-conformance.ts — asserted there against BOTH surfaces. These are
+  // the adapter's own edges: the governed key it reads, and the shapes only a
+  // real tree has.
+  //
+  // These tests used to assert `position:` / `sidebar_position:`, the
+  // predecessor's Docusaurus keys. No compliant record may declare either — the
+  // format checker closes the frontmatter key set and `order` is the ordering
+  // key in it — so the adapter was reading keys that never appear and ignoring
+  // the one that does (found live 2026-08-21).
+
+  it("honors the governed `order:` key over name order", () => {
     const root = dir(
       "docs",
-      file("a.md", "---\nposition: 2\n---\n# A\n"),
-      file("b.md", "---\nposition: 1\n---\n# B\n"),
+      file("a.md", "---\norder: 2\n---\n# A\n"),
+      file("b.md", "---\norder: 1\n---\n# B\n"),
     );
     const m = build(root).manifest;
     expect(m.nodes.map((n) => n.slug)).toEqual(["b", "a"]);
     expect(m.nodes.map((n) => n.position)).toEqual([1, 2]);
   });
 
-  it("ignores a boolean position — bool never parses as position 1", () => {
+  it("does NOT read the predecessor's position keys", () => {
+    // Reading them would be worse than ignoring them: the site never has, so a
+    // record that declared one would be ordered differently on the two surfaces
+    // — and the checker would refuse the document anyway.
     const root = dir(
       "docs",
-      file("a.md", "---\nposition: true\n---\n# A\n"),
-      file("b.md", "---\nposition: 1\n---\n# B\n"),
+      file("a.md", "---\nposition: 2\n---\n# A\n"),
+      file("b.md", "---\nsidebar_position: 1\n---\n# B\n"),
     );
-    const docs = build(root).manifest.nodes.filter((n) => n.kind === "document");
-    expect(docs.map((n) => n.slug)).toEqual(["b", "a"]);
+    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["a", "b"]);
   });
 
-  it("truncates a float position like Python int() — 2.7 sorts as 2", () => {
+  it("orders sections by their index file's `order:`", () => {
     const root = dir(
       "docs",
-      file("late.md", "---\nposition: 3\n---\n"),
-      file("mid.md", "---\nposition: 2.7\n---\n"),
-      file("early.md", "---\nposition: 1\n---\n"),
-    );
-    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["early", "mid", "late"]);
-  });
-
-  it("accepts sidebar_position and orders sections by their index file's position", () => {
-    const root = dir(
-      "docs",
-      dir("zeta", file("index.md", "---\nsidebar_position: 1\ntitle: Zeta\n---\n"), file("z.md")),
-      dir("alpha", file("index.md", "---\nsidebar_position: 2\ntitle: Alpha\n---\n"), file("a.md")),
+      dir("zeta", file("index.md", "---\norder: 1\ntitle: Zeta\n---\n"), file("z.md")),
+      dir("alpha", file("index.md", "---\norder: 2\ntitle: Alpha\n---\n"), file("a.md")),
     );
     const sections = build(root).manifest.nodes.filter((n) => n.kind === "section");
     expect(sections.map((n) => n.slug)).toEqual(["zeta", "alpha"]);
     expect(sections.map((n) => n.position)).toEqual([1, 2]);
   });
 
-  it("falls back to case-insensitive name order without positions", () => {
+  it("falls back to name order, case PRESERVED, without an order", () => {
+    // Case-preserving because the site compares routes and does not fold case;
+    // `B` (66) therefore precedes `a` (97). One bytewise truth, both surfaces.
     const root = dir("docs", file("Bravo.md"), file("alpha.md"), file("charlie.md"));
-    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["alpha", "bravo", "charlie"]);
+    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["bravo", "alpha", "charlie"]);
   });
 });
 
@@ -151,7 +156,7 @@ describe("identity", () => {
   });
 
   it("path fallback strips only the last suffix; .mdx files keep their path in files[]", () => {
-    const root = dir("docs", file("b.mdx", "---\nposition: 1\n---\n"), file("a.b.md"));
+    const root = dir("docs", file("b.mdx", "---\norder: 1\n---\n"), file("a.b.md"));
     const { manifest } = build(root);
     expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["docs/b", "docs/a.b"]);
     expect(manifest.files.map((f) => f.path)).toEqual(["docs/b.mdx", "docs/a.b.md"]);
