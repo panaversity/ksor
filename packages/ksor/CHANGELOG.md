@@ -1,5 +1,116 @@
 # @panaversity/ksor
 
+## 0.0.11
+
+### Patch Changes
+
+- 0a0dd27: A record describes itself on the surface agents discover it through
+
+  `/.well-known/mcp/server.json` carried one hard-coded sentence — "The <name>
+  Knowledge System of Record: governed markdown served with citations and honest
+  abstention." — byte-identical in every ksor record ever scaffolded. An agent
+  choosing between records in a registry learned nothing from any of them, which
+  is the opposite of what that document exists for.
+
+  The description now comes from the record's own prose: its display title and the
+  first real sentence of `instance.md`, which is what the intake interview writes.
+  A record whose owner has not described it yet SAYS so rather than borrowing a
+  confident sentence it has not earned — the same answer the MCP door already
+  gives an agent that connects, so the two surfaces do not disagree about whether
+  this record knows what it is.
+
+  The scaffold's opening paragraphs are authoring guidance, not scope, so the
+  template is detected across the whole body rather than paragraph by paragraph:
+  publishing instructions-to-the-author as a description would be worse than
+  admitting there is none.
+
+- 0fe759d: Three defects found by auditing 0.0.10 against a live record
+
+  **A repeated `sslmode` was read the wrong end.** `pinnedTlsDsn` took the FIRST
+  value of a repeated parameter; `pg` takes the LAST. So on
+  `?sslmode=require&sslmode=disable` — whose effective mode is `disable` — the pin
+  saw a weak mode, collapsed the duplicates into one `verify-full`, turned TLS on,
+  and printed "TLS verified" at an operator whose DSN ended in `disable`. The
+  direction was safe; silently overruling an explicit opt-out and then misreporting
+  it was not. All three TLS functions now read the mode the driver will use.
+
+  The same sweep asserted the larger worry the pin creates — that re-serializing a
+  connection string could alter a credential. Seventeen DSNs with the passwords
+  people actually paste (raw `@`, spaces, `%`, `+`, brackets, non-ASCII,
+  percent-encoded separators) are now checked field by field against `pg`'s own
+  resolved view: everything the driver derives is byte-identical, and so is the
+  TLS decision.
+
+  **The outline's `position` disclosed documents an audience may not see.** It was
+  the rank in the whole record, so a public caller received 1, 3, 4 — a gap exactly
+  where an internal sibling sat, telling them something exists and roughly where.
+  The same row's `child_count` was already computed over visible children only, so
+  one response object disagreed with itself. `position` is now the rank among the
+  siblings the caller can see, computed as a window over the filtered set so it
+  stays correct across pages and at every depth, and both it and `depth` say what
+  they are in the tool schema.
+
+  **`ksor serve` now says when the record has no identity yet.** The MCP door
+  already refused to pass an unedited `instance.md` to agents as instructions —
+  it substitutes a plain statement that the scope is unstated — but the operator
+  starting the server was told nothing, so a record serving with no declared
+  identity looked exactly like one that had been described. It is a boot line now,
+  beside the abstention posture: both answer "how much should I trust this".
+
+- f5cd885: The bearer door's key line joins the boot block instead of interrupting it
+
+  In bearer mode the line naming where the signing keys were discovered printed
+  before the aligned posture block and in a different shape, so it read as a stray
+  log line rather than as part of what the server was telling you about itself. It
+  is a `keys` row in the block now, under `auth`, resolved at boot exactly as
+  before.
+
+- 5f30b5f: The site build no longer fails when two evaluations of the record staging overlap
+
+  The scaffold stages a per-audience copy of the record before the site build
+  reads it, removing the previous stage first. `rmSync(..., { force: true })`
+  suppresses ENOENT but retries nothing: Node retries EBUSY / EMFILE / ENFILE /
+  ENOTEMPTY / EPERM only when `maxRetries` is set, and it defaults to zero. The
+  bundler evaluates the source config more than once when it wants it in more than
+  one place, so one run could remove the stage while another was still copying
+  into it — surfacing as `ENOTEMPTY` and failing the entire site build (seen once
+  in CI, 2026-08-21).
+
+  The removal now asks for those retries. Losing that race is safe: the stage is a
+  deterministic function of the record and the denylist, so redoing it produces
+  the same bytes.
+
+  Three claims in the scaffold's `AGENTS.md` that recent releases made false are
+  also corrected: `--actor` no longer "defaults to the operating user" (it is
+  required, and there is no default by design); the signing keys are discovered
+  from the SSO's own metadata rather than fetched from Better Auth's path; and the
+  `order:` key now drives the MCP `outline` tool alongside the sidebar and
+  `llms.txt`, which is what "one order drives every surface" was always supposed
+  to mean.
+
+- 4a1c154: The shrink guard guards `ksor ingest --flip` again — it had stopped
+
+  `.env.example` documents `KSOR_MAX_SHRINK` as "a corpus that shrinks by more
+  than this FRACTION refuses to flip". In 0.0.10 it did not. Deleting eight of ten
+  documents and running `ksor ingest --flip` published the two that were left,
+  silently, exit 0.
+
+  The cause was the fix that stopped a refused ingest from publishing. That moved
+  the flip out of `buildGeneration` and into the command, so the governance gate
+  could run against the new generation BEFORE it became the active one — and the
+  shrink check, which lived inside the build's flip branch, was stepped straight
+  over. The library test that covers the guard stayed green throughout, because it
+  drives `buildGeneration` directly with `flip: true`, which is no longer the path
+  the CLI takes.
+
+  There is now one answer to "may this generation be activated" — `flipRefusal` —
+  and both flip paths ask it, in the same transaction as the flip itself. The new
+  test drives the command rather than the library, so a guard that only one of two
+  paths performs fails the tier that proves it.
+
+  Verified against a live record: a 10 → 2 node build now names all eight removed
+  documents, refuses with exit 1, and leaves the previous generation serving.
+
 ## 0.0.10
 
 ### Patch Changes
