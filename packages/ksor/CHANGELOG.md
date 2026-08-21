@@ -1,5 +1,112 @@
 # @panaversity/ksor
 
+## 0.0.12
+
+### Patch Changes
+
+- 36e4a4c: The scaffold documents what a CLIENT has to do to reach a public MCP door
+
+  `ksor serve` implements the OAuth Resource Server handshake — an
+  unauthenticated request gets a 401 carrying
+  `WWW-Authenticate: Bearer resource_metadata="…"`, and that document names the
+  record's resource identifier and its authorization server, so a client discovers
+  where to authenticate instead of being told. None of it was written down
+  anywhere an adopter or their agent reads. The operator half was documented (the
+  three environment variables); the half their agents actually execute was not.
+
+  The scaffold's `AGENTS.md` now walks the three steps, and names the failure that
+  goes wrong quietly: a token minted for a different audience is a perfectly valid
+  token, and this door rejects it, so `aud` against `KSOR_JWT_ALLOWED_AUDIENCES` is
+  the first thing to compare when a client authenticates fine and still gets 401.
+  It also records the two behaviours a client author has to know and could not have
+  guessed — RS256 only, no opaque-token introspection, and an unknown key id
+  answering 503 rather than 401, because during a key rotation the token is
+  probably good and retrying beats sending the user back through a login.
+
+  This closes one of the three items named in issue #26; the worked provider
+  recipes and the introspection/rotation policy remain open there.
+
+- 125970c: Every 401 from the MCP door carries its `WWW-Authenticate` challenge, not just the first
+
+  Only the missing-token branch emitted `WWW-Authenticate: Bearer
+resource_metadata="…"`. A token that failed verification — expired, wrong
+  audience, no subject, bad signature — came back as a bare 401. That is the most
+  common 401 a real client will ever see, because tokens expire mid-conversation,
+  and it left the client with no pointer back to the resource-metadata document:
+  it could not re-discover the authorization server it had just been talking to.
+  Only a caller that had never sent a token was told where to go.
+
+  The MCP authorization spec requires `WWW-Authenticate` on a 401 without
+  qualification. Every 401 now carries it, with RFC 6750's `error="invalid_token"`
+  so a client refreshes rather than retrying the dead token.
+
+  A **503** stays deliberately unchallenged: an unreachable key set is our outage,
+  not the token's fault, and challenging there would send a user whose token is
+  perfectly good back through a login over a key-fetch failure.
+
+  Found by adversarially checking the release that documented this door. The
+  adversarial auth suite missed it by asserting the STATUS of each rejection and
+  never the header — it now sweeps every 401-producing token and asserts the
+  challenge on each, with the 503 as the negative control.
+
+- 0a94e31: A 503 refusal no longer puts the database host and user on the wire
+
+  When the deferred boot checks fail, `/mcp` refuses with the thrown error's
+  message in full under `data.detail`. For the three authored failures that is the
+  point — a too-old schema, a governance violation and a text-search mismatch each
+  carry a multi-line remedy the operator has to act on. But the catch treated every
+  error alike, and `pg` writes the host, its resolved address, the port and the
+  database user into its connection and authentication failures. Those went out
+  verbatim to any caller who could reach the door.
+
+  What may leave is now decided in one place and by TYPE, not by inspecting
+  message text: a class we wrote is a class whose words we control. A driver error
+  is refused with its class named and its text withheld, and the caller is told
+  which kind of failure it is — infrastructure, not their request.
+
+  The full text still reaches the operator, deliberately: the refusal says the
+  reason is in the server's logs, and the deferred-boot line recorded only the
+  error's NAME, so before this the real message existed nowhere. That is also why
+  the boot checks are not sanitised at their source — reducing a driver error to a
+  class name early would destroy the one copy anyone can act on.
+
+  **The test that covered this was holding it in place.** It asserted that
+  `http.ts` contains the literal string `data: { detail: message }` — so the leak
+  was pinned by an assertion with reasoning attached. Grepping source is the right
+  instrument for "does this check run before dispatch", because position is a
+  property of source, and the wrong one for "what does the response contain".
+  Response contents are now asserted against real bodies, including a `pg`-shaped
+  connection failure whose host, address, port and user must all be absent.
+
+  Verified live: a gateway pointed at an unreachable database answers
+  `the content store is unavailable (Error)` with no host, port, user or database
+  name anywhere in the body, while the server log carries
+  `connect ECONNREFUSED 127.0.0.1:59999` in full.
+
+- 1dd6211: The dimension ceiling says which shape it applies to, instead of blaming pgvector
+
+  `ksor schema` refuses an embedding dimension above 2000 with
+  "(pgvector vector + HNSW ceiling)". The refusal is right and the reason was
+  wrong: pgvector indexes a `vector` to 2000, but a **`halfvec` to 4000**, via an
+  expression index on the cast — verified live against a real database, where
+  `hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)` plans an Index Scan.
+
+  The old wording read as pgvector's own limit, so an adopter whose model emits
+  more than 2000 dimensions could conclude it was unusable here, over a wall that
+  is not one. The message now names the shape the ceiling belongs to — this schema
+  declares `VECTOR(dim)` columns and indexes one directly — and the constant
+  carries why raising it is a decision rather than an edit: every query site would
+  have to use the same cast as the index or fall silently back to a sequential
+  scan, and the halfvec arm's float16 rounding lands on the score the abstention
+  gate reads.
+
+  The same claim is corrected in the scaffold's `AGENTS.md`, which gains the reason
+  `dim: 1536` is the shipped default: `gemini-embedding-001` emits 3072 and ksor
+  asks it for 1536, which per Google's published MTEB table costs nothing
+  measurable — 1536 scores 68.17 against 2048's 68.16.
+
+  The 2000 refusal is unchanged. Issue #49 records the decision it now points at.
+
 ## 0.0.11
 
 ### Patch Changes
