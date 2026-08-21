@@ -68,9 +68,10 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    later means re-embedding the whole corpus. Keep `dim` at or below 2000 — the
    schema indexes a `vector` column directly and pgvector's HNSW takes a
    `vector` to 2000. `gemini-embedding-001` emits 3072 by default, so ksor asks
-   it for 1536; per Google's own MTEB table that costs nothing measurable
-   (1536 scores 68.17, 2048 scores 68.16), and 768 costs 0.18 if you want the
-   storage back.
+   it for 1536. Google's published MTEB table runs 128–2048 and is flat at the
+   top of it — 1536 scores 68.17 against 2048's 68.16 — so there is no gradient
+   to climb toward the ceiling; going the other way, 768 costs 0.18 if you want
+   the storage back.
 
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
@@ -250,9 +251,13 @@ Three things worth being deliberate about:
 
 ### What a CLIENT has to do
 
-The door is an OAuth **Resource Server**, which means a client is not told the
-authorization server — it discovers it. Nothing here needs configuring; it is
-what your agents will experience, and what to check when one cannot connect.
+Once the SSO door is configured (the three variables above), the server is an
+OAuth **Resource Server**, which means a client is not told the authorization
+server — it discovers it. Nothing here needs configuring beyond those variables;
+this is what your agents will experience, and what to check when one cannot
+connect. With `KSOR_AUTH_DISABLED=1` — the local default `.env.example` ships —
+none of it applies: there is no challenge and the metadata document answers 404,
+because there is no authorization server to point at.
 
 1. The client calls `POST /mcp` with no token and gets **401** carrying
 
@@ -277,6 +282,14 @@ what your agents will experience, and what to check when one cannot connect.
 3. The client gets a token from that authorization server, asking for THIS
    record as the resource (RFC 8707: `resource=https://<your-host>/mcp`), and
    sends it as `Authorization: Bearer <token>`.
+
+Every 401 carries that same header, not just the first one — including the one
+your clients will hit most often, a token that expired mid-conversation. It
+arrives as `Bearer error="invalid_token", resource_metadata="…"`, so a client
+knows to refresh rather than to retry the dead token. A **503** is deliberately
+_not_ challenged: an unreachable key set is our outage, not your token's fault,
+and telling a client to re-authenticate over it would send a perfectly good user
+back through a login.
 
 The one thing that goes wrong here goes wrong quietly: a token minted for a
 different audience is a perfectly valid token, and this door rejects it. The

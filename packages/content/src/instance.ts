@@ -176,7 +176,19 @@ const groupSchemas = {
   embedding: z.object({
     provider: z.string().min(1).default("gemini"),
     model: z.string().min(1).default(EMBED_MODEL),
-    dim: z.coerce.number().int().min(1).max(EMBED_DIM_MAX).default(EMBED_DIM),
+    dim: z.coerce
+      .number()
+      .int()
+      .min(1)
+      // The reason travels with the refusal. Declaring `dim:` in instance.md is
+      // the path the scaffold documents, and it used to fail here with only
+      // zod's "expected number to be <=2000" — no mention of what 2000 is or
+      // why, so an adopter whose model emits more had nothing to act on. The
+      // `--dim` flag's refusal explains itself; this one did not.
+      .max(EMBED_DIM_MAX, {
+        error: `at most ${EMBED_DIM_MAX}: this schema declares VECTOR columns and indexes one directly, and pgvector's HNSW takes a vector to ${EMBED_DIM_MAX}`,
+      })
+      .default(EMBED_DIM),
   }),
   retrieval: z.object({
     /**

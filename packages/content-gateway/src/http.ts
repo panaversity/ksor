@@ -468,9 +468,30 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         identity = await auth.verify(token);
       } catch (error) {
         const transient = error instanceof TokenVerifyError && error.transient;
+        // EVERY 401 carries the challenge, not just the one for a missing
+        // token. The MCP authorization spec requires `WWW-Authenticate` on a
+        // 401 without qualification, and the case this branch serves — a token
+        // that expired mid-conversation — is the most common 401 a real client
+        // will ever see. Returning it bare left that client with no pointer
+        // back to the resource-metadata document, so it could not re-discover
+        // the authorization server it had just been talking to; only a caller
+        // that had never sent a token got told where to go. The suite missed it
+        // by asserting the STATUS of each rejection and never the header
+        // (found 2026-08-21, verifying the release that documented this door).
+        //
+        // 503 is deliberately bare: an unreachable JWKS is not an authorization
+        // failure, and challenging a caller whose token may be perfectly good
+        // would send them to re-authenticate over our outage.
         return c.json(
           { error: transient ? "token verification temporarily unavailable" : "invalid token" },
           transient ? 503 : 401,
+          transient
+            ? {}
+            : {
+                // RFC 6750 §3: `error` tells the client WHY, so it retries by
+                // refreshing rather than by repeating the same dead token.
+                "www-authenticate": `Bearer error="invalid_token", resource_metadata="${resourceMetadataUrl}"`,
+              },
         );
       }
       bearer = token;

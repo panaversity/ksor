@@ -401,6 +401,47 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
     expect(r.status).toBe(403);
   }, 60_000);
 
+  it("EVERY 401 carries the challenge, not only the one for a missing token", async () => {
+    // The suite asserted the STATUS of each rejection and never the header, so
+    // it stayed green while the invalid-token branch returned a bare 401 — and
+    // that branch serves the most common 401 a real client ever sees, a token
+    // that expired mid-conversation. Left bare, such a client has no pointer
+    // back to the resource-metadata document and cannot re-discover the
+    // authorization server it was just talking to. The MCP authorization spec
+    // requires WWW-Authenticate on a 401 without qualification.
+    const rejected: [string, Awaited<ReturnType<typeof call>>][] = [
+      ["no token", await call({})],
+      [
+        "expired",
+        await call(
+          bearer(await as.token({ aud: resource, exp: Math.floor(Date.now() / 1000) - 60 })),
+        ),
+      ],
+      [
+        "wrong audience",
+        await call(bearer(await as.token({ aud: "https://other.example.com/mcp" }))),
+      ],
+      ["no subject", await call(bearer(await as.token({ aud: resource, sub: "" })))],
+    ];
+    for (const [what, r] of rejected) {
+      expect(r.status, `${what} must be a 401`).toBe(401);
+      const challenge = r.headers.get("www-authenticate") ?? "";
+      expect(challenge, `${what}: 401 with no challenge — the client cannot re-discover`).toContain(
+        "resource_metadata=",
+      );
+      expect(challenge, `${what}`).toContain("/.well-known/oauth-protected-resource/mcp");
+    }
+  }, 120_000);
+
+  it("a 503 is NOT challenged — an outage must not send a good token back to login", async () => {
+    // An unreachable JWKS is not an authorization failure. Challenging here
+    // would tell a client whose token is perfectly valid to re-authenticate
+    // because OUR key fetch failed.
+    const r = await call(bearer(await as.token({ aud: resource, kid: "rotated-away" })));
+    expect(r.status).toBe(503);
+    expect(r.headers.get("www-authenticate")).toBeNull();
+  }, 60_000);
+
   it("and the door is still serving afterwards — none of that killed it", async () => {
     const r = await call(bearer(await as.token({ aud: resource })));
     expect(r.status, "a refusal path must not take the process down").toBe(200);
