@@ -1,4 +1,4 @@
-import { entriesUnder, getSortedPages, source } from "@/lib/source";
+import { basePath, entriesUnder, getSortedPages, source } from "@/lib/source";
 import { RecordIndex } from "@/components/record-index";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
@@ -44,6 +44,10 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   // What this document replaced, derived by asking every document in the record
   // where its successor pointer lands (research/site-design.md F4). No new
   // frontmatter key: the record already says it, in the other direction.
+  // The same address `generateMetadata` advertises, shown to a person as well:
+  // the human surface handing an agent the record's own bytes is a better
+  // demonstration of the product than any copy on the home page.
+  const markdownUrl = `${basePath}/md/${(params.slug ?? []).join("/") || "index"}.md`;
   const allPages = getSortedPages();
   const replaces = predecessorsOf(
     page.url,
@@ -78,6 +82,15 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           for a leaf document, which renders nothing. */}
       <RecordIndex entries={entriesUnder(page.url)} heading="In this section" />
       {showGovernance ? <Provenance entries={governance.provenance} /> : null}
+      <p className="mt-8 text-xs text-fd-muted-foreground">
+        <a
+          href={markdownUrl}
+          className="underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+        >
+          This document as markdown
+        </a>{" "}
+        — the record's own bytes, for an agent or a prompt.
+      </p>
     </DocsPage>
   );
 }
@@ -99,8 +112,14 @@ export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): P
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  // The markdown twin, advertised rather than left to be guessed: a consumer
+  // that follows `rel="alternate"` reaches the record's own bytes instead of
+  // scraping this page (research/site-design.md F2).
+  const markdownUrl = `${basePath}/md/${(params.slug ?? []).join("/") || "index"}.md`;
+
   return {
     title: page.data.title,
     description: page.data.description,
+    alternates: { types: { "text/markdown": markdownUrl } },
   };
 }

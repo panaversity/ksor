@@ -155,6 +155,16 @@ because the agent surface is the audience ksor exists for.
 
 ### F2 · No per-page markdown, and nothing advertises one — _product surface_
 
+> **Closed 2026-08-21, with a constraint recorded.** Every document is emitted
+> as markdown at a path-derived address (`/md/<path>.md`), carrying its
+> governance as frontmatter, and each page advertises its twin in a
+> `rel="alternate" type="text/markdown"` link plus a visible "This document as
+> markdown" line. It is NOT the field convention of appending `.md` to the
+> document's own URL: under `output: "export"` a Route Handler cannot share a
+> route segment with a Page, and there is no middleware to rewrite one onto the
+> other. The prefix is what survives a static host; the canonical-URL form
+> becomes reachable the day `ksor build` emits these artifacts itself.
+
 The build emits zero `.md` artifacts and no `rel="alternate"`. An agent handed a
 document URL gets HTML and must scrape a React app to reach text the record
 already holds as markdown. Surface-contract clause 3 already promises per-page
@@ -163,11 +173,12 @@ it, and Fumadocs hands it to us for a route file.
 
 ### F3 · Status is rendered on the page and invisible everywhere a reader _chooses_ — _governance_
 
-> **Half closed 2026-08-21.** The home page and every folder index now list what
-> is below them with the caveat status on the card, so the choice between a live
-> document and its withdrawn predecessor shows the difference. The **sidebar and
-> search results still do not** — both are Fumadocs surfaces needing their own
-> component overrides.
+> **Mostly closed 2026-08-21.** The home page, every folder index, the sidebar
+> and the previous/next pager now carry a caveat status, so the moment a reader
+> chooses between a live document and its withdrawn predecessor, the record says
+> which is which. **Search results still do not**: that is a client dialog over a
+> static Orama index with no field for it, and the honest fix is a result
+> renderer, not a status smuggled into the indexed title.
 
 In the sidebar, "Purchase approval thresholds" and "Purchase approval thresholds
 (2019)" are pixel-identical rows. Same in search results, same in `llms.txt`,
@@ -176,6 +187,10 @@ committed to opening the document — which is the one moment it is least useful
 The record knows the status of every document at build time.
 
 ### F4 · Supersession is one-directional — _governance_
+
+> **Closed 2026-08-21.** The successor now names what it replaced, as a link,
+> derived by asking every document where its pointer lands — no new frontmatter
+> key, and the two directions cannot disagree.
 
 We render the forward pointer (this was replaced by X). The reverse — _this
 document replaced Y_ — is derivable from the record and rendered nowhere, so a
@@ -195,6 +210,10 @@ renders as text. Provenance is load-bearing (product principle 6); a source a
 reader cannot follow is weaker than the record makes it.
 
 ### F6 · One accent colour does four jobs, including the warning — _craft_
+
+> **Closed 2026-08-21.** The supersession notice has a caution role of its own,
+> the only place that colour is used. The word still carries the meaning, so
+> nothing depends on colour alone.
 
 `--color-fd-primary` is simultaneously the link colour, the primary CTA ("Open
 the record"), the focus ring, **and** the tint + rule of the supersession
@@ -248,6 +267,9 @@ title. Fumadocs exposes `tableOfContent.header` / `.footer` for exactly this.
 > beside the mark.
 
 ### F9 · The supersession notice is `role="note"` — _accessibility_
+
+> **Closed 2026-08-21.** `role="region"` with `aria-labelledby`, so the notice
+> is reachable by landmark.
 
 GOV.UK ships `role="region"` + `aria-labelledby` so a screen-reader user can
 reach the banner by landmark. Ours is a `role="note"` `aside`, which is

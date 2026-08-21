@@ -366,6 +366,29 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       const at = html.indexOf("In this section");
       return at === -1 ? "" : html.slice(at);
     };
+    // Every document is also emitted as MARKDOWN at a path-derived address, and
+    // the page advertises it: an agent handed a document URL used to have to
+    // scrape a React app to reach text the record holds verbatim
+    // (research/site-design.md F2).
+    const markdown = readFileSync(
+      path.join(project, "system", "site", "out", "md", "refund-policy.md"),
+      "utf8",
+    );
+    expect(markdown, "the markdown twin carries the body").toContain(
+      "Refunds are issued within 30 days",
+    );
+    // …and its governance, exactly as llms-full.txt does — a consumer reading
+    // ONE document still learns it was withdrawn.
+    expect(markdown).toContain("status: superseded");
+    expect(markdown).toContain("superseded_by: /docs/refund-policy-v5");
+    expect(
+      readFileSync(
+        path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
+        "utf8",
+      ),
+      "the page advertises its markdown twin",
+    ).toContain('rel="alternate" type="text/markdown" href="/md/refund-policy.md"');
+
     // The SIDEBAR carries a caveat status too — it is where a reader chooses,
     // and two documents that differ only in whether one was withdrawn were
     // identical rows there (research/site-design.md F3).
