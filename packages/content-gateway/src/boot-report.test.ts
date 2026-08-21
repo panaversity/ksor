@@ -37,7 +37,7 @@ describe("the boot report reads as one aligned block", () => {
 
 describe("authPosture", () => {
   it("shouts DISABLED and names the bind it is survivable on", () => {
-    const out = authPosture("disabled", "127.0.0.1");
+    const out = authPosture("disabled", "127.0.0.1", false);
     expect(out).toContain("DISABLED");
     expect(out).toContain("127.0.0.1");
     // The mitigation must travel with the scary word, or an operator reading
@@ -46,7 +46,18 @@ describe("authPosture", () => {
   });
 
   it("says what verification actually happens in public mode", () => {
-    expect(authPosture("public", "0.0.0.0")).toContain("verified");
+    expect(authPosture("public", "0.0.0.0", false)).toContain("verified");
+  });
+  it("does NOT reassure when the escape hatch is serving the record to anyone", () => {
+    // The one configuration that needs a loud line printed the reassurance
+    // meant for a loopback dev run: "DISABLED — 0.0.0.0 only, and a public bind
+    // will refuse to boot", which is false on both counts once
+    // KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1 permits exactly that bind.
+    const out = authPosture("disabled", "0.0.0.0", true);
+    expect(out, "must not claim a public bind would refuse").not.toContain("refuse to boot");
+    expect(out).toContain("UNAUTHENTICATED");
+    expect(out).toContain("KSOR_ALLOW_PUBLIC_UNAUTHENTICATED");
+    expect(out, "says what it actually means for the record").toContain("anyone who can reach");
   });
 });
 

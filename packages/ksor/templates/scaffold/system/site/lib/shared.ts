@@ -89,10 +89,36 @@ function readInstanceScope(): string | null {
   for (const para of afterHeading.split(/\n[ \t]*\n/)) {
     const one = para.trim().replace(/\s+/g, " ");
     if (one === "" || one.startsWith("#") || one.startsWith("-") || one.startsWith(">")) continue;
-    const sentence = /^(.+?[.!?])(\s|$)/.exec(one)?.[1] ?? one;
-    return sentence.length > 300 ? `${sentence.slice(0, 297)}...` : sentence;
+    return sentence(one);
   }
   return null;
+}
+
+/**
+ * The MCP registry schema caps `ServerDetail.description` at **100 characters**
+ * (`ServerDetail.description.maxLength`, 2025-12-11). Over it, the document a
+ * validating client reads is invalid — and the failure was shaped exactly
+ * wrong: the unfilled placeholder is 88 characters and validates, so the
+ * document became invalid the moment an owner did the thing the scaffold asks
+ * for and wrote a real scope sentence. Silent, and only for real records.
+ *
+ * A hard truncation would publish a sentence cut mid-word, so this trims at a
+ * word boundary and marks it, and the whole description is assembled inside the
+ * budget rather than clipped after the fact.
+ */
+const DESCRIPTION_MAX = 100;
+
+function sentence(one: string): string {
+  const first = /^(.+?[.!?])(\s|$)/.exec(one)?.[1] ?? one;
+  return first;
+}
+
+/** Fit `text` inside `max`, breaking on a word rather than mid-word. */
+function fit(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > max / 2 ? cut.slice(0, at) : cut).replace(/[,;:.\s]+$/, "")}\u2026`;
 }
 
 /** null until the owner has written one — never a guess. */
@@ -103,9 +129,11 @@ export const appScope: string | null = readInstanceScope();
  * registry document and anything else that needs one cannot drift apart.
  */
 export function recordDescription(): string {
-  return appScope === null
-    ? `${appTitle} — its owner has not yet described what this record covers.`
-    : `${appTitle} — ${appScope}`;
+  const whole =
+    appScope === null
+      ? `${appTitle} — its owner has not yet described what this record covers.`
+      : `${appTitle} — ${appScope}`;
+  return fit(whole, DESCRIPTION_MAX);
 }
 
 /**
