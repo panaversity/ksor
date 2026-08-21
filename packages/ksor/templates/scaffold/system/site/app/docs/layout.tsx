@@ -1,4 +1,5 @@
-import { getSortedPageTree } from "@/lib/source";
+import { basePath, getSortedPageTree, getSortedPages } from "@/lib/source";
+import { appName } from "@/lib/shared";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { ThemeSwitch } from "fumadocs-ui/layouts/shared/slots/theme-switch";
 import { baseOptions } from "@/lib/layout.shared";
@@ -20,11 +21,27 @@ export default function Layout({ children }: LayoutProps<"/docs">) {
       // silently swallow the attribution (review finding, 2026-08-18).
       sidebar={{
         footer: (
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-xs">
-              <FooterMark />
+          <div className="mt-3 flex flex-col gap-2">
+            {/* The record's own identity, on every page rather than only the
+                home page: the slug is what citations carry and llms.txt is the
+                door an agent is told to read. The sidebar had three links and
+                then several hundred pixels of nothing beneath them. */}
+            <p className="text-xs text-fd-muted-foreground">
+              <span className="font-mono">{appName}</span> · {getSortedPages().length} document
+              {getSortedPages().length === 1 ? "" : "s"} ·{" "}
+              <a
+                href={`${basePath}/llms.txt`}
+                className="underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+              >
+                llms.txt
+              </a>
             </p>
-            <ThemeSwitch />
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs">
+                <FooterMark />
+              </p>
+              <ThemeSwitch />
+            </div>
           </div>
         ),
       }}

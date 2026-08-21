@@ -62,7 +62,17 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   }));
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      // A document with no headings has no table of contents, but the shell
+      // still RESERVED its column: the page grid measured
+      // `88px 268px 1016px 268px 88px` with the TOC element itself
+      // `display: none`, so 268px of the viewport was held for something that
+      // never rendered and the prose sat off-centre (measured, 2026-08-21).
+      // Governed records are full of short documents with no headings at all.
+      tableOfContent={{ enabled: page.data.toc.length > 0 }}
+    >
       {successor === null ? null : <SupersededNotice successor={successor} />}
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
