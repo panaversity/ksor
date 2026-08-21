@@ -19,8 +19,9 @@ import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
-import { contentPool, ContentStoreError, INGEST_ROLE } from "./db.js";
+import { contentPool, ContentStoreError, INGEST_ROLE, runIngest } from "./db.js";
 import { assertGovernanceServable } from "./governance-gate.js";
+import { flip } from "./ingest/generation.js";
 import {
   parseInstance,
   InstanceParseError,
@@ -449,7 +450,14 @@ async function ingestCommand(args: string[]): Promise<number> {
         // Provenance is recorded honestly: without --source-commit the sources
         // rows say so rather than carrying a guessed SHA.
         sourceCommit,
-        flip: values.flip ?? false,
+        // NEVER flip inside the build when the caller asked for one: the
+        // governance gate below has to run against the new generation BEFORE
+        // it becomes the active one. Checking after the flip reported the
+        // problem and published anyway — a command that exits 1 with the
+        // record's active pointer already moved, which is exactly what the
+        // shrink guard does NOT do (it refuses inside the build and leaves the
+        // old generation serving). Found live against Neon, 2026-08-21.
+        flip: false,
         provider,
         onLog: (line) => process.stdout.write(line + "\n"),
       });
@@ -501,13 +509,34 @@ async function ingestCommand(args: string[]): Promise<number> {
   if (governance !== null) {
     return fail(
       REFUSED,
-      `generation ${report.generation} was built, but no surface can serve it\n` +
-        `  ${governance.split("\n").join("\n  ")}`,
+      `generation ${report.generation} was built and NOT activated — no surface could serve it\n` +
+        `  ${governance.split("\n").join("\n  ")}\n` +
+        `  note: generation ${report.generation} is left behind, un-activated; \`ksor gc\` reaps it ` +
+        "once the grace window passes. The previously active generation still serves.",
     );
   }
-  // A flip was already narrated by the build log ("FLIPPED active generation
-  // -> N"); only the withheld state still needs saying.
-  if (!report.flipped) process.stdout.write("ready; flip withheld (pass --flip to activate)\n");
+
+  // Governance is clean, so activate — the act the caller asked for, performed
+  // only after everything that could refuse it has run.
+  if (values.flip === true && !report.unchanged) {
+    await withPool(dsn, (pool) =>
+      runIngest(pool, instance.tenantId, (client) =>
+        flip(client, {
+          tenantId: instance.tenantId,
+          corpusId: instance.corpusId,
+          toGeneration: report.generation,
+        }),
+      ),
+    );
+    process.stdout.write(`FLIPPED active generation -> ${report.generation}\n`);
+  }
+  // Only the WITHHELD state still needs saying — the flip above narrates
+  // itself. `report.flipped` is always false now (the build never flips; this
+  // command does, after the governance gate), so the caller's intent is what
+  // decides, not the build's report.
+  if (values.flip !== true) {
+    process.stdout.write("ready; flip withheld (pass --flip to activate)\n");
+  }
   return 0;
 }
 

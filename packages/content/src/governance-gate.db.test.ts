@@ -7,6 +7,10 @@
  * out in full (round-5 review of #43).
  */
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runIngest } from "./db.js";
@@ -130,6 +134,29 @@ describe.runIf(adminDsn !== "")("the governance boot gate (db)", () => {
   it("ACCEPTS the level-0 shape: no model, and no document claims one", async () => {
     await seed({ generation: 5, schemaVersion: "2.4", visibility: null });
     await expect(assertGovernanceServable(pool, instanceWith([]))).resolves.toBeUndefined();
+  });
+
+  it("a refused ingest must not have MOVED the active pointer", () => {
+    // Ordering, asserted on the source because it is an ordering: the command
+    // builds with `flip: false`, runs the gate, and only then flips. Checking
+    // AFTER a build that already flipped reported the problem and published
+    // anyway — a command exiting 1 with the record's active pointer moved,
+    // which is exactly what the shrink guard does NOT do (it refuses inside
+    // the build and leaves the old generation serving). Found live against a
+    // Neon database, 2026-08-21.
+    const src = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "commands.ts"),
+      "utf8",
+    );
+    const ingest = src.slice(src.indexOf("buildGeneration(pool, instance, {"));
+    const build = ingest.indexOf("flip: false,");
+    const gate = ingest.indexOf("assertGovernanceServable(pool, instance, report.generation)");
+    const doFlip = ingest.indexOf("flip(client, {");
+    expect(build, "the build must not flip").toBeGreaterThan(-1);
+    expect(gate, "the gate must run").toBeGreaterThan(-1);
+    expect(doFlip, "the command must flip itself").toBeGreaterThan(-1);
+    expect(gate, "gate runs after the build").toBeGreaterThan(build);
+    expect(doFlip, "and the flip runs after the gate").toBeGreaterThan(gate);
   });
 
   it("ACCEPTS a record with no active generation — that is a new project", async () => {
