@@ -93,6 +93,38 @@ readiness chain shares one wall-clock budget (measured: 10.25s → 8.07s against
 an unreachable endpoint); and concurrent probes share one in-flight check
 however slow it is, instead of stacking a connection each.
 
+**An embedding outage is no longer reported as "not in the record".** On a
+record with a cosine floor, an unreachable provider means the floor cannot be
+evaluated, so nothing may be served past it — but the abstention envelope tells
+an agent the record does not cover the query and to say so without falling
+back. For the whole outage the agent would assert the record lacks something it
+contains. Searches now return a third outcome, `reason: "unavailable"` with
+`abstained: false`, described in the tool text and the output schema alongside
+`degraded_reason` (which had no description at all, and named a keyword search
+that never ran).
+
+**A door whose boot checks have not passed refuses requests.** Reporting
+not-ready keeps a platform from routing traffic; it does not stop anything that
+reaches the port. A gateway that started against an unreachable database and
+recovered moments later answered `{"ready":false}` and still served a
+`visibility: internal` document to a direct request. The schema and governance
+checks are one deferred set, retried together, and they gate every request with
+a 503 that names the remedy.
+
+**`ksor ingest` refuses to publish what `ksor serve` cannot serve.** It exited 0
+on a generation the door then refused to boot on, so the deploy step was green
+and the container crash-looped.
+
+**The MCP discovery document is valid.** `/.well-known/mcp/server.json` failed
+the published schema on four counts at once — no `version` (required), a `name`
+without the required `namespace/identifier` shape, no `$schema`, and a
+`capabilities` field the schema does not define. `instance.md` gains `version:`
+alongside `mcp_url:` to feed it.
+
+**`outline` pages.** It truncated at `limit` with no way to continue and did not
+mention `limit` or `has_more` in its description, so an agent read a partial
+list as the complete record. It now takes `offset` and returns `next_offset`.
+
 **A cold burst is no longer mistaken for an overloaded pool.** pg-pool counts a
 socket that is still completing its handshake as a full slot, so a burst of
 requests arriving at a waking database looked like saturation and was shed
@@ -112,4 +144,7 @@ actually reads; shutdown logs and has a deadline; pool sizing and the TLS postur
 are chosen rather than inherited; `ksor takedown --export` reads through the
 runtime role rather than the ingest role, so a site build host no longer needs
 write access to the record; and `KSOR_DRAIN_TIMEOUT_MS` is read when the server
-starts rather than when the module loads, which is what made it inert in `.env`.
+starts rather than when the module loads, which is what made it inert in `.env`; `gate: "uncalibrated"` is gone from the
+tool description and output schema, because that state throws rather than
+reaching the wire; and the docs name every verb the binary has, with a drift
+test that fails when they stop matching.
