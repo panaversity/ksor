@@ -627,6 +627,35 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(JSON.stringify(missing.content)).toContain("outline");
   });
 
+  it("a search's snapshot token composes into read — the two tools fit together", async () => {
+    // search returns `snapshot` as an OBJECT and read used to take `snapshot`
+    // as a STRING, so an agent copying the field of that name from one into
+    // the field of that name in the other got an input-validation error rather
+    // than a pinned read. Declaring the output schemas turned that informal
+    // ambiguity into a validated contract that contradicted itself; read's
+    // input is now `snapshot_token` (round-9 review of #43).
+    const found = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    const body = found.structuredContent as {
+      hits: { slug: string }[];
+      snapshot: { token: string; generation: number };
+    };
+    expect(body.snapshot?.token, "a served search pins a generation").toBeTruthy();
+
+    const pinned = await client.callTool({
+      name: "read",
+      arguments: { slug: body.hits[0]!.slug, snapshot_token: body.snapshot.token },
+    });
+    expect(pinned.isError, JSON.stringify(pinned.content)).toBeFalsy();
+    const doc = pinned.structuredContent as { provenance: { generation: number } };
+    expect(
+      doc.provenance.generation,
+      "and the read answers from the generation the search pinned",
+    ).toBe(body.snapshot.generation);
+  }, 60_000);
+
   it("outline PAGES to the end — a partial list is never mistaken for the record", async () => {
     // A truncated outline with no continuation manufactures a false "not in
     // the record": the agent asks for the structure, gets a partial list, and

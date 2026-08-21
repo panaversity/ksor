@@ -57,6 +57,26 @@ export class SchemaVersionError extends ContentStoreError {
 }
 
 /**
+ * The database is REACHABLE and its recorded state is wrong — a data problem
+ * the operator fixes, not an outage they wait out.
+ *
+ * `ContentStoreError`'s constructor takes a CLASS NAME and wraps it as "content
+ * store temporarily unavailable (…)", because its job is to keep driver detail
+ * off the MCP wire. Passing a whole remedy to it stuffed a multi-line fix
+ * inside that parenthetical and told the operator to chase connectivity — and
+ * `classifyFailure` mapped it to ENVIRONMENT (exit 3) for something that will
+ * never fix itself. Same shape as `SchemaVersionError` above, and for the same
+ * reason (round-9 review of PR 43).
+ */
+export class SchemaStateError extends ContentStoreError {
+  override readonly name: string = "SchemaStateError";
+  constructor(message: string) {
+    super("schema");
+    this.message = message;
+  }
+}
+
+/**
  * Refuse to serve against a database that is missing the schema OR older than
  * this build needs — fail closed at boot with a legible message. Serving never
  * migrates on its own: a newer gateway on an older/absent schema would

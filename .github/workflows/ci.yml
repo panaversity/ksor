@@ -200,4 +200,11 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm build
       - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/init.integration.test.ts
+      # The DRIFT tests too: they compare files across the tree, and the first
+      # thing Windows found was one of them failing on line endings rather than
+      # on drift (.gitattributes pins the templates to LF; the kernel's copies
+      # take the platform default). They moved from the unit tier to this one
+      # — AGENTS.md assigns repo-tree scans here — so name them explicitly or
+      # Windows stops running the checks it is best placed to catch.
+      - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/audience-rule-drift.integration.test.ts packages/ksor/src/denial-rule-drift.integration.test.ts packages/ksor/src/scaffold-scripts.integration.test.ts
       - run: pnpm test:unit

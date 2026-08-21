@@ -27,7 +27,7 @@ import {
   NoDatabaseDeclared,
   type ContentInstance,
 } from "./instance.js";
-import { applySchema, renderSchema, schemaVersion } from "./schema.js";
+import { applySchema, renderSchema, schemaVersion, SchemaStateError } from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
 import {
@@ -228,6 +228,10 @@ function classifyFailure(exc: unknown): number {
   // 3 ("the environment cannot run ksor") for a typo (review 2026-08-20).
   // Checked BEFORE isFsError for exactly that reason.
   if (isArgParseError(exc)) return REFUSED;
+  // A REACHABLE database whose recorded state is wrong is a data problem the
+  // operator fixes — REFUSED, like every other data problem above. Only a
+  // genuine store outage is ENVIRONMENT.
+  if (exc instanceof SchemaStateError) return REFUSED;
   if (exc instanceof ContentStoreError || isFsError(exc)) return ENVIRONMENT;
   return REFUSED;
 }
@@ -371,11 +375,11 @@ async function readSchemaState(pool: pg.Pool): Promise<SchemaState> {
       // The TABLE exists, so the DDL has run — the row is just missing. Calling
       // that "uninitialized" re-runs the full CREATE TABLE over live tables and
       // dies on an opaque 42P07 (review of PR #43).
-      throw new ContentStoreError(
+      throw new SchemaStateError(
         "schema_meta exists but records no version — this database was initialized and then " +
           "lost its version row. Re-applying the DDL over live tables would fail on existing " +
           "relations; restore the row with the version the data actually has, e.g.\n" +
-          "  INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.3', '2.0');",
+          `  INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('${schemaVersion()}', '2.0');`,
       );
     }
     return { kind: "applied", version };

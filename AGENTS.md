@@ -647,13 +647,20 @@ cite the research they distill; guard rule 8 enforces the frontmatter
 
 ## Testing
 
-Two tiers by filename convention; pick the tightest tier that can express the
+Three tiers by filename convention; pick the tightest tier that can express the
 assertion.
 
 - `*.test.ts` — unit, colocated (packages `src/` and `scripts/`): pure, no
   fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
   tmp dirs (<15s)
+- `*.db.test.ts` — real Postgres, gated on `KSOR_DB_URL` (`pnpm test:db`; CI
+  provides the service). The kernel's guarantees are SQL, so the tier that runs
+  them against a real database is where they are actually held.
+
+The tiers are a contract, not a preference: a file that reads the filesystem
+belongs in the second one however small it is. Seven did not, and drifted there
+because the unit tier is the fastest to run (round-9 review of PR 43).
 
 Agent evals land with `ksor serve` (CI-only — they spend model tokens), in
 three classes, and being explicit about which class gates is the design:

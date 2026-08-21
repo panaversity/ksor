@@ -103,6 +103,22 @@ contains. Searches now return a third outcome, `reason: "unavailable"` with
 `degraded_reason` (which had no description at all, and named a keyword search
 that never ran).
 
+**`read` takes `snapshot_token`, not `snapshot`.** `search` returns `snapshot`
+as an object and `read` accepted `snapshot` as a string, so an agent copying the
+field of that name from one into the field of that name in the other got an
+input-validation error instead of a pinned read. Declaring the output schemas
+turned an informal ambiguity into a validated contract that contradicted itself.
+
+**A database that lost its `schema_meta` row is refused, not blamed on the
+network.** The remedy was passed to an error whose constructor takes a class
+name, so a multi-line fix printed inside "content store temporarily unavailable
+(…)" and exited 3 — telling the operator to chase connectivity for a data
+problem that will never fix itself.
+
+**`ksor takedown --ledger` shows THIS record's acts.** It filtered by tenant
+only while every governance write records the corpus, so a tenant serving two
+records saw one audit trail polluted with the other's.
+
 **`outline` frames its text as untrusted, like the other two tools.** Titles and
 heading paths are corpus-authored and reach the agent exactly as passage content
 does; `search` and `read` both said so and flagged directive-shaped payloads,
