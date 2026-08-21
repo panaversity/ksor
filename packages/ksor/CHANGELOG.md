@@ -1,5 +1,160 @@
 # @panaversity/ksor
 
+## 0.0.10
+
+### Patch Changes
+
+- c07a5db: `ksor calibrate` states what its measurement is worth, not just its result
+
+  The default door synthesizes in-corpus questions by asking a model to write one
+  FROM each sampled passage, then scores those questions against the corpus that
+  contains the passage. They share vocabulary a reader's question will not, so the
+  in-corpus distribution sits higher than real traffic will and the separation the
+  run reports is an UPPER BOUND. The `--queries-file` door carried a caveat about
+  its own distribution; the default door — the biased one — carried none.
+
+  Found live: a real record calibrated this way reported min in-corpus 0.682
+  against max out-of-corpus 0.580 and recommended `vector_floor: 0.631`. Questions
+  the record demonstrably answers then scored 0.530 to 0.606 — every one below the
+  recommended floor. Pasting it would have made the record abstain on questions
+  whose answers it had just cited, which is the failure abstention exists to
+  prevent, arrived at from the other side.
+
+  The block now carries that caveat, and prints the one number it always left the
+  reader to work out: the separation margin, with the probe counts behind it. A
+  margin of 0.054 over six in-corpus and four out-of-corpus probes is a different
+  claim from the same margin over sixty, and both figures were already on the
+  report without ever reaching the page. The mathematics and the recommended value
+  are unchanged.
+
+  It also names the generation it measured. With nothing pinned — the ordinary
+  case, calibrating what is being served — the report carried no generation at
+  all, so the provenance comment beside a pasted floor read `on generation unknown
+(no generation pinned)`. A floor is a threshold inside ONE generation's embedding
+  space, and the query that counts the chunks had already resolved which one.
+
+  `runCalibration` had no test of any kind; it has one now, against real Postgres.
+
+- d00f3a2: The signing keys are discovered, not guessed — any standards-compliant SSO now works.
+
+  `KSOR_SSO_URL` is documented as "the AS base", and the verifier appended one
+  vendor's layout to it (`/api/auth/jwks`, Better Auth's). Auth0, Okta, Entra,
+  Keycloak, Cognito and Google all publish elsewhere, so every one of them failed
+  the key fetch — which is classified transient, so the door booted clean and
+  returned 503 to every request with nothing naming the cause. The only posture an
+  operator could actually reach was `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`: the one
+  key we handed people was the one that props the door open.
+
+  `jwks_uri` is now read from the SSO's own metadata document — RFC 8414 first,
+  then OpenID Discovery — with `KSOR_JWKS_URL` kept as an explicit override, and
+  the vendor path kept as a last resort that reports itself as a guess. Where the
+  keys came from is stated on the boot line.
+
+  Verified against three real providers: Google (RFC 8414, cross-origin
+  `jwks_uri`), GitHub Actions OIDC, and Entra — whose issuer carries a path,
+  the case a naive `${sso}/.well-known/…` gets wrong.
+
+  Discovery never refuses to boot: an unreachable AS falls back and says so.
+
+- 9062088: A loopback authorization server's keys are reachable again.
+
+  JWKS discovery refused a cleartext `jwks_uri`, which is right for a network AS
+  and wrong for a local one: a dev authorization server on loopback advertises
+  `http://127.0.0.1:…/jwks`, the resolver refused it, the vendor guess was used
+  instead, and every request returned 503. `assertHttpUrl` already exempts
+  loopback for the SSO base for exactly this reason; the resolver now does too.
+  Cleartext to any non-loopback host is still refused.
+
+  Found by writing the first test that boots the gateway in bearer mode.
+
+- 995ec48: A governance act names its actor; the tool no longer guesses one.
+
+  `ksor takedown --actor` fell back to `$USER` / `$USERNAME` / `"operator"`, so a
+  ledger row read `runner` under CI and `root` in a container — a self-asserted
+  string wearing a schema, indistinguishable from a person who was never there.
+  `retrieval_log.actor` is `NOT NULL` with the comment "NO default: unset errors
+  loudly", and the fallback is precisely what stopped it erroring.
+
+  Denying or revoking now REFUSES without `--actor`, before the DSN is resolved:
+  a missing actor is an argument error (exit 1), not an environment one. The
+  read-only modes — `--list`, `--ledger`, `--export` — write no ledger row and
+  need nothing.
+
+- 41b0c38: Reading order is one rule again: the MCP door now reads `order:`
+
+  `order:` is the only ordering key a record may declare — it is in the governed
+  frontmatter set the format checker closes, and the checker's own remedy for a
+  stray `meta.json` says so. The MCP door never read it. The tree adapter was
+  converted from the predecessor, whose ordering keys were Docusaurus's
+  `position:` / `sidebar_position:`, neither of which a compliant record may
+  declare — so `outline` reported the record's structure in filename order and
+  called it the reading order, while the website honoured `order:`. On a
+  curriculum, where reading order IS the content, an agent asking "what do I read
+  first" got a different answer from the two surfaces.
+
+  Four smaller disagreements went with it, each now a row in a shared decision
+  table: unordered documents sorted at 10 000 rather than after everything;
+  fractional orders were truncated; ties compared `example.md` against
+  `example-two.md`, where `.` sorts after `-`, reversing ordinary pairs; and one
+  side folded case while the other did not.
+
+  The rule now lives in one file, copied into the scaffold and asserted
+  byte-identical, with `ORDER_CASES` run against BOTH surfaces — so a surface that
+  drifts fails on the row it broke.
+
+- 41b0c38: `ksor serve` reports its own posture instead of forwarding other people's warnings
+
+  Booting printed four alarming paragraphs at an operator who had done nothing
+  wrong: the driver's multi-line `SECURITY WARNING` about `sslmode` aliases, ksor's
+  own three-line restatement of the same thing, and the MCP SDK's note about a
+  `responseMode` ksor chose deliberately.
+
+  The driver's warning is correct and its remedy is one word, so ksor now applies
+  it: a remote `sslmode=require|prefer|verify-ca` is rewritten to `verify-full`
+  before the connection is made. The connection is unchanged today — pg 8 was
+  already resolving all three to full verification, which is the entire content of
+  its warning — and it can no longer be silently downgraded by a driver upgrade.
+  The SDK's note describes a recorded decision, not a defect, and is suppressed by
+  exact message so that anything else it says still reaches the operator.
+
+  What is left is the record's posture, aligned and in ksor's own voice, with the
+  two lines that decide whether to trust what happens next saying what they mean:
+  auth `DISABLED` now names the bind it is survivable on, and an absent abstention
+  floor says out-of-corpus questions will be answered rather than refused.
+
+- bea7d80: `read` names every section it will accept, not just the top-level ones
+
+  `read` resolves a `heading` three ways: a full heading path, any prefix of one,
+  and a section's last segment when that segment is unique in the document. The
+  error for a section it could not find listed only the TOP-LEVEL segments — a
+  strict subset of its own vocabulary — so it reported real, reachable sections as
+  absent. Found live: a nested section was refused by name and served on the next
+  call under the same name.
+
+  The error now lists the full heading paths (the form that always resolves and
+  never collides), states the unique-last-segment shorthand rather than doubling
+  the list to enumerate it, and counts the tail past twenty instead of printing an
+  unbounded list. The `heading` input and the `sections` output now describe the
+  same vocabulary in the tool schema, where an agent reads it before making the
+  call rather than after failing one.
+
+- 4631268: Correct every remaining document that said `pnpm serve` publishes.
+
+  `serve` was `pnpm schema && pnpm grant && pnpm ingest && ksor serve` and is now
+  `ksor serve` alone. Three adopter-facing places still described the old chain:
+  the scaffolded `instance.md`'s own comment ("copy .env.example to .env, then run
+  `pnpm serve`"), the scaffold README's file table ("the agent surface: schema →
+  grant → ingest → serve"), and AGENTS.md's runbook ("`pnpm serve` is the only
+  command this rung needs"). Following any of them serves an empty record.
+
+  All three now say the same thing the CLI does: `pnpm provision` once,
+  `pnpm refresh` to publish, `pnpm serve` to serve — and why publishing is
+  separate, since a restart or an autoscaling event must not republish a record.
+
+  A test now asserts the CLAIM rather than the command. The existing guard could
+  not catch this: it checks that a named command exists, and `pnpm serve` does
+  exist — what was wrong was the sentence attached to it.
+
 ## 0.0.9
 
 ### Patch Changes
