@@ -5,7 +5,8 @@ import Link from "next/link";
 import mark from "@/app/icon.png";
 import { FooterMark } from "@/components/footer-mark";
 import { appName, appTitle } from "@/lib/shared";
-import { basePath, getSortedPages } from "@/lib/source";
+import { basePath, entriesUnder, getSortedPages } from "@/lib/source";
+import { RecordIndex } from "@/components/record-index";
 
 export default function HomePage() {
   // The first document in sidebar order — never a hardcoded path, so deleting
@@ -35,12 +36,9 @@ export default function HomePage() {
         <h1 className="text-4xl font-semibold tracking-tight text-balance break-words sm:text-5xl">
           {appTitle}
         </h1>
-        <p className="mt-3 text-lg text-fd-muted-foreground">
-          Knowledge you can govern. Answers you can trace. Boundaries agents can respect.
-        </p>
 
         {first ? (
-          <div className="mt-9 flex flex-col gap-4">
+          <div className="mt-8 flex flex-col gap-4">
             <Link
               href={first.url}
               className="group inline-flex w-fit items-center gap-2 rounded-lg bg-fd-primary px-4 py-2.5 text-sm font-medium text-fd-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
@@ -67,10 +65,15 @@ export default function HomePage() {
             </p>
           </div>
         ) : (
-          <p className="mt-9 text-fd-muted-foreground">
+          <p className="mt-8 text-fd-muted-foreground">
             the record is empty — add a document to <code>knowledge/</code>
           </p>
         )}
+        {/* What the record actually holds. Before this the page announced a
+            document count and linked to exactly one of them, so a system of
+            record's front door listed nothing that was in it
+            (research/site-design.md F2). */}
+        <RecordIndex entries={entriesUnder(null)} heading="The record" />
       </div>
 
       <footer className="mx-auto w-full max-w-2xl px-6 pb-10">

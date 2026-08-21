@@ -1,7 +1,12 @@
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import { isCalendarDate, sourceHref, type DocumentGovernance } from "@/lib/governance";
+import {
+  caveatStatus,
+  isCalendarDate,
+  sourceHref,
+  type DocumentGovernance,
+} from "@/lib/governance";
 
 /**
  * What the record says about the document you are reading.
@@ -78,24 +83,6 @@ function Fact({
 }
 
 /**
- * A document in a system of record is ASSUMED current and approved, so saying
- * "approved" tells the reader nothing they had not already assumed. Only a
- * caveat earns the space: draft and review say this is not settled yet,
- * superseded says stop trusting it.
- *
- * This keeps the chip rare enough to be read. A label on every page that
- * always says the same thing trains the reader to skip it — and then it is
- * skipped on the page where it mattered. It also keeps a level-0 record (where
- * every document is `draft`) from wearing governance furniture it has not
- * climbed to yet.
- *
- * A presentation rule, deliberately here and not in readGovernance: the
- * projection reports what the record says, and the page decides what is worth
- * showing.
- */
-const ASSUMED_STATUS = "approved";
-
-/**
  * The one-line governance strip under the document's title: any caveat on its
  * status, who stands behind it, and when it took effect.
  */
@@ -105,7 +92,7 @@ export function GovernanceMeta({
   governance: DocumentGovernance;
 }): ReactElement | null {
   const { owner, effective } = governance;
-  const status = governance.status === ASSUMED_STATUS ? null : governance.status;
+  const status = caveatStatus(governance.status);
   if (status === null && owner === null && effective === null) return null;
 
   return (

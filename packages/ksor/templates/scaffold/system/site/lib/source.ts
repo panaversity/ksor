@@ -3,7 +3,7 @@ import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import type { Node, Root } from "fumadocs-core/page-tree";
 
-import { agentFrontmatter, readGovernance, resolveSuccessorUrl } from "./governance";
+import { agentFrontmatter, caveatStatus, readGovernance, resolveSuccessorUrl } from "./governance";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
@@ -140,4 +140,61 @@ export async function getLLMText(
   return [`# ${page.data.title} (${basePath}${page.url})`, front.trimEnd(), processed.trimStart()]
     .filter((part) => part !== "")
     .join("\n\n");
+}
+
+/** One entry in a record listing — everything a reader needs to choose. */
+export interface RecordEntry {
+  readonly url: string;
+  readonly title: string;
+  readonly description: string | null;
+  /** The document's status when it is a caveat, else null. */
+  readonly status: string | null;
+}
+
+function entryFor(page: KnowledgePage): RecordEntry {
+  const data: Record<string, unknown> = page.data as unknown as Record<string, unknown>;
+  const description = typeof data["description"] === "string" ? data["description"].trim() : "";
+  const status = typeof data["status"] === "string" ? data["status"].trim() : "";
+  return {
+    url: page.url,
+    title: page.data.title,
+    description: description === "" ? null : description,
+    status: caveatStatus(status === "" ? null : status),
+  };
+}
+
+/**
+ * The entries directly below a node of the record, in the governed reading
+ * order — or the top level when `url` is null.
+ *
+ * A folder's own index page is not listed under itself: it IS the page doing
+ * the listing. Without this, `/docs/policies` opened with a card pointing back
+ * at `/docs/policies`.
+ */
+export function entriesUnder(url: string | null): RecordEntry[] {
+  const byUrl = new Map(getSortedPages().map((page) => [page.url, page] as const));
+  const nodes = url === null ? getSortedPageTree().children : childrenOfFolder(url);
+  const entries: RecordEntry[] = [];
+  for (const node of nodes) {
+    const target =
+      node.type === "page" ? node.url : node.type === "folder" ? node.index?.url : null;
+    if (target === undefined || target === null || target === url) continue;
+    const page = byUrl.get(target);
+    if (page !== undefined) entries.push(entryFor(page));
+  }
+  return entries;
+}
+
+/** The children of the folder whose index page is at `url`, or []. */
+function childrenOfFolder(url: string): Node[] {
+  const find = (nodes: readonly Node[]): Node[] | null => {
+    for (const node of nodes) {
+      if (node.type !== "folder") continue;
+      if (node.index?.url === url) return [...node.children];
+      const deeper = find(node.children);
+      if (deeper !== null) return deeper;
+    }
+    return null;
+  };
+  return find(getSortedPageTree().children) ?? [];
 }

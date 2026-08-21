@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentFrontmatter,
   agentIndexSuffix,
+  caveatStatus,
   governanceVisible,
   isCalendarDate,
   readGovernance,
@@ -500,5 +501,30 @@ describe("sourceHref", () => {
     expect(sourceHref("https://")).toBeNull();
     expect(sourceHref("")).toBeNull();
     expect(sourceHref("   ")).toBeNull();
+  });
+});
+
+// ONE definition of "worth showing", shared by the page chip, the agent index
+// and the record listings. It lived in two places (the component's
+// ASSUMED_STATUS and agentIndexSuffix) and a third was about to be written.
+describe("caveatStatus", () => {
+  it("is silent on approved — what a reader already assumes of a record", () => {
+    expect(caveatStatus("approved")).toBeNull();
+  });
+
+  it("names the three states that are caveats", () => {
+    expect(caveatStatus("draft")).toBe("draft");
+    expect(caveatStatus("review")).toBe("review");
+    expect(caveatStatus("superseded")).toBe("superseded");
+  });
+
+  it("is silent when the document declares nothing", () => {
+    expect(caveatStatus(null)).toBeNull();
+  });
+
+  it("passes an unrecognized state through rather than swallowing it", () => {
+    // `pnpm check` holds status to a closed set, so this is a record that
+    // skipped the checker. Showing what it wrote beats hiding it.
+    expect(caveatStatus("retired")).toBe("retired");
   });
 });

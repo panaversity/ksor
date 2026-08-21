@@ -347,6 +347,37 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       ),
     ).toContain("Refund policy v5");
 
+    // A page lists what the record holds below it, with a caveat status on the
+    // card — so a reader choosing between two documents sees that one was
+    // withdrawn BEFORE opening it. Before this the folder page ended at its own
+    // sentence and the home page linked to one of five documents
+    // (research/site-design.md F2/F3/F5).
+    const listingIn = (route: string): string => {
+      const html = readFileSync(
+        path.join(project, "system", "site", "out", route, "index.html"),
+        "utf8",
+      );
+      const at = html.indexOf("In this section");
+      return at === -1 ? "" : html.slice(at);
+    };
+    const sectionListing = listingIn("docs/refund-policy-v5");
+    // refund-policy-v5 is a leaf, so it lists nothing at all.
+    expect(sectionListing, "a leaf document must not grow an empty listing").toBe("");
+
+    const homeHtml = readFileSync(
+      path.join(project, "system", "site", "out", "index.html"),
+      "utf8",
+    );
+    const homeListing = homeHtml.slice(homeHtml.indexOf("The record"));
+    expect(homeListing, "the home page lists the record's top level").toContain(
+      "/docs/refund-policy",
+    );
+    // The withdrawn document carries its status on the card…
+    expect(homeListing).toContain("superseded");
+    // …and the framework's own marketing copy is gone from the adopter's page:
+    // critical rule 1 says the site never contains authored content.
+    expect(homeHtml).not.toContain("Knowledge you can govern");
+
     // The AGENT surface carries the same governance, or the record has two
     // truths (research/site-design.md F1): before this, llms.txt listed a
     // withdrawn policy and its replacement as adjacent entries told apart only

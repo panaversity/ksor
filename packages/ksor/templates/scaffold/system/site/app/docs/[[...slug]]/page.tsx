@@ -1,4 +1,5 @@
-import { getSortedPages, source } from "@/lib/source";
+import { entriesUnder, getSortedPages, source } from "@/lib/source";
+import { RecordIndex } from "@/components/record-index";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/components/mdx";
@@ -55,6 +56,11 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           })}
         />
       </DocsBody>
+      {/* A folder's index page lists what the folder holds. Without it the
+          page ended at its own sentence and the documents below it were
+          reachable only from the sidebar (research/site-design.md F5). Empty
+          for a leaf document, which renders nothing. */}
+      <RecordIndex entries={entriesUnder(page.url)} heading="In this section" />
       {showGovernance ? <Provenance entries={governance.provenance} /> : null}
     </DocsPage>
   );

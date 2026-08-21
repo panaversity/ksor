@@ -260,6 +260,22 @@ export function governanceVisible(instanceFrontmatterBlock: string): boolean {
 const ASSUMED_STATUS = "approved";
 
 /**
+ * The document's status when it is worth showing, or null.
+ *
+ * ONE definition, shared by every surface that shows a status — the page chip,
+ * the agent index, the record listings. `approved` is silent because that is
+ * what a reader already assumes of a document in a system of record, and a
+ * label that appears everywhere and always says the same thing trains people to
+ * skip it, including on the page where it mattered. An unrecognized state is
+ * passed through rather than swallowed: `pnpm check` holds status to a closed
+ * set, so reaching here with one means the record skipped the checker, and
+ * showing what it wrote beats hiding it.
+ */
+export function caveatStatus(status: string | null): string | null {
+  return status === null || status === ASSUMED_STATUS ? null : status;
+}
+
+/**
  * A YAML scalar a consumer can parse back to exactly what the record said. The
  * shapes below are the ones the record's own checker refuses unquoted, for the
  * same reason: unquoted, YAML reads them as something else.
@@ -292,8 +308,8 @@ export function agentIndexSuffix(
   governance: DocumentGovernance,
   successorUrl: string | null,
 ): string {
-  const { status } = governance;
-  if (status === null || status === ASSUMED_STATUS) return "";
+  const status = caveatStatus(governance.status);
+  if (status === null) return "";
   const replaced =
     status === "superseded" && successorUrl !== null ? `, replaced by ${successorUrl}` : "";
   return ` — ${status.toUpperCase()}${replaced}`;
