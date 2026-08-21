@@ -227,7 +227,7 @@ bind, set `KSOR_ALLOWED_HOSTS` / `KSOR_ALLOWED_ORIGINS`; on more than one
 replica, set a shared `KSOR_SNAPSHOT_KEYS` (unset ⇒ a per-process key, so a
 search token minted by one replica fails on another).
 
-Two things worth being deliberate about:
+Three things worth being deliberate about:
 
 - **`KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` serves your whole record to anyone
   who can reach the port.** It exists for deployments fronted by your own
@@ -243,6 +243,50 @@ Two things worth being deliberate about:
   line names which document answered and where the keys came from; set
   `KSOR_JWKS_URL` only to override that, or when your SSO publishes no metadata
   at all.
+
+### What a CLIENT has to do
+
+The door is an OAuth **Resource Server**, which means a client is not told the
+authorization server — it discovers it. Nothing here needs configuring; it is
+what your agents will experience, and what to check when one cannot connect.
+
+1. The client calls `POST /mcp` with no token and gets **401** carrying
+
+   ```
+   WWW-Authenticate: Bearer resource_metadata="https://<your-host>/.well-known/oauth-protected-resource/mcp"
+   ```
+
+   That header is the whole handshake: it names a DOCUMENT, not the resource.
+
+2. The client fetches that document and finds the record's resource identifier
+   and its authorization server:
+
+   ```json
+   {
+     "resource": "https://<your-host>/mcp",
+     "authorization_servers": ["https://your-sso.example.com"]
+   }
+   ```
+
+   Those two values are `KSOR_MCP_RESOURCE_URL` and `KSOR_SSO_URL`.
+
+3. The client gets a token from that authorization server, asking for THIS
+   record as the resource (RFC 8707: `resource=https://<your-host>/mcp`), and
+   sends it as `Authorization: Bearer <token>`.
+
+The one thing that goes wrong here goes wrong quietly: a token minted for a
+different audience is a perfectly valid token, and this door rejects it. The
+`aud` claim must match one of `KSOR_JWT_ALLOWED_AUDIENCES` — normally the same
+value as `KSOR_MCP_RESOURCE_URL` — because a bearer accepted for any audience is
+a bearer stolen from one service and replayed against this one. If a client
+authenticates fine and still gets 401, compare its token's `aud` against that
+list before looking anywhere else.
+
+Tokens must be signed **RS256**; nothing else is accepted, and opaque tokens are
+not supported (there is no introspection call). When your SSO rotates its
+signing keys, an unknown key id answers **503**, not 401 — the token may well be
+good and the door's key set merely stale, so a client should retry rather than
+send the user back through a login.
 
 ## Withdrawing a document — `ksor takedown`
 
