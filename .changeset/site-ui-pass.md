@@ -47,3 +47,10 @@ sidebar panel the centring offset as well as its own column, so above 97rem the
 panel's surface ran to the window edge with the first nav item starting 103px
 inside it (measured at 1728px). The layout width is now `100%`: the offsets go
 to zero, the rail starts where the window does, and the prose does not move.
+
+**The previous/next neighbours sit at the foot of the page, not wherever the
+text stopped.** A governed record is full of short documents, and on those the
+pager landed mid-screen — 265px above the bottom edge on the policies index,
+measured — reading as more content rather than as the end of the page. It now
+takes the free space as margin above it, and stays exactly where it was on any
+document taller than the viewport.

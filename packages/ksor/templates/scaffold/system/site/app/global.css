@@ -120,3 +120,15 @@ html > body[data-scroll-locked] {
     grid-column: 2;
   }
 }
+
+/* …and it sits at the foot of the page whatever the document's length. The
+   article is a flex column stretched to the viewport, so on a short document
+   the neighbours used to land wherever the text stopped — 265px above the
+   bottom edge on `/docs/policies`, measured — which reads as content, not as
+   the end of the page. `margin-top: auto` gives the free space to the gap
+   above them instead. It is inert once the document is taller than the
+   viewport: with no free space the auto margin is zero, so a long document
+   keeps the shell's own 16px gap (verified both ways at 863px of viewport). */
+#nd-page > [class*="@container"]:last-child {
+  margin-top: auto;
+}
