@@ -39,11 +39,24 @@ g AS (
 // Scoped takedown denial (decision 14): the shared `denied` set — per-node by
 // default, whole subtree when a row says so — bound PRE-fusion so a denied node
 // cannot leak by ranking. Definition lives in takedown.ts (one seam).
-const ARM_WHERE = `
+/**
+ * The arm predicate, built for the parameter numbering of the query that uses
+ * it — a FUNCTION, not a string the caller renumbers afterwards.
+ *
+ * It used to be derived with `ARM_WHERE.replaceAll("$5", "$4")`, which works
+ * only while the predicate happens to contain exactly one placeholder and no
+ * other text matching it. Adding any second parameter to the predicate breaks
+ * every derived query silently — and when it breaks, the failure arrives as a
+ * driver error that the serving layer correctly reduces to "content store
+ * temporarily unavailable", which tells you nothing about the cause. Found by
+ * tripping over it while trying a fix for issue #59; taking the number as an
+ * argument makes the coupling visible instead of textual.
+ */
+const armWhere = (kindsParam: string): string => `
         c.tenant_id = $1 AND c.generation = g.gen
           AND c.embedding_status = 'embedded' AND ${SERVABLE}
           AND n.status = 'published'
-          AND ($5::text[] IS NULL OR n.kind = ANY($5::text[]))
+          AND (${kindsParam}::text[] IS NULL OR n.kind = ANY(${kindsParam}::text[]))
           AND ${DENY}
           AND ${AUDIENCE_ALLOWED}`;
 
@@ -54,7 +67,16 @@ const JOINS = `
                       AND s.generation = c.generation
         JOIN content_nodes n ON n.node_id = s.node_id AND n.tenant_id = s.tenant_id`;
 
-const HYBRID_SQL = `
+/**
+ * Exported ONLY so a test can EXPLAIN the real thing.
+ *
+ * The index regression this fixes was announced as fixed once before, and came
+ * back through a different clause, because nothing ever asserted the RESULT —
+ * that the plan opens `idx_chunks_hnsw`. A timing threshold would be flaky and
+ * would not have caught it either; the plan shape is the property that matters
+ * (issue #59).
+ */
+export const HYBRID_SQL: string = `
 WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
     -- The top-k is taken by a PLAIN \`ORDER BY <distance> LIMIT\`, and the rank
     -- is numbered OUTSIDE it. Ordering by a window column instead made the
@@ -74,7 +96,7 @@ WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
         FROM (
             SELECT c.chunk_id, g.gen, (c.embedding <=> $3::vector) AS dist
             ${JOINS}
-            WHERE ${ARM_WHERE}
+            WHERE ${armWhere("$5")}
             ORDER BY c.embedding <=> $3::vector, c.chunk_id
             LIMIT $6
         ) ranked),
@@ -83,7 +105,7 @@ WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
                row_number() OVER (ORDER BY ts_rank_cd(c.search_tsv,
                    websearch_to_tsquery($9::regconfig, $4)) DESC, c.chunk_id) AS r
         ${JOINS}
-        WHERE ${ARM_WHERE}
+        WHERE ${armWhere("$5")}
           AND c.search_tsv @@ websearch_to_tsquery($9::regconfig, $4)
         ORDER BY r LIMIT $6),
     fused AS (
@@ -107,7 +129,7 @@ WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}
            ts_rank_cd(c.search_tsv, websearch_to_tsquery($7::regconfig, $3)) AS score,
            g.gen, n.permalink
     ${JOINS}
-    WHERE ${ARM_WHERE.replaceAll("$5", "$4")}
+    WHERE ${armWhere("$4")}
       AND c.search_tsv @@ websearch_to_tsquery($7::regconfig, $3)
     ORDER BY score DESC, c.chunk_id LIMIT $5`;
 
@@ -116,7 +138,7 @@ const TOP_ONE_SQL = `
 WITH RECURSIVE ${GEN_CTE.replace("$8", "$5")}, ${DENIED_CTE}
     SELECT 1 - (c.embedding <=> $3::vector) AS score
     ${JOINS}
-    WHERE ${ARM_WHERE.replaceAll("$5", "$4")}
+    WHERE ${armWhere("$4")}
     ORDER BY c.embedding <=> $3::vector, c.chunk_id
     LIMIT 1`;
 
