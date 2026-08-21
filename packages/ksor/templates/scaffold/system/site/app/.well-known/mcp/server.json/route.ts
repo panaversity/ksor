@@ -1,4 +1,4 @@
-import { appName, mcpEndpoint, mcpNamespace, recordVersion } from "@/lib/shared";
+import { appName, mcpEndpoint, mcpNamespace, recordDescription, recordVersion } from "@/lib/shared";
 
 /**
  * `/.well-known/mcp/server.json` — how an agent DISCOVERS this record's MCP
@@ -33,7 +33,10 @@ export function GET(): Response {
     {
       $schema: SCHEMA,
       name: `${mcpNamespace()}/${appName}`,
-      description: `The ${appName} Knowledge System of Record: governed markdown served with citations and honest abstention.`,
+      // The record's OWN account of itself — see recordDescription. A
+      // description identical in every ksor record cannot help an agent choose
+      // one, and a record with no scope yet says so instead of guessing.
+      description: recordDescription(),
       version: recordVersion(),
       // Absent until the owner declares where the server runs — an invented
       // URL is worse than none, because an agent would try it and conclude the

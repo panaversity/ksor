@@ -60,6 +60,55 @@ function readInstanceTitle(): string {
 export const appTitle: string = readInstanceTitle();
 
 /**
+ * How this record describes ITSELF, in one line — what an agent reads in a
+ * registry listing to decide whether this record can answer its question.
+ *
+ * It comes from the record's own prose (instance.md's first real paragraph,
+ * which the intake interview writes) because the alternative is what shipped
+ * before: one hard-coded sentence, byte-identical in every ksor record ever
+ * scaffolded, telling a discovering agent nothing that distinguishes this record
+ * from any other. "Discoverability determines whether agents find you at all" is
+ * a product principle, and a description that cannot discriminate is not
+ * discoverability (found live 2026-08-21).
+ *
+ * An UNDESCRIBED record says so rather than borrowing a confident sentence it
+ * has not earned — the same answer the MCP door already gives an agent that
+ * connects, so the two surfaces do not disagree about whether this record knows
+ * what it is. The marker is the template's own unfilled placeholder, matched on
+ * the WHOLE body: a scaffold's first paragraphs are authoring guidance, and
+ * reading one of those as the record's scope is worse than admitting there is
+ * none.
+ */
+const TEMPLATE_MARKER = "_fill this in; it is";
+
+function readInstanceScope(): string | null {
+  const text = readFileSync(findInstance(process.cwd()), "utf8");
+  const body = text.replace(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*\r?\n?/, "");
+  if (body.includes(TEMPLATE_MARKER)) return null;
+  const afterHeading = body.replace(/^[\s\S]*?^#[ \t]+.+$/m, "");
+  for (const para of afterHeading.split(/\n[ \t]*\n/)) {
+    const one = para.trim().replace(/\s+/g, " ");
+    if (one === "" || one.startsWith("#") || one.startsWith("-") || one.startsWith(">")) continue;
+    const sentence = /^(.+?[.!?])(\s|$)/.exec(one)?.[1] ?? one;
+    return sentence.length > 300 ? `${sentence.slice(0, 297)}...` : sentence;
+  }
+  return null;
+}
+
+/** null until the owner has written one — never a guess. */
+export const appScope: string | null = readInstanceScope();
+
+/**
+ * The one-line description every discovery surface publishes. Built here so the
+ * registry document and anything else that needs one cannot drift apart.
+ */
+export function recordDescription(): string {
+  return appScope === null
+    ? `${appTitle} — its owner has not yet described what this record covers.`
+    : `${appTitle} — ${appScope}`;
+}
+
+/**
  * Where this record's MCP surface is published, if the owner has said.
  *
  * `null` when they have not: an invented URL is worse than none, because an
