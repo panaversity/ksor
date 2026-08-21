@@ -163,9 +163,13 @@ export function GovernanceMeta({
         // On the governance row, not as a footnote below the sources: it is
         // how a reader hands this document to an agent, and it was previously
         // the smallest text on the page, last (research/site-design.md F2).
+        // Inline after the facts, NOT right-aligned: `ms-auto` parked it at the
+        // far edge of a 900px row, 498px from the nearest thing on a document
+        // with two facts, where it read as belonging to nothing (measured in
+        // Chromium, 2026-08-21).
         <a
           href={markdownUrl}
-          className="ms-auto inline-flex items-center gap-1 rounded border border-fd-border px-1.5 py-0.5 font-medium text-fd-muted-foreground transition-colors hover:border-fd-primary/40 hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+          className="inline-flex items-center gap-1 rounded border border-fd-border px-1.5 py-0.5 font-medium text-fd-muted-foreground transition-colors hover:border-fd-primary/40 hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
         >
           Markdown
         </a>
