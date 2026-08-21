@@ -30,7 +30,7 @@ import {
   MAX_OUTLINE_LIMIT,
   outline as outlineQuery,
 } from "./lib/read.js";
-import { codePointLength, windowDocument } from "./lib/windowing.js";
+import { codePointLength, windowDocument, type DocumentChunk } from "./lib/windowing.js";
 import { EmptyQueryError as EmbedEmptyQueryError } from "./lib/query-embed.js";
 
 export const SEARCH_BUDGET_CHARS: number = 34_000 * CHARS_PER_TOKEN;
@@ -539,6 +539,38 @@ export interface ReadOptions {
   readonly tokenBudget?: number | null;
 }
 
+/** How many section names an error prints before it starts counting instead. */
+const VOCABULARY_SHOWN = 20;
+
+/**
+ * The section names `read` will actually accept, for the error that says one
+ * was not found.
+ *
+ * It used to list `headingPath.split("/")[0]` — the TOP-LEVEL segments only —
+ * while the resolver above accepts a full heading path, any prefix of one, and
+ * a bare last segment when that segment is unique in the document. So the error
+ * named a strict subset of its own vocabulary and told callers that valid
+ * sections did not exist; an agent that believed it moved on, and one that
+ * retried anyway was served the section it had just been told was absent (found
+ * live 2026-08-21). "Errors are documentation" fails on under-reporting exactly
+ * as it fails on being wrong.
+ *
+ * Full paths, because they are the form that always resolves and never
+ * collides; the unique-last-segment shorthand is stated in words rather than
+ * enumerated, which would double the list to say nothing new.
+ */
+export function sectionVocabulary(chunks: readonly DocumentChunk[]): string {
+  const paths = [...new Set(chunks.map((c) => c.headingPath).filter((p) => p !== ""))].sort();
+  if (paths.length === 0) return "it has no sections — read it without `heading`";
+  const shown = paths.slice(0, VOCABULARY_SHOWN);
+  const more = paths.length - shown.length;
+  return (
+    `its sections: ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""} ` +
+    "(any of these resolves; so does a section's last segment alone, when it is " +
+    "unique in the document)"
+  );
+}
+
 export async function readDocument(
   ctx: ServiceContext,
   slug: string,
@@ -641,9 +673,8 @@ export async function readDocument(
       }
       const root = [...roots][0];
       if (root === undefined) {
-        const toc = [...new Set(chunks.map((c) => c.headingPath.split("/")[0]).filter(Boolean))];
         throw new Error(
-          `no section ${JSON.stringify(heading)} in ${node.slug} — its sections: ${toc.join(", ")}`,
+          `no section ${JSON.stringify(heading)} in ${node.slug} — ${sectionVocabulary(chunks)}`,
         );
       }
       scoped = chunks.filter((c) => c.headingPath === root || c.headingPath.startsWith(root + "/"));

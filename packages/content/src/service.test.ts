@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { CONTENT_ADVISORY, instructionLike, stripAssetMarkup } from "./service.js";
+import {
+  CONTENT_ADVISORY,
+  instructionLike,
+  sectionVocabulary,
+  stripAssetMarkup,
+} from "./service.js";
+import type { DocumentChunk } from "./lib/windowing.js";
 
 describe("stripAssetMarkup", () => {
   it("replaces paired and self-closing svg with [diagram]", () => {
@@ -107,5 +113,49 @@ describe("an empty query from the embed door re-raises as a client error, not a 
       },
     } as unknown as ServiceContext;
     await expect(search(ctx, "\u200b", 5)).rejects.toBeInstanceOf(EmptyQueryError);
+  });
+});
+
+describe("sectionVocabulary — the error names what read will actually accept", () => {
+  const chunk = (headingPath: string): DocumentChunk =>
+    ({ headingPath, content: "x", ordinal: 0 }) as unknown as DocumentChunk;
+
+  it("lists FULL heading paths, not just their first segment", () => {
+    // The old message listed `headingPath.split("/")[0]`, so a nested section
+    // was reported as absent and then served on the next call.
+    const out = sectionVocabulary([
+      chunk("intro"),
+      chunk("intro/errors"),
+      chunk("intro/errors/taxonomy"),
+    ]);
+    expect(out).toContain("intro/errors/taxonomy");
+    expect(out).toContain("intro/errors");
+    expect(out).toContain("intro");
+  });
+
+  it("states the shorthand rather than enumerating it", () => {
+    // Every last segment is also addressable when unique; listing them would
+    // double the message to say nothing the reader cannot infer from one line.
+    const out = sectionVocabulary([chunk("intro/errors")]);
+    expect(out).toMatch(/last segment alone/);
+    expect(out).not.toMatch(/\berrors,/);
+  });
+
+  it("counts the tail instead of printing an unbounded list", () => {
+    const many = Array.from({ length: 25 }, (_, i) => chunk(`s${String(i).padStart(2, "0")}`));
+    const out = sectionVocabulary(many);
+    expect(out).toContain("and 5 more");
+    expect(out.split(", ").length).toBeLessThan(25);
+  });
+
+  it("deduplicates and sorts, so the list is stable across calls", () => {
+    const a = sectionVocabulary([chunk("b"), chunk("a"), chunk("b")]);
+    const b = sectionVocabulary([chunk("a"), chunk("b")]);
+    expect(a).toBe(b);
+    expect(a.indexOf("a")).toBeLessThan(a.indexOf("b"));
+  });
+
+  it("says so plainly when a document has no sections at all", () => {
+    expect(sectionVocabulary([chunk("")])).toMatch(/no sections/);
   });
 });
