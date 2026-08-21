@@ -287,6 +287,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     kinds: null,
+    textSearchConfig: inst.textSearchConfig,
     pinnedGeneration: null,
   };
 
@@ -715,6 +716,15 @@ export interface OutlineNodeWire {
   readonly depth: number;
   readonly child_count: number;
   readonly has_content: boolean;
+  /**
+   * The document's page on the human surface, when the record publishes one.
+   *
+   * Fetched by every retrieval query, width-guarded, and then DROPPED before
+   * the wire — so no citation an agent produced could resolve to a page a
+   * person can open, which is half of what a citation is for (audit
+   * finding 19). Null when the record declares no site URL.
+   */
+  readonly permalink: string | null;
 }
 
 export async function outlineDocuments(
@@ -792,6 +802,7 @@ export async function outlineDocuments(
       depth: r.depth,
       child_count: r.childCount,
       has_content: r.hasContent,
+      permalink: r.permalink,
     })),
   };
 }

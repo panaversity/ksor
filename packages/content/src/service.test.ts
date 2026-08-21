@@ -45,6 +45,7 @@ describe("a declared-but-uncalibrated floor refuses to serve (fail closed, repre
       tenantId: "c",
       dsnEnv: "X",
       abstain: { vectorFloor: "uncalibrated", keywordFloor: null },
+      textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "",
       audiences: [],

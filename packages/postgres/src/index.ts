@@ -12,6 +12,7 @@ export {
   prewarmPool,
   scopedTxn,
   tlsAdvisory,
+  tlsOptionsFor,
   withGuardedClient,
   withPgRetry,
 } from "./db.js";

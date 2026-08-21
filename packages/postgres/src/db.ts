@@ -106,6 +106,18 @@ export function neverRetry(error: unknown): boolean {
 const WEAK_SSLMODES = ["require", "prefer", "verify-ca"];
 
 /**
+ * Is this DSN pointed at the local machine?
+ *
+ * `URL.hostname` keeps the BRACKETS on an IPv6 literal, so a bare `"::1"`
+ * comparison never matched and `postgresql://u@[::1]/db` was treated as remote
+ * (found while pinning the TLS posture, audit finding 28).
+ */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "");
+  return host === "" || host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
+/**
  * Warn once when a remote DSN's TLS posture is inherited rather than chosen.
  *
  * With pg 8, `sslmode=require|prefer|verify-ca` all resolve to full
@@ -123,8 +135,7 @@ export function tlsAdvisory(dsn: string): string | null {
   } catch {
     return null;
   }
-  const host = url.hostname;
-  if (host === "" || host === "localhost" || host === "127.0.0.1" || host === "::1") return null;
+  if (isLoopbackHost(url.hostname)) return null;
   const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
   if (!WEAK_SSLMODES.includes(mode)) return null;
   return (
@@ -132,6 +143,39 @@ export function tlsAdvisory(dsn: string): string | null {
     "UNVERIFIED under libpq semantics in pg 9 — write sslmode=verify-full in the DSN to say so " +
     "explicitly and keep the guarantee across a driver upgrade."
   );
+}
+
+/**
+ * The TLS posture ksor CHOOSES, rather than inherits.
+ *
+ * pg 8 resolves `sslmode=require|prefer|verify-ca` to full verification, so the
+ * guarantee today comes from a driver default — and the driver's own warning
+ * says those modes adopt libpq semantics (NO certificate verification) in pg 9.
+ * `pg` is pinned `^8.23.0`, so semver blocks that today; passing the option
+ * explicitly means the bump cannot silently downgrade a deployment when it
+ * comes (audit finding 28).
+ *
+ * Returns `undefined` where TLS is not in play, so nothing changes for a
+ * loopback dev database or a DSN that disables TLS deliberately:
+ *
+ *   loopback host            no TLS — leave the driver alone
+ *   sslmode=disable          the operator said no TLS, explicitly
+ *   sslmode=no-verify        the operator OPTED OUT of verification, explicitly
+ *   anything else, remote    verify, and say so
+ *
+ * Behaviour is unchanged on pg 8. The point is that it stays unchanged.
+ */
+export function tlsOptionsFor(dsn: string): { rejectUnauthorized: boolean } | undefined {
+  let url: URL;
+  try {
+    url = new URL(dsn);
+  } catch {
+    return undefined;
+  }
+  if (isLoopbackHost(url.hostname)) return undefined;
+  const mode = (url.searchParams.get("sslmode") ?? "").toLowerCase();
+  if (mode === "disable" || mode === "no-verify") return undefined;
+  return { rejectUnauthorized: true };
 }
 
 /**
@@ -190,8 +234,12 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
   // arms the pending-queue timer when this is non-zero), and it removes the
   // waiter from the queue instead of the hand-rolled "let the late winner
   // complete and bounce" — so we use the native mechanism, not a Promise.race.
+  const tls = tlsOptionsFor(dsn);
   const pool = new pg.Pool({
     connectionString: dsn,
+    // Stated, not inherited — see tlsOptionsFor. Omitted entirely when TLS is
+    // not in play, so a loopback dev database is untouched.
+    ...(tls === undefined ? {} : { ssl: tls }),
     max: options.maxSize,
     min: Math.min(options.minSize, options.maxSize),
     keepAlive: true,

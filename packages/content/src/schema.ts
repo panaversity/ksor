@@ -125,6 +125,12 @@ export function schemaSqlPath(): string {
 }
 
 const SHIPPED_TOKEN = /\bvector\(1536\)/gi;
+/**
+ * The shipped text-search configuration, rendered per instance the way the
+ * dimension is. It appears exactly once, in the STORED generated column.
+ */
+const SHIPPED_TS_CONFIG = "english";
+const TS_TOKEN = /to_tsvector\('english', content\)/g;
 const COLUMN_LINE = (dim: number): RegExp =>
   new RegExp(`^\\s*embedding\\s+vector\\(${dim}\\)`, "gim");
 
@@ -144,15 +150,20 @@ function verifyTemplate(text: string, dim: number): void {
 }
 
 /** The pure core: render the given template text at the given dimension. */
-export function renderSchemaText(text: string, dim: number): string {
+export function renderSchemaText(
+  text: string,
+  dim: number,
+  textSearchConfig: string = SHIPPED_TS_CONFIG,
+): string {
   if (!Number.isInteger(dim) || dim < 1 || dim > EMBED_DIM_MAX) {
     throw new Error(
       `dim must be an integer in 1..${EMBED_DIM_MAX} (pgvector vector + HNSW ceiling), got ${JSON.stringify(dim)}`,
     );
   }
   verifyTemplate(text, EMBED_DIM);
-  if (dim === EMBED_DIM) return text; // byte-for-byte, test-pinned
-  const rendered = text.replace(SHIPPED_TOKEN, `VECTOR(${dim})`);
+  const withTs = renderTsConfig(text, textSearchConfig);
+  if (dim === EMBED_DIM) return withTs; // byte-for-byte at the shipped dim
+  const rendered = withTs.replace(SHIPPED_TOKEN, `VECTOR(${dim})`);
   verifyTemplate(rendered, dim);
   if (new RegExp(`\\bvector\\(${EMBED_DIM}\\)`, "i").test(rendered)) {
     throw new Error(
@@ -162,11 +173,82 @@ export function renderSchemaText(text: string, dim: number): string {
   return rendered;
 }
 
-export function renderSchema(dim: number, source?: string): string {
-  return renderSchemaText(readFileSync(source ?? schemaSqlPath(), "utf8"), dim);
+/**
+ * Substitute the record's text-search configuration into the generated column.
+ *
+ * Refused rather than escaped: the value is spliced into DDL, so it is
+ * validated as a bare identifier at BOTH ends — `instance.ts` rejects anything
+ * that is not `[a-z][a-z0-9_]*`, and this refuses again rather than trust its
+ * caller.
+ */
+function renderTsConfig(text: string, config: string): string {
+  if (!/^[a-z][a-z0-9_]*$/.test(config)) {
+    throw new Error(
+      `text_search_config ${JSON.stringify(config)} is not a bare Postgres configuration name ` +
+        "(lowercase letters, digits and underscores, e.g. `english`, `spanish`, `simple`)",
+    );
+  }
+  const found = text.match(TS_TOKEN) ?? [];
+  if (found.length !== 1) {
+    throw new Error(
+      `schema template drift: expected to_tsvector('${SHIPPED_TS_CONFIG}', content) exactly once, found ${found.length}`,
+    );
+  }
+  return config === SHIPPED_TS_CONFIG
+    ? text
+    : text.replace(TS_TOKEN, `to_tsvector('${config}', content)`);
+}
+
+export function renderSchema(dim: number, source?: string, textSearchConfig?: string): string {
+  return renderSchemaText(
+    readFileSync(source ?? schemaSqlPath(), "utf8"),
+    dim,
+    textSearchConfig ?? SHIPPED_TS_CONFIG,
+  );
 }
 
 /** Apply the rendered DDL to a fresh database (idempotence is the DDL's own concern). */
-export async function applySchema(pool: pg.Pool, dim: number): Promise<void> {
-  await pool.query(renderSchema(dim));
+export async function applySchema(
+  pool: pg.Pool,
+  dim: number,
+  textSearchConfig?: string,
+): Promise<void> {
+  await pool.query(renderSchema(dim, undefined, textSearchConfig));
+}
+
+/**
+ * The text-search configuration a database's `search_tsv` column was BUILT
+ * with, read back from the catalogue — or null when the column is absent.
+ *
+ * `search_tsv` is STORED and GENERATED, so changing `retrieval.text_search_
+ * config` after a corpus exists does not restem anything: the stored vectors
+ * keep the old language while queries arrive in the new one, and the keyword
+ * arm silently stops matching. The value has to be checked, not assumed
+ * (audit finding 20).
+ */
+export async function storedTextSearchConfig(pool: pg.Pool): Promise<string | null> {
+  const r = await pool.query(
+    "SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attrdef d " +
+      "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum " +
+      "WHERE d.adrelid = 'chunks'::regclass AND a.attname = 'search_tsv'",
+  );
+  const expr = (r.rows[0] as { expr?: string } | undefined)?.expr;
+  if (expr === undefined) return null;
+  return /to_tsvector\(\s*'([a-z0-9_]+)'::regconfig/.exec(expr)?.[1] ?? null;
+}
+
+export class TextSearchConfigMismatch extends ContentStoreError {
+  override readonly name: string = "TextSearchConfigMismatch";
+  constructor(declared: string, stored: string) {
+    super("schema");
+    this.message =
+      `instance.md declares retrieval.text_search_config: ${declared}, but this database's ` +
+      `chunks.search_tsv was generated with '${stored}'\n` +
+      "  why: search_tsv is a STORED generated column — the existing rows keep the old " +
+      "language while queries arrive in the new one, so the keyword arm stops matching " +
+      "without erroring\n" +
+      `  fix: keep retrieval.text_search_config: ${stored}, or provision a NEW database at ` +
+      `${declared} and re-ingest — a different stemming is a different index, the way a ` +
+      "different embedding model is a different space";
+  }
 }

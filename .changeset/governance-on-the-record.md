@@ -103,6 +103,27 @@ contains. Searches now return a third outcome, `reason: "unavailable"` with
 `degraded_reason` (which had no description at all, and named a keyword search
 that never ran).
 
+**Retrieval stems in the record's language.** `to_tsvector('english', …)` was
+hardcoded in a STORED generated column and at four query sites, against the
+claim that the owner writes "in any language they write in" — and on an
+uncalibrated record the keyword arm is the only arm that gates.
+`retrieval.text_search_config` is declared in `instance.md`, rendered into the
+DDL the way the embedding dimension is, and parameterised (`$n::regconfig`) on
+the query side. Because the column is STORED, changing it after a corpus exists
+restems nothing, so a mismatch between the declared value and the one the
+database was built with refuses at boot.
+
+**The TLS posture is chosen, not inherited.** pg 8 resolves
+`sslmode=require|prefer|verify-ca` to full verification, and the driver warns
+that those adopt libpq semantics — no certificate verification — in pg 9. The
+option is now passed explicitly for remote endpoints, so a dependency bump
+cannot silently downgrade a deployment. Behaviour on pg 8 is unchanged; the
+point is that it stays unchanged.
+
+**`outline` carries `permalink`.** It was fetched by every retrieval query,
+width-guarded, then dropped before the wire — so no citation could resolve to a
+page a person can open.
+
 **`read` takes `snapshot_token`, not `snapshot`.** `search` returns `snapshot`
 as an object and `read` accepted `snapshot` as a string, so an agent copying the
 field of that name from one into the field of that name in the other got an

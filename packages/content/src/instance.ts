@@ -177,6 +177,26 @@ const groupSchemas = {
     dim: z.coerce.number().int().min(1).max(EMBED_DIM_MAX).default(EMBED_DIM),
   }),
   retrieval: z.object({
+    /**
+     * The Postgres text-search configuration the KEYWORD arm stems with.
+     *
+     * It was hardcoded to 'english' in a STORED GENERATED column and at four
+     * query sites, against the product's own claim that the owner writes "in
+     * any language they write in". For a Spanish, Urdu or German corpus the
+     * stemming is simply wrong — and on an uncalibrated record the keyword arm
+     * is the only arm that gates.
+     *
+     * Declared here because changing it later is a re-ingest: the column is
+     * STORED, so the value has to be settled before a corpus exists (audit
+     * finding 20).
+     */
+    text_search_config: z
+      .string()
+      .regex(
+        /^[a-z][a-z0-9_]*$/,
+        "text_search_config must be a bare Postgres configuration name (lowercase, e.g. `english`, `spanish`, `simple`)",
+      )
+      .default("english"),
     vector_floor: floorSchema.default(null),
     // The keyword floor is a degraded-path number or null only — the
     // uncalibrated-refuses state is a property of the VECTOR gate.
@@ -204,6 +224,8 @@ export interface ContentInstance {
   /** Transport name (registry key, never persisted). */
   readonly embeddingProvider: string;
   /** The record's reader audiences, least- to most-restricted; empty = no model. */
+  /** The Postgres text-search configuration the keyword arm stems with. */
+  readonly textSearchConfig: string;
   readonly audiences: readonly string[];
   /** The tier a document takes when it declares none; null = none declared. */
   readonly defaultVisibility: string | null;
@@ -334,6 +356,7 @@ export function parseInstanceText(text: string): ContentInstance {
     tenantId: name, // 1:1 with the corpus — see the tenant_id guard above
     dsnEnv: database.dsn_env,
     abstain: { vectorFloor: retrieval.vector_floor, keywordFloor: retrieval.keyword_floor },
+    textSearchConfig: retrieval.text_search_config,
     maximumResponseCharacters: budgets.maximum_response_characters,
     instructions: fm.body.trim(),
     ...audienceModelOf(fm),

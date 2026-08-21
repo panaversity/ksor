@@ -41,6 +41,7 @@ function instanceOf(tenantId: string, corpusId: string): ContentInstance {
     tenantId,
     dsnEnv: "KSOR_DB_URL",
     abstain: { vectorFloor: null, keywordFloor: null },
+    textSearchConfig: "english",
     maximumResponseCharacters: 120_000,
     instructions: "",
     audiences: [],

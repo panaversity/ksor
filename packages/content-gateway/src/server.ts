@@ -195,6 +195,10 @@ const OUTLINE_OUTPUT = z.object({
       position: z.number().int(),
       depth: z.number().int(),
       child_count: z.number().int(),
+      permalink: z
+        .string()
+        .nullable()
+        .describe("The page a person can open, when the record publishes one; null otherwise."),
       has_content: z.boolean(),
     }),
   ),

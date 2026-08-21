@@ -140,6 +140,11 @@ CREATE TABLE chunks (
     embedding         VECTOR(1536),                  -- NULL while pending/failed; dim = the declared space
     embedding_status  TEXT NOT NULL DEFAULT 'embedded'
                       CHECK (embedding_status IN ('pending','embedded','failed')),
+    -- The text-search configuration is RENDERED from instance.md
+    -- (retrieval.text_search_config), the way the embedding dimension is. It
+    -- is STORED and GENERATED, so it cannot be changed without a re-ingest —
+    -- which is exactly why the record declares it rather than inheriting
+    -- 'english' from the DDL (audit finding 20).
     search_tsv        TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     embedded_at       TIMESTAMPTZ,

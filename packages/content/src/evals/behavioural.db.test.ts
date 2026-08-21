@@ -105,6 +105,7 @@ describe.runIf(canRun)("behavioural evals", () => {
       // No floor: these assertions are about DISCLOSURE and provenance, which
       // must hold at level 0 — the shape every adopter starts in.
       abstain: { vectorFloor: null, keywordFloor: null },
+      textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "",
       audiences: [],

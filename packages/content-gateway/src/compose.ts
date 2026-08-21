@@ -20,6 +20,8 @@ import {
   assertGovernanceServable,
   assertSchemaCompatible,
   GovernanceGateError,
+  storedTextSearchConfig,
+  TextSearchConfigMismatch,
   buildShippedProvider,
   checkEmbeddingSpace,
   contentPool,
@@ -129,6 +131,12 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // from here; only an unreachable store defers.
   const bootChecks = async (): Promise<void> => {
     await assertSchemaCompatible(pool);
+    // The stemming the stored column was BUILT with must match what queries
+    // will use, or the keyword arm silently stops matching (audit finding 20).
+    const stored = await storedTextSearchConfig(pool);
+    if (stored !== null && stored !== instance.textSearchConfig) {
+      throw new TextSearchConfigMismatch(instance.textSearchConfig, stored);
+    }
     await assertGovernanceServable(pool, instance);
   };
 

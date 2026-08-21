@@ -91,6 +91,7 @@ export {
   QueryEmbedUnavailable,
 } from "./lib/query-embed.js";
 export { checkEmbeddingSpace, EmbeddingSpaceMismatch, type SpaceCheck } from "./lib/space.js";
+export { storedTextSearchConfig, TextSearchConfigMismatch } from "./schema.js";
 export { aembedIntent, embedIntent, embedInput } from "./lib/embedding.js";
 export {
   outlineDocuments,

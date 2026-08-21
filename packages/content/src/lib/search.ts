@@ -81,10 +81,10 @@ WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
     kw AS (
         SELECT c.chunk_id, g.gen,
                row_number() OVER (ORDER BY ts_rank_cd(c.search_tsv,
-                   websearch_to_tsquery('english', $4)) DESC, c.chunk_id) AS r
+                   websearch_to_tsquery($9::regconfig, $4)) DESC, c.chunk_id) AS r
         ${JOINS}
         WHERE ${ARM_WHERE}
-          AND c.search_tsv @@ websearch_to_tsquery('english', $4)
+          AND c.search_tsv @@ websearch_to_tsquery($9::regconfig, $4)
         ORDER BY r LIMIT $6),
     fused AS (
         SELECT chunk_id, max(gen) AS gen, sum(1.0 / (${RRF_K} + r)) AS score
@@ -104,11 +104,11 @@ const KEYWORD_SQL = `
 WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
            c.content,
-           ts_rank_cd(c.search_tsv, websearch_to_tsquery('english', $3)) AS score,
+           ts_rank_cd(c.search_tsv, websearch_to_tsquery($7::regconfig, $3)) AS score,
            g.gen, n.permalink
     ${JOINS}
     WHERE ${ARM_WHERE.replaceAll("$5", "$4")}
-      AND c.search_tsv @@ websearch_to_tsquery('english', $3)
+      AND c.search_tsv @@ websearch_to_tsquery($7::regconfig, $3)
     ORDER BY score DESC, c.chunk_id LIMIT $5`;
 
 /** The calibrator's standalone top-1 signal (the read path gets it free from HYBRID_SQL). */
@@ -187,7 +187,21 @@ export interface SearchScope {
   readonly corpusId: string;
   readonly kinds: readonly string[] | null;
   readonly pinnedGeneration: number | null;
+  /**
+   * The Postgres text-search configuration to stem the QUERY with — it must
+   * match the one `chunks.search_tsv` was generated with, or the arms disagree
+   * about what a word is.
+   *
+   * PARAMETERISED as `$n::regconfig`, never spliced: the value comes from
+   * instance.md, and a configuration name reaching DDL-shaped SQL by
+   * concatenation is the one place this file would be injectable. Omitted =
+   * `english`, which is what every record built before the key existed has.
+   */
+  readonly textSearchConfig?: string;
 }
+
+/** What a scope that names no configuration means. */
+const DEFAULT_TS_CONFIG = "english";
 
 /** Caller MUST have bound VECTOR_TXN_GUCS into this transaction (see above). */
 export async function hybridSearch(
@@ -210,6 +224,7 @@ export async function hybridSearch(
       poolPerArm,
       limit,
       scope.pinnedGeneration,
+      scope.textSearchConfig ?? DEFAULT_TS_CONFIG,
     ],
   });
   return splitHits(result);
@@ -225,7 +240,15 @@ export async function keywordSearch(
   const result = await client.query({
     text: KEYWORD_SQL,
     rowMode: "array",
-    values: [scope.tenantId, scope.corpusId, query, scope.kinds, limit, scope.pinnedGeneration],
+    values: [
+      scope.tenantId,
+      scope.corpusId,
+      query,
+      scope.kinds,
+      limit,
+      scope.pinnedGeneration,
+      scope.textSearchConfig ?? DEFAULT_TS_CONFIG,
+    ],
   });
   // The same projection guard the hybrid arm gets via splitHits. Without it a
   // dropped or reordered KEYWORD_SQL column silently mis-maps score /

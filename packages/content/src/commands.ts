@@ -289,8 +289,11 @@ async function schemaCommand(args: string[]): Promise<number> {
     dim = instance.embeddingDim;
   }
 
+  // The record's stemming is rendered into the DDL, the way its dimension is.
+  // `--dim` alone names no record, so it falls back to the shipped default.
+  const tsConfig = instance?.textSearchConfig;
   if (!values.apply) {
-    process.stdout.write(renderSchema(dim));
+    process.stdout.write(renderSchema(dim, undefined, tsConfig));
     return 0;
   }
   if (instance === null) {
@@ -315,9 +318,10 @@ async function schemaCommand(args: string[]): Promise<number> {
   const required = schemaVersion();
   const state = await withPool(dsn, (pool) => readSchemaState(pool));
   if (state.kind === "uninitialized") {
-    await withPool(dsn, (pool) => applySchema(pool, dim));
+    await withPool(dsn, (pool) => applySchema(pool, dim, tsConfig));
     process.stdout.write(
-      `schema: applied ${required} at dim ${dim} (database named by ${instance.dsnEnv})\n`,
+      `schema: applied ${required} at dim ${dim}, text search ${tsConfig ?? "english"} ` +
+        `(database named by ${instance.dsnEnv})\n`,
     );
     return 0;
   }
