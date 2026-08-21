@@ -9,6 +9,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { NO_GOVERNANCE, type NodeGovernance } from "./governance.js";
+
 export const SUPPORTED_FORMATS: readonly number[] = [1];
 
 export interface ManifestNode {
@@ -28,6 +30,12 @@ export interface ManifestNode {
    * fidelity; ksor derives routes from paths, so adapters here leave it null.)
    */
   readonly permalink: string | null;
+  /**
+   * What the document declares ABOUT ITSELF — audience, authored status, owner,
+   * provenance, supersession. Carried onto the record (schema 2.2) so every
+   * surface reads one source instead of re-deriving governance from markdown.
+   */
+  readonly governance: NodeGovernance;
 }
 
 export interface ManifestFile {
@@ -65,6 +73,7 @@ export interface ManifestNodeInit {
   readonly summary?: string | null;
   readonly keywords?: readonly string[];
   readonly permalink?: string | null;
+  readonly governance?: NodeGovernance;
 }
 
 /** Mirrors the oracle dataclass defaults (parent/summary/permalink None, position 0, keywords ()). */
@@ -79,6 +88,7 @@ export function manifestNode(init: ManifestNodeInit): ManifestNode {
     summary: init.summary ?? null,
     keywords: init.keywords ?? [],
     permalink: init.permalink ?? null,
+    governance: init.governance ?? NO_GOVERNANCE,
   };
 }
 
@@ -124,6 +134,7 @@ export function parseManifest(text: string): Manifest {
       summary: optString(n["summary"]),
       keywords: toKeywords(n["keywords"], i),
       permalink: optString(n["permalink"]),
+      governance: toGovernance(n["governance"], i),
     }),
   );
   const files = entriesOf(obj, "files").map((f, i) =>
@@ -135,6 +146,44 @@ export function parseManifest(text: string): Manifest {
   );
   validate(nodes, files);
   return { format: fmt, corpus_id: corpusId, source_commit: sourceCommit, nodes, files };
+}
+
+/**
+ * The inverse of `governanceToJson`. Absent → NO_GOVERNANCE, which is what a
+ * corpus that declares nothing has always meant. A present-but-wrong shape is
+ * REFUSED rather than silently dropped: dropping it would serve a document at
+ * the instance default, and for a `visibility:` that means serving a restricted
+ * document to everyone.
+ */
+function toGovernance(raw: unknown, index: number): NodeGovernance {
+  if (raw === undefined || raw === null) return NO_GOVERNANCE;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError(`entry ${index}: 'governance' must be an object`);
+  }
+  const g = raw as Record<string, unknown>;
+  const str = (key: string): string | null => {
+    const val = g[key];
+    if (val === undefined || val === null) return null;
+    if (typeof val !== "string" || val === "") {
+      throw new ManifestError(`entry ${index}: 'governance.${key}' must be a non-empty string`);
+    }
+    return val;
+  };
+  const provenanceRaw = g["provenance"];
+  let provenance: readonly string[] | null = null;
+  if (provenanceRaw !== undefined && provenanceRaw !== null) {
+    if (!Array.isArray(provenanceRaw) || provenanceRaw.some((v) => typeof v !== "string")) {
+      throw new ManifestError(`entry ${index}: 'governance.provenance' must be a list of strings`);
+    }
+    provenance = provenanceRaw as string[];
+  }
+  return {
+    visibility: str("visibility"),
+    docStatus: str("doc_status"),
+    owner: str("owner"),
+    provenance,
+    supersededBy: str("superseded_by"),
+  };
 }
 
 function topString(obj: Record<string, unknown>, key: string): string {
@@ -310,6 +359,25 @@ function nodeToJson(n: ManifestNode): Record<string, unknown> {
     const omit = val === null || val === 0 || (Array.isArray(val) && val.length === 0);
     if (key === "position" || !omit) out[key] = val;
   }
+  // Governance is part of the manifest's FINGERPRINT, not decoration. The
+  // manifest's sha256 fills `instance_bundle_sha256` — the provenance hash of a
+  // generation — so a manifest blind to governance made flipping a document
+  // from public to internal produce a byte-identical hash, and the record could
+  // not tell the two generations apart (round-3 review of #43). Same omit rule
+  // as the fields above, so a corpus that declares no governance emits nothing
+  // and its hash is unchanged by this addition.
+  const gov = governanceToJson(n.governance);
+  if (Object.keys(gov).length > 0) out["governance"] = gov;
+  return out;
+}
+
+function governanceToJson(g: NodeGovernance): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (g.visibility !== null) out["visibility"] = g.visibility;
+  if (g.docStatus !== null) out["doc_status"] = g.docStatus;
+  if (g.owner !== null) out["owner"] = g.owner;
+  if (g.provenance !== null && g.provenance.length > 0) out["provenance"] = g.provenance;
+  if (g.supersededBy !== null) out["superseded_by"] = g.supersededBy;
   return out;
 }
 

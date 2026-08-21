@@ -32,6 +32,27 @@ export class InstanceParseError extends Error {
   }
 }
 
+/**
+ * A record that declares no `database:` block at all — the level-0 shape
+ * `ksor init` emits, and a legitimate state, not a typo.
+ *
+ * It carries the instance NAME because one caller needs to answer FOR such a
+ * record rather than refuse: `ksor takedown --export` runs inside `pnpm build`,
+ * and a level-0 project must be able to build. Everyone else catches
+ * `InstanceParseError` and refuses exactly as before (found live, round 4 of
+ * the #43 review: removing the scaffold's `|| true` made `pnpm build` fail on a
+ * freshly scaffolded record, because the refusal fires before the DSN is ever
+ * consulted).
+ */
+export class NoDatabaseDeclared extends InstanceParseError {
+  readonly instanceName: string;
+  constructor(instanceName: string, what: string, why: string, fix: string) {
+    super(what, why, fix);
+    this.name = "NoDatabaseDeclared";
+    this.instanceName = instanceName;
+  }
+}
+
 function unknownKey(key: string): never {
   throw new InstanceParseError(
     `instance.md declares an unknown top-level key: ${key}`,
@@ -156,6 +177,26 @@ const groupSchemas = {
     dim: z.coerce.number().int().min(1).max(EMBED_DIM_MAX).default(EMBED_DIM),
   }),
   retrieval: z.object({
+    /**
+     * The Postgres text-search configuration the KEYWORD arm stems with.
+     *
+     * It was hardcoded to 'english' in a STORED GENERATED column and at four
+     * query sites, against the product's own claim that the owner writes "in
+     * any language they write in". For a Spanish, Urdu or German corpus the
+     * stemming is simply wrong — and on an uncalibrated record the keyword arm
+     * is the only arm that gates.
+     *
+     * Declared here because changing it later is a re-ingest: the column is
+     * STORED, so the value has to be settled before a corpus exists (audit
+     * finding 20).
+     */
+    text_search_config: z
+      .string()
+      .regex(
+        /^[a-z][a-z0-9_]*$/,
+        "text_search_config must be a bare Postgres configuration name (lowercase, e.g. `english`, `spanish`, `simple`)",
+      )
+      .default("english"),
     vector_floor: floorSchema.default(null),
     // The keyword floor is a degraded-path number or null only — the
     // uncalibrated-refuses state is a property of the VECTOR gate.
@@ -182,6 +223,12 @@ export interface ContentInstance {
   readonly instructions: string;
   /** Transport name (registry key, never persisted). */
   readonly embeddingProvider: string;
+  /** The record's reader audiences, least- to most-restricted; empty = no model. */
+  /** The Postgres text-search configuration the keyword arm stems with. */
+  readonly textSearchConfig: string;
+  readonly audiences: readonly string[];
+  /** The tier a document takes when it declares none; null = none declared. */
+  readonly defaultVisibility: string | null;
   /** model + dim are the persisted IDENTITY of the embedding space. */
   readonly embeddingModel: string;
   readonly embeddingDim: number;
@@ -239,6 +286,12 @@ const KERNEL_TOP_LEVEL_KEYS = new Set([
   "site",
   "audiences",
   "default_visibility",
+  "mcp_url",
+  // The record's published semver, for the MCP discovery document — whose
+  // schema REQUIRES a version. The kernel does not consume it; it must tolerate
+  // it, or an adopter who fills in the discovery surface breaks `ksor serve`
+  // (round-6 review of #43).
+  "version",
 ]);
 
 export function parseInstanceText(text: string): ContentInstance {
@@ -281,7 +334,8 @@ export function parseInstanceText(text: string): ContentInstance {
     );
   }
   if (database === null) {
-    throw new InstanceParseError(
+    throw new NoDatabaseDeclared(
+      name,
       "instance.md declares no database: block",
       "the kernel serves from a Postgres corpus store; without database.dsn_env there is nothing to open",
       "add:\n  database:\n    dsn_env: KSOR_DB_URL\nand export that variable with the DSN",
@@ -302,12 +356,92 @@ export function parseInstanceText(text: string): ContentInstance {
     tenantId: name, // 1:1 with the corpus — see the tenant_id guard above
     dsnEnv: database.dsn_env,
     abstain: { vectorFloor: retrieval.vector_floor, keywordFloor: retrieval.keyword_floor },
+    textSearchConfig: retrieval.text_search_config,
     maximumResponseCharacters: budgets.maximum_response_characters,
     instructions: fm.body.trim(),
+    ...audienceModelOf(fm),
     embeddingProvider: embedding.provider,
     embeddingModel,
     embeddingDim: embedding.dim,
   };
+}
+
+/**
+ * The audience model, parsed with the SITE's grammar and its refusals.
+ *
+ * The two surfaces had two grammars and the kernel's was the weaker one:
+ * flow style (`audiences: [public, internal]`) parses on the site and read as
+ * a plain SCALAR here, so `lists.get("audiences")` was undefined, the model was
+ * empty, and an empty model filters NOTHING — the site hid a restricted
+ * document while the MCP door served it in full. That is precisely the failure
+ * decision 15 exists to end, reintroduced through a parser mismatch.
+ *
+ * So this mirrors `system/site/lib/audience.ts` clause for clause, and the
+ * governing rule is its comment: a declared-but-unreadable model must never
+ * read as "no model", because no model serves everything.
+ */
+function audienceModelOf(fm: Frontmatter): {
+  audiences: readonly string[];
+  defaultVisibility: string | null;
+} {
+  const declared =
+    fm.lists.has("audiences") || fm.scalars.has("audiences") || fm.maps.has("audiences");
+  if (!declared) return { audiences: [], defaultVisibility: null };
+
+  // Flow style is a LIST the site reads and this parser stores as a scalar.
+  const scalar = fm.scalars.get("audiences") ?? "";
+  const flow = /^\[(.*)\]$/.exec(scalar.trim())?.[1];
+  const audiences =
+    fm.lists.get("audiences") ??
+    (flow === undefined
+      ? []
+      : flow
+          .split(",")
+          .map((v) =>
+            v
+              .trim()
+              .replace(/^["']|["']$/g, "")
+              .trim(),
+          )
+          .filter((v) => v !== ""));
+
+  if (audiences.length === 0) {
+    throw new InstanceParseError(
+      "instance.md declares `audiences:` but no audience could be read from it",
+      "an unreadable model reads as no model, and no model serves every document to every caller — the one parse failure that leaks",
+      "write the audiences as a list, least-restricted first:\n  audiences:\n    - public\n    - internal",
+    );
+  }
+  if (audiences[0] !== "public") {
+    throw new InstanceParseError(
+      `audiences: must start with public (it starts with ${JSON.stringify(audiences[0])})`,
+      "the list is ordered least- to most-restricted, and a caller the door cannot identify gets the FIRST entry — any other first entry makes the anonymous default the most restricted tier, or the leak",
+      "reorder audiences: with public first",
+    );
+  }
+  if (new Set(audiences).size !== audiences.length) {
+    throw new InstanceParseError(
+      `audiences: declares a tier twice (${audiences.join(", ")})`,
+      "a duplicated tier has two positions in the ordering, and which one a request honours is undefined",
+      "remove the duplicate entry",
+    );
+  }
+  const defaultVisibility = fm.scalars.get("default_visibility") ?? "";
+  if (defaultVisibility === "") {
+    throw new InstanceParseError(
+      "instance.md declares `audiences:` without `default_visibility:`",
+      "there is no safe guess: the widest tier leaks on the first document that forgets the key, the narrowest hides the record — and an unset default binds an empty tier that matches nothing, blacking out every document that declares no visibility",
+      `add the tier a document without a visibility: key belongs to, e.g. default_visibility: ${audiences[0]}`,
+    );
+  }
+  if (!audiences.includes(defaultVisibility)) {
+    throw new InstanceParseError(
+      `default_visibility: ${JSON.stringify(defaultVisibility)} is not one of the declared audiences (${audiences.join(", ")})`,
+      "a default outside the model matches no tier, so every document that declares no visibility: is served to nobody",
+      `use one of: ${audiences.join(", ")}`,
+    );
+  }
+  return { audiences, defaultVisibility };
 }
 
 export function parseInstance(path: string): ContentInstance {

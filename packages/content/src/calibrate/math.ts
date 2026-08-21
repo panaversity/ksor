@@ -59,6 +59,16 @@ export interface CalibrationReport {
   readonly target_precision: FloorStats | null;
   readonly paste: number;
   readonly paste_why: string;
+  /**
+   * Did the measurement separate in-corpus from out-of-corpus at all? When it
+   * did NOT, there is no floor to paste — only a diagnosis. Carried on the
+   * report so the renderer cannot hand out a number the maths just refused.
+   */
+  readonly separable: boolean;
+  /** The precision target the ALT floor was measured at — reported, not assumed. */
+  readonly target: number;
+  /** When the measurement was taken: the invariant says the DATE rides beside the number. */
+  readonly measured_at: string;
   readonly low_tail: ScoredQuery[];
   readonly detail: ScoredQuery[];
 }
@@ -160,7 +170,9 @@ export function recommendFloor(
  * decimals, falling back to hi exactly when rounding leaves the (narrow)
  * interval. Not separable: the precise zero-FA floor with the leak stated.
  */
-export function pasteValue(points: readonly Scored[]): [paste: number, why: string] {
+export function pasteValue(
+  points: readonly Scored[],
+): [paste: number, why: string, separable: boolean] {
   const inScores = points.filter((p) => p.in_corpus).map((p) => p.score);
   const oocScores = points.filter((p) => !p.in_corpus).map((p) => p.score);
   if (!inScores.length || !oocScores.length) {
@@ -181,12 +193,14 @@ export function pasteValue(points: readonly Scored[]): [paste: number, why: stri
     return [
       mid,
       `separable: max OOC ${pythonFormatFixed(lo, 3)} < min in-corpus ${pythonFormatFixed(hi, 3)}; midpoint has margin both ways`,
+      true,
     ];
   }
   const leak = statsAtFloor(points, hi).risk;
   return [
     hi,
     `NOT separable: max OOC ${pythonFormatFixed(lo, 3)} >= min in-corpus ${pythonFormatFixed(hi, 3)}; zero-FA floor leaks ${pythonFormatFixed(leak, 3)}`,
+    false,
   ];
 }
 
@@ -257,10 +271,12 @@ export function buildReport(
   detail: readonly ScoredQuery[],
   meta: ReportMeta,
   targetPrecision: number = 0.95,
+  /** Injected so the report is deterministic under test. */
+  now: Date = new Date(),
 ): CalibrationReport {
   const points: Scored[] = detail.map((d) => ({ score: d.score, in_corpus: d.in_corpus }));
   const rec = recommendFloor(points, targetPrecision);
-  const [paste, paste_why] = pasteValue(points);
+  const [paste, paste_why, separable] = pasteValue(points);
   // The weakest in-corpus queries drive the floor via min(); a ratifying
   // human must SEE them, or one atypical low scorer silently drags the
   // recommendation down. Stable ascending sort, first five — as the oracle.
@@ -281,6 +297,12 @@ export function buildReport(
     target_precision: rec.target_precision,
     paste,
     paste_why,
+    separable,
+    target: rec.target,
+    // "Never copy a calibrated constant between corpora. Recalibrate; record
+    // the measurement and its DATE beside the number" — the date was the half
+    // the paste line never carried.
+    measured_at: now.toISOString().slice(0, 10),
     low_tail,
     detail: [...detail],
   };
@@ -297,9 +319,14 @@ export function renderReport(report: CalibrationReport): string {
   const lines: string[] = [];
   const z = report.zero_fa;
   const how = report.pinned ? "PINNED" : "served";
-  // A missing generation prints as Python's None literal — the oracle's
-  // bytes, kept identical because the paste line is machine-checked.
-  const gen = report.generation === null ? "None" : String(report.generation);
+  // The generation this was measured against. The oracle printed Python's
+  // `None` literal when it had none and ksor replicated the bytes; that put
+  // the string "None" into the provenance comment an operator pastes beside
+  // the floor, which is the one place the invariant "record the measurement
+  // beside the number" is implemented. Byte-fidelity to the oracle is for
+  // ALGORITHMS, never for reporting (review 2026-08-20).
+  const gen =
+    report.generation === null ? "unknown (no generation pinned)" : String(report.generation);
   lines.push(
     `\nmeasured on generation ${gen} (${how}), model ${report.model}, door: ${report.door}`,
   );
@@ -314,11 +341,12 @@ export function renderReport(report: CalibrationReport): string {
   }
   const t = report.target_precision;
   if (t) {
-    // The oracle prints report.get("target", 0.95); the report dict never
-    // carries "target" (calibrate() does not record it), so the label always
-    // reads 0.95 whatever target was measured. Replicated as-is.
+    // The label states the precision this floor was actually measured at. The
+    // oracle read a key its own report never carried, so the line always said
+    // 0.95 whatever was measured — a report that describes a different
+    // measurement than the one it performed (review 2026-08-20).
     lines.push(
-      `ALT (${pythonFloatRepr(0.95)}-precision): floor = ${pythonFormatFixed(t.floor, 3)} -> coverage ${pythonFormatFixed(t.coverage, 3)}`,
+      `ALT (${pythonFloatRepr(report.target)}-precision): floor = ${pythonFormatFixed(t.floor, 3)} -> coverage ${pythonFormatFixed(t.coverage, 3)}`,
     );
   }
   lines.push("weakest in-corpus queries (these set the floor):");
@@ -326,8 +354,25 @@ export function renderReport(report: CalibrationReport): string {
     lines.push(`  ${pythonFormatFixed(d.score, 3)}  ${d.query}`);
   }
   lines.push(`\n${report.paste_why}`);
+  if (!report.separable) {
+    // NO paste-ready number. The measurement just said this corpus does not
+    // separate in-corpus from out-of-corpus at the floor it found — handing
+    // over a value anyway is handing over a floor known to leak, and the
+    // intended operator is a coding agent that will paste it (review
+    // 2026-08-20). `uncalibrated` is representable and REFUSES every serve,
+    // which is the honest state until the measurement succeeds.
+    lines.push(
+      "NOT pasting a floor: this measurement did not separate, so any number here " +
+        "would be one that is known to leak.\n" +
+        "Put the record in the fail-closed state and fix the measurement:\n" +
+        "  retrieval:\n    vector_floor: uncalibrated\n" +
+        "Then widen the probe set (scope-adjacent near-misses, not only far-domain " +
+        "questions), add in-corpus questions, and re-run.",
+    );
+    return lines.join("\n") + "\n";
+  }
   lines.push(
-    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}`,
+    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated ${report.measured_at} on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}`,
   );
   return lines.join("\n") + "\n";
 }

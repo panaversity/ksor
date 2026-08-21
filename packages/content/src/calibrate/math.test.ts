@@ -91,18 +91,48 @@ describe("paste_value refuses a one-sided distribution", () => {
 describe("report assembly and the printed recommendation block", () => {
   for (const c of fixture.report_cases) {
     it(c.name, () => {
-      const report = buildReport(c.detail, c.meta, c.target_precision);
+      // Fixed clock: the report records the DATE beside the number, and a
+      // measurement date that moves would make the fixture untestable.
+      const report = buildReport(
+        c.detail,
+        c.meta,
+        c.target_precision,
+        new Date("2026-08-21T00:00:00Z"),
+      );
       expect(report).toEqual(c.expected);
       expect(renderReport(report)).toBe(c.rendered);
     });
   }
 
-  it("the rendered block ends in the machine-checked paste line", () => {
-    for (const c of fixture.report_cases) {
+  it("a SEPARABLE measurement ends in the machine-checked paste line, with its date", () => {
+    for (const c of fixture.report_cases.filter((x) => x.expected.separable)) {
       const lastLine = c.rendered.trimEnd().split("\n").at(-1) ?? "";
       expect(lastLine, `case ${c.name}: ${lastLine}`).toMatch(
-        /^ {2}vector_floor: -?\d+\.\d{3} {3}# calibrated on generation (\d+|None), model .+\/d\d+, door: (synthesized|queries-file)$/,
+        /^ {2}vector_floor: -?\d+\.\d{3} {3}# calibrated \d{4}-\d{2}-\d{2} on generation (\d+|unknown \(no generation pinned\)), model .+\/d\d+, door: (synthesized|queries-file)$/,
       );
+    }
+  });
+
+  it("a NON-separable measurement hands out NO floor at all", () => {
+    // The intended operator is a coding agent; a paste-ready number under a
+    // "NOT separable" verdict is a floor known to leak, pasted.
+    const cases = fixture.report_cases.filter((x) => !x.expected.separable);
+    expect(cases.length, "the fixture covers the non-separable case").toBeGreaterThan(0);
+    for (const c of cases) {
+      expect(c.rendered, c.name).not.toMatch(/^ {2}vector_floor: -?\d/m);
+      expect(c.rendered, c.name).toContain("vector_floor: uncalibrated");
+      expect(c.rendered, c.name).toMatch(/NOT pasting a floor/);
+    }
+  });
+
+  it("the ALT line reports the precision it was MEASURED at, never a constant", () => {
+    // The oracle read a key its report never carried, so this line always said
+    // 0.95 whatever was measured — a report describing a different measurement
+    // than the one it performed.
+    for (const c of fixture.report_cases) {
+      if (c.expected.target_precision === null) continue;
+      const alt = c.rendered.split("\n").find((l) => l.startsWith("ALT ("));
+      expect(alt, `case ${c.name}`).toContain(`(${String(c.expected.target)}`);
     }
   });
 });

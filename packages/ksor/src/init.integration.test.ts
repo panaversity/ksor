@@ -194,8 +194,38 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     // TWO surfaces, TWO commands, each named for what it serves: `pnpm dev`
     // is the site for people, `pnpm serve` is the record for agents. `serve`
     // carries the whole chain so there is never a choice to make.
-    expect(pkg.scripts?.["serve"], "one command serves the agent surface").toBe(
-      "pnpm schema && pnpm grant && pnpm ingest && ksor serve",
+    // SETUP is separate from SERVE on purpose. The fused form applied DDL and
+    // granted the tool its own ingest authorization on EVERY boot — grant.ts
+    // argues at length that a flag is not authorization, and here the tool was
+    // its own authorizer once per start (review 2026-08-20). The privileged,
+    // once-only acts moved to their own script; the daily loop stays one
+    // command.
+    //
+    // NOT named `setup`: `pnpm setup` is pnpm's own installer and shadows a
+    // script of that name, so the documented step printed "No changes to the
+    // environment were made", exited 0, applied no DDL, and the next command
+    // failed blaming the database (round-7 review of #43, reproduced live).
+    // `scaffold-scripts.test.ts` holds the general rule.
+    expect(pkg.scripts?.["setup"], "`pnpm setup` is a pnpm command — it cannot be a script").toBe(
+      undefined,
+    );
+    expect(pkg.scripts?.["provision"], "the privileged acts, run once by a human").toBe(
+      "pnpm schema && pnpm grant",
+    );
+    // ONE command, not a chain. A chain runs the server under the shell pnpm
+    // spawned, so a signal to that shell returns the prompt while the server
+    // keeps holding the port; the next `pnpm serve` then dies with EADDRINUSE.
+    // A lone command is exec'd by the shell itself — no wrapper to orphan it,
+    // and no POSIX-only `exec` keyword to break cmd.exe on Windows. It also
+    // makes publication deliberate: refreshing the record is its own verb.
+    expect(pkg.scripts?.["serve"], "serving is one supervised process").toBe("ksor serve");
+    expect(pkg.scripts?.["refresh"], "publishing is a separate, deliberate act").toBe(
+      "pnpm ingest && pnpm gc",
+    );
+    // gc in the loop: a refused flip leaves a complete generation behind, and
+    // nothing in the default path ever collected them.
+    expect(pkg.scripts?.["gc"], "collection is part of the loop").toBe(
+      "ksor gc --instance instance.md",
     );
     // `up` is pnpm's own alias for `update`: a script by that name is shadowed
     // and silently upgrades the adopter's dependencies (shipped in 0.0.5).

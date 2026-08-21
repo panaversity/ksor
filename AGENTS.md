@@ -387,11 +387,132 @@ gateway` package, serve-by-spawn) is superseded._
     outline, and the calibration sampler; an empty denylist makes the seed
     empty and the recursion terminate at once, so the hot path pays nothing.
     Schema: `takedown_denylist.scope` (schema_meta 2.1, additive with a
-    default → a 2.0 reader still reads a 2.1 DB). When the `takedown` write
+    default → a 2.0 reader still reads a 2.1 DB; 2.2 adds the governance
+    columns the same additive way). When the `takedown` write
     verb lands it must make a container selection an EXPLICIT choice —
     expand to leaves (identity) or declare a subtree rule — never silently
     guess. Reversed per-clause with evidence; the `node` default is not
     reversible without an owner decision (it is the identity guarantee).
+
+15. **Governance is stored on the record, not re-derived per surface**
+    (2026-08-20, from the end-to-end review). The ingest adapter kept four
+    frontmatter keys and dropped the rest, so `visibility`, the authored
+    `status`, `owner` and `provenance` existed only in markdown and each
+    surface implemented its own subset — the site enforced `visibility:` and
+    the MCP door could not, because the record did not carry it (a document
+    marked `visibility: internal` was hidden from the website and served in
+    full to every agent, reproduced live). Schema 2.2 puts them on
+    `content_nodes`; ONE frontmatter module reads them; `lib/audience.ts` is
+    the single serving seam, bound the way `lib/takedown.ts` binds denial. A
+    new guarantee about a document is a COLUMN plus a seam, never a filter in
+    one surface's build step. Reversed only by an owner decision recorded here.
+
+16. **Forward migrations exist and are walked, not sorted** (2026-08-20).
+    `schema/migrations/<from>-<to>__<slug>.sql`: each file names both ends of
+    its step, so a missing step refuses instead of being silently skipped, and
+    each applies in one transaction with the `schema_meta` row recording it.
+    `schema.sql` remains the DDL source of truth for a FRESH database. This
+    retires "drop and recreate", which destroyed the two tables that cannot be
+    rebuilt from markdown. Reversed only with a recorded replacement.
+
+17. **A pool with a floor of ZERO — not a connection per call, not a pinned
+    set** (owner-directed, 2026-08-21). The question the owner asked is the
+    right one for a product that will run on Cloud Run against a serverless
+    Postgres: who holds a connection, and for how long. Three postures were
+    weighed and the middle one is ours.
+
+    _Connect per call_ pays a full handshake on every request. Measured
+    locally (Postgres 17.7, loopback, no TLS, n=30): a fresh connect + trivial
+    query is **3.02ms** median against **0.15ms** on an open one — a **2.87ms**
+    floor under every request that does no work at all. A remote TLS endpoint
+    is materially worse, because the handshake adds round trips this local
+    number does not contain. Paying that per request buys nothing an idle
+    timeout does not already buy.
+
+    _A pinned pool_ (`min: 2`, which ksor inherited from the predecessor) is
+    the posture the owner objected to, and the objection was correct — more so
+    than it looked. pg-pool reaps an idle connection ONLY while the pool is
+    above `min` (pg-pool 3.14 `index.js:409`), and it does not open anything
+    eagerly. So a non-zero `min` does not prewarm: it pins that many sockets
+    open forever and prewarms nothing. The predecessor's psycopg pool DID
+    prewarm, which is why 2 was reasonable there; ksor took the number without
+    the mechanism and got the cost with none of the benefit. Against a compute
+    that suspends on idle, those pinned sockets are also the ones most likely
+    to be dead on the next request.
+
+    **What ships: `min: 0` with a 10-second idle timeout.** A server that is
+    quiet for ten seconds holds NOTHING — no socket, no backend, nothing for a
+    suspend to kill and nothing billed on a per-connection plan — which is the
+    "connections are closed" property, obtained by expiry rather than by
+    per-request teardown. Inside a burst, connections are reused and the
+    handshake is paid once. `prewarmPool` exists for the deployment that wants
+    warm sockets and asks for them explicitly; it is never implied by `min`.
+
+    This posture is only safe because the reconnect path is real, so it is
+    part of the decision: `withGuardedClient` keeps an error listener attached
+    for the whole checkout (pg-pool removes the client's own during one, and a
+    socket dying mid-statement then reaches Node as an uncaught exception and
+    exits the process), and `acquire` distinguishes a saturated pool from a
+    slow connect so a cold reconnect is retried rather than reported as
+    exhaustion. Held by `idle.db.test.ts`, `checkout-error.db.test.ts`, and an
+    MCP-client suspend/resume test that terminates every backend and asserts
+    none survived before the next call answers.
+
+    Walked live 2026-08-21 against a served record: Postgres stopped under the
+    running gateway → the in-flight request returned "content store temporarily
+    unavailable" and the process stayed up; Postgres restarted → the FIRST
+    request answered with cited hits; SIGTERM → drained in 0.34s with the port
+    released and no orphan.
+
+    Reversed if a deployment target makes per-request connection genuinely
+    cheaper (a local pooler sidecar would), or if a measurement here shows the
+    idle window costing more than it saves.
+
+    _Revision 2026-08-21: the posture the reversal clause names is now an
+    OPT-IN rather than a fork — `KSOR_DB_CONNECT_PER_REQUEST=1` releases every
+    connection with destroy, so each call opens and closes its own. The default
+    is unchanged and unchanged for the same reason: measured on loopback,
+    per-request costs **2.58ms/call** against **0.13ms** pooled, and a remote
+    TLS endpoint widens that gap rather than narrowing it. What the option
+    buys is not a property the default lacks — a quiet server already holds
+    ZERO — it is the deployment where a pool is a fiction: an external pooler
+    sidecar, or a runtime that reuses no process between invocations. Both
+    postures are asserted in `connect-per-request.db.test.ts`, including the
+    measurement, so the default stays a choice rather than a habit._
+
+18. **One rule, two surfaces, one table** (2026-08-21, from the visibility
+    leak's fourth recurrence). The site and the kernel enforce the SAME
+    visibility rule in two languages — TypeScript in the site's build, SQL in
+    the serving predicate — and it drifted four separate times while each
+    side's own tests stayed green, because each side was internally consistent
+    with itself. So the rule stops living in two heads: `AUDIENCE_CASES`
+    (`packages/content/src/lib/audience-conformance.ts`) IS the rule, as a
+    decision table; the SQL predicate is asserted against every row through
+    real Postgres, and the TypeScript half against the same rows.
+    The TypeScript rule itself is ONE canonical file
+    (`packages/content/src/lib/audience-rule.ts`), copied byte-identically into
+    the scaffold — the site cannot import the kernel, whose package carries pg
+    and the embedding providers, so the copy is asserted by a drift test rather
+    than trusted. A surface that drifts now fails on the ROW it broke.
+    Extends to any guarantee two surfaces must both honour; the next one is
+    takedown, which is already single-seam on the serving side. Reversed if the
+    site ever can import the rule directly, which would make the table a
+    convenience rather than a guard.
+
+19. **A surface that refuses must refuse on BOTH surfaces** (2026-08-21, from
+    the governance review). Product principle 2 says the site and the MCP door
+    render the same corpus; the sharper form is that they must also REFUSE the
+    same corpus. Two states had the site stopping by name while the door came
+    up clean and served the restricted half: a generation built before
+    governance reached the node row (schema 2.2 added `visibility` and a
+    migration cannot backfill frontmatter, so every carried-forward node reads
+    as the widest tier), and a document declaring `visibility:` in a record
+    that declares no `audiences:` (an author restricted something and nothing
+    enforced it). Both are now boot checks in `assertGovernanceServable`, and
+    schema 2.4 stamps each generation with the schema it was built against so
+    the first is detectable at all. When a new refusal lands on either surface,
+    the question to answer is what the OTHER surface does in that state.
+    Reversed only by an owner decision recorded here.
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
@@ -538,13 +659,20 @@ cite the research they distill; guard rule 8 enforces the frontmatter
 
 ## Testing
 
-Two tiers by filename convention; pick the tightest tier that can express the
+Three tiers by filename convention; pick the tightest tier that can express the
 assertion.
 
 - `*.test.ts` — unit, colocated (packages `src/` and `scripts/`): pure, no
   fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
   tmp dirs (<15s)
+- `*.db.test.ts` — real Postgres, gated on `KSOR_DB_URL` (`pnpm test:db`; CI
+  provides the service). The kernel's guarantees are SQL, so the tier that runs
+  them against a real database is where they are actually held.
+
+The tiers are a contract, not a preference: a file that reads the filesystem
+belongs in the second one however small it is. Seven did not, and drifted there
+because the unit tier is the fastest to run (round-9 review of PR 43).
 
 Agent evals land with `ksor serve` (CI-only — they spend model tokens), in
 three classes, and being explicit about which class gates is the design:

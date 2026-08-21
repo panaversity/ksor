@@ -15,6 +15,7 @@ import { CHARS_PER_TOKEN, CHUNK_POLICY } from "./config.js";
 import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
+import { audienceGucs } from "./lib/audience.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type Hit } from "./lib/search.js";
 import {
   mint,
@@ -23,7 +24,12 @@ import {
   type SnapshotToken,
 } from "./lib/snapshot.js";
 import { logRead } from "./lib/rlog.js";
-import { documentChunks, findDocument, outline as outlineQuery } from "./lib/read.js";
+import {
+  documentChunks,
+  findDocument,
+  MAX_OUTLINE_LIMIT,
+  outline as outlineQuery,
+} from "./lib/read.js";
 import { codePointLength, windowDocument } from "./lib/windowing.js";
 import { EmptyQueryError as EmbedEmptyQueryError } from "./lib/query-embed.js";
 
@@ -79,6 +85,26 @@ export interface ServiceContext {
   readonly embedQuery: (query: string) => Promise<readonly number[] | string>;
   /** The verified caller, or null → audited as "anonymous". */
   readonly actor?: () => string | null;
+  /**
+   * The audience tier this door serves. null = the record's least-privileged
+   * tier, which is the safe default: a door that cannot establish who is asking
+   * must not hand out the restricted half of the record. Ignored entirely when
+   * the instance declares no `audiences:` model.
+   */
+  readonly audience?: string | null;
+}
+
+/**
+ * The audience GUCs every serving statement's predicate reads. Computed per
+ * call from the instance's model and the door's tier, and folded into the same
+ * transaction-local `set_config` round trip as the tenant wall — so a path
+ * cannot serve without them the way it could not serve without the tenant id.
+ */
+function audienceScope(ctx: ServiceContext): Readonly<Record<string, string>> {
+  return audienceGucs(
+    { audiences: ctx.instance.audiences, defaultVisibility: ctx.instance.defaultVisibility },
+    ctx.audience ?? null,
+  );
 }
 
 export interface SearchHit {
@@ -103,6 +129,25 @@ export interface SnapshotEnvelope {
   readonly expires_at: string;
 }
 
+/**
+ * What the abstention gate is doing, reported on every search envelope.
+ * "off" is an HONEST state (governance is a ladder) — but only if the surface
+ * says so; before this it was visible in the boot log and nowhere on the wire.
+ */
+export type GateState = "off" | "uncalibrated" | { readonly floor: number };
+
+export function gateState(instance: ContentInstance): GateState {
+  const floor = instance.abstain.vectorFloor;
+  if (floor === "uncalibrated") return "uncalibrated";
+  if (floor !== null) return { floor };
+  // A keyword floor gates ONLY the degraded (embed-outage) path, so the healthy
+  // path really cannot abstain and "off" is the honest answer for it. Saying
+  // {floor} here would claim a gate that is not armed — the inverse error of
+  // the one being fixed. The degraded case is reported where it happens, via
+  // degraded_reason on the envelope.
+  return "off";
+}
+
 /** Abstention is a TYPE the caller branches on, never a phrasing (spec §6). */
 export type SearchResult =
   | {
@@ -110,6 +155,17 @@ export type SearchResult =
       readonly abstained: false;
       readonly hits: SearchHit[];
       readonly snapshot: SnapshotEnvelope;
+      /**
+       * Whether the abstention gate is ARMED, on every envelope. Without it
+       * `ok:true` from an UNCALIBRATED corpus is indistinguishable from
+       * `ok:true` from a gated one, and the tool description tells the agent
+       * that an answer means the record covers the question — so a level-0
+       * record answered out-of-corpus questions with confident citations and
+       * nothing on the wire said otherwise (review 2026-08-20).
+       */
+      readonly gate: GateState;
+      /** Top-1 cosine actually measured, so "why did this not abstain?" is answerable off-database. */
+      readonly top_cosine?: number | null;
       readonly note?: string;
       readonly content_advisory?: string;
       readonly k_note?: string;
@@ -117,8 +173,28 @@ export type SearchResult =
     }
   | {
       readonly ok: false;
-      readonly abstained: true;
-      readonly reason: "abstained";
+      /**
+       * TRUE only when the record genuinely does not cover the question.
+       *
+       * FALSE with `reason: "unavailable"` means retrieval could not be
+       * performed — the embedding provider is down on a record whose floor is a
+       * COSINE floor, so the gate cannot be evaluated and nothing may be served
+       * past it (round-6 review of #43).
+       *
+       * FALSE with `reason: "unpublished"` means the record has no active
+       * generation: nothing has been ingested yet, so there is nothing to be
+       * absent FROM (round-7 review of #43).
+       *
+       * Both were reported as abstentions, which told the agent the record does
+       * not cover something — a claim about coverage neither state supports.
+       */
+      readonly abstained: boolean;
+      readonly reason: "abstained" | "unavailable" | "unpublished";
+      readonly gate: GateState;
+      /** The measured signal beside the floor that rejected it — an operator
+       * can tell "genuinely out of corpus" from "the embedding space is
+       * broken" without querying retrieval_log, which no shipped role can read. */
+      readonly top_cosine?: number | null;
       readonly hits: [];
       /**
        * UNIFORM key, present on every abstention: a floor abstention (hits
@@ -211,6 +287,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     kinds: null,
+    textSearchConfig: inst.textSearchConfig,
     pinnedGeneration: null,
   };
 
@@ -219,6 +296,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   // provider's incident, not the record's).
   let queryVector: readonly number[] | string | null = null;
   let degradedReason: string | undefined;
+  let embedFailed = false;
   try {
     queryVector = await ctx.embedQuery(query);
   } catch (error) {
@@ -229,7 +307,12 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       throw new EmptyQueryError();
     }
     queryVector = null;
-    degradedReason = "embed_unavailable_keyword_only";
+    // Which degrade this becomes is decided BELOW, by whether a floor is
+    // declared. It used to be stamped "keyword_only" here, before the branch
+    // was chosen — and the calibrated branch abstains WITHOUT running a
+    // keyword search, so the envelope described a search that never happened
+    // (round-6 review of #43).
+    embedFailed = true;
   }
 
   let hits: Hit[];
@@ -243,12 +326,13 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ctx.pool,
       inst.tenantId,
       (client) => hybridSearch(client, scope, vec, query, kb),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...audienceScope(ctx) },
     );
     hits = result.hits;
     topCosine = result.topCosine;
     abstained = vectorAbstains(topCosine, inst.abstain) || hits.length === 0;
   } else if (inst.abstain.vectorFloor !== null) {
+    degradedReason = "embed_unavailable";
     // A calibrated corpus gates on the VECTOR floor, and an embed outage
     // means that floor cannot be evaluated at all. Serving keyword results
     // ungated here would answer out-of-corpus questions during the outage
@@ -259,10 +343,14 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     hits = [];
     abstained = true;
   } else {
+    degradedReason = "embed_unavailable_keyword_only";
     // No vector floor declared → the gate was already off; the keyword
     // degrade serves exactly what an uncalibrated corpus always serves.
-    hits = await runRead(ctx.pool, inst.tenantId, (client) =>
-      keywordSearch(client, scope, query, kb),
+    hits = await runRead(
+      ctx.pool,
+      inst.tenantId,
+      (client) => keywordSearch(client, scope, query, kb),
+      audienceScope(ctx),
     );
     const topKw = hits[0]?.score ?? null;
     abstained = keywordAbstains(topKw, inst.abstain);
@@ -291,10 +379,46 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         degraded: degradedReason !== undefined,
       },
     });
+    // A record with NO PUBLISHED GENERATION is a third thing again: nothing has
+    // ever been ingested, so every question gets "the record does not cover
+    // this" and the agent states it as fact about a record that is simply
+    // empty. Following `ksor init`'s own next-steps reaches this state — it
+    // provisions and serves without publishing — and /ready answered
+    // {"ready":true} the whole time (round-7 review of #43, reproduced live).
+    //
+    // Asked ONLY on the empty path, where there is nothing to pin, so a served
+    // answer pays nothing for it.
+    const unpublished =
+      generation === undefined &&
+      (await runRead(
+        ctx.pool,
+        inst.tenantId,
+        async (client) => {
+          const r = await client.query(
+            "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+            [inst.tenantId, inst.corpusId],
+          );
+          return Number(r.rows[0]?.active_generation ?? 0) === 0;
+        },
+        audienceScope(ctx),
+      ));
+
+    // "The record does not cover this" and "I could not look properly" are
+    // DIFFERENT answers, and only the first is an abstention. When the embed
+    // provider is down on a calibrated record the floor cannot be evaluated at
+    // all, so withholding is right — but reporting it as an abstention told the
+    // agent the record does not cover a question it does cover, for the whole
+    // outage, and the tool description instructs the agent to state exactly
+    // that and not fall back (round-6 review of #43, reproduced live with a
+    // bogus provider key against a corpus that contains the answer).
+    const unavailable = embedFailed && inst.abstain.vectorFloor !== null;
+    const reason = unavailable ? "unavailable" : unpublished ? "unpublished" : "abstained";
     return {
       ok: false,
-      abstained: true,
-      reason: "abstained",
+      abstained: reason === "abstained",
+      reason,
+      gate: gateState(inst),
+      top_cosine: topCosine,
       hits: [],
       snapshot: generation === undefined ? null : snapshotEnvelope(ctx, generation),
       ...(kNote === undefined ? {} : { k_note: kNote }),
@@ -363,6 +487,8 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     abstained: false,
     hits: shaped,
     snapshot: snapshotEnvelope(ctx, generation),
+    gate: gateState(inst),
+    top_cosine: topCosine,
     ...(truncated === 0
       ? {}
       : {
@@ -394,8 +520,16 @@ export interface ReadResult {
   readonly total_est_tokens?: number;
   readonly note?: string;
   readonly content_advisory?: string;
-  /** ONLY when an incoming snapshot token failed validation — serves active, says why. */
-  readonly snapshot?: string;
+  /**
+   * What happened to the caller's generation pin, on EVERY read.
+   *
+   * This used to be `snapshot`, a string present only on FAILURE — the same key
+   * `search` returns as an OBJECT, so `if (result.snapshot)` meant "pin
+   * succeeded" after search and "your pin FAILED" after read, and a silently
+   * honoured pin was indistinguishable from a server ignoring the field
+   * (review 2026-08-20). Renamed, retyped, and always present.
+   */
+  readonly snapshot_status: "pinned" | "unpinned" | string;
 }
 
 export interface ReadOptions {
@@ -439,8 +573,15 @@ export async function readDocument(
   // generation IS the rollback pointer, so search→read consistency across a
   // forward flip is preserved.
   if (pinned !== null) {
-    const servable = await runRead(ctx.pool, inst.tenantId, (client) =>
-      servableGenerations(client, inst.corpusId),
+    // Scoped like every other read in this door, though it touches only the
+    // generation pointers. The rule "every serving read narrows" is one an
+    // `audience-binding.test.ts` can hold; "every read except the metadata
+    // ones" is a list someone has to keep correct (round-3 review of #43).
+    const servable = await runRead(
+      ctx.pool,
+      inst.tenantId,
+      (client) => servableGenerations(client, inst.corpusId),
+      audienceScope(ctx),
     );
     if (!servable.includes(pinned)) {
       refreshed = "refreshed (withdrawn)";
@@ -449,13 +590,18 @@ export async function readDocument(
   }
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
 
-  const { node, chunks } = await runRead(ctx.pool, inst.tenantId, async (client) => {
-    const found = await findDocument(client, scope, slug);
-    // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
-    // against active would find nothing (oracle rule, carried).
-    const pinnedScope = { ...scope, pinnedGeneration: found.generation };
-    return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
-  });
+  const { node, chunks } = await runRead(
+    ctx.pool,
+    inst.tenantId,
+    async (client) => {
+      const found = await findDocument(client, scope, slug);
+      // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
+      // against active would find nothing (oracle rule, carried).
+      const pinnedScope = { ...scope, pinnedGeneration: found.generation };
+      return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
+    },
+    audienceScope(ctx),
+  );
   if (chunks.length === 0) {
     throw new Error(`document ${JSON.stringify(slug)} has no readable content`);
   }
@@ -551,7 +697,10 @@ export async function readDocument(
         }
       : {}),
     ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
-    ...(refreshed === undefined ? {} : { snapshot: refreshed }),
+    // Always stated: "pinned" when the caller's token was honoured, "unpinned"
+    // when they sent none, and the refresh reason when one was sent and could
+    // not be used.
+    snapshot_status: refreshed ?? (pinned === null ? "unpinned" : "pinned"),
   };
 }
 
@@ -567,12 +716,28 @@ export interface OutlineNodeWire {
   readonly depth: number;
   readonly child_count: number;
   readonly has_content: boolean;
+  /**
+   * The document's page on the human surface, when the record publishes one.
+   *
+   * Fetched by every retrieval query, width-guarded, and then DROPPED before
+   * the wire — so no citation an agent produced could resolve to a page a
+   * person can open, which is half of what a citation is for (audit
+   * finding 19). Null when the record declares no site URL.
+   */
+  readonly permalink: string | null;
 }
 
 export async function outlineDocuments(
   ctx: ServiceContext,
-  options: { node?: string | null; depth?: number | null; limit?: number } = {},
-): Promise<{ nodes: OutlineNodeWire[] }> {
+  options: { node?: string | null; depth?: number | null; limit?: number; offset?: number } = {},
+): Promise<{
+  nodes: OutlineNodeWire[];
+  has_more: boolean;
+  limit: number;
+  offset: number;
+  next_offset: number | null;
+  content_advisory?: string;
+}> {
   const inst = ctx.instance;
   // A declared-but-uncalibrated floor REFUSES every serve — outline is a
   // serve (it hands out the whole record structure: slugs, titles, root-
@@ -588,18 +753,46 @@ export async function outlineDocuments(
   // 2026-08-19); a drill-down shows at least the immediate children.
   const depth = root === null ? (options.depth ?? 0) : Math.max(1, options.depth ?? 1);
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: null };
-  const rows = await runRead(ctx.pool, inst.tenantId, (client) =>
-    outlineQuery(client, scope, { root, depth, limit: options.limit ?? 200 }),
+  // Clamp HERE, where the caller's request is, not inside the query where the
+  // truncation probe would be clamped away with it.
+  const limit = Math.max(1, Math.min(options.limit ?? 200, MAX_OUTLINE_LIMIT));
+  const offset = Math.max(0, options.offset ?? 0);
+  // One MORE than asked for, so truncation is DETECTED rather than inferred.
+  // A silently cut outline manufactures a false "not in the record" — the
+  // agent asks for the structure, gets a partial list with no signal, and
+  // concludes the document is absent (review 2026-08-20).
+  const rows = await runRead(
+    ctx.pool,
+    inst.tenantId,
+    (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1, offset }),
+    audienceScope(ctx),
   );
+  const has_more = rows.length > limit;
+  if (has_more) rows.length = limit;
   await logRead(ctx.pool, {
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { node: root, returned: rows.length },
+    detail: { node: root, returned: rows.length, has_more, offset },
   });
+  // Titles and heading paths are corpus-authored text and reach the agent
+  // exactly as passage content does. `search` and `read` both flag directive-
+  // shaped payloads and outline did not, so an author-injected instruction in a
+  // heading arrived framed as structure rather than as quoted content
+  // (round-8 review of #43).
+  const advisory = rows.some(
+    (r) => instructionLike(r.title) || instructionLike(r.headingPath ?? ""),
+  );
   return {
+    ...(advisory ? { content_advisory: CONTENT_ADVISORY } : {}),
+    has_more,
+    limit,
+    offset,
+    // The value to pass back as `offset` for the next page, or null at the end
+    // — so continuing is a field the caller copies, not arithmetic they infer.
+    next_offset: has_more ? offset + rows.length : null,
     nodes: rows.map((r) => ({
       slug: r.slug,
       kind: r.kind,
@@ -609,6 +802,7 @@ export async function outlineDocuments(
       depth: r.depth,
       child_count: r.childCount,
       has_content: r.hasContent,
+      permalink: r.permalink,
     })),
   };
 }

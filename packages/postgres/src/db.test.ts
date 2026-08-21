@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { isOperationalError, neverRetry, pooledEndpointFor, PoolTimeoutError } from "./db.js";
+import {
+  ConnectTimeoutError,
+  PoolTimeoutError,
+  isOperationalError,
+  neverRetry,
+  pooledEndpointFor,
+  scopedTxn,
+  tlsAdvisory,
+} from "./db.js";
 
 describe("pooledEndpointFor — classify, never transform", () => {
   it("detects Neon pooler hosts, pgbouncer, and port 6432", () => {
@@ -43,5 +51,116 @@ describe("error classification — the retry/shed contract", () => {
   it("a bare connection-drop message (no code) is operational", () => {
     expect(isOperationalError(new Error("Connection terminated unexpectedly"))).toBe(true);
     expect(isOperationalError(new Error("some app-level failure"))).toBe(false);
+  });
+});
+
+describe("tlsAdvisory", () => {
+  it("is silent for a loopback DSN — a local socket needs no certificate story", () => {
+    for (const dsn of [
+      "postgresql://u@localhost:5432/db?sslmode=require",
+      "postgresql://u@127.0.0.1:5432/db?sslmode=prefer",
+    ]) {
+      expect(tlsAdvisory(dsn), dsn).toBeNull();
+    }
+  });
+
+  it("is silent when the DSN states the posture explicitly", () => {
+    expect(tlsAdvisory("postgresql://u@db.example.com/x?sslmode=verify-full")).toBeNull();
+    expect(tlsAdvisory("postgresql://u@db.example.com/x?sslmode=disable")).toBeNull();
+  });
+
+  it("names the weak mode and the one-word fix for a remote DSN", () => {
+    for (const mode of ["require", "prefer", "verify-ca"]) {
+      const out = tlsAdvisory(`postgresql://u@db.example.com/x?sslmode=${mode}`);
+      expect(out, mode).toContain(mode);
+      expect(out, mode).toContain("verify-full");
+    }
+  });
+
+  it("never throws on an unparseable DSN", () => {
+    expect(tlsAdvisory("not a url")).toBeNull();
+    expect(tlsAdvisory("")).toBeNull();
+  });
+});
+
+describe("connect timeout vs pool saturation", () => {
+  // `connectionTimeoutMillis` bounds both, and pg reports them with the same
+  // text. Only one of them is safe to retry.
+  const timeoutError = new Error("timeout exceeded when trying to connect");
+
+  /**
+   * `total` and `busy` are DIFFERENT numbers and the split lives on the gap
+   * between them. pg-pool's `totalCount` counts sockets that are still
+   * completing their handshake (it pushes the client before connect resolves,
+   * 3.14 index.js:242), while `busy` — tracked from the pool's own
+   * acquire/release events — counts connections that actually work. A pool can
+   * be "full" by the first and empty by the second: that is a cold burst
+   * against a waking compute, and shedding it was the round-4 defect.
+   */
+  const fakePool = (o: { max: number; total: number; idle: number; busy?: number }): unknown => ({
+    options: { max: o.max, connectionTimeoutMillis: 10_000 },
+    totalCount: o.total,
+    idleCount: o.idle,
+    ksorBusy: o.busy ?? 0,
+    connect: () => Promise.reject(timeoutError),
+  });
+
+  it("classifies a WAIT on a fully busy pool as saturation — never retried", async () => {
+    // Four connections that CONNECTED and are all checked out.
+    const pool = fakePool({
+      max: 4,
+      total: 4,
+      idle: 0,
+      busy: 4,
+    }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      PoolTimeoutError,
+    );
+    expect(neverRetry(new PoolTimeoutError())).toBe(true);
+  });
+
+  it("classifies a failure with slots to spare as a CONNECT failure — retried", async () => {
+    const pool = fakePool({ max: 20, total: 1, idle: 0 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+    expect(neverRetry(new ConnectTimeoutError(10_000))).toBe(false);
+    expect(isOperationalError(new ConnectTimeoutError(10_000))).toBe(true);
+  });
+
+  it("a pool FULL of handshaking sockets is a cold burst, not saturation", async () => {
+    // Every slot taken by pg-pool's count, and NOTHING connected: the shape of
+    // a burst arriving at a suspended compute. Shedding these threw away the
+    // requests the classification exists to keep, and gave identical callers
+    // opposite verdicts depending on arrival order (round-4 review of #43).
+    const pool = fakePool({
+      max: 20,
+      total: 20,
+      idle: 0,
+      busy: 0,
+    }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+  });
+
+  it("an empty pool that cannot connect is a cold start, not saturation", async () => {
+    // The exact shape of the first request after a serverless endpoint suspends.
+    const pool = fakePool({ max: 20, total: 0, idle: 0 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+  });
+
+  it("a pool at max with an idle connection is not saturation either", async () => {
+    const pool = fakePool({ max: 4, total: 4, idle: 1 }) as Parameters<typeof scopedTxn>[0];
+    await expect(scopedTxn(pool, {}, async () => undefined)).rejects.toBeInstanceOf(
+      ConnectTimeoutError,
+    );
+  });
+
+  it("says which bound it hit, so an operator can tell the two apart", () => {
+    expect(new ConnectTimeoutError(10_000).message).toMatch(/waking from suspend/);
+    expect(new PoolTimeoutError().message).toMatch(/saturated/);
   });
 });

@@ -9,8 +9,10 @@ updated: 2026-08-20.
 `@panaversity/ksor` **0.0.7** on npm (trusted publishing, provenance
 attached). **In the currently published 0.0.7** it ships the working
 `ksor init` described below — including the visibility model and the deploy
-story — AND the bundled content kernel: `serve`, `ingest`, `schema`, `grant`,
-`calibrate`, and `gc` all run from the one `ksor` binary. Only `dev` and
+story — AND the bundled content kernel: `ksor serve`, `ksor ingest`,
+`ksor schema`, `ksor grant`, `ksor calibrate` and `ksor gc` all run from the
+one `ksor` binary. (`ksor takedown` is NOT in 0.0.7 — it lands with the
+governance branch; see the implemented list below.) Only `dev` and
 `build` still report "designed but not implemented" and exit `2`; an unknown
 verb is refused with exit `1` and a stable `error: unknown-verb` stderr slug.
 The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs
@@ -162,25 +164,66 @@ builtin `up`.
   security controls were re-verified against the new wiring as the acceptance
   for the swap.
 
-- **No schema migration runner**: `schema.sql` is one file, versioned in
-  `schema_meta` (2.1). That is correct while no adopter has production data
-  (nothing is released). Before adopters do, a forward-migration path
-  (versioned plain SQL + a runner keyed on `schema_meta`) is owed —
-  recorded as a decision in `research/kernel-conversion.md`.
+- **Schema migrations — DONE.** `schema.sql` provisions a FRESH database at the
+  current version (2.4); an existing one moves forward through
+  `schema/migrations/<from>-<to>__<slug>.sql`, applied by a runner keyed on
+  `schema_meta`. The chain is WALKED, not sorted, so a missing step refuses
+  rather than being skipped, and each step commits with the `schema_meta` row
+  that records it. `ksor schema --apply` compares versions instead of checking
+  presence. This retires the "drop and recreate the database" remedy, which
+  destroyed `retrieval_log` and `takedown_denylist` — the only two tables that
+  cannot be rebuilt from markdown.
+
+- **The governance boot gate — DONE.** `ksor serve` refuses two states the SITE
+  already refuses to build in, because a door that serves where the site stops
+  is the two surfaces reading different truths. A generation built before
+  schema 2.2 carries no `visibility` at all — the 2.1 → 2.2 migration added the
+  column and cannot backfill frontmatter — and the serving predicate reads a
+  NULL as `default_visibility`, the WIDEST tier; 2.4 stamps each generation
+  with the schema it was built against, so that state is detectable and
+  refused. A document declaring `visibility:` in a record that declares no
+  `audiences:` is refused too, matching the site's
+  `ksor-visibility-without-audiences`.
+
+- **Subtree takedowns reach the site — DONE.** The exported manifest carries
+  the DIRECTORIES a `--subtree` denial governs alongside the expanded id list,
+  derived from the descendants' `sources.origin_path`. The id list can only
+  name what the active generation holds, and the site builds from disk: a
+  document added under a withdrawn section after the last ingest was published
+  to `/docs` and `llms.txt` with no warning.
 
 ## Designed, not implemented
 
 - `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
   own `pnpm dev` / `pnpm build` work today without them.
-  `ksor serve`, `ingest`, `schema`, `grant`, `calibrate`, `gc` ARE implemented
-  and RELEASED in 0.0.7 — the bundled kernel provides them from the one `ksor`
-  binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
+  `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
+  `ksor calibrate` and `ksor gc` ARE implemented (`ksor takedown` lands with
+  this branch; the rest were released in 0.0.7) — the bundled kernel provides
+  them from the one `ksor` binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
   `3` with a remedy when it is missing).
 - Build provenance records (`build.lock.json`) — designed with `ksor build`.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
-- The agent-eval harness (contract in AGENTS.md → Testing); until it
-  exists, acceptance (6) runs as a manual rubric-scored walk.
+- The agent-eval harness's RELEVANCE and CORRECTNESS classes. The
+  **behavioural** class — the one the contract says gates — now exists at
+  `packages/content/src/evals/behavioural.db.test.ts`: citations resolve to a
+  readable generation, the abstention gate is disclosed on every envelope, and
+  an unpublished generation is never served (all three deterministic, any
+  provider), plus in/out-of-corpus separation and abstention across a
+  scope-adjacent near-miss, measured in a real embedding space where a key is
+  configured.
+
+  **What the first real run measured, and it matters**: against
+  `gemini-embedding-001`, the near-miss "what is the approval threshold for
+  hiring a contractor" scores **0.683** on the example corpus, ABOVE the weaker
+  in-corpus question at **0.671**. No single cosine floor both answers
+  "what happens if a purchase is split" and declines the hiring question. The
+  eval therefore GATES the mechanism (given a floor, everything below it
+  abstains and everything above still answers) and REPORTS the corpus's
+  separation margin rather than asserting it — separation is a property of the
+  corpus and its embedding space, and `ksor calibrate` already names this exact
+  state "NOT separable" and refuses to hand out a floor for it.
+
 - Doc code-sample checking (`check-snippets`) — deferred until the docs carry
   import fences worth verifying.
 

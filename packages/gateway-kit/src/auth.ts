@@ -28,6 +28,18 @@ export type AuthConfig = {
   ssoUrl: string;
   /** This server's canonical URI (the RFC 8707 audience clients bind to). */
   resourceUrl: string;
+  /**
+   * Where this SSO publishes its JWKS.
+   *
+   * `KSOR_SSO_URL` is documented as "the AS base", and the verifier used to
+   * append one vendor's layout (`/api/auth/jwks`, Better Auth's) with no
+   * override. Every other provider — Auth0, Okta, Entra, Keycloak, Cognito —
+   * therefore failed the JWKS fetch, which is classified TRANSIENT rather than
+   * misconfiguration, so every request 503'd with nothing naming the cause
+   * (review 2026-08-20). `KSOR_JWKS_URL` states it; the vendor default is only
+   * the fallback.
+   */
+  jwksUrl: string;
   allowedAudiences: readonly string[];
   /**
    * Enforced ONLY when KSOR_SSO_ISSUER is explicitly set — never defaulted to
@@ -119,7 +131,20 @@ export function audOk(aud: unknown, allowed: readonly string[]): boolean {
  * and every request gets a permanent 503 while /health reports auth: public.
  * Fail closed at boot instead (review 2026-08-19).
  */
-function assertHttpUrl(name: string, value: string): void {
+/**
+ * `fetched` marks a URL whose CONTENT is trusted — the SSO base and the JWKS
+ * URL, from which the bearer gate's signing keys are retrieved. Cleartext to a
+ * remote host is refused for those, because anyone on the path could serve
+ * their own keys.
+ *
+ * `KSOR_MCP_RESOURCE_URL` is NOT one: it is the resource IDENTIFIER the token's
+ * `aud` is compared against and the `resource` advertised in the challenge —
+ * a string that is compared, never fetched by this process. Refusing http://
+ * there blocked a legitimate deployment (a gateway behind a TLS-terminating
+ * proxy whose canonical resource id is the internal http:// URL) with a
+ * security argument that does not apply to it (round-3 review of #43).
+ */
+function assertHttpUrl(name: string, value: string, fetched: boolean): void {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -131,6 +156,22 @@ function assertHttpUrl(name: string, value: string): void {
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new AuthConfigError(`${name}=${JSON.stringify(value)} must be an http(s) URL.`);
+  }
+  // The JWKS fetched from this base is the ENTIRE trust root of the bearer
+  // gate: over cleartext, anyone on the path substitutes the signing keys and
+  // mints their own valid tokens. Loopback is exempt because it is a local dev
+  // door, not a network path (review 2026-08-20).
+  const loopback =
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "::1" ||
+    parsed.hostname === "[::1]";
+  if (fetched && parsed.protocol === "http:" && !loopback) {
+    throw new AuthConfigError(
+      `${name}=${JSON.stringify(value)} is cleartext http:// to a remote host. The JWKS ` +
+        "fetched from it is the whole trust root of the bearer gate — anyone on the path " +
+        "could serve their own keys. Use https://, or point at loopback for local dev.",
+    );
   }
 }
 
@@ -144,14 +185,18 @@ function configFromEnv(env: Env): AuthConfig | null {
   // Both are used to build a `new URL(...)` later (the JWKS fetch and the
   // resource-metadata document); validate them HERE so a malformed value
   // refuses to boot, never 503s per-request.
-  assertHttpUrl("KSOR_SSO_URL", ssoUrl);
-  assertHttpUrl("KSOR_MCP_RESOURCE_URL", resourceUrl);
+  assertHttpUrl("KSOR_SSO_URL", ssoUrl, true);
+  assertHttpUrl("KSOR_MCP_RESOURCE_URL", resourceUrl, false);
   const allowedAudiences = (env.KSOR_JWT_ALLOWED_AUDIENCES ?? "")
     .split(",")
     .map((a) => a.trim())
     .filter((a) => a !== "");
   const issuer = (env.KSOR_SSO_ISSUER ?? "").trim() || null;
-  return { ssoUrl, resourceUrl, allowedAudiences, issuer, jwksCacheTtlS: 3600 };
+  // Explicit when given; otherwise the vendor layout that used to be the only
+  // option, so an existing Better Auth deployment keeps working unchanged.
+  const jwksUrl = (env.KSOR_JWKS_URL ?? "").trim() || `${ssoUrl}/api/auth/jwks`;
+  assertHttpUrl("KSOR_JWKS_URL", jwksUrl, true);
+  return { ssoUrl, resourceUrl, jwksUrl, allowedAudiences, issuer, jwksCacheTtlS: 3600 };
 }
 
 /**
@@ -248,7 +293,7 @@ function joseVerifyJwt(config: AuthConfig): (token: string) => Promise<TokenClai
   // refetches on an unknown kid after its cooldown (key rotation).
   let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
   return async (token: string): Promise<TokenClaims> => {
-    jwks ??= createRemoteJWKSet(new URL(`${config.ssoUrl}/api/auth/jwks`), {
+    jwks ??= createRemoteJWKSet(new URL(config.jwksUrl), {
       cacheMaxAge: config.jwksCacheTtlS * 1000,
     });
     const { payload } = await jwtVerify(token, jwks, {

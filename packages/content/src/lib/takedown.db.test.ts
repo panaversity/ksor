@@ -17,6 +17,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runIngest, runRead } from "../db.js";
+import { WHOLE_RECORD_SCOPE } from "../lib/audience.js";
 import { applySchema } from "../schema.js";
 import { embedIntent } from "./embedding.js";
 import { buildShippedProvider } from "./providers/registry.js";
@@ -145,7 +146,7 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
         const { hits } = await hybridSearch(c, sscope, qv ?? [], query, 10);
         return hits.map((h) => ({ stableId: h.stableId }));
       },
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
   const stableIds = (hits: { stableId: string }[]): string[] => hits.map((h) => h.stableId);
 
@@ -231,7 +232,7 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
           });
           return topOneScore(c, sscope, qv ?? []);
         },
-        VECTOR_TXN_GUCS,
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
       );
     // policy's own text scores ~1.0 against its own chunk when nothing is denied
     const before = await topOne(BODY["docs/legal/policy"]!);

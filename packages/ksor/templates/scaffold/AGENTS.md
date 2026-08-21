@@ -52,8 +52,9 @@ pnpm check       # the format checker — run before handing off any knowledge c
 with honest abstention. It is the climbed rung — not required for `pnpm dev`.
 Stand it up in this order (each step's errors explain how to fix themselves):
 
-1. **Configure `instance.md`.** One block is required — the name of the
-   environment variable holding your DSN (never the DSN itself):
+1. **Configure `instance.md`.** One block is required, and it is already
+   there, commented out — uncomment it. It names the environment variable
+   holding your DSN (never the DSN itself):
 
    ```yaml
    database:
@@ -90,11 +91,57 @@ Stand it up in this order (each step's errors explain how to fix themselves):
      intended dev shape. A PUBLIC deployment configures the SSO door instead —
      see the comments in `.env.example` and "Serving safely" below.
 
-3. **Bring it up — one command:**
+3. **Bring it up.** Once, then every time:
 
    ```sh
-   pnpm serve   # schema → grant → ingest → serve
+   pnpm provision   # schema (or migrate) + grant — the privileged acts, run once
+   pnpm refresh # ingest the record, collect retired generations
+   pnpm serve   # the MCP server (one supervised process)
    ```
+
+   `provision` is separate on purpose: applying DDL and granting ingest are acts
+   an operator performs, not side effects of starting a server. (It is not
+   called `setup` because `pnpm setup` is pnpm's own command and would shadow
+   it — the step would print "No changes to the environment were made" and do
+   nothing.)
+
+   **Deploying to a container runtime you do not control** (Cloud Run, Fly,
+   Container Apps — anything that scales to zero and hands you a `$PORT`):
+   `ksor serve` is already shaped for it, and the posture is deliberate.
+
+   - It binds `$PORT` on `0.0.0.0` when the platform sets one.
+   - It holds **no idle database connections**. The pool minimum is 0 and an
+     unused connection is closed after 10s, so an idle instance keeps nothing
+     open against a serverless Postgres — and a busy one still reuses
+     connections instead of paying a TLS handshake per request.
+   - The first request after an idle period wakes the database, and that
+     connect is **retried** rather than failing: a cold start is a transient,
+     not a refusal.
+   - `SIGTERM` drains and exits within 8s, inside the ~10s a runtime usually
+     allows before `SIGKILL`.
+
+   What it does NOT do is open and close a connection per request. That is the
+   pattern connection poolers exist to remove — the handshake alone is ~26x the
+   cost of a pooled query even on localhost, before TLS — and it is not what
+   managed Postgres vendors recommend for a process that serves many requests.
+   Per-request connections are the right shape only for a per-invocation
+   runtime (an edge function), which is a different deployment and would want
+   an HTTP database driver rather than TCP.
+
+   Set `KSOR_SNAPSHOT_KEYS` for any such deployment: without it each cold start
+   mints a new signing key, so citations pinned before a scale-down stop
+   validating after it.
+
+   **`pnpm serve` serves; it does not publish.** It is `ksor serve` and nothing
+   else — it opens the port against whatever generation is already active and
+   needs no ingest privileges. Publishing is `pnpm ingest` (or `pnpm refresh`),
+   and it is a separate step ON PURPOSE: a container that re-ingested on boot
+   would pay the whole record's embedding cost on every cold start and would
+   need write credentials at runtime. So in a deployment, run `pnpm provision` and
+   `pnpm ingest` as DEPLOY steps and run `ksor serve` in the container, where
+   it honours `$PORT` and binds `0.0.0.0`. If you skip the ingest step, the
+   container serves the last generation you flipped — and on a FIRST deploy,
+   that is nothing at all.
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing
@@ -187,12 +234,47 @@ Two things worth being deliberate about:
 - **Set `KSOR_SSO_ISSUER` when your SSO stamps a stable `iss`.** Audience is
   always enforced against `KSOR_JWT_ALLOWED_AUDIENCES`; naming the issuer adds
   one more check for the cost of one variable.
+- **Set `KSOR_JWKS_URL` unless your SSO is Better Auth.** The signing keys are
+  fetched from `<KSOR_SSO_URL>/api/auth/jwks` by default, which is Better
+  Auth's layout. Auth0, Okta, Entra, Keycloak and Cognito publish theirs
+  elsewhere, and a wrong JWKS URL fails as a transient fetch error — the door
+  boots clean and every request 503s with nothing naming the cause.
+
+## Withdrawing a document — `ksor takedown`
+
+A takedown is the one governance act that must reach EVERY surface at once.
+It needs the database (the denial is a row, not a file), so it belongs to the
+served rung.
+
+```sh
+pnpm exec ksor takedown --instance instance.md <stable-id> --reason "legal request 2026-08"
+pnpm exec ksor takedown --instance instance.md <stable-id> --reason "..." --subtree
+pnpm exec ksor takedown --instance instance.md --list      # what is currently denied
+pnpm exec ksor takedown --instance instance.md --ledger    # who denied what, when
+pnpm exec ksor takedown --instance instance.md --revoke <stable-id>
+```
+
+The stable id is what a search result reports as `provenance.stable_id` — for
+most documents that is `knowledge/<path-without-.md>`. `--subtree` withdraws a
+section and everything beneath it, including documents added later.
+`--actor NAME` names who performed the act in the ledger; it defaults to the
+operating user.
+
+**The MCP door stops serving it immediately. The SITE stops at its next
+build** — the site reads a file, not the database, and `pnpm build` refreshes
+that file for you (`pnpm export-denylist`). So after a takedown, rebuild and
+redeploy the site, or the human surface keeps publishing what the agent
+surface already refuses.
 
 ## Publishing
 
 `pnpm build` emits a fully static site (`system/site/out/`) deployable to
 any host — Vercel reads the shipped `vercel.json` (deploy from the repo
 ROOT, never `system/site/`), and every other host just serves the folder.
+Once `instance.md` declares a `database:`, `pnpm build` needs `KSOR_DB_URL` as
+well: it runs `pnpm export-denylist` first, which asks the database what has
+been withdrawn and writes `.ksor-denylist.json`. Without the DSN the build
+refuses rather than publish a document someone took down.
 `KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With
 `audiences:` declared, plain `pnpm build` is always the public tier;
 `KSOR_AUDIENCE=<audience> pnpm build` builds a wider tier that belongs
@@ -219,8 +301,12 @@ Details in README → Deploying.
 - `visibility:` names the one audience a document belongs to — a single value
   from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
   (an approved document can be restricted, and a draft is not hidden). Leave
-  it off and the document takes `default_visibility`. The key does nothing
-  until `instance.md` declares `audiences:`; once it does, `pnpm check`
+  it off and the document takes `default_visibility`. Using the key WITHOUT
+  an `audiences:` block is refused on both surfaces — `pnpm build` stops with
+  `ksor-visibility-without-audiences` and `pnpm serve` refuses to boot —
+  because a document marked restricted while nothing enforces it is the one
+  shape where the frontmatter is the only trace of a restriction that is not
+  happening. Once `audiences:` is declared, `pnpm check`
   refuses any link or `superseded_by:` pointing from a wider audience at a
   narrower one — the leak no single build can catch, because the build that
   publishes the link has already dropped its target.

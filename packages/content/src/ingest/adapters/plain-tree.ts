@@ -30,6 +30,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import { governanceFromFrontmatter, NO_GOVERNANCE } from "../governance.js";
 import {
   type Manifest,
   ManifestError,
@@ -209,6 +210,8 @@ export function buildManifestFromTree(
             kind: "section",
             parent: parentSid,
             position,
+            governance:
+              index === null ? NO_GOVERNANCE : governanceFromFrontmatter(meta, index.text),
           }),
         );
         if (index !== null) addFile(sid, [...dirSegs, index.name]);
@@ -225,6 +228,7 @@ export function buildManifestFromTree(
             kind: "document",
             parent: parentSid,
             position,
+            governance: governanceFromFrontmatter(meta, entry.text),
           }),
         );
         addFile(sid, [...relSegs, entry.name]);
@@ -244,6 +248,7 @@ export function buildManifestFromTree(
         title: titleOf(meta, rootName),
         kind: "document",
         position: 0,
+        governance: governanceFromFrontmatter(meta, rootIndex.text),
       }),
     );
     addFile(sid, [rootIndex.name]);
@@ -286,7 +291,7 @@ function indexOf(dir: TreeDir, dirPath: string): TreeFile | null {
   return present[0] ?? null;
 }
 
-function stableIdOf(
+export function stableIdOf(
   rootName: string,
   fileSegs: readonly string[],
   meta: Record<string, unknown>,
@@ -370,7 +375,8 @@ function codePointCompare(a: string, b: string): number {
 
 // ^\uFEFF? — a BOM-prefixed file must not serve its YAML as a chunk
 // (review finding, 2026-08-19).
-const FRONTMATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+/** Re-exported so every reader of a document agrees where its frontmatter ENDS. */
+export const FRONTMATTER: RegExp = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 
 const YAML_BOOLS: Record<string, boolean> = {
   yes: true,

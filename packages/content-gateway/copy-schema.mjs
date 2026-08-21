@@ -8,4 +8,4 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 mkdirSync(join(here, "schema"), { recursive: true });
-cpSync(join(here, "..", "content", "schema", "schema.sql"), join(here, "schema", "schema.sql"));
+cpSync(join(here, "..", "content", "schema"), join(here, "schema"), { recursive: true });

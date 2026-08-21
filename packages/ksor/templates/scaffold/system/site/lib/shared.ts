@@ -58,3 +58,51 @@ function readInstanceTitle(): string {
 }
 
 export const appTitle: string = readInstanceTitle();
+
+/**
+ * Where this record's MCP surface is published, if the owner has said.
+ *
+ * `null` when they have not: an invented URL is worse than none, because an
+ * agent would try it and conclude the record is down rather than unpublished.
+ */
+export function mcpEndpoint(): string | null {
+  const declared = /^mcp_url:[ \t]*(.*)$/m.exec(instanceFrontmatter())?.[1] ?? "";
+  const value = declared.trim().replace(/^["']|["']$/g, "");
+  return value === "" ? null : value;
+}
+
+/**
+ * The namespace half of the MCP `name`, which the schema requires to look like
+ * `<namespace>/<identifier>` — a bare record name has no slash and is rejected
+ * by a validating client (round-6 review of #43).
+ *
+ * Derived from the published MCP URL's host in reverse-DNS order, which is the
+ * convention and is something the owner has already declared rather than a
+ * second thing to configure. With no URL declared there is nothing published to
+ * namespace, so the local-only namespace says exactly that.
+ */
+export function mcpNamespace(): string {
+  const endpoint = mcpEndpoint();
+  if (endpoint === null) return "local";
+  try {
+    const host = new URL(endpoint).hostname;
+    const labels = host.split(".").filter((l) => l !== "");
+    // A bare host or an IP literal cannot be reversed into a namespace
+    // meaningfully; "local" is honest about that.
+    if (labels.length < 2 || /^\d+$/.test(labels[labels.length - 1] ?? "")) return "local";
+    return labels.reverse().join(".");
+  } catch {
+    return "local";
+  }
+}
+
+/**
+ * The version this record publishes as. The record's own generation is not a
+ * semver, and the schema wants one, so this reads an explicit `version:` from
+ * instance.md and falls back to a first-release default.
+ */
+export function recordVersion(): string {
+  const declared = /^version:[ \t]*(.*)$/m.exec(instanceFrontmatter())?.[1] ?? "";
+  const value = declared.trim().replace(/^["']|["']$/g, "");
+  return /^\d+\.\d+\.\d+/.test(value) ? value : "0.1.0";
+}

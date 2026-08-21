@@ -4,6 +4,20 @@ name: KSOR-STAMP-NAME
 ksor:
   requires: ">=KSOR-STAMP-VERSION"
   scaffolded: "KSOR-STAMP-VERSION"
+# The served MCP rung needs ONE required block: the NAME of the environment
+# variable holding your Postgres DSN — never the DSN itself. Uncomment it, copy
+# .env.example to .env, then run `pnpm serve`. Nothing else here is required:
+# `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
+# `retrieval:` out starts you with the abstention gate off and honest about it
+# (turn it on afterwards with `ksor calibrate`, once the record is serving).
+# database:
+#   dsn_env: KSOR_DB_URL
+# Where agents reach this record's MCP surface, and the semver it publishes as.
+# Both go into /.well-known/mcp/server.json, the document an agent reads to
+# DISCOVER this record instead of being told the URL. Leave mcp_url out until
+# the server is actually published: an invented URL is worse than none.
+# mcp_url: https://records.example.com/mcp
+# version: 0.1.0
 ---
 
 # Knowledge System of Record

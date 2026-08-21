@@ -15,6 +15,7 @@
 
 import type pg from "pg";
 
+import { AUDIENCE_ALLOWED, audienceAllowed } from "./audience.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
@@ -35,6 +36,14 @@ g AS (
 export const NODE_BY_SLUG_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
+-- The walk exists to BUILD PATHS, so it does not gate by audience; the
+-- RESOLVED node does, below. Gating every ancestor made an internal parent
+-- prune its public children, so a document that search had just returned --
+-- and told the agent to read -- came back "no document with slug": citable and
+-- unreachable at once. Visibility is a property of a DOCUMENT, not of its
+-- container; the site stages per file, AUDIENCE_CASES is per document, and
+-- NODE_BY_STABLE_ID_SQL below already resolved this way (round-9 review of
+-- PR 43).
 tree AS (
     SELECT n.node_id, n.parent_id, n.slug, n.title, n.stable_id, n.generation, n.permalink,
            n.slug::text AS path
@@ -49,7 +58,9 @@ tree AS (
 )
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink
 FROM tree n
-WHERE n.slug = $4 AND ${DENY}
+JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
+                       AND self.generation = n.generation
+WHERE n.slug = $4 AND ${DENY} AND ${audienceAllowed("self")}
 ORDER BY n.path`;
 
 export const ALIAS_SQL: string = `
@@ -68,7 +79,8 @@ export const NODE_BY_STABLE_ID_SQL: string = `
 WITH RECURSIVE ${GEN}, ${DENIED_CTE}
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
 FROM content_nodes n JOIN g ON n.generation = g.gen
-WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}`;
+WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}
+  AND ${AUDIENCE_ALLOWED}`;
 
 export const DOCUMENT_CHUNKS_SQL: string = `
 WITH ${GEN}
@@ -112,7 +124,7 @@ up AS (
 )
 SELECT path, climbed FROM up WHERE parent_id IS NULL ORDER BY path LIMIT 1`;
 
-/** Anchor $4 (uuid, NULL = browse roots), depth bound $5, limit $6. */
+/** Anchor $4 (uuid, NULL = browse roots), depth bound $5, limit $6, offset $7. */
 export const OUTLINE_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
@@ -120,6 +132,11 @@ walk AS (
     SELECT n.node_id, n.parent_id, n.slug, n.kind, n.title, n.position, n.stable_id,
            n.generation, n.permalink, 0 AS depth, ARRAY[n.position] AS sort_key,
            n.slug::text AS heading_path
+    -- The SEED does not gate either, for the same reason the recursive arm
+    -- does not: a root the caller may not see must still be descended THROUGH,
+    -- or its visible children vanish from the record. The anchor case is
+    -- different -- drilling INTO a node the caller cannot see is resolved
+    -- before this query runs -- so only DENY binds here.
     FROM content_nodes n JOIN g ON n.generation = g.gen
     WHERE n.tenant_id = $1 AND n.status = 'published'
       AND (($4::uuid IS NULL AND n.parent_id IS NULL)
@@ -130,12 +147,17 @@ walk AS (
            w.heading_path || '/' || n.slug
     FROM content_nodes n
     JOIN walk w ON n.parent_id = w.node_id AND n.generation = w.generation
+    -- Descends WITHOUT gating: an internal parent must not prune its public
+    -- children, or a document search returns is absent from the outline that
+    -- the error message tells the caller to consult. The final WHERE below
+    -- gates each row on its OWN visibility (round-9 review of PR 43).
     WHERE n.tenant_id = $1 AND n.status = 'published' AND w.depth < $5
 )
 SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'
+           AND ${audienceAllowed("ch")}
            AND ch.node_id NOT IN (SELECT node_id FROM denied)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
@@ -144,9 +166,15 @@ SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
 FROM walk w
 JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
-WHERE ${DENY}
+-- A drill-down returns CHILDREN, so the depth-0 anchor is excluded HERE rather
+-- than stripped after the window. It used to ride inside LIMIT/OFFSET and be
+-- filtered afterwards, which cost one row on the FIRST page only: the caller
+-- computed next_offset from the post-strip count, so every later page started
+-- one row early and repeated its predecessor's last row (round-9 review of
+-- PR 43).
+WHERE ${DENY} AND ${AUDIENCE_ALLOWED} AND ($4::uuid IS NULL OR w.depth > 0)
 ORDER BY w.sort_key
-LIMIT $6`;
+LIMIT $6 OFFSET $7`;
 
 /**
  * A TYPED not-found — composition roots relabel it for their own door by
@@ -401,10 +429,36 @@ export function rebaseOutlineRows(
     .map((r) => ({ ...r, headingPath: prefix + r.headingPath, depth: absDepth + r.depth }));
 }
 
+/**
+ * The largest outline a caller may ASK for. The tool schema and the service
+ * both derive from it, so the ceiling is one number rather than three
+ * hand-copied ones.
+ */
+export const MAX_OUTLINE_LIMIT = 5000;
+
+/**
+ * The ceiling this function actually clamps to, which is deliberately HIGHER.
+ * Callers add a probe row on top of the caller's limit — `service.ts` asks for
+ * `limit + 1` to DETECT truncation. Clamping those away made `has_more`
+ * always false at exactly the maximum, which is where truncation is most
+ * likely and least visible (round-3 review of #43).
+ */
+const OUTLINE_CEILING = MAX_OUTLINE_LIMIT + 2;
+
 export interface OutlineOptions {
   readonly root?: string | null;
   readonly depth?: number;
   readonly limit?: number;
+  /**
+   * Rows to skip, so a truncated outline has a way to continue.
+   *
+   * `has_more` told a caller the list was partial and nothing let them see the
+   * rest: the only recourse was re-asking with a larger `limit`, and above the
+   * maximum the tail was unreachable at all. An agent that cannot reach the
+   * tail concludes the record does not contain it — the false "not in the
+   * record" the truncation probe exists to prevent (round-6 review of #43).
+   */
+  readonly offset?: number;
 }
 
 /**
@@ -421,7 +475,8 @@ export async function outline(
 ): Promise<OutlineRow[]> {
   const root = options.root ?? null;
   const depth = Math.max(0, options.depth ?? 0);
-  const limit = Math.max(1, Math.min(options.limit ?? 200, 5000));
+  const limit = Math.max(1, Math.min(options.limit ?? 200, OUTLINE_CEILING));
+  const offset = Math.max(0, options.offset ?? 0);
   let pinned = scope.pinnedGeneration;
   let anchor: string | null = null;
   if (root !== null) {
@@ -456,17 +511,9 @@ export async function outline(
 
   const result = await arrayQuery(client, {
     text: OUTLINE_SQL,
-    // A drill-down's result includes the depth-0 anchor row, which
-    // rebaseOutlineRows strips — so fetch limit+1 to return up to `limit`
-    // CHILDREN, not limit-1 (review, 2026-08-19).
-    values: [
-      scope.tenantId,
-      scope.corpusId,
-      pinned,
-      anchor,
-      depth,
-      root === null ? limit : limit + 1,
-    ],
+    // The anchor row is excluded by the query itself now, so the window holds
+    // only CHILDREN and `limit`/`offset` mean the same thing on every page.
+    values: [scope.tenantId, scope.corpusId, pinned, anchor, depth, limit, offset],
   });
   const rows = outlineRows(result);
   if (root === null) return rows;
