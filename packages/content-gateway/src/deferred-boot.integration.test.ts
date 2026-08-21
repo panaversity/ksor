@@ -44,10 +44,21 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     ).toBeLessThan(handler.indexOf("mcpHandler.fetch"));
   });
 
-  it("refuses with 503 and names the reason, rather than a bare error", () => {
-    expect(HTTP).toContain("this record cannot be served:");
-    expect(HTTP, "a refusal an operator can act on carries the full remedy").toContain(
-      "data: { detail: message }",
+  it("builds the refusal body through the one function that decides what may leave", () => {
+    // Deliberately NOT an assertion about the body's contents. This file greps
+    // source, which is the right instrument for "does the check sit before
+    // dispatch" — position is a property of source — and the wrong one for
+    // "what does the response contain".
+    //
+    // It was used for both, and that is how the leak survived: the old
+    // assertion required the literal string `data: { detail: message }` in
+    // http.ts, so a test with reasoning attached PINNED a driver error's host,
+    // address, port and database user onto the wire. What goes in the body is
+    // now asserted against real bodies in refusal-body.test.ts; all this may
+    // legitimately check is that the handler routes through it.
+    expect(HTTP, "the 503 body must not be assembled inline again").toContain("refusalBody(error)");
+    expect(HTTP, "and the full text must still reach the operator's logs").toContain(
+      "refusing requests — boot checks failing",
     );
   });
 
