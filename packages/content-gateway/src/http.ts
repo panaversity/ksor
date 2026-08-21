@@ -44,6 +44,7 @@ import {
   UNDESCRIBED_RECORD,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
+import { refusalBody } from "./refusal-body.js";
 import { buildServer, recordIsUndescribed } from "./server.js";
 import type { Composition } from "./compose.js";
 
@@ -387,19 +388,27 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       try {
         await verifyBoot();
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return new Response(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            error: {
-              code: -32001,
-              message: `this record cannot be served: ${message.split("\n")[0]}`,
-              data: { detail: message },
-            },
-            id: null,
-          }),
-          { status: 503, headers: { "content-type": "application/json" } },
+        // LOG in full, ANSWER in the minimum. Which messages may go on the wire
+        // is decided in one place and by type — see refusal-body.ts. It used to
+        // be decided here by not deciding: the thrown error's message went out
+        // whoever threw it, so a `pg` connection failure put the database host,
+        // its resolved address, the port and the database user into an API
+        // response.
+        //
+        // The logging half is not decoration. The refusal tells the operator the
+        // reason is in the server's logs, and the deferred-boot line records
+        // only the error's NAME — so without this the full text existed nowhere
+        // and the refusal would be pointing at an empty page. This is also why
+        // the boot checks are NOT sanitised at their source: reducing a driver
+        // error to its class name before it reaches here would destroy the one
+        // copy an operator can act on.
+        console.error(
+          `refusing requests — boot checks failing: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
         );
+        return new Response(JSON.stringify(refusalBody(error)), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        });
       }
     }
     const response = await mcpHandler.fetch(request, authInfo === undefined ? {} : { authInfo });
