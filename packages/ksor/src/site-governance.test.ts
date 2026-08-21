@@ -17,6 +17,7 @@ import {
   isCalendarDate,
   readGovernance,
   resolveSuccessorUrl,
+  sourceHref,
   type DocumentGovernance,
 } from "../templates/scaffold/system/site/lib/governance.js";
 
@@ -444,5 +445,60 @@ describe("agentFrontmatter — the full corpus block", () => {
         null,
       ),
     ).toBe("");
+  });
+});
+
+// A provenance entry that IS a source URL should be followable. Measured on a
+// built scaffold: 0 of 3 entries were links, so an intranet URL rendered as
+// dead grey text (research/site-design.md F5). Provenance is load-bearing —
+// a source nobody can open is weaker than the record makes it.
+describe("sourceHref", () => {
+  it("links an entry that is nothing but an http(s) URL", () => {
+    expect(sourceHref("https://intranet.example.com/finance/policy-4-2")).toBe(
+      "https://intranet.example.com/finance/policy-4-2",
+    );
+    expect(sourceHref("http://wiki.internal/policy")).toBe("http://wiki.internal/policy");
+  });
+
+  it("trims surrounding whitespace before deciding", () => {
+    expect(sourceHref("  https://x.test/y  ")).toBe("https://x.test/y");
+  });
+
+  it("leaves a citation alone — the common case", () => {
+    // The record's own house style: "Finance policy manual §4.2, approved
+    // 2025-11-03". Nothing to open, and turning part of it into a link would
+    // invent a destination.
+    expect(sourceHref("Finance policy manual §4.2, approved 2025-11-03")).toBeNull();
+    expect(sourceHref("Board resolution 2025-19")).toBeNull();
+  });
+
+  it("refuses an entry that merely CONTAINS a URL", () => {
+    // Linkifying inside prose would have to guess where the URL ends, and the
+    // whole entry is the citation — not the fragment inside it.
+    expect(sourceHref("See https://x.test/y for the signed copy")).toBeNull();
+  });
+
+  it("refuses every scheme that is not http(s)", () => {
+    // `provenance` is AUTHORED content. A javascript: or data: URL rendered
+    // into an href would execute on click — the record must never be able to
+    // put a script in the page that serves it.
+    for (const hostile of [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "vbscript:msgbox(1)",
+      "file:///etc/passwd",
+    ]) {
+      expect(sourceHref(hostile), hostile).toBeNull();
+    }
+    // …and the merely-unsupported ones, which are citations, not links.
+    expect(sourceHref("mailto:records@example.com")).toBeNull();
+    expect(sourceHref("ftp://archive.example.com/policy.pdf")).toBeNull();
+  });
+
+  it("refuses a malformed URL rather than emitting a broken href", () => {
+    expect(sourceHref("https://")).toBeNull();
+    expect(sourceHref("")).toBeNull();
+    expect(sourceHref("   ")).toBeNull();
   });
 });

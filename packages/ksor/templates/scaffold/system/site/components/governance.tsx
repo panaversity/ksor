@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import { isCalendarDate, type DocumentGovernance } from "@/lib/governance";
+import { isCalendarDate, sourceHref, type DocumentGovernance } from "@/lib/governance";
 
 /**
  * What the record says about the document you are reading.
@@ -158,11 +158,30 @@ export function Provenance({ entries }: { entries: readonly string[] }): ReactEl
           no ellipsis and nothing to scroll (measured, 2026-08-20). A source
           nobody can read is not provenance. */}
       <ul className="space-y-1 break-words text-fd-muted-foreground">
-        {entries.map((entry, index) => (
-          // Position, not text: a record may cite the same source twice, and
-          // duplicate keys are a console error on a governed page.
-          <li key={`${index}-${entry}`}>{entry}</li>
-        ))}
+        {entries.map((entry, index) => {
+          // An entry that IS a URL becomes followable; a citation stays text.
+          // `rel="noreferrer"` because the destination is authored in the
+          // record, not chosen by this site.
+          const href = sourceHref(entry);
+          return (
+            // Position, not text: a record may cite the same source twice, and
+            // duplicate keys are a console error on a governed page.
+            <li key={`${index}-${entry}`}>
+              {href === null ? (
+                entry
+              ) : (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+                >
+                  {entry}
+                </a>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

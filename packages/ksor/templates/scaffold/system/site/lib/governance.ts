@@ -331,3 +331,30 @@ export function agentFrontmatter(
   }
   return lines.length === 0 ? "" : `---\n${lines.join("\n")}\n---\n`;
 }
+
+/**
+ * The href for a provenance entry that IS a source URL, or null when the entry
+ * is an ordinary citation.
+ *
+ * Deliberately narrow in two directions. The WHOLE entry must be the URL —
+ * linkifying a fragment inside "See https://x for the signed copy" would have
+ * to guess where the URL ends, and the citation is the entry, not the fragment.
+ * And only `http(s)` is accepted: `provenance` is AUTHORED content, so a
+ * `javascript:` or `data:` entry rendered into an href would let the record
+ * execute a script in the page that serves it. Other schemes (`mailto:`,
+ * `ftp:`) are refused as citations rather than links — widen only with a reason.
+ */
+export function sourceHref(entry: string): string | null {
+  const value = entry.trim();
+  if (value === "" || /\s/.test(value)) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  // `new URL("https://")` throws, but a host-less shape that parses would
+  // render an href pointing nowhere.
+  return url.host === "" ? null : value;
+}

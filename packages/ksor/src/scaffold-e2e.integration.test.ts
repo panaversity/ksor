@@ -254,6 +254,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         "provenance:",
         "  - Board minutes 2026-01-11",
         "  - Terms of service v4",
+        "  - https://intranet.example.com/legal/refunds-v4",
         "superseded_by: ./refund-policy-v5.md",
       ].join("\n"),
       "Refunds are issued within 30 days of purchase.",
@@ -318,6 +319,25 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // survive to the page, separately.
     expect(superseded).toContain("Board minutes 2026-01-11");
     expect(superseded).toContain("Terms of service v4");
+
+    // A source that IS a URL is followable; a citation stays text. Provenance
+    // is load-bearing, and a source nobody can open is weaker than the record
+    // makes it (research/site-design.md F5, measured at 0 of 3 links).
+    const sourcesHtml = (route: string): string => {
+      const html = readFileSync(
+        path.join(project, "system", "site", "out", route, "index.html"),
+        "utf8",
+      );
+      const at = html.indexOf("Sources");
+      expect(at, `no Sources section in ${route}`).toBeGreaterThan(-1);
+      return html.slice(at);
+    };
+    const refundSources = sourcesHtml("docs/refund-policy");
+    expect(refundSources).toMatch(
+      /<a[^>]+href="https:\/\/intranet\.example\.com\/legal\/refunds-v4"[^>]*>/,
+    );
+    // …and the citation beside it is NOT wrapped in an anchor.
+    expect(refundSources).toMatch(/<li[^>]*>Board minutes 2026-01-11<\/li>/);
 
     // …and the route it points at was really built.
     expect(
