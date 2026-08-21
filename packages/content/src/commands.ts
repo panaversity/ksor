@@ -74,15 +74,16 @@ Usage:
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
-  ksor takedown --instance PATH [--actor NAME]
+  ksor takedown --instance PATH [--actor NAME]   (--actor REQUIRED to deny or revoke)
                 (<stable-id> --reason TEXT [--subtree]
                  | --list | --ledger | --revoke <stable-id> | --export PATH)
       Deny a document from EVERY surface. Default scope is the node itself;
       --subtree denies its descendants too. --export writes the manifest the
       site build reads, so a takedown reaches the human surface as well.
       --ledger prints the recorded governance acts: who denied what, when.
-      --actor names WHO is performing the act in that ledger; it defaults to the
-      operating user. Governance governs acts, so the row has to name someone.
+      --actor names WHO is performing the act, and is REQUIRED for a denial or a
+      revocation: the ledger row is the evidence that a person withdrew this
+      document, and a name guessed from the shell attributes nothing.
   ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
@@ -798,12 +799,46 @@ async function takedownCommand(args: string[]): Promise<number> {
     );
   }
 
+  // Who performed the act — NAMED, never inferred.
+  //
+  // This used to fall back to $USER / $USERNAME / "operator". In CI that writes
+  // `actor: "runner"` and in a container `"root"`: a self-asserted string
+  // wearing a schema, which reads like a person and attributes nothing. The
+  // column is `NOT NULL` with the comment "NO default: unset errors loudly" —
+  // and the fallback is exactly what stopped it erroring. Product principle:
+  // honest absence, never silent weakness (review, 2026-08-21).
+  //
+  // Checked BEFORE the DSN is resolved: a missing actor is an argument error
+  // and must not depend on the environment being configured, or `--actor` is
+  // reported as "the environment cannot run ksor" (exit 3) when it is a
+  // refusal (exit 1).
+  //
+  // Only the WRITE acts need it; --list / --ledger / --export write no ledger
+  // row and are readable by anyone who can reach the database.
+  const namedActor = (values.actor ?? "").trim();
+  const requireActor = (act: string): string | number =>
+    namedActor === ""
+      ? fail(
+          REFUSED,
+          `${act} is a governance act and its ledger row must name who performed it\n` +
+            "  why: the §7 trail is the evidence that a person withdrew this document. A name " +
+            "guessed from $USER attributes nothing — it reads like a person and is whatever the " +
+            "shell happened to be (`runner` in CI, `root` in a container)\n" +
+            '  fix: pass --actor, e.g. --actor "you@example.com"',
+        )
+      : namedActor;
+
+  // The write modes are known from the ARGUMENTS alone, so the requirement is
+  // enforced here — before the DSN is resolved. Deferring it to the write site
+  // reported a missing --actor as "the environment cannot run ksor" (exit 3)
+  // when it is a refusal (exit 1).
+  if (values.export === undefined && !values.list && !values.ledger) {
+    const named = requireActor(values.revoke === undefined ? "takedown" : "takedown --revoke");
+    if (typeof named === "number") return named;
+  }
+
   const dsn = resolveDsn(instance);
   if (typeof dsn === "number") return dsn;
-  // Who performed the act. Governance governs ACTS: the ledger row has to name
-  // someone, and "unknown" is a worse answer than the operating user.
-  const actor = values.actor ?? process.env["USER"] ?? process.env["USERNAME"] ?? "operator";
-
   if (values.export !== undefined) {
     // EXPANDED here, where the tree lives: the site has no parent_id to walk.
     // The subtree DIRECTORIES go too, because the expanded list can only name
@@ -854,8 +889,10 @@ async function takedownCommand(args: string[]): Promise<number> {
   }
 
   if (values.revoke !== undefined) {
+    const writer = requireActor("takedown --revoke");
+    if (typeof writer === "number") return writer;
     const outcome = await withPool(dsn, (pool) =>
-      revokeTakedown(pool, instance, { stableId: values.revoke!, actor }),
+      revokeTakedown(pool, instance, { stableId: values.revoke!, actor: writer }),
     );
     process.stdout.write(
       outcome.changed
@@ -881,13 +918,15 @@ async function takedownCommand(args: string[]): Promise<number> {
         "unexplained hole in the record, and this row is the only place it is written down",
     );
   }
+  const writer = requireActor("takedown");
+  if (typeof writer === "number") return writer;
   const scope = values.subtree ? "subtree" : "node";
   const outcome = await withPool(dsn, (pool) =>
     applyTakedown(pool, instance, {
       stableId,
       scope,
       reason: values.reason!,
-      actor,
+      actor: writer,
     }),
   );
   process.stdout.write(

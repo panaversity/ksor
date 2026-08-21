@@ -514,6 +514,38 @@ gateway` package, serve-by-spawn) is superseded._
     the question to answer is what the OTHER surface does in that state.
     Reversed only by an owner decision recorded here.
 
+20. **The keyword arm stays in Postgres — never reimplemented in JS**
+    (2026-08-21, from an adversarial review of the artifact rung). A
+    database-free serving rung is more feasible than it looks: exact int8
+    cosine in plain JS measures 19ms at 5,000 chunks and beats HNSW on RECALL
+    because it is exact rather than approximate, the abstention gate reads only
+    the VECTOR arm, and the denial seam already exports JSON. The blocker is
+    not the vector arm — it is `websearch_to_tsquery`. Its parsing, stemming
+    and stop-word behaviour diverge from any reimplementation SILENTLY: no
+    error, just a different set of matches. And this record's own gold shows
+    how little room that leaves — in-corpus 0.730 / 0.671 against a
+    scope-adjacent near-miss at 0.683 (`behavioural.db.test.ts`), so the
+    abstention decision turns on about one hundredth. A tokenizer that stems
+    one word differently moves which questions get answered, and nothing goes
+    red. Reversed only by a measurement showing a JS implementation agreeing
+    with Postgres across the gold set — which is a bigger project than the arm
+    it would replace.
+
+21. **A governance act NAMES its actor; the tool never guesses one**
+    (2026-08-21, same review). `--actor` fell back to `$USER` / `$USERNAME` /
+    `"operator"`, so a ledger row read `runner` under CI and `root` in a
+    container: a self-asserted string wearing a schema, indistinguishable from
+    a person who was never there. `retrieval_log.actor` is `NOT NULL` with the
+    comment "NO default: unset errors loudly" — and the fallback is precisely
+    what stopped it erroring. `ksor takedown` now REFUSES a denial or a
+    revocation without `--actor`, before the DSN is even resolved (a missing
+    actor is an argument error, not an environment one). Read-only modes need
+    nothing. This is product principle "honest absence, never silent weakness"
+    applied to attribution, and it generalises: a column that records WHO must
+    never be populated from ambient state. Reversed only by an identity source
+    the tool can VERIFY rather than read — a bearer token's subject qualifies,
+    an environment variable never will.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

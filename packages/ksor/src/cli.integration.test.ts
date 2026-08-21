@@ -151,6 +151,74 @@ describe("ksor CLI (built artifact)", () => {
  * legitimate state that refuses during PARSING. Both were found live (rounds 3
  * and 4 of the #43 review), so all four shapes are pinned here.
  */
+describe("a governance act must NAME who performed it", () => {
+  // `--actor` used to fall back to $USER / $USERNAME / "operator", so a ledger
+  // row in CI read `runner` and in a container `root` — a self-asserted string
+  // wearing a schema, which looks like a person and attributes nothing. The
+  // column is NOT NULL with the comment "NO default: unset errors loudly", and
+  // the fallback is exactly what stopped it erroring (review, 2026-08-21).
+  const instanceIn = (dir: string): string => {
+    const file = path.join(dir, "instance.md");
+    writeFileSync(
+      file,
+      "---\nformat: 1\nname: actor-test\ndatabase:\n  dsn_env: KSOR_ACTOR_TEST_DSN\n---\n\n# Record\n",
+      "utf8",
+    );
+    return file;
+  };
+
+  it("refuses a denial with no --actor, before touching the database", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-actor-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [distCli, "takedown", "--instance", instanceIn(dir), "knowledge/x", "--reason", "legal"],
+        // No DSN at all: the refusal must come from the MISSING ACTOR, which
+        // proves it is checked before anything is opened.
+        { encoding: "utf8", env: { ...process.env, KSOR_ACTOR_TEST_DSN: "" } },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("must name who performed it");
+      expect(result.stderr, "the remedy names the flag").toContain("--actor");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a revocation the same way", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-actor-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [distCli, "takedown", "--instance", instanceIn(dir), "--revoke", "knowledge/x"],
+        { encoding: "utf8", env: { ...process.env, KSOR_ACTOR_TEST_DSN: "" } },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("must name who performed it");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("never infers one from the environment", () => {
+    const src = readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "..",
+        "..",
+        "content",
+        "src",
+        "commands.ts",
+      ),
+      "utf8",
+    );
+    const block = src.slice(src.indexOf("const namedActor"), src.indexOf("if (values.export"));
+    expect(block, "an actor guessed from the shell attributes nothing").not.toMatch(
+      /process\.env\["USERNAME?"\]/,
+    );
+  });
+});
+
 describe("takedown --export: answers for a record with no database, fails loudly for a broken one", () => {
   const write = (dir: string, database: string): string => {
     const file = path.join(dir, "instance.md");
