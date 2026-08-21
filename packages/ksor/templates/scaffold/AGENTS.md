@@ -99,8 +99,11 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    pnpm serve   # the MCP server (one supervised process)
    ```
 
-   `setup` is separate on purpose: applying DDL and granting ingest are acts an
-   operator performs, not side effects of starting a server.
+   `provision` is separate on purpose: applying DDL and granting ingest are acts
+   an operator performs, not side effects of starting a server. (It is not
+   called `setup` because `pnpm setup` is pnpm's own command and would shadow
+   it — the step would print "No changes to the environment were made" and do
+   nothing.)
 
    **Deploying to a container runtime you do not control** (Cloud Run, Fly,
    Container Apps — anything that scales to zero and hands you a `$PORT`):
