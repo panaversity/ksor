@@ -3,7 +3,14 @@ import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import type { Node, Root } from "fumadocs-core/page-tree";
 
-import { agentFrontmatter, caveatStatus, readGovernance, resolveSuccessorUrl } from "./governance";
+import {
+  agentFrontmatter,
+  agentIndexSuffix,
+  caveatStatus,
+  readGovernance,
+  resolveSuccessorUrl,
+} from "./governance";
+import { appName, showGovernance } from "./shared";
 import { withStatus } from "@/components/sidebar-status";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
@@ -174,6 +181,14 @@ export interface RecordEntry {
   readonly description: string | null;
   /** The document's status when it is a caveat, else null. */
   readonly status: string | null;
+  /**
+   * Who stands behind it. Null when the record declares no owner — and null
+   * for every document when `site.governance` is off, because an owner is a
+   * governance fact and that key turns the pages plain.
+   */
+  readonly owner: string | null;
+  /** How many documents this entry holds below it; 0 for a leaf. */
+  readonly documents: number;
 }
 
 function entryFor(page: KnowledgePage): RecordEntry {
@@ -185,7 +200,33 @@ function entryFor(page: KnowledgePage): RecordEntry {
     title: page.data.title,
     description: description === "" ? null : description,
     status: caveatStatus(status === "" ? null : status),
+    owner: showGovernance ? readGovernance(page.data, page.path).owner : null,
+    documents: 0,
   };
+}
+
+/**
+ * How many documents a folder holds, its own index page excluded — the index
+ * IS the entry being counted, not something below it.
+ *
+ * By url in a set, not by adding lengths: whether a folder's index also
+ * appears among its children is the loader's business, and counting it twice
+ * would publish a number the record cannot support.
+ */
+function countDocuments(folder: Extract<Node, { type: "folder" }>): number {
+  const urls = new Set<string>();
+  const walk = (nodes: readonly Node[]): void => {
+    for (const node of nodes) {
+      if (node.type === "page") urls.add(node.url);
+      else if (node.type === "folder") {
+        if (node.index) urls.add(node.index.url);
+        walk(node.children);
+      }
+    }
+  };
+  walk(folder.children);
+  if (folder.index) urls.delete(folder.index.url);
+  return urls.size;
 }
 
 /**
@@ -205,9 +246,55 @@ export function entriesUnder(url: string | null): RecordEntry[] {
       node.type === "page" ? node.url : node.type === "folder" ? node.index?.url : null;
     if (target === undefined || target === null || target === url) continue;
     const page = byUrl.get(target);
-    if (page !== undefined) entries.push(entryFor(page));
+    if (page === undefined) continue;
+    entries.push(
+      node.type === "folder"
+        ? { ...entryFor(page), documents: countDocuments(node) }
+        : entryFor(page),
+    );
   }
   return entries;
+}
+
+/**
+ * The record as `llms.txt` serves it: the instance name, then every document in
+ * the governed reading order, each carrying its governance when the governance
+ * is a caveat.
+ *
+ * Here rather than in the route, because the home page shows these same bytes
+ * to a reader. Two spellings of the record's index would be two indexes, and
+ * the one on the page would be the one nobody checked.
+ */
+export function recordIndexText(): string {
+  const pages = getSortedPages();
+  const lines = pages.map((page) => {
+    const governance = readGovernance(page.data, page.path);
+    const successor =
+      governance.supersededBy === null
+        ? null
+        : resolveSuccessorUrl(governance.supersededBy, page.path, pages);
+    const link = `- [${page.data.title}](${basePath}${page.url})`;
+    const described = page.data.description ? `${link}: ${page.data.description}` : link;
+    // The successor's route is prefixed like every other URL here, so the line
+    // is usable as-is on a sub-path host.
+    return (
+      described + agentIndexSuffix(governance, successor === null ? null : basePath + successor)
+    );
+  });
+  return `# ${appName}\n\n${lines.join("\n")}\n`;
+}
+
+/**
+ * The route of a document's markdown twin — `/docs/policies/terms` becomes
+ * `/md/policies/terms.md`, and the record's own index becomes `/md/index.md`.
+ *
+ * One rule, one place: the docs page derives the same address from its route
+ * params for `rel="alternate"`, and a second spelling of it here would be a
+ * broken link the day either changes.
+ */
+export function markdownPath(url: string): string {
+  const slug = url.replace(/^\/docs\/?/, "").replace(/\/$/, "");
+  return `${basePath}/md/${slug === "" ? "index" : slug}.md`;
 }
 
 /** The children of the folder whose index page is at `url`, or []. */

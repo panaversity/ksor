@@ -1,6 +1,4 @@
-import { basePath, getSortedPages } from "@/lib/source";
-import { appName } from "@/lib/shared";
-import { agentIndexSuffix, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
+import { recordIndexText } from "@/lib/source";
 
 export const revalidate = false;
 
@@ -11,22 +9,9 @@ export const revalidate = false;
 // Without that last part a withdrawn document and the one that replaced it are
 // two adjacent entries told apart only by whatever a human happened to type
 // into a title, and an agent picks either (research/site-design.md F1).
+//
+// The bytes are built in lib/source (`recordIndexText`) because the home page
+// shows this same index to a reader — one index, one spelling.
 export function GET(): Response {
-  const pages = getSortedPages();
-  const lines = pages.map((page) => {
-    const governance = readGovernance(page.data, page.path);
-    const successor =
-      governance.supersededBy === null
-        ? null
-        : resolveSuccessorUrl(governance.supersededBy, page.path, pages);
-    const link = `- [${page.data.title}](${basePath}${page.url})`;
-    const described = page.data.description ? `${link}: ${page.data.description}` : link;
-    // The successor's route is prefixed like every other URL here, so the line
-    // is usable as-is on a sub-path host.
-    return (
-      described + agentIndexSuffix(governance, successor === null ? null : basePath + successor)
-    );
-  });
-
-  return new Response(`# ${appName}\n\n${lines.join("\n")}\n`);
+  return new Response(recordIndexText());
 }

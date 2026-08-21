@@ -48,6 +48,16 @@ panel's surface ran to the window edge with the first nav item starting 103px
 inside it (measured at 1728px). The layout width is now `100%`: the offsets go
 to zero, the rail starts where the window does, and the prose does not move.
 
+**The site is a shadcn/ui project.** `components.json` and `lib/utils.ts` ship
+with the scaffold, so `pnpm dlx shadcn@latest add <name>` writes a component the
+adopter then owns, and Fumadocs reads the same palette through its `shadcn` CSS
+preset — one set of tokens for the shell and for anything added from the
+registry, with `--primary` carrying the brand. It also ends a real defect: the
+`neutral` preset painted the page and the sidebar it sits against 1.6% apart, so
+the reading surface never read as a page. The shadcn CLI itself is deliberately
+NOT a dependency (578 extra packages, measured); the four the site actually uses
+cost +2.
+
 **The previous/next neighbours sit at the foot of the page, not wherever the
 text stopped.** A governed record is full of short documents, and on those the
 pager landed mid-screen — 265px above the bottom edge on the policies index,
@@ -64,12 +74,18 @@ TOC column is held on every page, so sidebar and rail are the same width and the
 column lands in the same place on every document: x=464, 672px wide, on a
 document with a table of contents and on one without, verified in both.
 
-**The site is a shadcn/ui project.** `components.json` and `lib/utils.ts` ship
-with the scaffold, so `pnpm dlx shadcn@latest add <name>` writes a component the
-adopter then owns, and Fumadocs reads the same palette through its `shadcn` CSS
-preset — one set of tokens for the shell and for anything added from the
-registry, with `--primary` carrying the brand. It also ends a real defect: the
-`neutral` preset painted the page and the sidebar it sits against 1.6% apart, so
-the reading surface never read as a page. The shadcn CLI itself is deliberately
-NOT a dependency (578 extra packages, measured); the ones the site actually uses
-cost +2.
+**The home page is the record's own front door.** It renders inside the record
+shell, so the sidebar — the record itself — is present before you click
+anything, and the hero is split: the record's identity, its authority sentence
+and a humans/agents switch on the left; on the right a panel showing the
+record's OWN published bytes, the same `llms.txt` the route serves and the same
+markdown twin `/md/` serves, with a copy button. Below it the record lists as
+cards carrying who owns each entry, how many documents sit below it, and any
+caveat status. Every word still comes from `instance.md` or frontmatter — the
+site contains no authored content — and both audience blocks stay in the markup
+so a crawler, a reader without JavaScript and an agent parsing the HTML all find
+every door. The shape is borrowed deliberately from the docs homes of AI-first
+projects read on 2026-08-22 (Anthropic's asymmetric hero with a live artifact,
+Vercel AI SDK's humans/agents switch, Cursor and MCP rendering their first page
+inside the docs shell); what is ours is that the artifact is evidence rather
+than illustration.

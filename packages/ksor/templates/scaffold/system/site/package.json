@@ -15,6 +15,7 @@
     "fumadocs-ui": "16.10.3",
     "lucide-react": "1.31.0",
     "next": "16.2.9",
+    "radix-ui": "1.6.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "tailwind-merge": "3.6.0",

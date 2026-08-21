@@ -441,6 +441,11 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     );
     // The withdrawn document carries its status on the card…
     expect(homeListing).toContain("superseded");
+    // …and who stands behind a document is on the front door too. The record
+    // declares an owner on every serious document; a listing that shows the
+    // title and hides the owner makes the reader open a page to learn whether
+    // anyone owns it (2026-08-22).
+    expect(homeListing, "the listing names who stands behind each document").toContain("Finance");
     // …and the framework's own marketing copy is gone from the adopter's page:
     // critical rule 1 says the site never contains authored content.
     expect(homeHtml).not.toContain("Knowledge you can govern");
@@ -450,7 +455,22 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(homeHtml, "the home page publishes the record's own purpose").toContain(
       "authoritative for",
     );
+    // The machine identity, on the page that introduces the record: the slug
+    // is what a citation carries, so it belongs where an agent's operator can
+    // read it without opening a file.
+    expect(homeHtml, "the home page names the instance slug").toContain("walkthrough");
+    // Every agent door, not just the first one. The page advertised llms.txt
+    // alone while the build also publishes llms-full.txt and a .md twin per
+    // document — surfaces an agent cannot use if nothing says they exist
+    // (product principle 8: discoverability decides whether agents find you).
+    expect(homeHtml, "the home page points at the full-corpus file").toContain("llms-full.txt");
+    expect(homeHtml, "…and at the per-document markdown").toContain("/md/");
 
+    // The front door wears the record's own shell: the sidebar IS the record,
+    // so a reader sees what is in it before clicking anything. It rendered in
+    // a separate navbar-only layout until 2026-08-22, which is how a system of
+    // record ended up with a first page that showed none of the record.
+    expect(homeHtml, "the home page renders inside the record shell").toContain('id="nd-sidebar"');
     // The AGENT surface carries the same governance, or the record has two
     // truths (research/site-design.md F1): before this, llms.txt listed a
     // withdrawn policy and its replacement as adjacent entries told apart only
@@ -458,6 +478,15 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // prose. Asserted on the built files, not on the projection.
     const agentFile = (name: string): string =>
       readFileSync(path.join(project, "system", "site", "out", name), "utf8");
+
+    // The front page publishes the record's OWN bytes, not a description of
+    // them: the hero panel renders the same index llms.txt serves, governance
+    // suffix and all. Asserted against a line only that builder produces, so a
+    // hand-written imitation of it on the page would fail here.
+    const indexLine = agentFile("llms.txt")
+      .split("\n")
+      .find((line) => line.includes("(/docs/refund-policy)")) as string;
+    expect(homeHtml, "the hero shows the index an agent is served").toContain(indexLine.trim());
 
     // ONE document's block, never "from this heading to the end of the file":
     // the loose form swallows every document after it, so an assertion that a

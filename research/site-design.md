@@ -385,3 +385,39 @@ Fetched 2026-08-21.
 - MDN, _Banners and notices_ — <https://developer.mozilla.org/en-US/docs/MDN/Writing_guidelines/Page_structures/Banners_and_notices>
 - Butterick, _Line length_ — <https://practicaltypography.com/line-length.html>
 - Diátaxis — <https://diataxis.fr/>
+
+---
+
+## 6 · What AI-first documentation homes do (2026-08-22)
+
+Read live, not recalled, when the scaffolded home page was redesigned. `llms.txt`
+fetched directly: modelcontextprotocol.io 200 (22 KB), platform.claude.com/docs
+200 (60 KB), docs.cursor.com 200 (499 KB), ai-sdk.dev 200 (2 KB), fumadocs.dev
+200 (15 KB), docs.stripe.com 200 (90 KB) — and glean.com 404, whose front page is
+a lead-gen marketing site. The AI-first ones all publish an agent surface; the
+enterprise-knowledge VENDOR does not, which is the distinction §4's non-goal was
+already drawing.
+
+Four patterns, and what we took:
+
+1. **The first page renders inside the docs shell.** `modelcontextprotocol.io`
+   redirects to a document; Cursor's `/docs` is a document with the sidebar
+   beside it. **Adopted** — the front door wears `components/record-shell`, so a
+   reader sees the record before clicking. It also answers the complaint that
+   drove this pass: a single centred column left a wide screen 60% empty.
+2. **Asymmetric hero, live artifact beside the identity.** Anthropic's docs home
+   pairs eyebrow + display title + one sentence + search with a running code
+   sample. **Adopted, with the artifact changed**: ours renders the record's own
+   `llms.txt` and markdown twin, built by the same function the routes call
+   (`recordIndexText`), so the page cannot drift from the bytes it claims to
+   show.
+3. **A humans/agents switch.** Vercel's AI SDK puts one under its headline.
+   **Adopted** — it is this product's whole claim expressed as a control.
+4. **Page actions (`Copy page`) beside `rel="alternate" type="text/markdown"`.**
+   MCP and Cursor both ship it; MCP's page carries the same alternate tag our
+   document pages emit. **Not yet taken** — worth its own change on the document
+   pages, where the markdown twin is already advertised as a chip.
+
+Rejected: **the version selector** in MCP's nav ("Version 2026-07-28 (latest)").
+Generations are a serve-time concept here and `ksor build` is not shipped, so a
+selector would be a present-tense claim about behaviour that does not run.

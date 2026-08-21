@@ -1,4 +1,4 @@
-import { basePath, entriesUnder, getSortedPages, source } from "@/lib/source";
+import { entriesUnder, getSortedPages, markdownPath, source } from "@/lib/source";
 import { RecordIndex } from "@/components/record-index";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
@@ -47,7 +47,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   // The same address `generateMetadata` advertises, shown to a person as well:
   // the human surface handing an agent the record's own bytes is a better
   // demonstration of the product than any copy on the home page.
-  const markdownUrl = `${basePath}/md/${(params.slug ?? []).join("/") || "index"}.md`;
+  const markdownUrl = markdownPath(page.url);
   const allPages = getSortedPages();
   const replaces = predecessorsOf(
     page.url,
@@ -133,7 +133,7 @@ export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): P
   // The markdown twin, advertised rather than left to be guessed: a consumer
   // that follows `rel="alternate"` reaches the record's own bytes instead of
   // scraping this page (research/site-design.md F2).
-  const markdownUrl = `${basePath}/md/${(params.slug ?? []).join("/") || "index"}.md`;
+  const markdownUrl = markdownPath(page.url);
 
   return {
     title: page.data.title,
