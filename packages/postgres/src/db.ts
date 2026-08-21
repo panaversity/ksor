@@ -146,6 +146,29 @@ export function tlsAdvisory(dsn: string): string | null {
 }
 
 /**
+ * Close every connection when its call finishes, instead of returning it to
+ * the pool.
+ *
+ * OFF by default, because the default is measured better. On the shipped shape
+ * (`min: 0`, 10s idle) a quiet server already holds ZERO connections — nothing
+ * for a serverless compute to suspend, nothing billed on a per-connection plan
+ * — and inside a burst the handshake is paid once. Measured against a live
+ * database: reconnect 7.92ms, warm query 0.31ms, so per-request teardown pays
+ * roughly 7.6ms on EVERY call rather than only after a genuine idle period, and
+ * a remote TLS endpoint is worse because the handshake adds round trips that
+ * number does not contain (decision 17).
+ *
+ * It exists because decision 17 names the deployment that would want it: one
+ * where per-request connection is genuinely cheaper — a local pooler sidecar,
+ * or a runtime that reuses no process between invocations, where a pool is a
+ * fiction anyway. The owner of such a deployment should not have to patch the
+ * kernel to get it.
+ */
+export function connectPerRequest(): boolean {
+  return (process.env["KSOR_DB_CONNECT_PER_REQUEST"] ?? "") === "1";
+}
+
+/**
  * The TLS posture ksor CHOOSES, rather than inherits.
  *
  * pg 8 resolves `sslmode=require|prefer|verify-ca` to full verification, so the
@@ -453,7 +476,9 @@ export async function withGuardedClient<T>(
   } finally {
     if (socketError === undefined) {
       client.removeListener("error", guard);
-      client.release();
+      // `release(true)` DESTROYS the connection instead of returning it to the
+      // pool, so the next call opens a fresh one — literal connect-per-request.
+      client.release(connectPerRequest());
     } else {
       // Release WITH the error so pg-pool destroys this connection instead of
       // returning a dead socket to the pool for the next borrower to trip over.

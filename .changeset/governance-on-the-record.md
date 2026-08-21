@@ -103,6 +103,14 @@ contains. Searches now return a third outcome, `reason: "unavailable"` with
 `degraded_reason` (which had no description at all, and named a keyword search
 that never ran).
 
+**`KSOR_DB_CONNECT_PER_REQUEST=1` closes each connection when its call
+finishes.** Off by default, because the default measures better: a quiet server
+already holds zero connections, and inside a burst the handshake is paid once
+(2.58ms/call per-request against 0.13ms pooled on loopback; a remote TLS
+endpoint widens it). The option is for the deployment where a pool is a fiction
+— an external pooler sidecar, or a runtime that reuses no process between
+invocations.
+
 **Retrieval stems in the record's language.** `to_tsvector('english', …)` was
 hardcoded in a STORED generated column and at four query sites, against the
 claim that the owner writes "in any language they write in" — and on an

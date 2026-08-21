@@ -468,6 +468,18 @@ gateway` package, serve-by-spawn) is superseded._
     cheaper (a local pooler sidecar would), or if a measurement here shows the
     idle window costing more than it saves.
 
+    _Revision 2026-08-21: the posture the reversal clause names is now an
+    OPT-IN rather than a fork — `KSOR_DB_CONNECT_PER_REQUEST=1` releases every
+    connection with destroy, so each call opens and closes its own. The default
+    is unchanged and unchanged for the same reason: measured on loopback,
+    per-request costs **2.58ms/call** against **0.13ms** pooled, and a remote
+    TLS endpoint widens that gap rather than narrowing it. What the option
+    buys is not a property the default lacks — a quiet server already holds
+    ZERO — it is the deployment where a pool is a fiction: an external pooler
+    sidecar, or a runtime that reuses no process between invocations. Both
+    postures are asserted in `connect-per-request.db.test.ts`, including the
+    measurement, so the default stays a choice rather than a habit._
+
 18. **One rule, two surfaces, one table** (2026-08-21, from the visibility
     leak's fourth recurrence). The site and the kernel enforce the SAME
     visibility rule in two languages — TypeScript in the site's build, SQL in
