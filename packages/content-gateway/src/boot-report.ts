@@ -63,9 +63,26 @@ export function withoutSdkResponseModeWarning<T>(body: () => T): T {
  * it survivable (`buildAuth` refuses a non-loopback bind without auth, so the
  * only way to read this line is on a host that cannot be reached from outside).
  */
-export function authPosture(mode: "public" | "disabled", host: string): string {
-  if (mode === "disabled") return `DISABLED — ${host} only, and a public bind will refuse to boot`;
-  return "bearer tokens, verified against the record's authorization server";
+export function authPosture(
+  mode: "public" | "disabled",
+  host: string,
+  publicUnauthenticated: boolean,
+): string {
+  if (mode !== "disabled") {
+    return "bearer tokens, verified against the record's authorization server";
+  }
+  // The escape hatch inverts the sentence, so the sentence has to know about it.
+  // It previously said "a public bind will refuse to boot" whatever the bind
+  // was — so the one configuration that serves the entire record to anyone who
+  // can reach the port printed the reassurance meant for a loopback dev run.
+  // The moment an operator most needs a loud line was the moment it lied.
+  if (publicUnauthenticated) {
+    return (
+      `UNAUTHENTICATED and bound to ${host} — KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1 is set, so ` +
+      "the whole record is served to anyone who can reach this port"
+    );
+  }
+  return `DISABLED — ${host} only, and a public bind will refuse to boot`;
 }
 
 /**

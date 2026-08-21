@@ -582,7 +582,16 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   if (recordIsUndescribed(instance.instructions)) {
     console.error(bootLine("identity", UNDESCRIBED_RECORD));
   }
-  console.error(bootLine("auth", authPosture(auth.mode, bind.host)));
+  console.error(
+    bootLine(
+      "auth",
+      authPosture(
+        auth.mode,
+        bind.host,
+        process.env["KSOR_ALLOW_PUBLIC_UNAUTHENTICATED"] === "1" && !loopback,
+      ),
+    ),
+  );
   for (const line of keyLines) console.error(line);
   console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
   console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));

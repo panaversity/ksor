@@ -71,9 +71,10 @@ describe("the description a record publishes for discovery", () => {
     const out = describeRecord(
       `${FM}\n# Acme Operations Handbook\n\nThis record is authoritative for expenses, travel and procurement approvals. Everything else is out of scope.\n`,
     );
-    expect(out).toBe(
-      "Acme Operations Handbook — This record is authoritative for expenses, travel and procurement approvals.",
+    expect(out.startsWith("Acme Operations Handbook — This record is authoritative for")).toBe(
+      true,
     );
+    expect(out.length, "and within the registry schema's cap").toBeLessThanOrEqual(100);
   });
 
   it("says plainly when the owner has not described it — never a borrowed sentence", () => {
@@ -96,11 +97,34 @@ describe("the description a record publishes for discovery", () => {
     expect(out).toBe("Acme — The record covers procurement.");
   });
 
-  it("bounds the sentence, so a runaway paragraph cannot become the listing", () => {
+  it("fits the MCP schema's 100-character cap on ServerDetail.description", () => {
+    // The registry schema caps it at 100 (2025-12-11). It used to allow 300, so
+    // the document a validating client reads became INVALID the moment an owner
+    // wrote a real scope sentence — while the 88-character placeholder passed.
+    // Silent, and only for records that had been properly described.
     const long = `${"a really long clause ".repeat(40)}end.`;
     const out = describeRecord(`${FM}\n# Acme\n\n${long}\n`);
-    expect(out.length).toBeLessThanOrEqual("Acme — ".length + 300);
-    expect(out.endsWith("...")).toBe(true);
+    expect(out.length, `over the schema cap: ${out.length} chars — ${out}`).toBeLessThanOrEqual(
+      100,
+    );
+    expect(out.endsWith("\u2026"), "truncation is marked").toBe(true);
+    // Every word kept must be a WHOLE word from the source — a naive slice
+    // would publish a sentence cut mid-word into a registry listing.
+    const words = out
+      .replace(/^[^—]*— /, "")
+      .replace(/\u2026$/, "")
+      .split(" ");
+    for (const w of words) {
+      expect(["a", "really", "long", "clause", "end."], `truncated mid-word: ${out}`).toContain(w);
+    }
+  });
+
+  it("keeps a realistic described record inside the cap", () => {
+    const out = describeRecord(
+      `${FM}\n# Acme Operations Handbook\n\nThis record is authoritative for how Acme runs internally: expenses, travel, procurement approvals and the compensation bands the pay review works from.\n`,
+    );
+    expect(out.length).toBeLessThanOrEqual(100);
+    expect(out).toContain("Acme Operations Handbook");
   });
 
   it("collapses a wrapped sentence onto one line — this ends up inside JSON", () => {
