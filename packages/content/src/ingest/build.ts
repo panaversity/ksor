@@ -430,6 +430,69 @@ async function sameCommit(
   return String(stored ?? "") === String(sourceCommit ?? "");
 }
 
+/**
+ * May this generation be ACTIVATED? Returns the refusal, or null.
+ *
+ * Extracted so there is exactly ONE answer to that question. It used to live
+ * inside `buildGeneration`'s flip branch, which made it unreachable the moment
+ * a caller flipped separately — and `ksor ingest --flip` does, deliberately: the
+ * governance gate has to run against the new generation BEFORE it becomes the
+ * active one. That change silently retired this guard on the CLI path, so a
+ * record that lost 80% of its documents published without a word, while the
+ * library test that covers the guard stayed green because it drives
+ * `buildGeneration` directly (found live 2026-08-21, auditing 0.0.10).
+ *
+ * A pre-flip check that only one of two flip paths performs is not a guard.
+ */
+export async function flipRefusal(
+  client: pg.PoolClient,
+  options: {
+    readonly tenantId: string;
+    readonly corpusId: string;
+    readonly newGeneration: number;
+    readonly force: boolean;
+    readonly log: (line: string) => void;
+  },
+): Promise<string | null> {
+  const { log } = options;
+  const delta = await flipDelta(client, {
+    tenantId: options.tenantId,
+    corpusId: options.corpusId,
+    newGeneration: options.newGeneration,
+  });
+  const added = addedSlugs(delta);
+  const removed = removedSlugs(delta);
+  log(
+    `pre-flip delta vs gen ${delta.priorGeneration}: ` +
+      `${delta.priorSlugs.size} -> ${delta.newSlugs.size} nodes (+${added.length} / -${removed.length})`,
+  );
+  if (removed.length > 0) log(`  removed: ${JSON.stringify(removed.slice(0, 20))}`);
+  if (added.length > 0) log(`  added:   ${JSON.stringify(added.slice(0, 20))}`);
+  // oracle env names: SOR_MAX_SHRINK / SOR_ALLOW_SHRINK. KSOR_MAX_SHRINK is a
+  // FRACTION in [0,1]. A value above 1 — "15" meant as a percentage — would
+  // silently DISABLE this catastrophic-drop guard (shrinkFraction is always
+  // <= 1, so a threshold > 1 never fires), flipping a build that lost every
+  // node straight to production. Reject it and keep the safe default rather
+  // than un-guard the flip (review 2026-08-19).
+  const configuredShrink = envFloat("KSOR_MAX_SHRINK", 0.15, 0.0);
+  const maxShrink = configuredShrink <= 1 ? configuredShrink : 0.15;
+  if (configuredShrink > 1) {
+    log(
+      `KSOR_MAX_SHRINK=${configuredShrink} is not a fraction in [0,1]; using ${maxShrink} ` +
+        `(did you mean ${configuredShrink / 100}?)`,
+    );
+  }
+  const allowed = options.force || process.env["KSOR_ALLOW_SHRINK"] === "1";
+  if (!shrinkUnsafe(delta.priorSlugs.size, delta.newSlugs.size, maxShrink) || allowed) return null;
+  const fraction = shrinkFraction(delta.priorSlugs.size, delta.newSlugs.size);
+  return (
+    `REFUSING FLIP: corpus shrank ${pct(fraction)} vs gen ${delta.priorGeneration} ` +
+    `(> KSOR_MAX_SHRINK=${pct(maxShrink)}); ${removed.length} node(s) vanished. ` +
+    `Generation ${options.newGeneration} is READY but NOT served — the old generation keeps serving. ` +
+    "If the drop is intended, re-run with KSOR_ALLOW_SHRINK=1; otherwise fix the corpus and re-ingest."
+  );
+}
+
 /** Thrown inside the build transaction to roll it back when nothing changed. */
 class UnchangedCorpus extends Error {
   readonly activeGeneration: number;
@@ -588,48 +651,14 @@ export async function buildGeneration(
       };
     }
     if (!options.flip) return { ready, centroids, health, flipped: false, refusal: null };
-    const delta = await flipDelta(c, {
+    const refusal = await flipRefusal(c, {
       tenantId: tenant,
       corpusId: instance.corpusId,
       newGeneration: generation,
+      force: options.force === true,
+      log,
     });
-    const added = addedSlugs(delta);
-    const removed = removedSlugs(delta);
-    log(
-      `pre-flip delta vs gen ${delta.priorGeneration}: ` +
-        `${delta.priorSlugs.size} -> ${delta.newSlugs.size} nodes (+${added.length} / -${removed.length})`,
-    );
-    if (removed.length > 0) log(`  removed: ${JSON.stringify(removed.slice(0, 20))}`);
-    if (added.length > 0) log(`  added:   ${JSON.stringify(added.slice(0, 20))}`);
-    // oracle env names: SOR_MAX_SHRINK / SOR_ALLOW_SHRINK. KSOR_MAX_SHRINK is a
-    // FRACTION in [0,1]. A value above 1 — "15" meant as a percentage — would
-    // silently DISABLE this catastrophic-drop guard (shrinkFraction is always
-    // <= 1, so a threshold > 1 never fires), flipping a build that lost every
-    // node straight to production. Reject it and keep the safe default rather
-    // than un-guard the flip (review 2026-08-19).
-    const configuredShrink = envFloat("KSOR_MAX_SHRINK", 0.15, 0.0);
-    const maxShrink = configuredShrink <= 1 ? configuredShrink : 0.15;
-    if (configuredShrink > 1) {
-      log(
-        `KSOR_MAX_SHRINK=${configuredShrink} is not a fraction in [0,1]; using ${maxShrink} ` +
-          `(did you mean ${configuredShrink / 100}?)`,
-      );
-    }
-    const allowed = options.force === true || process.env["KSOR_ALLOW_SHRINK"] === "1";
-    if (shrinkUnsafe(delta.priorSlugs.size, delta.newSlugs.size, maxShrink) && !allowed) {
-      const fraction = shrinkFraction(delta.priorSlugs.size, delta.newSlugs.size);
-      return {
-        ready,
-        centroids,
-        health,
-        flipped: false,
-        refusal:
-          `REFUSING FLIP: corpus shrank ${pct(fraction)} vs gen ${delta.priorGeneration} ` +
-          `(> KSOR_MAX_SHRINK=${pct(maxShrink)}); ${removed.length} node(s) vanished. ` +
-          `Generation ${generation} is READY but NOT served — the old generation keeps serving. ` +
-          "If the drop is intended, re-run with KSOR_ALLOW_SHRINK=1; otherwise fix the corpus and re-ingest.",
-      };
-    }
+    if (refusal !== null) return { ready, centroids, health, flipped: false, refusal };
     await flip(c, { tenantId: tenant, corpusId: instance.corpusId, toGeneration: generation });
     log(`FLIPPED active generation -> ${generation}`);
     return { ready, centroids, health, flipped: true, refusal: null };

@@ -43,7 +43,7 @@ import {
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
-import { buildGeneration } from "./ingest/build.js";
+import { buildGeneration, flipRefusal } from "./ingest/build.js";
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
@@ -519,16 +519,33 @@ async function ingestCommand(args: string[]): Promise<number> {
 
   // Governance is clean, so activate — the act the caller asked for, performed
   // only after everything that could refuse it has run.
+  //
+  // The shrink guard runs HERE, in the same transaction as the flip, because
+  // this command is now the only thing that flips. It used to live inside
+  // `buildGeneration`'s flip branch, and moving the flip out of the build to
+  // put the governance gate ahead of it silently retired the guard on this
+  // path: a record that lost 80% of its documents published without a word
+  // (found live 2026-08-21). One decision, `flipRefusal`, shared by both.
   if (values.flip === true && !report.unchanged) {
-    await withPool(dsn, (pool) =>
-      runIngest(pool, instance.tenantId, (client) =>
-        flip(client, {
+    const refusal = await withPool(dsn, (pool) =>
+      runIngest(pool, instance.tenantId, async (client) => {
+        const stop = await flipRefusal(client, {
+          tenantId: instance.tenantId,
+          corpusId: instance.corpusId,
+          newGeneration: report.generation,
+          force: false,
+          log: (line) => process.stdout.write(line + "\n"),
+        });
+        if (stop !== null) return stop;
+        await flip(client, {
           tenantId: instance.tenantId,
           corpusId: instance.corpusId,
           toGeneration: report.generation,
-        }),
-      ),
+        });
+        return null;
+      }),
     );
+    if (refusal !== null) return fail(REFUSED, refusal);
     process.stdout.write(`FLIPPED active generation -> ${report.generation}\n`);
   }
   // Only the WITHHELD state still needs saying — the flip above narrates
