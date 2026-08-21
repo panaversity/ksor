@@ -36,23 +36,31 @@ g AS (
 export const NODE_BY_SLUG_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
+-- The walk exists to BUILD PATHS, so it does not gate by audience; the
+-- RESOLVED node does, below. Gating every ancestor made an internal parent
+-- prune its public children, so a document that search had just returned --
+-- and told the agent to read -- came back "no document with slug": citable and
+-- unreachable at once. Visibility is a property of a DOCUMENT, not of its
+-- container; the site stages per file, AUDIENCE_CASES is per document, and
+-- NODE_BY_STABLE_ID_SQL below already resolved this way (round-9 review of
+-- PR 43).
 tree AS (
     SELECT n.node_id, n.parent_id, n.slug, n.title, n.stable_id, n.generation, n.permalink,
            n.slug::text AS path
     FROM content_nodes n JOIN g ON n.generation = g.gen
     WHERE n.tenant_id = $1 AND n.parent_id IS NULL AND n.status = 'published'
-      AND ${AUDIENCE_ALLOWED}
   UNION ALL
     SELECT n.node_id, n.parent_id, n.slug, n.title, n.stable_id, n.generation, n.permalink,
            t.path || '/' || n.slug
     FROM content_nodes n
     JOIN tree t ON n.parent_id = t.node_id
     WHERE n.tenant_id = $1 AND n.generation = t.generation AND n.status = 'published'
-      AND ${AUDIENCE_ALLOWED}
 )
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink
 FROM tree n
-WHERE n.slug = $4 AND ${DENY}
+JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
+                       AND self.generation = n.generation
+WHERE n.slug = $4 AND ${DENY} AND ${audienceAllowed("self")}
 ORDER BY n.path`;
 
 export const ALIAS_SQL: string = `
@@ -124,9 +132,13 @@ walk AS (
     SELECT n.node_id, n.parent_id, n.slug, n.kind, n.title, n.position, n.stable_id,
            n.generation, n.permalink, 0 AS depth, ARRAY[n.position] AS sort_key,
            n.slug::text AS heading_path
+    -- The SEED does not gate either, for the same reason the recursive arm
+    -- does not: a root the caller may not see must still be descended THROUGH,
+    -- or its visible children vanish from the record. The anchor case is
+    -- different -- drilling INTO a node the caller cannot see is resolved
+    -- before this query runs -- so only DENY binds here.
     FROM content_nodes n JOIN g ON n.generation = g.gen
     WHERE n.tenant_id = $1 AND n.status = 'published'
-      AND ${AUDIENCE_ALLOWED}
       AND (($4::uuid IS NULL AND n.parent_id IS NULL)
            OR ($4::uuid IS NOT NULL AND n.node_id = $4 AND ${DENY}))
   UNION ALL
@@ -135,8 +147,11 @@ walk AS (
            w.heading_path || '/' || n.slug
     FROM content_nodes n
     JOIN walk w ON n.parent_id = w.node_id AND n.generation = w.generation
+    -- Descends WITHOUT gating: an internal parent must not prune its public
+    -- children, or a document search returns is absent from the outline that
+    -- the error message tells the caller to consult. The final WHERE below
+    -- gates each row on its OWN visibility (round-9 review of PR 43).
     WHERE n.tenant_id = $1 AND n.status = 'published' AND w.depth < $5
-      AND ${AUDIENCE_ALLOWED}
 )
 SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
        (SELECT count(*) FROM content_nodes ch
@@ -151,7 +166,13 @@ SELECT w.slug, w.kind, w.title, w.heading_path, w.position, w.depth,
 FROM walk w
 JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
-WHERE ${DENY} AND ${AUDIENCE_ALLOWED}
+-- A drill-down returns CHILDREN, so the depth-0 anchor is excluded HERE rather
+-- than stripped after the window. It used to ride inside LIMIT/OFFSET and be
+-- filtered afterwards, which cost one row on the FIRST page only: the caller
+-- computed next_offset from the post-strip count, so every later page started
+-- one row early and repeated its predecessor's last row (round-9 review of
+-- PR 43).
+WHERE ${DENY} AND ${AUDIENCE_ALLOWED} AND ($4::uuid IS NULL OR w.depth > 0)
 ORDER BY w.sort_key
 LIMIT $6 OFFSET $7`;
 
@@ -417,9 +438,8 @@ export const MAX_OUTLINE_LIMIT = 5000;
 
 /**
  * The ceiling this function actually clamps to, which is deliberately HIGHER.
- * Callers add probe rows on top of the caller's limit — `service.ts` asks for
- * `limit + 1` to DETECT truncation, and a drill-down adds one more for the
- * anchor row `rebaseOutlineRows` strips. Clamping those away made `has_more`
+ * Callers add a probe row on top of the caller's limit — `service.ts` asks for
+ * `limit + 1` to DETECT truncation. Clamping those away made `has_more`
  * always false at exactly the maximum, which is where truncation is most
  * likely and least visible (round-3 review of #43).
  */
@@ -491,18 +511,9 @@ export async function outline(
 
   const result = await arrayQuery(client, {
     text: OUTLINE_SQL,
-    // A drill-down's result includes the depth-0 anchor row, which
-    // rebaseOutlineRows strips — so fetch limit+1 to return up to `limit`
-    // CHILDREN, not limit-1 (review, 2026-08-19).
-    values: [
-      scope.tenantId,
-      scope.corpusId,
-      pinned,
-      anchor,
-      depth,
-      root === null ? limit : limit + 1,
-      offset,
-    ],
+    // The anchor row is excluded by the query itself now, so the window holds
+    // only CHILDREN and `limit`/`offset` mean the same thing on every page.
+    values: [scope.tenantId, scope.corpusId, pinned, anchor, depth, limit, offset],
   });
   const rows = outlineRows(result);
   if (root === null) return rows;

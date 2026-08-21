@@ -42,12 +42,21 @@ describe("the verb vocabulary is documented where it is claimed", () => {
   it.each([
     ["docs/status.md", "the only authority on what is implemented"],
     ["packages/ksor/docs/index.md", "the docs shipped inside the npm tarball"],
+    // README carries the CLI vocabulary and was NOT on this list, so it
+    // drifted the moment the list was written: the branch edited that very
+    // block to add `ksor grant` and left `ksor takedown` out (round-9 review
+    // of #43).
+    ["README.md", "the product pitch, which carries the CLI vocabulary"],
   ])("%s names every verb", (file, why) => {
     const text = read(file);
-    // `ksor <verb>` only. The looser form also accepted a bare `` `serve` ``
-    // mentioned in any context, which is not the same as documenting the verb
-    // (round-8 review of #43).
-    const missing = expected.filter((verb) => !new RegExp(`\`ksor ${verb}\``).test(text));
+    // `ksor <verb>` as a COMMAND: inline code, or a line in a fenced block.
+    // A bare `` `serve` `` mentioned in prose is not documenting the verb
+    // (round-8 review of #43), and a fenced `ksor serve` line is.
+    const fenced = [...text.matchAll(/```[\s\S]*?```/g)].map((m) => m[0]).join("\n");
+    const named = (verb: string): boolean =>
+      new RegExp(`\`ksor ${verb}\``).test(text) ||
+      new RegExp(`^\\s*ksor ${verb}\\b`, "m").test(fenced);
+    const missing = expected.filter((verb) => !named(verb));
     expect(missing, `${why} — missing: ${missing.join(", ")}`).toEqual([]);
   });
 });

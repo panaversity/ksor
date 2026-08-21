@@ -1,11 +1,15 @@
 /**
- * The content pool spec (oracle SC/db.py): two access paths mirroring the
- * schema roles —
+ * The content pool spec (oracle SC/db.py): the access paths, each pinning the
+ * schema role its work is entitled to —
  *
- * - `runRead`    pins `SET LOCAL ROLE sor_content_runtime`, binds the tenant
+ * - `runRead`      pins `SET LOCAL ROLE sor_content_runtime`, binds the tenant
  *   GUC, retries (idempotent reads).
- * - `runIngest`  pins `sor_content_ingest`, binds the tenant GUC, EXACTLY
+ * - `runIngest`    pins `sor_content_ingest`, binds the tenant GUC, EXACTLY
  *   one attempt — reruns are the recovery path, not retries.
+ * - `runAuditRead` pins `sor_content_auditor` (schema 2.3), which reads the §7
+ *   ledger and the denial list and can reach no content.
+ * - `runProbe`     a readiness read under the runtime role, bounded by a
+ *   wall-clock budget so /ready answers rather than persisting.
  *
  * Role pinning is in-transaction (`SET LOCAL ROLE` resets with the txn), so
  * any over-privileged DSN drops to least privilege before touching a table,

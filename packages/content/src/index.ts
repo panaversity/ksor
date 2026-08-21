@@ -134,6 +134,7 @@ export {
   GOVERNANCE_SINCE,
 } from "./governance-gate.js";
 export {
+  frontmatterMap,
   isDenied,
   scalarLike,
   stableIdFrom,

@@ -124,8 +124,12 @@ function parseFrontmatter(text) {
     // A full-line `#` comment is YAML, and the kernel's own instance parser
     // skips it — the checker refusing one made the two grammars disagree about
     // the same file, which is exactly the drift this checker exists to stop.
-    // (Only a WHOLE-line comment: a trailing `# ...` after a value is still the
-    // value, as YAML and the kernel both read it.)
+    // A TRAILING `# ...` is a different question and this is not the place it
+    // is decided: `scalarValue` below strips it, exactly as the kernel's
+    // frontmatter reader and the site's both do. (An earlier comment here
+    // claimed the opposite — that a trailing comment stays part of the value —
+    // which contradicted this file's own reader and both build scanners;
+    // round-9 review of PR 43.)
     if (line.trimStart().startsWith("#")) continue;
     // YAML requires a space after the colon and refuses tab indentation —
     // both parsed here fine and failed the build (review findings, 2026-08-18).
@@ -636,8 +640,12 @@ if (!existsSync(knowledgeDir)) {
           crossings.push({ kind: "superseded_by", rel, from: p, to: resolved, target: successor });
         }
       }
-      // visibility: one audience per document, from the set instance.md declares
-      const visibility = fm.keys.get("visibility");
+      // visibility: one audience per document, from the set instance.md declares.
+      // Through scalarValue, so the comparison sees what the READERS see: a raw
+      // read reported `visibility "internal # narrowed 2026-08" is not a
+      // declared audience` for a document every reader resolves to `internal`
+      // (round-9 review of PR 43).
+      const visibility = scalarValue(fm, "visibility");
       const listed = fm.lists.get("visibility") ?? [];
       // A flow list ([a, b]) is already named by the shape rule above.
       const flowList = !fm.quoted.has("visibility") && /^\[.*\]$/.test(visibility ?? "");

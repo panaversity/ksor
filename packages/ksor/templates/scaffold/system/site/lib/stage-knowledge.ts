@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience";
 import { isDenied, recordPathFrom, stableIdFrom, type DenylistManifest } from "./denial-rule";
-import { appName } from "./shared";
+import { appName, instanceFrontmatter } from "./shared";
 
 // Both relative to the site directory — the directory every build runs from
 // (`pnpm build` is `pnpm -C system/site build`), which is also how fumadocs
@@ -172,15 +172,24 @@ const NOTHING_DENIED: DenylistManifest = { source: "none", denied: [], denied_su
 /** Where `ksor takedown --export` writes, relative to the project root. */
 const DENYLIST_FILE = ".ksor-denylist.json";
 
-/** Does this project declare a database at all? A level-0 record does not. */
+/**
+ * Does this project declare a database at all? A level-0 record does not.
+ *
+ * Reads through `instanceFrontmatter()`, which finds instance.md by WALKING UP
+ * from the cwd, and which THROWS when it cannot find it. Both halves matter:
+ * this used to join `../../` onto the cwd and answer `false` on any read
+ * failure, so a build run from anywhere but exactly `system/site` — a host with
+ * a configured root directory, an adopter who moved the site they own
+ * (decision 4), a permissions error — silently reported "no database". That
+ * turned the whole fail-closed takedown gate off: a MISSING manifest became
+ * "nothing denied" instead of a refusal, and a `source: "none"` manifest
+ * skipped the not-from-database refusal. Both are the fail-open paths this
+ * function exists to close (round-9 review of #43).
+ *
+ * A record whose identity cannot be found is an ERROR, never a `false`.
+ */
 function declaresDatabase(): boolean {
-  try {
-    return /^database:/m.test(
-      readFileSync(path.join(process.cwd(), "..", "..", "instance.md"), "utf8"),
-    );
-  } catch {
-    return false;
-  }
+  return /^database:/m.test(instanceFrontmatter());
 }
 
 function deniedStableIds(recordDir: string): DenylistManifest {

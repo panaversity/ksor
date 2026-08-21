@@ -291,7 +291,7 @@ function indexOf(dir: TreeDir, dirPath: string): TreeFile | null {
   return present[0] ?? null;
 }
 
-function stableIdOf(
+export function stableIdOf(
   rootName: string,
   fileSegs: readonly string[],
   meta: Record<string, unknown>,

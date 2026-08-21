@@ -64,7 +64,12 @@ visibility: public
 
 # Public handbook
 
-Everyone may read about onboarding and expenses.
+Everyone may read this handbook. It covers onboarding for new joiners, the
+expense categories the finance team recognises, how to claim travel costs, and
+which approvals a purchase needs before it is placed. New joiners should read
+the onboarding section in their first week; everyone else can treat it as a
+reference and search it when a question comes up rather than reading it end to
+end.
 `,
   "internal-salaries.md": `---
 title: Internal salaries
@@ -76,7 +81,76 @@ visibility: internal
 
 # Internal salaries
 
-Band 4 engineers ${SECRET} receive between 180000 and 240000.
+Band 4 engineers ${SECRET} receive between 180000 and 240000 depending on
+location and the outcome of the annual review. Band 5 adds an equity component
+that vests over four years. This document is the compensation reference for
+managers preparing offers, and it is restricted to staff: the numbers here are
+not published outside the company and must not appear in any external material
+or job posting.
+`,
+  "hr/index.md": `---
+title: HR section
+status: approved
+owner: hr@example.test
+provenance: hr charter
+visibility: internal
+---
+
+# HR section
+
+The section itself is internal, and everything about how the HR team operates
+belongs here: who owns which policy, when each is reviewed, and where the
+signed originals are kept. It is deliberately marked internal even though some
+of the documents beneath it are public, because the section index names
+programmes that have not been announced.
+`,
+  "hr/holiday.md": `---
+title: Holiday policy
+status: approved
+owner: hr@example.test
+provenance: handbook v1
+visibility: public
+---
+
+# Holiday policy
+
+Everyone may read the holiday policy, even though the section it lives in is
+internal. Full-time staff accrue twenty-five days a year plus public holidays,
+booked through the usual system and approved by a line manager. Carry-over is
+capped at five days and must be used in the first quarter. This document is
+public on purpose: it is the one people link to from outside the HR section.
+`,
+  "hr/expenses.md": `---
+title: Expense claims
+status: approved
+owner: hr@example.test
+provenance: handbook v1
+visibility: public
+---
+
+# Expense claims
+
+Claims are submitted through the finance portal within thirty days of the
+spend, with a receipt attached for anything over twenty pounds. Approvals
+follow the usual line-manager chain, and the finance team reviews anything
+booked to a project code. This document sits under the internal HR section and
+is itself public, like the holiday policy beside it.
+`,
+  "hr/grievance.md": `---
+title: Grievance procedure
+status: approved
+owner: hr@example.test
+provenance: hr charter
+visibility: public
+---
+
+# Grievance procedure
+
+Anyone may raise a grievance in writing to their manager or, where that is not
+appropriate, directly to the HR team. The first response is due within five
+working days and the process is documented at each step so that both sides can
+see what was decided and when. This is public deliberately: people need to be
+able to read it before they decide whether to use it.
 `,
   "undeclared-notes.md": `---
 title: Undeclared notes
@@ -87,7 +161,12 @@ provenance: notes
 
 # Undeclared notes
 
-This document declares no visibility, so it takes default_visibility.
+This document declares no visibility at all, so it takes whatever
+default_visibility the record declares. It exists to prove that an undeclared
+document is resolved at serving time rather than at ingest, and that both tiers
+of this record can see it while default_visibility is public. The body is long
+enough to be classified as prose rather than navigation, so search reaches it
+like any other document.
 `,
 };
 
@@ -123,7 +202,9 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
     const knowledge = path.join(work, "knowledge");
     mkdirSync(knowledge, { recursive: true });
     for (const [name, body] of Object.entries(DOCS)) {
-      writeFileSync(path.join(knowledge, name), body, "utf8");
+      const target = path.join(knowledge, name);
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, body, "utf8");
     }
 
     instance = {
@@ -179,8 +260,17 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
   it("LINK 2 — a PUBLIC door cannot search, read or outline the internal document", async () => {
     const door = doorFor("public");
 
-    const hits = await search(door, `${SECRET} salary bands`, 10);
+    const hits = await search(door, `${SECRET} salary bands compensation`, 10);
     const slugs = hits.ok ? hits.hits.map((h) => h.slug) : [];
+    // The PRECONDITION. "Did not return the restricted document" is satisfied
+    // by returning NOTHING, and a fixture whose bodies fall under
+    // NAV_MAX_CHARS returns nothing for every query — which is exactly how
+    // this assertion first passed while proving nothing (round-8 review of
+    // #43 named this class).
+    expect(
+      slugs.length,
+      `search returned no hits at all, so it filtered nothing: ${JSON.stringify(hits).slice(0, 200)}`,
+    ).toBeGreaterThan(0);
     expect(slugs, "search must not return it").not.toContain("internal-salaries");
     const serialized = JSON.stringify(hits);
     expect(
@@ -225,6 +315,60 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
       );
     }
   });
+
+  it("a PUBLIC document under an INTERNAL parent is reachable, not merely citable", async () => {
+    // `visibility:` is a property of a DOCUMENT, not of its container: the site
+    // stages per file and `AUDIENCE_CASES` is per document. The kernel's three
+    // paths disagreed about that. `search` filtered only the chunk's own node,
+    // so it returned the public child and told the agent to read that slug —
+    // while `read` and `outline` walked the tree gating EVERY ancestor, so the
+    // internal parent pruned the child and the suggested remedy failed with
+    // "no document with slug". Citable and unreachable at once, and `outline`,
+    // the fallback the error names, hid it too (round-9 review of #43).
+    const door = doorFor("public");
+
+    const listed = (await outlineDocuments(door, { depth: 5 })).nodes.map((n) => n.slug);
+    expect(listed, "the public child is part of the record a public caller may see").toContain(
+      "holiday",
+    );
+    expect(listed, "…and the internal parent is NOT").not.toContain("hr");
+
+    const doc = await readDocument(door, "holiday");
+    expect(doc.text, "and reading it returns the real document").toContain("holiday policy");
+
+    const hits = await search(door, "holiday carry-over accrue days", 10);
+    const slugs = hits.ok ? hits.hits.map((h) => h.slug) : [];
+    expect(
+      slugs,
+      `search agrees — every path resolves the same document: ${JSON.stringify(hits).slice(0, 260)}`,
+    ).toContain("holiday");
+  });
+
+  it("paging a DRILL-DOWN never repeats a row at a page boundary", async () => {
+    // The existing paging acceptance walks the BROWSE path, where there is no
+    // anchor row. A drill-down's depth-0 anchor used to ride inside
+    // LIMIT/OFFSET and be stripped afterwards, so it cost a slot on the FIRST
+    // page only — and next_offset, computed from the post-strip count, started
+    // every later page one row early and repeated the previous page's last row
+    // (round-9 review of #43).
+    const door = doorFor("internal");
+    const whole = await outlineDocuments(door, { node: "hr", depth: 1 });
+    const all = whole.nodes.map((n) => n.slug);
+    expect(all.length, "the hr section needs children to page through").toBeGreaterThan(0);
+
+    const seen: string[] = [];
+    let offset = 0;
+    for (let page = 0; page < all.length + 4; page += 1) {
+      const body = await outlineDocuments(door, { node: "hr", depth: 1, limit: 1, offset });
+      seen.push(...body.nodes.map((n) => n.slug));
+      if (!body.has_more) break;
+      offset = body.next_offset!;
+    }
+    expect(seen, "one row per page reconstructs the children exactly once").toEqual(all);
+    expect(new Set(seen).size, `a row repeated across pages: ${JSON.stringify(seen)}`).toBe(
+      seen.length,
+    );
+  }, 60_000);
 
   it("the tiers DIFFER — an assertion satisfied by both would prove nothing", async () => {
     // The control the mutation exposed: with the door handing itself the whole

@@ -10,8 +10,9 @@ updated: 2026-08-20.
 attached). **In the currently published 0.0.7** it ships the working
 `ksor init` described below — including the visibility model and the deploy
 story — AND the bundled content kernel: `ksor serve`, `ksor ingest`,
-`ksor schema`, `ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc`
-all run from the one `ksor` binary. Only `dev` and
+`ksor schema`, `ksor grant`, `ksor calibrate` and `ksor gc` all run from the
+one `ksor` binary. (`ksor takedown` is NOT in 0.0.7 — it lands with the
+governance branch; see the implemented list below.) Only `dev` and
 `build` still report "designed but not implemented" and exit `2`; an unknown
 verb is refused with exit `1` and a stable `error: unknown-verb` stderr slug.
 The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs

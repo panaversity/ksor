@@ -68,6 +68,21 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     );
   });
 
+  it("shares ONE in-flight attempt, so a burst cannot multiply boot checks", () => {
+    // The door awaits verifyBoot on every request until it passes. Memoizing
+    // only the settled result meant a burst against a waking database started
+    // one full check chain PER REQUEST — the pool-exhaustion amplifier
+    // /ready's coalescing exists to prevent, on a hotter path (round-9 review
+    // of #43).
+    const closure = COMPOSE.slice(COMPOSE.indexOf("let verified = false;"));
+    expect(closure, "an in-flight attempt must be shared").toContain(
+      "if (inFlight !== null) return inFlight;",
+    );
+    // …and cleared on BOTH outcomes, or a failed attempt would never be retried.
+    const body = closure.slice(0, closure.indexOf("};"));
+    expect(body.split("inFlight = null;").length - 1, "cleared on success AND failure").toBe(2);
+  });
+
   it("the governance gate is not called anywhere outside the deferred set", () => {
     // A second call site is how the two drifted apart the first time.
     const calls = COMPOSE.split("assertGovernanceServable(").length - 1;

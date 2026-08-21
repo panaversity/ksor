@@ -4,9 +4,10 @@
  * `schema/schema.sql` provisions a FRESH database at the current version and
  * stays the DDL source of truth (decision 12). This module is the other half:
  * bringing an EXISTING database forward, which the schema file alone cannot do
- * once an adopter has rows. The recorded gap — "no schema migration runner ...
- * before adopters do, a forward-migration path is owed" (docs/status.md) — is
- * this.
+ * once an adopter has rows. This closes the gap `docs/status.md` recorded as
+ * "no schema migration runner ... a forward-migration path is owed" — an entry
+ * that now reads "Schema migrations — DONE", so the quotation is history rather
+ * than a live citation (round-9 review of PR 43).
  *
  * A migration names BOTH ends of the step it performs:
  * `schema/migrations/<from>-<to>__<slug>.sql`. Encoding only the target would

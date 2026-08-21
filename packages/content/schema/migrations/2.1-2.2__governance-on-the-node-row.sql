@@ -40,6 +40,15 @@ UPDATE content_nodes n
  WHERE c.tenant_id = n.tenant_id
    AND n.corpus_id IS NULL;
 
+-- NOTE (2.4): this index is DROPPED again by 2.2 -> 2.3, and schema.sql builds
+-- a fresh database without it. The rationale below is wrong and is kept only
+-- because a migration that has run somewhere must not be rewritten: the serving
+-- predicate filters on `coalesce(visibility, <a per-transaction GUC>)`, which no
+-- plain btree on `visibility` can serve, so the index was built and maintained
+-- and never read — the same defect the HNSW arm was fixed for. An operator
+-- reading this file sees the claim, so it is corrected here rather than
+-- silently (round-9 review of PR 43).
+--
 -- The serving filter is (tenant, generation, visibility); without this the
 -- audience predicate turns every search into a scan of the generation.
 CREATE INDEX IF NOT EXISTS idx_nodes_visibility

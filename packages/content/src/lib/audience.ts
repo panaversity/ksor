@@ -132,8 +132,14 @@ export function audienceAllowed(alias: string): string {
 export const AUDIENCE_ALLOWED: string = audienceAllowed("n");
 
 /**
- * The GUCs {@link AUDIENCE_ALLOWED} reads. Empty object when the record
- * declares no model, so nothing is bound and the predicate stays TRUE.
+ * The GUCs {@link AUDIENCE_ALLOWED} reads.
+ *
+ * A record that declares no model still binds the {@link NO_MODEL} sentinel
+ * EXPLICITLY, so every serving path states its audience scope and a missing
+ * binding cannot be mistaken for "unrestricted". This sentence used to say the
+ * opposite — empty object, nothing bound, predicate stays TRUE — which is the
+ * fail-open the module was rewritten to end, still described directly above
+ * the code that ends it (round-9 review of PR 43).
  */
 export function audienceGucs(
   model: AudienceModel,

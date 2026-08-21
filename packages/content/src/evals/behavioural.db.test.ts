@@ -17,8 +17,12 @@
  * "what is the approval threshold for hiring" is the near-miss a purchase-
  * approval corpus must decline, and the contract requires exactly that.
  *
- * Gated on a real embedding space (GEMINI_API_KEY, which CI carries): a floor
- * measured in the fake provider's space would be measuring nothing.
+ * The three DETERMINISTIC assertions — provenance, disclosure, publication —
+ * run against any provider and need only a database. Only the two SEMANTIC
+ * ones are gated on a real embedding space (GEMINI_API_KEY, which CI carries):
+ * a floor measured in the fake provider's space would be measuring nothing.
+ * (The header used to gate the whole file on the key, which `docs/status.md`
+ * already described correctly — round-9 review of PR 43.)
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

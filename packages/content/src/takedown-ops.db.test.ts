@@ -238,6 +238,38 @@ describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
     await revokeTakedown(pool, instance, { stableId: "knowledge/about", actor: "ops@example.com" });
   });
 
+  it("the ledger is scoped to THIS record, not just the tenant", async () => {
+    // Every governance write records corpus_id, and listTakedowns already
+    // scoped by it; readLedger did not. One tenant serving two corpora — the
+    // shape the second-record open question prepares for — got one record's
+    // audit trail polluted with the other's (round-9 review of #43).
+    const other: ContentInstance = { ...instance, corpusId: "other-corpus" };
+    await runIngest(pool, TENANT, async (client) => {
+      await client.query(
+        "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1, $2, 1) " +
+          "ON CONFLICT (tenant_id, corpus_id) DO NOTHING",
+        [TENANT, "other-corpus"],
+      );
+      await client.query(
+        "INSERT INTO retrieval_log (tenant_id, corpus_id, actor, action, detail)" +
+          " VALUES ($1, $2, 'someone-else', 'takedown_applied', '{}'::jsonb)",
+        [TENANT, "other-corpus"],
+      );
+    });
+
+    const mine = await readLedger(pool, instance, 50);
+    expect(
+      mine.some((r) => r.actor === "someone-else"),
+      `another corpus's act appeared in this record's ledger: ${JSON.stringify(mine.map((r) => r.actor))}`,
+    ).toBe(false);
+
+    const theirs = await readLedger(pool, other, 50);
+    expect(
+      theirs.map((r) => r.actor),
+      "…and it IS in its own",
+    ).toContain("someone-else");
+  });
+
   it("lifts a denial and records THAT act too", async () => {
     const lifted = await revokeTakedown(pool, instance, {
       stableId: "knowledge/withdrawn",

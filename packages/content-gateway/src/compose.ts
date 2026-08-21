@@ -146,12 +146,38 @@ export async function compose(instancePath: string, version: string): Promise<Co
       `boot checks DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
         "this instance reports NOT READY until schema AND governance both verify",
     );
+    // Memoize the IN-FLIGHT attempt, not only the settled result.
+    //
+    // The door awaits this on every request until it passes, and `bootChecks`
+    // is a schema query plus a `runRead` with five attempts, linear backoff and
+    // a 30s deadline. Sharing only the RESULT meant a burst against a waking
+    // database started one whole chain per request — up to KSOR_MAX_INFLIGHT
+    // (64) concurrent chains against a 20-connection pool, each holding a
+    // checkout for up to 30s. That is the pool-exhaustion amplifier /ready's
+    // coalescing was rewritten to prevent, rebuilt on a hotter path (round-9
+    // review of #43).
+    //
+    // One attempt at a time: concurrent callers share it, and the next caller
+    // after a FAILED attempt starts a fresh one, so an unreachable store is
+    // still retried — just never in parallel with itself.
     let verified = false;
+    let inFlight: Promise<void> | null = null;
     verifyBoot = async (): Promise<void> => {
       if (verified) return;
-      await bootChecks();
-      verified = true;
-      console.error("boot checks passed on retry — instance is now ready");
+      if (inFlight !== null) return inFlight;
+      const attempt = bootChecks().then(
+        () => {
+          verified = true;
+          inFlight = null;
+          console.error("boot checks passed on retry — instance is now ready");
+        },
+        (error: unknown) => {
+          inFlight = null;
+          throw error;
+        },
+      );
+      inFlight = attempt;
+      return attempt;
     };
   }
 

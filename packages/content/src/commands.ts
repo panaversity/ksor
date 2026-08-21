@@ -73,13 +73,15 @@ Usage:
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
-  ksor takedown --instance PATH (<stable-id> --reason TEXT [--subtree]
-                                 | --list | --ledger | --revoke <stable-id>
-                                 | --export PATH)
+  ksor takedown --instance PATH [--actor NAME]
+                (<stable-id> --reason TEXT [--subtree]
+                 | --list | --ledger | --revoke <stable-id> | --export PATH)
       Deny a document from EVERY surface. Default scope is the node itself;
       --subtree denies its descendants too. --export writes the manifest the
       site build reads, so a takedown reaches the human surface as well.
       --ledger prints the recorded governance acts: who denied what, when.
+      --actor names WHO is performing the act in that ledger; it defaults to the
+      operating user. Governance governs acts, so the row has to name someone.
   ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
@@ -103,9 +105,12 @@ export function usageFor(command: string): string {
   if (start === -1) return USAGE;
   const rest = lines.slice(start + 1);
   const end = rest.findIndex(isHeading);
-  return [lines[start], ...(end === -1 ? rest : rest.slice(0, end))]
-    .join("\n")
-    .replace(/\s+$/, "\n");
+  // Trim trailing blank lines, then add exactly ONE newline. The previous form
+  // only fired when trailing whitespace already existed, so every verb except
+  // `gc` printed with no final newline and the shell prompt landed mid-line —
+  // and `gc` alone also carried the "Exit codes" footer, because it is the last
+  // block (round-9 review of PR 43).
+  return `${[lines[start], ...(end === -1 ? rest : rest.slice(0, end))].join("\n").replace(/\s+$/, "")}\n`;
 }
 
 function fail(code: number, message: string): number {
@@ -685,11 +690,15 @@ async function takedownCommand(args: string[]): Promise<number> {
   // project has to be able to build. It writes `source: "none"`, the shape the
   // site reads as "no database declared, nothing can be denied", and exits 0.
   //
-  // Two no-database shapes reach here and BOTH are legitimate: the level-0
-  // record that declares no `database:` block (which refuses during PARSING,
-  // before any DSN is consulted — found live in round 4, after removing the
-  // scaffold's `|| true` made `pnpm build` fail on a freshly scaffolded record),
-  // and a record that declares one whose env var is unset.
+  // ONE no-database shape reaches here: the level-0 record that declares no
+  // `database:` block, which refuses during PARSING before any DSN is
+  // consulted (found live in round 4, after removing the scaffold's `|| true`
+  // made `pnpm build` fail on a freshly scaffolded record).
+  //
+  // A record that DECLARES a database and has no DSN is NOT this case and is
+  // refused below — writing `source: "none"` for it published a withdrawn
+  // document. This comment described that fail-open as legitimate for forty
+  // lines after it was closed (round-9 review of PR 43).
   //
   // Everything else — database configured and unreachable, permission denied,
   // a malformed instance.md — still exits non-zero. That is precisely what the

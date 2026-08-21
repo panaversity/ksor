@@ -1264,6 +1264,7 @@ ksor serve
 ksor ingest
 ksor schema
 ksor grant
+ksor takedown
 ksor calibrate
 ksor gc
 ```
@@ -1302,12 +1303,13 @@ provider key; ingest with `ksor ingest` first.
 ksor serve
 ```
 
-### `ksor ingest` / `schema` / `grant` / `calibrate` / `gc` — implemented
+### `ksor ingest` / `schema` / `grant` / `takedown` / `calibrate` / `gc` — implemented
 
 The corpus operations behind the served rung: apply the schema (or migrate an
 existing one forward), authorize a tenant to ingest, ingest `knowledge/` into a
-generation, calibrate the abstention floor, and collect withdrawn generations.
-Each needs the same Postgres store.
+generation, withdraw a document from every surface (and export the manifest the
+site build reads), calibrate the abstention floor, and collect withdrawn
+generations. Each needs the same Postgres store.
 
 `grant` is the one to read twice: who may WRITE a tenant's corpus is decided by
 a row in the database that row-level security checks, never by a flag on a

@@ -234,6 +234,11 @@ Two things worth being deliberate about:
 - **Set `KSOR_SSO_ISSUER` when your SSO stamps a stable `iss`.** Audience is
   always enforced against `KSOR_JWT_ALLOWED_AUDIENCES`; naming the issuer adds
   one more check for the cost of one variable.
+- **Set `KSOR_JWKS_URL` unless your SSO is Better Auth.** The signing keys are
+  fetched from `<KSOR_SSO_URL>/api/auth/jwks` by default, which is Better
+  Auth's layout. Auth0, Okta, Entra, Keycloak and Cognito publish theirs
+  elsewhere, and a wrong JWKS URL fails as a transient fetch error — the door
+  boots clean and every request 503s with nothing naming the cause.
 
 ## Publishing
 

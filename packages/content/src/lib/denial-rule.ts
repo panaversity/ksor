@@ -71,15 +71,70 @@ export function isDenied(
  *
  * A comment cannot appear inside a QUOTED scalar's value, so quoting is
  * resolved first — exactly the kernel's order.
+ *
+ * `ok: false` marks a value the kernel's reader REFUSES rather than reads: a
+ * flow collection, an anchor, a block scalar, or anything with a `: ` in it.
+ * That matters because refusing one line poisons the whole map — see
+ * `frontmatterMap`.
  */
 export function scalarLike(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
-  const trimmed = raw.trim();
-  const dq = /^"(.*)"$/.exec(trimmed);
-  if (dq !== null) return (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-  const sq = /^'(.*)'$/.exec(trimmed);
-  if (sq !== null) return (sq[1] ?? "").replace(/''/g, "'");
-  return trimmed.replace(/[ \t]+#.*$/, "").trim();
+  const parsed = readScalar(raw.trim());
+  return parsed.ok ? parsed.value : undefined;
+}
+
+interface ScalarRead {
+  readonly ok: boolean;
+  readonly value: string;
+}
+
+function readScalar(raw: string): ScalarRead {
+  const dq = /^"(.*)"$/.exec(raw);
+  if (dq !== null)
+    return { ok: true, value: (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\") };
+  const sq = /^'(.*)'$/.exec(raw);
+  if (sq !== null) return { ok: true, value: (sq[1] ?? "").replace(/''/g, "'") };
+  const plain = raw.replace(/[ \t]+#.*$/, "").trim();
+  // The shapes the kernel's reader refuses in a plain value position. Kept in
+  // step with `scalarValue` in ingest/adapters/plain-tree.ts, and bound to it
+  // by `stable-id-conformance.test.ts`.
+  if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { ok: false, value: "" };
+  if (/^[|>&*!{[]/.test(plain)) return { ok: false, value: "" };
+  return { ok: true, value: plain };
+}
+
+/**
+ * The frontmatter block as a map, read the way the KERNEL reads it — including
+ * the part that looks like a bug and is load-bearing: if ANY top-level line is
+ * a shape the reader refuses, the WHOLE map comes back empty.
+ *
+ * That behaviour is inherited from the oracle's PyYAML path, and mirroring it
+ * is not optional. The site read `sor_id:` with a bare regex, so a document
+ * carrying an ordinary flow list —
+ *
+ *     title: Policy
+ *     tags: [hr, payroll]
+ *     sor_id: hr/policy
+ *
+ * — got `hr/policy` here and `knowledge/policies/policy` from the kernel, which
+ * drops the override with the poisoned map. A takedown then matched on exactly
+ * one surface: denied by the MCP door, ignored by the site build, published to
+ * /docs and llms.txt. That is the failure decisions 14 and 18 exist to stop,
+ * re-entered through the denial rule (round-9 review of PR 43).
+ */
+export function frontmatterMap(block: string): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const line of block.split(/\r?\n/)) {
+    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
+    if (/^[ \t]/.test(line)) continue; // nested structure — no top-level scalar
+    const kv = /^([^\s:]+):(?:[ \t]+(.*))?$/.exec(line);
+    const key = kv?.[1];
+    if (key === undefined) return {};
+    const parsed = readScalar((kv?.[2] ?? "").trim());
+    if (!parsed.ok) return {};
+    map[key] = parsed.value;
+  }
+  return map;
 }
 
 /**
@@ -106,7 +161,10 @@ export function stableIdFrom(
   relPath: string,
   frontmatterBlock: string,
 ): string {
-  const override = scalarLike(/^sor_id:[ \t]*(.*)$/m.exec(frontmatterBlock)?.[1]);
+  // Through the MAP, not a bare regex on the block: the kernel drops the whole
+  // map when any line is a shape it refuses, and an id the two surfaces read
+  // differently is a takedown that lands on one of them.
+  const override = frontmatterMap(frontmatterBlock)["sor_id"];
   if (override !== undefined && override !== "") return override;
   return `${recordName}/${relPath.replace(/\.md$/i, "")}`;
 }

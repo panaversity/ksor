@@ -150,9 +150,15 @@ export async function readLedger(
 ): Promise<LedgerRow[]> {
   return runAuditRead(pool, instance.tenantId, async (client) => {
     const r = await client.query(
+      // Scoped by CORPUS as well as tenant. Every governance write records
+      // corpus_id and `listTakedowns` already scoped by it; this did not, so a
+      // tenant serving two corpora — the shape AGENTS.md's open question 1 is
+      // preparing for — got one record's audit answer polluted with the
+      // other's, under the verb whose whole purpose is a per-record governance
+      // trail (round-9 review of PR 43).
       "SELECT action, actor, generation, detail, created_at FROM retrieval_log" +
-        " WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2",
-      [instance.tenantId, limit],
+        " WHERE tenant_id = $1 AND corpus_id = $2 ORDER BY created_at DESC, id DESC LIMIT $3",
+      [instance.tenantId, instance.corpusId, limit],
     );
     return r.rows.map((row: Record<string, unknown>) => ({
       action: String(row.action),
