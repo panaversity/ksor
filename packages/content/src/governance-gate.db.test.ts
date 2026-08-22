@@ -174,3 +174,131 @@ describe.runIf(adminDsn === "")("the governance boot gate (db) — gated", () =>
     expect(adminDsn).toBe("");
   });
 });
+
+/**
+ * The third state: a takedown that has stopped applying.
+ *
+ * `takedown_denylist` records a `stable_id`, and the serving seam matches those
+ * rows against nodes in the SERVING generation. A row whose id no longer exists
+ * denies nothing — silently, on both surfaces. Reproduced before this gate
+ * existed: deny a section, add an `index.md` so the adapter derives a different
+ * id, re-ingest, flip, and search / read / outline / the site all serve it again
+ * (issue #85).
+ *
+ * The likelier route is plainer still: the default stable_id is path-derived, so
+ * an ordinary rename or move of a denied FILE breaks a `scope=node` match the
+ * same way. No attacker is involved — an editorial act plus a re-ingest does it.
+ *
+ * Decision 14 calls the denylist "identity, immune to reorganization, an
+ * auditable frozen list". Nothing made that true; this does, by refusing rather
+ * than by guessing which node the operator meant.
+ */
+describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () => {
+  let pool: pg.Pool;
+  let admin: pg.Pool;
+  const DB2 = "ksor_gate_takedown";
+  const T = "gatetd";
+
+  const instance = (): ContentInstance =>
+    ({
+      name: T,
+      corpusId: T,
+      tenantId: T,
+      dsnEnv: "KSOR_DB_URL",
+      abstain: { vectorFloor: null, keywordFloor: null },
+      textSearchConfig: "english",
+      maximumResponseCharacters: 120_000,
+      instructions: "",
+      audiences: [],
+      defaultVisibility: null,
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: 1536,
+    }) as ContentInstance;
+
+  const putGeneration = async (generation: number, stableId: string): Promise<void> => {
+    await runIngest(pool, T, async (client) => {
+      await client.query(
+        "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1,$1,$2) " +
+          "ON CONFLICT (tenant_id, corpus_id) DO UPDATE SET active_generation = $2",
+        [T, generation],
+      );
+      await client.query(
+        "INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit," +
+          " instance_bundle_sha256, schema_version) VALUES ($1,$1,$2,'active','seed','seed','2.4') " +
+          "ON CONFLICT (tenant_id, corpus_id, generation) DO UPDATE SET schema_version = '2.4'",
+        [T, generation],
+      );
+      await client.query(
+        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position)" +
+          " VALUES ($1,$1,$2,$3,'doc','Doc','document',0)",
+        [T, generation, stableId],
+      );
+    });
+  };
+
+  beforeAll(async () => {
+    const { Pool } = (await import("pg")).default;
+    admin = new Pool({ connectionString: adminDsn });
+    await admin.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin.query(`CREATE DATABASE ${DB2}`);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB2}`;
+    pool = contentPool(url.toString(), 4);
+    await applySchema(pool, 1536);
+    await grantIngest(pool, T);
+  }, 180_000);
+
+  afterAll(async () => {
+    await pool?.end().catch(() => undefined);
+    await admin?.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin?.end().catch(() => undefined);
+  });
+
+  it("serves happily while the denial still matches something", async () => {
+    await putGeneration(1, "knowledge/legal/notice.md");
+    await runIngest(pool, T, async (client) => {
+      await client.query(
+        "INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason)" +
+          " VALUES ($1,$1,'knowledge/legal/notice.md','node','court order')",
+        [T],
+      );
+    });
+    await expect(assertGovernanceServable(pool, instance())).resolves.toBeUndefined();
+  }, 60_000);
+
+  it("REFUSES once the denied document has been renamed out from under the row", async () => {
+    // The same editorial act an operator performs without thinking: the file
+    // moved, so its path-derived id moved, so the denial matches nothing.
+    await putGeneration(2, "knowledge/legal/notice-2024.md");
+    await expect(assertGovernanceServable(pool, instance())).rejects.toBeInstanceOf(
+      GovernanceGateError,
+    );
+    await expect(assertGovernanceServable(pool, instance())).rejects.toThrow(
+      /knowledge\/legal\/notice\.md/,
+    );
+  }, 60_000);
+
+  it("names the remedy, both halves of it", async () => {
+    // Re-point or revoke — an explicit act either way, never a guess about which
+    // node the operator meant (decision 21: a governance act names its actor).
+    await expect(assertGovernanceServable(pool, instance())).rejects.toThrow(/ksor takedown/);
+    await expect(assertGovernanceServable(pool, instance())).rejects.toThrow(/--revoke/);
+  }, 60_000);
+
+  it("refuses the GENERATION BEING BUILT, so ingest stops before the flip", async () => {
+    // The same function the door calls at boot, asked about the generation ingest
+    // just built — so the act that creates the state refuses at the moment it
+    // happens, rather than leaving a green publish and a door that serves it.
+    await expect(assertGovernanceServable(pool, instance(), 2)).rejects.toBeInstanceOf(
+      GovernanceGateError,
+    );
+  }, 60_000);
+
+  it("goes quiet again once the row is revoked", async () => {
+    await runIngest(pool, T, async (client) => {
+      await client.query("DELETE FROM takedown_denylist WHERE tenant_id = $1", [T]);
+    });
+    await expect(assertGovernanceServable(pool, instance())).resolves.toBeUndefined();
+  }, 60_000);
+});

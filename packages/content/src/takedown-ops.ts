@@ -239,7 +239,10 @@ export async function deniedStableIds(pool: pg.Pool, instance: ContentInstance):
  *
  * The seed's OWN file counts when the seed has children, and only then — see
  * the SQL comment: a container's index.md names its directory, a leaf's file
- * names its parent's.
+ * names its parent's. An index-less container has no such file, so the one it
+ * would have had is synthesized from its (path-derived) "#section" id — without
+ * it, a section whose descendants all live one level down contributed only the
+ * subdirectory and left its own level publishable (issue #86).
  */
 export async function deniedSubtreeDirs(
   pool: pg.Pool,
@@ -251,7 +254,7 @@ export async function deniedSubtreeDirs(
          SELECT active_generation AS g FROM corpora WHERE tenant_id = $1 AND corpus_id = $2
        ),
        seed AS (
-         SELECT n.node_id
+         SELECT n.node_id, n.stable_id
            FROM takedown_denylist d
            JOIN content_nodes n ON n.tenant_id = d.tenant_id AND n.stable_id = d.stable_id
            JOIN gen ON n.generation = gen.g
@@ -289,7 +292,28 @@ export async function deniedSubtreeDirs(
                  WHERE NOT EXISTS (SELECT 1 FROM content_nodes kid
                                     JOIN gen ON kid.generation = gen.g
                                    WHERE kid.tenant_id = $1 AND kid.parent_id = s2.node_id)
-              )`,
+              )
+        UNION
+        -- An INDEX-LESS container has no file at all, so the join above drops
+        -- it however many descendants it has, and a section whose files all
+        -- live one level down contributed only the SUBdirectory — leaving a
+        -- document written directly under the withdrawn section publishable
+        -- (issue #86). The round-10 "seed counts when it has children" rule was
+        -- right and could not fire here, because there was nothing to count.
+        --
+        -- So the index.md it WOULD have had is synthesized, and the container
+        -- then names its directory exactly as an index-bearing one does. This is
+        -- not the stable_id prefix matching decision 14 rejects: that fails
+        -- because a sor_id: override decouples an id from its path, and a
+        -- "#section" id is generated from the path with no frontmatter in
+        -- reach: there is no index file to carry an override
+        -- (adapters/plain-tree.ts:214-219).
+        SELECT substring(sd.stable_id from '^(.*)#section$') || '/index.md'
+          FROM seed sd
+         WHERE sd.stable_id LIKE '%#section'
+           AND EXISTS (SELECT 1 FROM content_nodes kid
+                        JOIN gen ON kid.generation = gen.g
+                       WHERE kid.tenant_id = $1 AND kid.parent_id = sd.node_id)`,
       [instance.tenantId, instance.corpusId],
     );
     return (result.rows as { origin_path: string }[]).map((r) => String(r.origin_path));

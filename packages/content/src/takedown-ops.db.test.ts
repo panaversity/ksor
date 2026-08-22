@@ -378,3 +378,112 @@ describe.runIf(adminDsn === "")("takedown write plane (db) — gated", () => {
     expect(adminDsn).toBe("");
   });
 });
+
+/**
+ * Issue #86 — the shape where the withdrawn container contributes no path at all.
+ *
+ * The round-10 fix made a container's OWN file count when it has children,
+ * because a section's `index.md` names the section's directory. But an
+ * index-less section has no `sources` row to contribute, and the walk inner-joins
+ * `sources` — so a section whose every file descendant lives one level down
+ * emitted only the SUBdirectory. A document written directly under the withdrawn
+ * section then staged and published, in exactly the window `denied_subtrees`
+ * exists to cover.
+ *
+ * The existing cases both miss it: the index-less container at :133 has a direct
+ * file child (which supplies its directory), and the container at :228 has an
+ * index. This is index-less AND descendants-only-below.
+ */
+describe.runIf(adminDsn !== "")(
+  "a withdrawn container with no index and no direct files (db)",
+  () => {
+    const T2 = "tdnoidx";
+    let pool2: pg.Pool;
+    let admin2: pg.Pool;
+    const DB2 = "ksor_td_noindex";
+
+    const inst = (): ContentInstance =>
+      ({
+        name: T2,
+        corpusId: T2,
+        tenantId: T2,
+        dsnEnv: "KSOR_DB_URL",
+        abstain: { vectorFloor: null, keywordFloor: null },
+        textSearchConfig: "english",
+        maximumResponseCharacters: 120_000,
+        instructions: "",
+        audiences: [],
+        defaultVisibility: null,
+        embeddingProvider: "fake",
+        embeddingModel: "fake-embed-001",
+        embeddingDim: 1536,
+      }) as ContentInstance;
+
+    beforeAll(async () => {
+      const { Pool } = (await import("pg")).default;
+      admin2 = new Pool({ connectionString: adminDsn });
+      await admin2.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+      await admin2.query(`CREATE DATABASE ${DB2}`);
+      const url = new URL(adminDsn);
+      url.pathname = `/${DB2}`;
+      pool2 = contentPool(url.toString(), 4);
+      await applySchema(pool2, 1536);
+      await grantIngest(pool2, T2);
+
+      // legal/ (no index) -> legal/2024/ (no index) -> legal/2024/notice.md
+      await runIngest(pool2, T2, async (client) => {
+        await client.query(
+          "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1,$1,1)",
+          [T2],
+        );
+        const mk = async (stable: string, slug: string, kind: string, parent: string | null) => {
+          const r = await client.query(
+            "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, parent_id)" +
+              " VALUES ($1,$1,1,$2,$3,$3,$4,0,$5) RETURNING node_id",
+            [T2, stable, slug, kind, parent],
+          );
+          return String(r.rows[0].node_id);
+        };
+        const legal = await mk("knowledge/legal#section", "legal", "section", null);
+        const y2024 = await mk("knowledge/legal/2024#section", "2024", "section", legal);
+        const notice = await mk("knowledge/legal/2024/notice", "notice", "document", y2024);
+        await client.query(
+          "INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path," +
+            " content_hash, embedding_model, chunk_policy) VALUES ($1,1,$2,$3,'Notice',$4,'h','fake-embed-001','p')",
+          [T2, "knowledge/legal/2024/notice.md:prose", notice, "knowledge/legal/2024/notice.md"],
+        );
+      });
+      await applyTakedown(pool2, inst(), {
+        stableId: "knowledge/legal#section",
+        scope: "subtree",
+        reason: "legal hold",
+        actor: "ops@example.com",
+      });
+    }, 300_000);
+
+    afterAll(async () => {
+      await pool2?.end().catch(() => undefined);
+      await admin2?.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+      await admin2?.end().catch(() => undefined);
+    });
+
+    it("emits the WITHDRAWN container's directory, not just the subdirectory", async () => {
+      const dirs = await deniedSubtreeDirs(pool2, inst());
+      expect(
+        dirs,
+        "knowledge/legal/ is the subtree root; the 2024/ below it is covered by it",
+      ).toEqual(["knowledge/legal/"]);
+    }, 60_000);
+
+    it("so a file written DIRECTLY under the withdrawn section is denied", async () => {
+      // The exact leak: on disk, not in the database, published by the next build.
+      const dirs = await deniedSubtreeDirs(pool2, inst());
+      const covered = (p: string): boolean => dirs.some((d) => p.startsWith(d));
+      expect(covered("knowledge/legal/urgent.md"), "directly under the withdrawn section").toBe(
+        true,
+      );
+      expect(covered("knowledge/legal/2024/late.md"), "and deeper still").toBe(true);
+      expect(covered("knowledge/about.md"), "but nothing outside it").toBe(false);
+    }, 60_000);
+  },
+);
