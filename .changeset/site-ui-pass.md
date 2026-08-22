@@ -89,3 +89,17 @@ projects read on 2026-08-22 (Anthropic's asymmetric hero with a live artifact,
 Vercel AI SDK's humans/agents switch, Cursor and MCP rendering their first page
 inside the docs shell); what is ours is that the artifact is evidence rather
 than illustration.
+
+**The site has a design, not a default theme.** Three voices, each marking who
+is speaking: the record's own words in a serif (its title, its documents'
+titles), the site's furniture in a sans, and everything machine-facing — the
+slug, addresses, owners, statuses, section labels — in mono. System stacks only,
+because a web font is fetched at build time and the scaffold's build must work
+offline and byte-identically. The palette moves from neutral grey to a cool ink
+(`oklch(0.17 0.012 255)`) that sits with the accent instead of beside it, with
+firmer hairlines, and the accent is spent only on actions, links and the active
+state. The front door is built as the thing it describes: a rule down the
+middle, people on the left, the bytes an agent is served on the right, both true
+at once — which is what "one source, two surfaces" looks like when it is a
+layout rather than a sentence. The record lists as a register: serif title, mono
+metadata in a fixed column, hairline rows.

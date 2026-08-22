@@ -24,77 +24,87 @@
    is tokens — but a component added from the registry will. */
 @custom-variant dark (&:is(.dark *));
 
-/* The shadcn neutral palette, as `shadcn init` writes it, with ONE pair
-   changed: `--primary` (and the ring that follows it) carries the KSoR accent
-   drawn from the mark. That pair is the whole brand — re-brand by changing it
-   and every accented element follows, in the shell and in every shadcn
-   component alike, because Fumadocs now reads `--primary` too. */
+/* ── Ink, paper, rule ────────────────────────────────────────────────────────
+   shadcn's neutral palette, retuned on two axes and otherwise left alone.
+
+   The ink carries a trace of blue (chroma .012 at hue 255) instead of being a
+   pure grey: it sits with the accent rather than beside it, and a record set in
+   cool ink reads as printed rather than as chrome. The rules are darker than
+   shadcn's default (0.9 against 0.922) because this design puts weight on
+   hairlines, and a rule you have to look for is not doing its job.
+
+   `--primary` and its foreground are the whole brand — re-brand by changing
+   that pair and every accented element follows, in the shell and in every
+   shadcn component alike, because Fumadocs reads `--primary` too. It is spent
+   ONLY on actions, links and the active state: a page where the accent is
+   everywhere has no accent. `--ksor-caution` (further down) is the only other
+   colour with a job, and its job is the opposite one. */
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --foreground: oklch(0.17 0.012 255);
+  --card: oklch(0.985 0.002 255);
+  --card-foreground: oklch(0.17 0.012 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.17 0.012 255);
   --primary: #1d4ed8;
   --primary-foreground: #ffffff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.972 0.002 255);
+  --muted-foreground: oklch(0.53 0.012 255);
+  --accent: oklch(0.965 0.004 255);
+  --accent-foreground: oklch(0.17 0.012 255);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.9 0.004 255);
+  --input: oklch(0.9 0.004 255);
   --ring: #1d4ed8;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.985 0.002 255);
+  --sidebar-foreground: oklch(0.17 0.012 255);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-accent: oklch(0.965 0.004 255);
+  --sidebar-accent-foreground: oklch(0.17 0.012 255);
+  --sidebar-border: oklch(0.9 0.004 255);
   --sidebar-ring: #1d4ed8;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --background: oklch(0.155 0.012 255);
+  --foreground: oklch(0.965 0.004 255);
+  --card: oklch(0.195 0.012 255);
+  --card-foreground: oklch(0.965 0.004 255);
+  --popover: oklch(0.195 0.012 255);
+  --popover-foreground: oklch(0.965 0.004 255);
   --primary: #7fb0f9;
   --primary-foreground: #081226;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.24 0.012 255);
+  --muted-foreground: oklch(0.7 0.014 255);
+  --accent: oklch(0.26 0.014 255);
+  --accent-foreground: oklch(0.965 0.004 255);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
   --ring: #7fb0f9;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.185 0.012 255);
+  --sidebar-foreground: oklch(0.965 0.004 255);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-accent: oklch(0.26 0.014 255);
+  --sidebar-accent-foreground: oklch(0.965 0.004 255);
+  --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: #7fb0f9;
 }
 
@@ -104,6 +114,22 @@
    layout, and this scaffold deliberately loads none (see app/layout.tsx —
    a Google face is fetched at BUILD time, which costs the offline build and
    byte-identical rebuilds). Tailwind's own system stack stands. */
+/* ── Three voices ────────────────────────────────────────────────────────────
+   The record speaks in a serif, the site speaks in a sans, and the machine
+   surface speaks in mono. Not decoration: each face marks WHO is talking, so a
+   reader can tell the record's own words (its title, its documents' titles)
+   from the site's furniture around them, and both from an address a machine
+   resolves.
+
+   System stacks only. A web font would be fetched at build time, which costs
+   the offline build and byte-identical rebuilds the scaffold pins — and the
+   browser smoke test asserts zero external requests. Georgia and its siblings
+   are on every machine this site is read on, and a serif that arrives instantly
+   beats a distinctive one that arrives late. */
+@theme {
+  --font-display: ui-serif, Georgia, "Times New Roman", Times, serif;
+}
+
 @theme inline {
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -247,9 +273,13 @@ html > body[data-scroll-locked] {
    which is right for long-form reading. Scoped to the shell's own page id, so
    nothing depends on which order two arbitrary Tailwind sizes land in. */
 #nd-page > h1 {
-  font-size: 2.125rem;
-  line-height: 1.15;
-  letter-spacing: -0.021em;
+  font-family: var(--font-display);
+  font-size: 2.375rem;
+  font-weight: 600;
+  line-height: 1.1;
+  /* Serifs need less negative tracking than the sans did at this size — the
+     -0.021em that suited the old face closes the counters on this one. */
+  letter-spacing: -0.012em;
   text-wrap: balance;
 }
 

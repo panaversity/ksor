@@ -82,9 +82,13 @@ function Fact({
   children: ReactElement | string;
 }): ReactElement {
   return (
-    <div className="flex items-baseline gap-1.5">
-      <dt className="text-fd-muted-foreground">{label}</dt>
-      <dd className="break-words text-fd-foreground">{children}</dd>
+    <div className="flex items-baseline gap-2">
+      {/* Mono, uppercase, letterspaced: these are the record's checkable facts,
+          and they read as a register's column heads rather than as a form. */}
+      <dt className="font-mono text-[0.6875rem] tracking-[0.14em] text-fd-muted-foreground uppercase">
+        {label}
+      </dt>
+      <dd className="font-mono text-xs break-words text-fd-foreground">{children}</dd>
     </div>
   );
 }
@@ -110,10 +114,10 @@ export function GovernanceMeta({
   if (bare && markdownUrl === undefined) return null;
 
   return (
-    <dl className="mb-6 flex flex-wrap items-baseline gap-x-4 gap-y-1.5 border-b border-fd-border pb-4 text-[0.8125rem]">
+    <dl className="mb-7 flex flex-wrap items-baseline gap-x-5 gap-y-2 border-b border-fd-border pb-4">
       {status === null ? null : (
         <Fact label="Status">
-          <span className="rounded border border-fd-border px-1.5 py-0.5 font-medium">
+          <span className="rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest uppercase">
             {status}
           </span>
         </Fact>
@@ -169,7 +173,7 @@ export function GovernanceMeta({
         // Chromium, 2026-08-21).
         <a
           href={markdownUrl}
-          className="inline-flex items-center gap-1 rounded border border-fd-border px-1.5 py-0.5 font-medium text-fd-muted-foreground transition-colors hover:border-fd-primary/40 hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+          className="inline-flex items-center gap-1 rounded-sm border border-fd-border px-1.5 py-0.5 font-mono text-[0.6875rem] tracking-[0.14em] text-fd-muted-foreground uppercase transition-colors hover:border-fd-primary/40 hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
         >
           Markdown
         </a>
@@ -190,7 +194,7 @@ export function Provenance({ entries }: { entries: readonly string[] }): ReactEl
 
   return (
     <section className="mt-10 border-t border-fd-border pt-5 text-sm">
-      <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-fd-muted-foreground">
+      <h2 className="mb-2 font-mono text-xs tracking-[0.18em] text-fd-muted-foreground uppercase">
         Sources
       </h2>
       {/* break-words, because a citation is often a long unbroken URL: on a

@@ -66,7 +66,7 @@ export default async function HomePage(): Promise<ReactElement> {
 
   return (
     <main className="flex flex-1 flex-col">
-      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-16 sm:py-24">
+      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-20 sm:py-28">
         <HomeHero
           eyebrow="KSoR"
           name={appName}
@@ -99,16 +99,14 @@ export default async function HomePage(): Promise<ReactElement> {
             document count and linked to exactly one of them, so a system of
             record's front door listed nothing that was in it
             (research/site-design.md F2). */}
-        <div className="mt-16">
-          <RecordIndex entries={entriesUnder(null)} heading="The record" />
-        </div>
+        <RecordIndex entries={entriesUnder(null)} heading="The record" />
       </div>
 
       {/* The sidebar carried the attribution and the audience notice while the
           front door wore the docs chrome; standing alone, it carries its own. */}
-      <footer className="mx-auto w-full max-w-6xl px-6 pb-10">
-        <Separator className="mb-6" />
-        <p className="text-xs">
+      <footer className="mx-auto w-full max-w-6xl px-6 pb-12">
+        <Separator className="mb-5" />
+        <p className="font-mono text-xs tracking-wider text-fd-muted-foreground uppercase">
           <FooterMark />
         </p>
       </footer>
