@@ -65,6 +65,13 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
     <DocsPage
       toc={page.data.toc}
       full={page.data.full}
+      // One active heading at a time. The shell defaults `single` to false,
+      // which marks EVERY heading currently on screen as active — and a
+      // governed record is full of short documents whose headings all fit on
+      // one screen, so the whole rail lit up in the accent at once (measured:
+      // four of five entries `data-active="true"` on a five-heading document).
+      // An accent that marks everything marks nothing.
+      tableOfContent={{ single: true }}
       // The table-of-contents column is HELD on every page, including the many
       // in a governed record that have no headings at all and render nothing
       // into it. Collapsing it for those documents (which this file did, from

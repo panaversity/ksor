@@ -60,3 +60,16 @@ It fails honestly: `navigator.clipboard` exists only in a secure context, so a
 site served over plain http on a LAN address has no clipboard at all, and the
 button says "Copy failed" rather than reporting a success it did not have.
 
+**The table of contents marks where you are, not everything in view.** Fumadocs
+defaults its TOC to `single: false`, which marks EVERY heading currently on
+screen as active — and a governed record is full of short documents whose
+headings all fit on one screen, so the whole rail rendered in the accent at
+once (measured: four of five entries active on a five-heading document). An
+accent that marks everything marks nothing. The default is specifically wrong
+for this shape of content, so the scaffold sets `single: true`.
+
+The two document actions rest in muted grey with an icon each, and take the
+accent only when something has happened — the copy that succeeded. They wore
+the accent at rest, which said "link" about controls that were merely sitting
+there and added to a page already too blue to read.
+

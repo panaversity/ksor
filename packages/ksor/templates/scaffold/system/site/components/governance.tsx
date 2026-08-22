@@ -1,3 +1,4 @@
+import { FileText } from "lucide-react";
 import Link from "next/link";
 
 import { CopyMarkdown } from "@/components/copy-markdown";
@@ -181,32 +182,30 @@ export function GovernanceMeta({
         // On the governance row, not as a footnote below the sources: it is
         // how a reader hands this document to an agent, and it was previously
         // the smallest text on the page, last (research/site-design.md F2).
-        // It is the one ACTION on a row of FACTS, so it stops wearing the
-        // bordered badge: that badge means "a status the record declares", and
-        // dressing a link in it made the only clickable thing here look like
-        // another read-only field. It takes the accent instead — which on this
-        // site means exactly "a link, an action, an active thing".
+        // These are the ACTIONS on a row of FACTS, so they wear neither the
+        // bordered badge (that means "a status the record declares", and
+        // dressing a link in it made the only clickable thing look like another
+        // read-only field) nor the accent at rest. An icon and a hover surface
+        // say "control" without spending the brand colour on something that is
+        // merely sitting there — the page had gone blue enough that the accent
+        // had stopped meaning anything (owner, 2026-08-22).
         // Inline after the facts, NOT right-aligned: `ms-auto` parked it at the
         // far edge of a 900px row, 498px from the nearest thing on a document
         // with two facts, where it read as belonging to nothing (measured in
         // Chromium, 2026-08-21).
-        <a
-          href={markdownUrl}
-          className="group inline-flex items-baseline gap-1.5 font-mono text-[0.6875rem] tracking-[0.16em] text-fd-primary uppercase transition-colors hover:text-fd-primary/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-        >
-          <span className="underline decoration-fd-primary/30 underline-offset-4 group-hover:decoration-fd-primary/70">
+        <span className="flex items-center gap-0.5">
+          <a
+            href={markdownUrl}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[0.6875rem] tracking-[0.14em] text-fd-muted-foreground uppercase transition-colors hover:bg-fd-muted hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+          >
+            <FileText aria-hidden className="size-3.5" />
             Markdown
-          </span>
-          <span aria-hidden className="transition-transform group-hover:translate-x-0.5">
-            &rarr;
-          </span>
-        </a>
-      )}
-      {markdownUrl === undefined ? null : (
-        // Beside the link, not instead of it: opening the markdown and handing
-        // it to an agent are different acts, and a reader who wants the second
-        // should not have to perform the first.
-        <CopyMarkdown href={markdownUrl} />
+          </a>
+          {/* Beside the link, not instead of it: opening the markdown and
+              handing it to an agent are different acts, and a reader who wants
+              the second should not have to perform the first. */}
+          <CopyMarkdown href={markdownUrl} />
+        </span>
       )}
     </dl>
   );
