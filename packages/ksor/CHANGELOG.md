@@ -1,5 +1,477 @@
 # @panaversity/ksor
 
+## 0.0.21
+
+### Patch Changes
+
+- 2c67e18: The files AI agents read now carry the same governance the page shows.
+
+  A scaffolded site warned a reader that a policy had been replaced — an
+  unmissable notice above the title, naming its successor — and then handed an
+  agent the same policy as ordinary prose. In `llms.txt` a withdrawn document and
+  the one that replaced it were adjacent entries, told apart only by whatever a
+  human happened to type into a title; in `llms-full.txt` the withdrawn body
+  appeared with no status, no successor and no owner at all. An agent reading the
+  record answered from a policy nobody follows any more, and had nothing in the
+  bytes it was given to know that.
+
+  `llms.txt` now marks a document whose status is a caveat — `DRAFT`, `REVIEW`,
+  `SUPERSEDED` — and names the route that replaced a superseded one.
+  `llms-full.txt` puts the record's own keys back as frontmatter above each
+  document: status, owner, effective, the resolved successor, and every
+  provenance entry.
+
+  Two details are deliberate. A successor is named by the route a consumer can
+  fetch, never the `./successor.md` pointer it has no file tree to resolve. And
+  `site: governance: false` does not reach these files — that key decides what the
+  published pages show, while the record keeps every key for the agent surface and
+  the audit trail, so suppressing them here would recreate the defect on purpose.
+
+  Nothing else changes: no new dependency, no new frontmatter key, the same static
+  export. An approved document's index line stays clean, and a document that
+  declares no governance still emits none — a placeholder would read as governed.
+
+- 472ee30: An interrupted ingest no longer throws away the embeddings it already paid for
+
+  A killed `ksor ingest` leaves its generation in state `building`. Carry-forward
+  accepted only `ready`, `active` and `retired` sources, so the rerun found nothing
+  to copy and embedded the entire corpus again — paying twice for work that was
+  sitting in the database, correct and complete.
+
+  Found while ingesting an 81-document book into a managed Postgres. The run was
+  killed at 4,736 of 6,963 chunks; the rerun reported `carried 0, pending 6963`.
+
+  ```
+  before   structure: 82 nodes, 81 sources, 6963 chunks; carried 0,    pending 6963
+  after    structure: 82 nodes, 81 sources, 6963 chunks; carried 4736, pending 2227
+  ```
+
+  The asymmetry is what made it expensive. Interrupt a RE-ingest and a complete
+  generation still exists, so the rerun carries from it and costs almost nothing.
+  Interrupt the FIRST ingest and there is no complete generation at all — and the
+  first ingest of a large corpus is the longest, the least familiar, and the one an
+  operator is most likely to interrupt.
+
+  Nothing about an abandoned run makes its vectors wrong. An embedding is a pure
+  function of its input and model, the match key already establishes identity, and
+  carry only ever fills chunks still marked pending. So a run's state now decides
+  the ORDER sources are tried in, not whether they may be used at all: the active
+  generation first, so vetted vectors always win, then complete generations newest
+  first, then abandoned ones.
+
+- 59c4f7a: **The search dialog forgets the last search when you close it.** The query
+  lives in component state and the dialog stays mounted after closing, so the
+  next time a reader opened search it came up on the previous term and its
+  results — they had to clear the field before they could look for anything
+  else. Closing now resets it, and the shell's own `onOpenChange` still fires,
+  so nothing else about the dialog changes.
+- 2c67e18: **The scaffolded site moves to Fumadocs 16.14.5 / fumadocs-mdx 15.3.0**, from
+  16.10.3 / 15.0.13.
+
+  What the adopter gets, all of it landing at or below 16.14.5:
+
+  - **Search is multilingual with no configuration.** 16.14.0 replaced the Orama
+    engine with ZBSearch behind the same module paths. The scaffold now imports
+    `staticClient` rather than the deprecated `oramaStaticClient` alias it kept
+    for compatibility — the subpath and the options are unchanged, so the new
+    name costs nothing today and does not have to be found again when the alias
+    goes. It matters here because a KSoR's knowledge is written in whatever
+    language its owner writes in.
+  - **Two accessibility fixes**: the sidebar trigger exposes its state to
+    assistive technology (16.11.5), and documentation pages carry a `main`
+    landmark (16.14.5).
+  - **A table-of-contents overscroll fix** (16.14.3), which this shell feels
+    because it holds the TOC column on every page.
+  - **Page Actions honour a base path** (16.10.7) — relevant because the scaffold
+    ships `KSOR_BASE_PATH` for sub-path hosting.
+
+  **Not 16.15.0 / 15.3.1, deliberately.** Those are the `latest` tags, but they
+  were published 2026-08-21 18:05Z and the scaffold's own supply-chain policy
+  quarantines a dependency for 48 hours (`minimumReleaseAge: 2880`). Pinning them
+  today would emit a scaffold whose first `pnpm install` its own policy refuses.
+  Every improvement listed above is at or below 16.14.5, so nothing is given up
+  by waiting; the bump is a one-line change once they age out.
+
+  Also worth recording: `fumadocs-core` and `fumadocs-ui` both have a `17.0.0` on
+  npm, published 2026-02-01 — BEFORE the 16.x line. The `latest` tag is 16.x. A
+  higher version number is not a later release here, and nothing should chase it.
+
+  **The sidebar's status marker is the shell's plugin now, not our own walk.**
+  `statusBadgesPlugin` reads `status` from a document's frontmatter while the
+  loader builds the page tree, so the scaffold stops carrying a map of statuses
+  by url and a second recursive walk that rewrote each row. What stays ours is
+  the rule the shell has no opinion about: only a CAVEAT is drawn, so `approved`
+  renders nothing and the marker stays rare enough to be noticed. The tree nodes
+  also gain a real `status` field rather than only a decorated name.
+
+  **Every document can be handed to an agent in one click.** Beside the link to a
+  document's markdown twin there is now a `Copy` action that fetches that same
+  twin — the bytes `/md/<path>.md` already serves, so there is no second
+  rendering of the document to drift — and puts them on the clipboard. Opening
+  the markdown and handing it to an agent are different acts, and a reader who
+  wants the second should not have to perform the first.
+
+  Fumadocs ships an `ai/page-actions` component that does this alongside "Open in
+  ChatGPT" and "Open in Claude". Those two are deliberately not taken: this
+  product's claim is that one corpus answers in ANY assistant because the agent
+  surface is an open standard, and hardcoding two vendors into every adopter's
+  page argues the opposite. What is taken is the shell's own `useCopyButton`
+  hook, which owns the copied-state timing — the only part worth not rewriting —
+  so the action costs no new dependency and no registry component.
+
+  It fails honestly: `navigator.clipboard` exists only in a secure context, so a
+  site served over plain http on a LAN address has no clipboard at all, and the
+  button says "Copy failed" rather than reporting a success it did not have.
+
+  **The table of contents marks where you are, not everything in view.** Fumadocs
+  defaults its TOC to `single: false`, which marks EVERY heading currently on
+  screen as active — and a governed record is full of short documents whose
+  headings all fit on one screen, so the whole rail rendered in the accent at
+  once (measured: four of five entries active on a five-heading document). An
+  accent that marks everything marks nothing. The default is specifically wrong
+  for this shape of content, so the scaffold sets `single: true`.
+
+  The two document actions rest in muted grey with an icon each, and take the
+  accent only when something has happened — the copy that succeeded. They wore
+  the accent at rest, which said "link" about controls that were merely sitting
+  there and added to a page already too blue to read.
+
+  **"On this page" marks the section you are in, exactly.** The shell decides the
+  active heading with an intersection observer set to `{ threshold: 0.9 }` and no
+  `rootMargin` — a heading counts as active whenever 90% of it is visible
+  ANYWHERE in the viewport — and then highlights whichever became active most
+  recently. On a long page that reads fine. On a governed record it does not:
+  these documents are short-sectioned, so several headings share the screen and
+  the one arriving from the BOTTOM always won. The marker sat two to four
+  headings ahead of the reader (measured: reading "owner" while the rail marked
+  "description").
+
+  Those observer options are not configurable and the observer is not exported,
+  so the selection could not be corrected — only replaced. The scaffold now
+  supplies the rail through `DocsPage`'s `slots.toc.main`, keeping the shell's
+  provider and its small-screen popover exactly as they are. The rule is a
+  reading line rather than visibility: the active heading is the last one whose
+  top has passed it, which is what a person means by "the section I am in".
+  Measured at eight scroll positions across a 7.8-screen document: exact at every
+  one. The bar is the row's own border, so it cannot drift from what it marks.
+
+- 1145ebb: When calibration does not separate, `ksor calibrate` names the probes that held it open
+
+  A "NOT separable" verdict reads as _this corpus cannot be calibrated_, and the
+  report had every number needed to show otherwise while printing none of them.
+  Its only remedy was "widen the probe set" — when the fix is sometimes to narrow
+  it.
+
+  ```
+  these out-of-corpus probes scored at or above your weakest in-corpus question:
+    0.721  which vector database should I choose
+    ^ look at these first. Either the record COVERS one — move it to the
+      in-corpus side, because a probe the record answers is not out of corpus
+      — or it genuinely does not separate, and the floor stays uncalibrated.
+  ```
+
+  That is a real measurement, on a real 81-document book. One probe — a question
+  about vector databases, asked of a record containing a Postgres-and-AI chapter —
+  held the whole calibration open at 0.721 against a weakest in-corpus question of
+  0.680. It was not an out-of-corpus question at all; it was mislabelled. Moving it
+  separated the record immediately (`max OOC 0.676 < min in-corpus 0.680`), and the
+  resulting floor answered every in-corpus question and refused every genuine
+  out-of-corpus one.
+
+  Without that line, the conclusion drawn from the same numbers was that the record
+  could not support abstention — the product's headline guarantee — at all.
+
+  The advice deliberately names **both** readings, because either can be right: the
+  probe may be mislabelled, or the corpus may genuinely fail to separate, in which
+  case the floor stays uncalibrated and that is the correct outcome.
+
+- 2c67e18: The scaffolded site now renders the governance each document declares.
+
+  `knowledge/` documents carry `status`, `owner`, `provenance`, `effective` and
+  `superseded_by`, and `pnpm check` enforces them — but the site rendered only
+  title, description and body. The sharpest consequence was not cosmetic: a
+  `status: superseded` document was served looking identical to an approved one,
+  with the successor pointer the checker requires swallowed.
+
+  Each document now shows its owner and effective date under the title, one entry
+  per `provenance` source at the foot, and — above the title, where it cannot be
+  missed — a supersession notice that names the successor and links to its page.
+
+  The status appears only when it is a caveat: `draft`, `review` and `superseded`
+  are shown, `approved` is not. A reader already assumes a document in a system of
+  record is current, and a label that appears on every page saying the same thing
+  trains people to skip it — including on the page where it mattered.
+
+  Nothing is inferred. A key a document does not declare renders nothing at all:
+  a placeholder would read as governed, which is worse than a visible gap. It is
+  all server-rendered, so the governance survives printing, JavaScript off and a
+  failed bundle.
+
+  Whether the pages show it at all is the owner's call: `site: governance: false`
+  in `instance.md` keeps them plain while the record still carries every key for
+  the agent surface and the audit trail. It defaults to on, and it never hides
+  the supersession notice — a reader handed a replaced document with no word of
+  its successor has been misled regardless of the site's preferences.
+
+  The record's checker was hardened alongside, because these keys now reach a
+  published page: `superseded_by` is validated whatever shape it is written in
+  (a pointer matching neither `./x` nor `*.md` previously skipped every rule,
+  including the cross-audience one, and the page then published it verbatim); it
+  must name a real markdown document, not a directory, and must pair with
+  `status: superseded`; an `effective` carrying a time is refused, because a YAML
+  timestamp reads back in a timezone and could render the day before the one
+  written; and a grouped `instance.md` key written inline (`site: { … }`) is
+  refused instead of being silently dropped, which also restores the closed-key-set
+  guarantee for every nested group.
+
+  A second adversarial pass hardened the rules again: the `effective` check now
+  matches YAML's real timestamp grammar rather than a padded-date shape (so
+  `2026-4-1 00:00:00 +05:00` is caught and `2026-04-01 for new customers` is left
+  alone); a YAML comment on an `instance.md` group key and a capitalised `False`
+  are accepted, both having been refused by a checker stricter than the parsers it
+  protects; a supersession that points back at itself or forms a cycle is refused,
+  because the notice was sending readers in a circle; and a long source URL now
+  wraps instead of being clipped away on a phone.
+
+- 2c67e18: The scaffolded site got a UI pass, driven by measuring the real page in a
+  browser rather than reading the code.
+
+  **Every document is now published as markdown too.** `/md/<path>.md` carries the
+  document's body and its governance as frontmatter, and each page advertises its
+  twin with a `rel="alternate"` link and a visible "This document as markdown"
+  line. An agent handed a document URL no longer has to scrape a React app to
+  reach text the record holds verbatim.
+
+  **Governance shows up where a reader chooses, not only after the click.** The
+  sidebar, the previous/next pager, search results, the home page and every folder
+  index now carry a caveat status, so a withdrawn document and the one that replaced it stop
+  looking identical at the moment you pick between them.
+
+  **A folder page lists what the folder holds**, and the home page lists the
+  record — it used to announce a document count and link to one of them.
+
+  **The home page opens with the record's own words**: the first paragraph of
+  `instance.md`, which is also what `ksor serve` gives the MCP server. The
+  framework's marketing line is gone from the adopter's front page, which the
+  project's own critical rule 1 never allowed. Scaffolded `instance.md` was
+  reordered so the authority sentence comes first, where it belongs for the system
+  prompt too.
+
+  **Supersession runs both ways.** The withdrawn document names its successor; the
+  successor now names what it replaced, derived from the record with no new
+  frontmatter key.
+
+  **The supersession notice reads as a caution and is reachable by landmark** —
+  its own colour instead of the brand accent that also means "go here", and
+  `role="region"` with `aria-labelledby` instead of `role="note"`.
+
+  **A provenance entry that is a URL is now a link** — the whole entry only, and
+  `http(s)` only, so an authored `javascript:` source can never become a
+  clickable href.
+
+  **The sidebar footer no longer renders an empty input-shaped box.** The theme
+  switch shipped inside a bordered bar that stretched to the sidebar width around
+  one 61px control; it now sits on the footer row beside the mark.
+
+  **The left rail is flush with the window again.** The docs grid gives the
+  sidebar panel the centring offset as well as its own column, so above 97rem the
+  panel's surface ran to the window edge with the first nav item starting 103px
+  inside it (measured at 1728px). The layout width is now `100%`: the offsets go
+  to zero, the rail starts where the window does, and the prose does not move.
+
+  **The site is a shadcn/ui project.** `components.json` and `lib/utils.ts` ship
+  with the scaffold, so `pnpm dlx shadcn@latest add <name>` writes a component the
+  adopter then owns, and Fumadocs reads the same palette through its `shadcn` CSS
+  preset — one set of tokens for the shell and for anything added from the
+  registry, with `--primary` carrying the brand. It also ends a real defect: the
+  `neutral` preset painted the page and the sidebar it sits against 1.6% apart, so
+  the reading surface never read as a page. The shadcn CLI itself is deliberately
+  NOT a dependency (578 extra packages, measured); the four the site actually uses
+  cost +2.
+
+  **The previous/next neighbours sit at the foot of the page, not wherever the
+  text stopped.** A governed record is full of short documents, and on those the
+  pager landed mid-screen — 265px above the bottom edge on the policies index,
+  measured — reading as more content rather than as the end of the page. It now
+  takes the free space as margin above it, and stays exactly where it was on any
+  document taller than the viewport.
+
+  **The reading column stopped moving, and stopped being a slab.** The shell caps
+  the article at 900px — 78 characters a line at the body's 16px — and centres it
+  in whatever the table-of-contents column leaves, so the prose ALSO jumped 134px
+  sideways between a document with headings and one without (measured: text at
+  x=446 against x=580). The measure is now 46rem, about 66 characters, and the
+  TOC column is held on every page, so sidebar and rail are the same width and the
+  column lands in the same place on every document: x=464, 672px wide, on a
+  document with a table of contents and on one without, verified in both.
+
+  **The home page is the record's own front door.** It is a landing page that
+  stands alone — no sidebar, no document chrome, `Open the record` as the way in,
+  landing on the first document in governed order rather than a hardcoded path.
+  Every word on it comes from `instance.md` or a document's frontmatter, because
+  the site contains no authored content, and everything it says is in the
+  server-rendered markup, so a crawler, a reader without JavaScript and an agent
+  parsing the HTML all read the same page.
+
+  **The site has a design, not a default theme.** Three voices, each marking who
+  is speaking: the record's own words in a serif (its title, its documents'
+  titles), the site's furniture in a sans, and everything machine-facing — the
+  slug, addresses, owners, statuses, section labels — in mono. System stacks only,
+  because a web font is fetched at build time and the scaffold's build must work
+  offline and byte-identically. The palette moves from neutral grey to a cool ink
+  (`oklch(0.17 0.012 255)`) that sits with the accent instead of beside it, with
+  firmer hairlines, and the accent is spent only on actions, links and the active
+  state.
+
+  **The front door is the record's cover, and it is one screen.** The identity
+  takes the whole window under the navbar over a faintly ruled ground: the
+  record's name, the authority sentence it declares in `instance.md`, one way in,
+  and the record itself standing beside it. The cover follows the theme
+  rather than staying dark in both — pale stock in the light, and in the dark it
+  rises one step above the page instead of turning white, because a cover is the
+  surface that catches the light. Every machine address came off the page:
+  `/llms.txt` sits where agents look for it and each document advertises its own
+  markdown twin, so nothing became less discoverable by leaving the front door,
+  and the page stopped printing URLs at a reader who will never fetch one.
+
+  **The front door shows the record, not a drawing of one.** The right of the
+  cover is the document `Open the record` opens — its own title, its own words,
+  its owner and any caveat status — with the record's next entries standing
+  behind it, and the count of everything the record holds beneath. Four abstract
+  illustrations were drawn for that space first and all four were rejected; the
+  reason is the useful part, and it is now written into the component: a stock
+  drawing is the ONE thing on this page that can never be true of the adopter's
+  corpus, so every KSoR would have shipped the same picture of nothing in
+  particular. A record of one document and a record of two hundred now get
+  visibly different front doors. Nothing on the page is authored — every string
+  is a title, description, owner or status the record itself declares — and the
+  depth is CSS, so it costs no image, needs no request, and follows the theme.
+
+  **The cover's composition is centred and its type ramp closed.** The signature
+  line at the foot took the section's free space as top margin, which cancelled
+  the centring and left 197px of dead space below the content and none above it
+  (measured at a 996px-tall window); the composition now sits in the middle of the
+  space above the signature, 157px clear at the top and 158px at the bottom. The
+  ramp ran 12px eyebrow to a 76px title to an 18px lead — a jump with nothing in
+  the middle — and is now 12 / 64 / 20. The accent rule under the title was still
+  pinned to the dark theme's blue from when the cover was dark in both themes,
+  which left it all but invisible on the pale light cover; it takes the token
+  again, so it inverts with everything else.
+
+  **A document's section headings speak in the record's voice, and its
+  governance strip has a hierarchy.** Only the title was styled; h2, h3 and h4
+  fell through to the shell's prose defaults, which measured 24 / 20 / 16px in
+  the SANS body face — so inside one document the title was the record speaking
+  and every section heading was the site speaking, and h4 was the body size
+  with only its weight to tell it apart. The ramp is now 38 / 28 / 22 / 18 in
+  the display serif, scoped to the container the record's own markdown renders
+  in so the site's own headings keep their voice.
+
+  In the strip under the title, the label and its value were both mono a single
+  pixel apart, so "Owner Product Effective 2026-08-22" read as one
+  undifferentiated run. The label is now 10px and letterspaced against a 13px
+  value that carries the weight. The "Markdown" link stopped wearing the
+  bordered badge that means "a status the record declares": it is the one
+  ACTION on a row of FACTS, so it takes the accent, which on this site means a
+  link. The gap between facts matches the register's.
+
+  **A withdrawn document no longer looks like a draft.** `draft` and `superseded`
+  rendered as pixel-identical chips — same hairline border, same muted text —
+  which put the two statuses that mean the most different things in the same
+  clothes at exactly the moment a reader picks between a document and its
+  successor. `--ksor-caution` already existed to mean "the record withdrew this",
+  but it was declared inside the one class that first used it; it is now a token
+  pair on the root, and a `superseded` chip wears it in all five places one
+  renders: the sidebar, the section listing, the front door's stack, the
+  document's own governance strip, and search results. The colour is additive and
+  never the whole signal — the word "superseded" is beside it everywhere.
+
+  **The ramp covers every level a document can write, and the top of a document
+  stopped moving.** Three defects an audit of the shipped stylesheet turned up
+  after the first pass: a body `# heading` was reached by neither rule — the page
+  title's selector is a child combinator — so it rendered at 30px in the SANS
+  face at weight 800, the loudest thing on the page, in the site's voice, for the
+  record's own words; `h5` and `h6` were 16px/400 with no margins at all, which
+  is a paragraph, because the prose plugin never defines them and preflight
+  resets them; and the ramp's own margins beat the shell's "first block has no
+  top margin" rule, which is written with `:where()` and therefore has no
+  specificity, so a document whose body opened with a heading started 44px lower
+  than one that opened with a sentence. All three fixed and measured.
+
+  **A document reads like documentation, not a wall of black.** Under the
+  headings almost everything was one weight of one ink: a link inside a paragraph
+  rendered at the same colour and weight as the `<strong>` beside it, told apart
+  only by an underline, so nothing on the page looked clickable. Links in running
+  text now take the accent — in running text only, because a heading carries an
+  anchor around its own words and colouring those turns every heading blue.
+  Emphasis is heavier than the 500 the prose default gave it. A table's head
+  speaks in the mono voice every other label on the site uses and its rows are
+  separated by hairlines, where `tbody tr` previously had a 0px border and the
+  cells simply floated. A quotation steps back in muted ink instead of shouting
+  in italic. And a fenced code block finally looks like a block: Fumadocs paints
+  its surface with `bg-fd-card`, which in this palette is under 2% away from the
+  page colour, so it takes `--muted` — the token that actually means "a surface
+  on the page", and a light/dark pair.
+
+  **Inline code carries its own colour.** A frontmatter key or a path in running
+  text was set in the same ink as the prose, leaving a grey chip to do the whole
+  job of saying "this is machine vocabulary". It now has a token of its own — a
+  deep teal, as a light/dark pair — chosen because the two colours already on
+  this site are spoken for: the accent means link or action, so tinting code with
+  it would make every key look clickable, and `--ksor-caution` means the record
+  withdrew something.
+
+  **A record's entries look clickable before you touch them.** The list a folder
+  page shows was a hairline register whose rows were links and said so only on
+  hover — so on a touch screen, where there is no hover, nothing ever indicated
+  they could be opened. Each entry is a card now: a bordered surface, an icon
+  that distinguishes a folder from a document, the title in the record's serif,
+  its metadata in mono, and an arrow that says where pressing leads. The voice is
+  unchanged, and so is the rule that `approved` shows no label.
+
+- 2c67e18: **`ksor init` seeds a real starter record instead of one bare stub.**
+
+  A fresh project used to arrive with a single document titled "Your first
+  governed document" — enough to prove the directory was not empty, and nothing
+  more. The first `pnpm dev` therefore showed a site with one page on it, which is
+  the worst possible demonstration of a system whose whole subject is a governed
+  body of knowledge: no folder, no owner, no provenance, no supersession, no
+  second status, and a front door with one card on it.
+
+  Five documents now ship in `knowledge/`, in a two-level shape:
+
+  ```text
+  knowledge/
+  ├── what-is-a-ksor.md
+  ├── governance-ladder.md
+  └── surfaces/
+      ├── index.md
+      ├── for-people.md
+      └── for-agents.md
+  ```
+
+  They are about KSoR itself, and they carry the governance keys they describe —
+  owners, `provenance` naming real sources, effective dates, `order`, and one
+  `draft` beside four `approved`. So the governance surfaces are visible working
+  on the first run: a caveat status in the sidebar and on the front door, a
+  folder that counts what it holds, provenance rendered at the foot of a page,
+  and `llms.txt` carrying the same facts to an agent.
+
+  `instance.md` leads with the matching authority sentence and its display title
+  is `KSoR`, so the site has a coherent identity out of the box rather than a
+  placeholder. Both the record and the identity are seed content the adopter
+  replaces: `instance.md` says so in its own body, and the intake interview
+  rewrites the identity as its first job.
+
+  The record is still the adopter's outright (decision 4) — these are documents
+  to delete as real knowledge arrives, not framework files to work around.
+
+  The seeded documents are sectioned rather than flat — `##` down to `####`,
+  never an `# h1`, because the frontmatter title is already the page heading.
+  A record of headingless documents would leave both the document heading ramp
+  and the "On this page" table of contents unexercised on exactly the pages an
+  adopter reads first.
+
 ## 0.0.20
 
 ### Patch Changes
