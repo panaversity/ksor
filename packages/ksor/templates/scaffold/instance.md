@@ -34,32 +34,26 @@ Write and govern the knowledge once; every surface here derives from it. When a
 slide deck, a wiki page or a model's memory disagrees with this record, this
 record wins.
 
-**Everything above is a starter record about KSoR itself, and it is yours to
-replace.** It ships so that a fresh project has a real governed corpus to read
-on the first `pnpm dev` — statuses, owners, provenance, a folder and a draft —
-rather than an empty shelf. The documents live in `knowledge/`; delete them as
-your own knowledge arrives.
+## This is a starter, and it is yours to replace
 
-The heading above is this record's **display title** — the human name every
-page leads with. The intake interview replaces it with the real one
-("Acme Operations Handbook"); the machine identity stays `KSOR-STAMP-NAME`
-in the frontmatter, and that is what agents and citations use.
+Everything above describes KSoR itself. It ships filled in so that a fresh
+project has a real governed corpus on the first `pnpm dev` — statuses, owners,
+provenance, a folder and a draft — instead of an empty shelf and a placeholder.
+The documents live in `knowledge/`; delete them as your own knowledge arrives.
 
-The first paragraph is the sentence that matters most: it is the first thing
-the site publishes, and it is what tells an agent where this record's authority
-ends. This prose IS the agent surface's system prompt — `ksor serve` wires it
-into the MCP server's instructions — so write it for a reader who must act on
-it.
+Be deliberate about replacing it, because a starter that describes the wrong
+thing describes it _everywhere_. Two lines here are read by every surface:
+
+- **The heading** is the display title — the human name every page leads with.
+  The machine identity stays `KSOR-STAMP-NAME` in the frontmatter, and that is
+  what citations and `llms.txt` use.
+- **The first paragraph** is this record's scope. The site publishes it, and
+  `ksor serve` hands it to a connecting agent as the MCP server's instructions.
+  A record published with this paragraph unchanged will tell an agent — quite
+  accurately, and quite uselessly for you — that it is authoritative for what a
+  Knowledge System of Record is.
 
 Ask your coding agent to run the **intake interview** (it knows how — see
 `.agents/skills/intake-interview/`), answer its questions, and let it write
-this document with you.
-
-Until you do, this record describes KSoR rather than your organization — and
-it describes it everywhere, not just on the page. The first paragraph above is
-what `ksor serve` hands a connecting agent as its instructions, and what the
-registry document publishes as this record's one-line description. That is the
-cost of shipping a starter with something real in it instead of a placeholder:
-a scaffold nobody has run the interview on will tell an agent, accurately, that
-it is authoritative for what a Knowledge System of Record is. Replace it and
-both surfaces follow, because both read this one paragraph.
+this document with you. Replace those two lines and every surface follows,
+because every surface reads them from here.
