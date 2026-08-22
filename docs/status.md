@@ -6,7 +6,7 @@ updated: 2026-08-22.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.16** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.17** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -16,7 +16,7 @@ unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
 
-Verified end to end against each published version (most recently 0.0.16,
+Verified end to end against each published version (most recently 0.0.17,
 2026-08-22: fresh `npm install` into a bare project, driven by the real
 `@modelcontextprotocol/client` SDK over live Postgres 17.7 + pgvector 0.8.2
 with real Gemini embeddings). What that walk covers: install · `schema` ·
@@ -27,6 +27,22 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### Install weight (0.0.17)
+
+`npx @panaversity/ksor init` installed **54 MB across 52 packages**; 32 MB of
+that was `@google/genai` and its dependencies, carried by every adopter
+including those who never reach a served rung. It made two HTTP calls, both
+already behind one typed client boundary, so those calls are now spoken
+directly: **22 MB, 22 packages**.
+
+The swap was gated on a measurement taken before any code was written — the SDK
+and the REST endpoint return **byte-identical vectors** for the same text, model,
+`outputDimensionality` and `taskType` (max per-component difference 0.000e+0 at
+1536 dimensions). Stored embeddings and calibrated floors therefore keep their
+meaning; had they differed by a rounding step the swap would have silently
+invalidated `vector_floor` everywhere. The provider seam is unchanged and a
+deployment may still supply an SDK client through `clientFactory`.
 
 ### What a real foreign corpus found (0.0.16)
 
@@ -192,9 +208,9 @@ cannot land unnoticed.
     surface (decision 11 revision 2026-08-20), `ksor init` now declares
     `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
     version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
-    first-class in every new project. **Released in 0.0.8-0.0.16.**
+    first-class in every new project. **Released in 0.0.8-0.0.17.**
 
-- **Governance, honesty and measurement work (0.0.8-0.0.16, 2026-08-21/22).**
+- **Governance, honesty and measurement work (0.0.8-0.0.17, 2026-08-21/22).**
   Reading order is one rule across the website, `llms.txt` and the MCP
   `outline` tool — the door had been reading the predecessor's Docusaurus keys,
   which no compliant record may declare. `ksor serve` reports its own posture
