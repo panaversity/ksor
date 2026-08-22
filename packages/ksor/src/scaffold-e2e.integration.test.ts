@@ -466,11 +466,15 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(homeHtml, "the home page points at the full-corpus file").toContain("llms-full.txt");
     expect(homeHtml, "…and at the per-document markdown").toContain("/md/");
 
-    // The front door wears the record's own shell: the sidebar IS the record,
-    // so a reader sees what is in it before clicking anything. It rendered in
-    // a separate navbar-only layout until 2026-08-22, which is how a system of
-    // record ended up with a first page that showed none of the record.
-    expect(homeHtml, "the home page renders inside the record shell").toContain('id="nd-sidebar"');
+    // The front door stands ALONE — no sidebar, no document chrome (owner,
+    // 2026-08-22). It wore the full docs shell for part of that day, on the
+    // reasoning that a system of record should show the record immediately;
+    // the call is that a landing page should land, and `Open the record` is
+    // the door. Asserted, because "the home page grew a sidebar again" is
+    // exactly the kind of drift a shell refactor causes silently.
+    expect(homeHtml, "the home page is a landing page, not a document page").not.toContain(
+      'id="nd-sidebar"',
+    );
     // The AGENT surface carries the same governance, or the record has two
     // truths (research/site-design.md F1): before this, llms.txt listed a
     // withdrawn policy and its replacement as adjacent entries told apart only

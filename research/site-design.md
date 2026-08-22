@@ -402,9 +402,12 @@ Four patterns, and what we took:
 
 1. **The first page renders inside the docs shell.** `modelcontextprotocol.io`
    redirects to a document; Cursor's `/docs` is a document with the sidebar
-   beside it. **Adopted** — the front door wears `components/record-shell`, so a
-   reader sees the record before clicking. It also answers the complaint that
-   drove this pass: a single centred column left a wide screen 60% empty.
+   beside it. **Adopted, then REVERSED the same day (owner, 2026-08-22)**: a
+   landing page should land, and the record's navigation belongs on the other
+   side of `Open the record`. The shell extraction it produced stays —
+   `components/record-shell` is now the document pages' chrome, defined once —
+   and the emptiness that drove this pass is answered by the two-column hero
+   instead.
 2. **Asymmetric hero, live artifact beside the identity.** Anthropic's docs home
    pairs eyebrow + display title + one sentence + search with a running code
    sample. **Adopted, with the artifact changed**: ours renders the record's own

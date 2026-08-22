@@ -74,9 +74,9 @@ TOC column is held on every page, so sidebar and rail are the same width and the
 column lands in the same place on every document: x=464, 672px wide, on a
 document with a table of contents and on one without, verified in both.
 
-**The home page is the record's own front door.** It renders inside the record
-shell, so the sidebar — the record itself — is present before you click
-anything, and the hero is split: the record's identity, its authority sentence
+**The home page is the record's own front door.** It is a landing page that
+stands alone — no sidebar, no document chrome, `Open the record` as the way in —
+and the hero is split: the record's identity, its authority sentence
 and a humans/agents switch on the left; on the right a panel showing the
 record's OWN published bytes, the same `llms.txt` the route serves and the same
 markdown twin `/md/` serves, with a copy button. Below it the record lists as

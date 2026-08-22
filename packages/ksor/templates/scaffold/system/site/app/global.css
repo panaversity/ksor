@@ -171,8 +171,8 @@
    prose does not move (measured at 1728px: the article starts at x=548 either
    way). Below 97rem nothing changes — the offsets were already zero. Percent
    rather than `100vw` on purpose: `vw` includes the scrollbar the stable
-   gutter below reserves, which would overflow the row by its width. Every page
-   of the record wears this same grid, the front door included. */
+   gutter below reserves, which would overflow the row by its width. The home
+   layout is its own shell and does not use this grid at all. */
 :root {
   --fd-layout-width: 100%;
 }
