@@ -19,7 +19,7 @@ import {
   SearchDialogOverlay,
   type SharedProps,
 } from "fumadocs-ui/components/dialog/search";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 /**
  * The search dialog, with a caveat status on the rows that have one.
@@ -63,9 +63,23 @@ function readStatuses(): Record<string, string> {
 const trimSlash = (url: string): string =>
   url.length > 1 && url.endsWith("/") ? url.slice(0, -1) : url;
 
-export default function KsorSearchDialog({ api, ...props }: KsorSearchDialogProps) {
+export default function KsorSearchDialog({ api, onOpenChange, ...props }: KsorSearchDialogProps) {
   const client = staticClient({ from: api });
   const { search, setSearch, query } = useDocsSearch({ client });
+
+  // Closing the dialog clears the query. `useDocsSearch` keeps the term in
+  // component state and the dialog stays MOUNTED when it closes, so without
+  // this the next Cmd-K reopened onto the last search and its results — a
+  // reader coming back to look for something else had to clear the field
+  // first, and a stale result list is a worse first impression than an empty
+  // one (found live 2026-08-22).
+  const handleOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) setSearch("");
+      onOpenChange(open);
+    },
+    [onOpenChange, setSearch],
+  );
   const byUrl = useMemo(() => {
     const map = new Map<string, string>();
     for (const [url, status] of Object.entries(readStatuses())) map.set(trimSlash(url), status);
@@ -73,7 +87,13 @@ export default function KsorSearchDialog({ api, ...props }: KsorSearchDialogProp
   }, []);
 
   return (
-    <SearchDialog search={search} onSearchChange={setSearch} isLoading={query.isLoading} {...props}>
+    <SearchDialog
+      search={search}
+      onSearchChange={setSearch}
+      isLoading={query.isLoading}
+      onOpenChange={handleOpenChange}
+      {...props}
+    >
       <SearchDialogOverlay />
       <SearchDialogContent>
         <SearchDialogHeader>
