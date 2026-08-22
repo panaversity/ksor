@@ -31,7 +31,7 @@ import { chunkText, cleanBody, CHUNK_POLICY, headingPathText } from "./chunking.
 import {
   addedSlugs,
   allocateRun,
-  bestCarrySource,
+  carrySources,
   carryForward,
   flip,
   flipDelta,
@@ -268,16 +268,21 @@ export async function buildStructure(
       modelId,
     });
   }
-  const newest = await bestCarrySource(client, {
+  //   3. From every other generation holding vectors, best-vetted first, then
+  //      newest — including runs a kill left in `building`. Each pass fills only
+  //      what the last left pending, so priority is expressed by ORDER; an
+  //      abandoned run can never outrank the active one, and its vectors are no
+  //      less correct for the run having died (issue #97).
+  for (const source of await carrySources(client, {
     tenantId,
     corpusId: opts.corpusId,
     excludeGeneration: generation,
-  });
-  if (newest !== 0 && newest !== active) {
+  })) {
+    if (source === active) continue;
     carried += await carryForward(client, {
       tenantId,
       generation,
-      fromGeneration: newest,
+      fromGeneration: source,
       modelId,
     });
   }

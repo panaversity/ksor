@@ -506,3 +506,107 @@ describe.runIf(adminDsn === "")("ingest pipeline db acceptance (gated)", () => {
     expect(adminDsn).toBe("");
   });
 });
+
+/**
+ * An interrupted ingest must not throw away the vectors it already paid for.
+ *
+ * A killed run leaves its generation in state `building`, and `bestCarrySource`
+ * accepted only `ready`/`active`/`retired` — so the rerun carried NOTHING and
+ * re-embedded the whole corpus. Reproduced live against a managed Postgres: an
+ * 81-document book, killed at 4,736 of 6,963 chunks, rerun reported
+ * `carried 0, pending 6963` and started paying again (issue #97).
+ *
+ * The asymmetry is what makes it expensive. Interrupt a RE-ingest and a complete
+ * generation still exists, so the rerun carries from it. Interrupt the FIRST
+ * ingest and there is none — and the first ingest of a large corpus is the
+ * longest, the least familiar, and the one most likely to be interrupted.
+ *
+ * Nothing about an abandoned run makes its vectors wrong: an embedding is a pure
+ * function of (embed input, model), the match key already establishes identity,
+ * and carry only ever fills `pending` rows. The run's state adds nothing to that
+ * judgement — so it no longer gates it.
+ *
+ * Order still matters and is preserved: the ACTIVE generation is carried from
+ * first (vetted vectors win), then complete generations newest-first, and only
+ * then abandoned ones. Each pass fills what the last left pending, so priority
+ * is expressed by order rather than by exclusion.
+ */
+describe.runIf(adminDsn !== "")("carry-forward across an interrupted run (db)", () => {
+  const DB2 = `ksor_carry_${randomBytes(4).toString("hex")}`;
+  const T2 = "carry";
+  const C2 = "carry-rulebook";
+  const fake2 = buildShippedProvider("fake", { apiKey: null, dim: DIM });
+  let pool2: pg.Pool;
+  let admin2: pg.Pool;
+  let inst2: ContentInstance;
+
+  beforeAll(async () => {
+    const { Pool } = (await import("pg")).default;
+    admin2 = new Pool({ connectionString: adminDsn });
+    await admin2.query(`CREATE DATABASE ${DB2}`);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB2}`;
+    pool2 = contentPool(url.toString(), 4);
+    await applySchema(pool2, DIM);
+    // The grant row is the ingest AUTHORIZATION — the RLS policy checks
+    // current_user after the SET LOCAL ROLE pin, so it names the ingest role.
+    await pool2.query(
+      "INSERT INTO ingest_tenant_grants (role_name, tenant_id) VALUES ('sor_content_ingest', $1)",
+      [T2],
+    );
+    inst2 = instanceOf(T2, C2);
+  }, 300_000);
+
+  afterAll(async () => {
+    await pool2?.end().catch(() => undefined);
+    await admin2?.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin2?.end().catch(() => undefined);
+  });
+
+  it("carries from a generation whose run never finished", async () => {
+    // Generation 1: built and embedded, but never flipped and never marked
+    // ready — exactly what a killed `ksor ingest` leaves behind.
+    const first = await buildGeneration(pool2, inst2, {
+      knowledgeDir: FIXTURE,
+      sourceCommit: "interrupted",
+      flip: false,
+      provider: fake2,
+    });
+    expect(first.generation).toBe(1);
+    expect(first.embedded, "the first run did embed real vectors").toBeGreaterThan(0);
+
+    // A finished-but-unflipped run lands in `ready`, which was ALREADY an
+    // accepted carry source — so building the fixture that way proves nothing.
+    // A KILLED run is the case: it never reaches the finalize step and stays
+    // `building`. That is what is reproduced here, and asserted, because the
+    // first version of this test passed against the unfixed code by testing
+    // `ready` instead.
+    await pool2.query(
+      "UPDATE ingestion_runs SET state = 'building' WHERE tenant_id = $1 AND generation = 1",
+      [T2],
+    );
+    const state = await pool2.query(
+      "SELECT state FROM ingestion_runs WHERE tenant_id = $1 AND generation = 1",
+      [T2],
+    );
+    expect(
+      String(state.rows[0].state),
+      "the fixture must be an ABANDONED run, or this proves nothing",
+    ).toBe("building");
+
+    // The rerun: same tree, nothing published, so the ONLY possible carry source
+    // is the abandoned generation.
+    const embedded: string[] = [];
+    const second = await buildGeneration(pool2, inst2, {
+      knowledgeDir: FIXTURE,
+      sourceCommit: "rerun",
+      flip: false,
+      provider: instrumented(fake2, (texts) => embedded.push(...texts)),
+    });
+    expect(
+      second.carried,
+      `the abandoned run's vectors were thrown away: ${JSON.stringify(second)}`,
+    ).toBe(first.chunks);
+    expect(embedded, "and nothing was embedded a second time").toEqual([]);
+  }, 300_000);
+});
