@@ -136,8 +136,16 @@ function readScalar(raw: string): ScalarRead {
   // override — which is what the kernel does. Kept in step with `scalarValue`
   // in ingest/adapters/plain-tree.ts and bound to it by
   // `stable-id-conformance.test.ts`.
+  // VALID YAML this reader does not model: a flow sequence or mapping, a block
+  // scalar, an anchor/alias/tag. PyYAML parses every one — the DOCUMENT is fine
+  // and only this KEY is beyond the reader, so it must not empty the map.
+  // Checked BEFORE the ": " test, because a flow mapping legitimately contains
+  // one (`meta: {a: 1}`).
+  // `typed` rather than `refused`: the key exists but is not a string, so this
+  // map (which holds strings) omits it and no override is taken — exactly what
+  // the kernel now does with `value: null` (issue #78).
+  if (/^[|>&*!{[]/.test(plain)) return { kind: "typed", value: "" };
   if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { kind: "refused", value: "" };
-  if (/^[|>&*!{[]/.test(plain)) return { kind: "refused", value: "" };
   if (YAML_TYPED.test(plain)) return { kind: "typed", value: "" };
   return { kind: "string", value: plain };
 }

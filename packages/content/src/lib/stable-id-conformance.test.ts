@@ -96,10 +96,21 @@ describe("one stable_id, both surfaces", () => {
     }
   });
 
-  it("the FLOW LIST case is genuinely poisoned — or this table proves nothing", () => {
-    // A control: if the kernel ever stops poisoning, these cases become
-    // trivially equal and the table would still pass while testing nothing.
+  it("a flow list no longer costs the document its override (#78)", () => {
+    // This used to assert the opposite, and the opposite was the defect: the
+    // kernel emptied the whole map, so `sor_id:` was dropped and the id fell
+    // back to the path. A flow list is valid YAML; the override now stands, and
+    // BOTH readers take it — which is the property this file exists to hold.
     const text = doc("title: Policy\ntags: [hr, payroll]\nsor_id: hr/policy");
+    expect(frontmatterMeta(text)["sor_id"], "the kernel keeps the override").toBe("hr/policy");
+    expect(stableIdFrom(RECORD, REL, blockOf(text)), "and so does the site").toBe("hr/policy");
+  });
+
+  it("a GENUINELY poisoned map still drops the override on both sides", () => {
+    // The control that keeps the table honest: if nothing poisoned any more,
+    // every case would be trivially equal and this file would prove nothing.
+    // An unquoted value carrying ": " is what PyYAML actually rejects.
+    const text = doc("title: Note: quoting\nsor_id: hr/policy");
     expect(Object.keys(frontmatterMeta(text)), "the kernel drops the whole map").toEqual([]);
     expect(
       stableIdFrom(RECORD, REL, blockOf(text)),

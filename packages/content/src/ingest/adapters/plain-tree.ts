@@ -488,9 +488,29 @@ function scalarValue(raw: string): ScalarResult {
   if (/^[-+]?(?:\.[0-9]+|[0-9][0-9_]*\.[0-9_]*)(?:[eE][-+]?[0-9]+)?$/.test(plain)) {
     return { ok: true, value: Number.parseFloat(plain.replaceAll("_", "")) };
   }
-  // PyYAML refuses these in a plain value position; anything it would instead
-  // read as a non-scalar (flow map/seq) is equally outside this reader's scope.
+  // VALID YAML this reader does not model: a flow sequence or mapping, a block
+  // scalar, an anchor/alias/tag. PyYAML parses every one — the DOCUMENT is fine
+  // and only this KEY is beyond the reader, so it must not empty the map.
+  // Checked BEFORE the ": " test, because a flow mapping legitimately contains
+  // one (`meta: {a: 1}`).
+  //
+  // Refusing them used to poison the whole meta, which cost four documents in a
+  // real book their titles: "The System of Context: Connecting the Records to
+  // Real Work" was served as "System Of Context" because one `authors: [...]`
+  // line sat beside the title (issue #78). Recorded as a non-string, so
+  // `stableIdOf` still declines to take it as an override — which is what keeps
+  // this in step with the site (see denial-rule.ts).
+  if (/^[|>&*!{[]/.test(plain)) return { ok: true, value: null };
+  // INVALID: PyYAML raises on a plain scalar carrying ": " or ending in ":", so
+  // the oracle's error path empties the whole meta and so does this.
   if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { ok: false, value: null };
-  if (/^[|>&*!{[]/.test(plain)) return { ok: false, value: null };
+  // VALID, but not modelled here: a flow sequence or mapping, a block scalar, an
+  // anchor/alias/tag. PyYAML parses every one of these — so the document is fine
+  // and only this KEY is beyond the reader. Refusing them used to poison the
+  // whole meta, which cost four documents in a real book their titles: "The
+  // System of Context: Connecting the Records to Real Work" was served as
+  // "System Of Context", because one `authors: [...]` line sat beside the title
+  // (issue #78). The key is recorded present-with-unknown-value; the keys this
+  // adapter actually consumes survive.
   return { ok: true, value: plain };
 }
