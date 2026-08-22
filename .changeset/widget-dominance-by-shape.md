@@ -6,7 +6,7 @@ A quiz no longer swallows the explanation that precedes it
 
 The previous release moved navigation from a length test to a shape test, so a
 short fact stopped being mistaken for a link list. The rule that decides whether
-a whole section is *a widget* — a quiz, a slide embed — was left on the old
+a whole section is _a widget_ — a quiz, a slide embed — was left on the old
 threshold: under 250 characters of teaching before the widget, and the entire
 section was labelled `assessment` or `embed`, neither of which any search
 returns.
