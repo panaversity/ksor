@@ -1,7 +1,12 @@
 "use client";
 
 import { useDocsSearch } from "fumadocs-core/search/client";
-import { oramaStaticClient } from "fumadocs-core/search/client/orama-static";
+// `staticClient`, not `oramaStaticClient`: 16.14.0 replaced the Orama engine
+// with ZBSearch and renamed the export, keeping the old name as a deprecated
+// alias. Riding an alias is borrowing time — the subpath and the options are
+// unchanged, so the new name costs nothing today and does not have to be found
+// again when the alias goes.
+import { staticClient } from "fumadocs-core/search/client/orama-static";
 import {
   SearchDialog,
   SearchDialogClose,
@@ -59,7 +64,7 @@ const trimSlash = (url: string): string =>
   url.length > 1 && url.endsWith("/") ? url.slice(0, -1) : url;
 
 export default function KsorSearchDialog({ api, ...props }: KsorSearchDialogProps) {
-  const client = oramaStaticClient({ from: api });
+  const client = staticClient({ from: api });
   const { search, setSearch, query } = useDocsSearch({ client });
   const byUrl = useMemo(() => {
     const map = new Map<string, string>();
