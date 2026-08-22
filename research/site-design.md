@@ -368,6 +368,17 @@ simplify an implementation.
   open the record, point at `llms.txt`.
 - **Tightening the measure below 86 characters**: measured, in range, and the
   screenshot-driven instinct to "fix" it was wrong.
+- **An illustration of the product's claim on the front door.** Five were drawn
+  across 2026-08-22 — a map of the record, stacked sheets, source-and-
+  projections, and a panel of four (instrument, prism, strata, register) — and
+  every one was rejected by the owner ("none of them is suitable for KSoR").
+  The rule that came out of it is worth more than any of the drawings: **a
+  stock illustration is the one thing on this page that can never be true of
+  the adopter's corpus.** Every KSoR would ship the identical picture, which
+  makes it decoration on the page whose entire subject is what this particular
+  record is authoritative for. What replaced it is the record — the document
+  `Open the record` opens, set as the record describes it, with its next
+  entries behind. Reversed only if a future front door has no record to show.
 
 ---
 
@@ -407,9 +418,10 @@ Four patterns, and what we took:
    side of `Open the record`. The shell extraction it produced stays —
    `components/record-shell` is now the document pages' chrome, defined once.
    The emptiness that drove the pass is answered instead by the cover: the
-   identity claims the whole window under the navbar, and a drawing of what a
-   system of record does sits beside it as a second column. The drawing is the
-   design's one bold move; everything else on the page is quiet by intent.
+   identity claims the whole window under the navbar, and the record itself
+   sits beside it as a second column — the document it opens on, set as the
+   record describes it, with the entries behind it. That stack is the design's
+   one bold move; everything else on the page is quiet by intent.
 2. **Asymmetric hero, live artifact beside the identity.** Anthropic's docs home
    pairs eyebrow + display title + one sentence + search with a running code
    sample. **Adopted, with the artifact changed**: ours renders the record's own
@@ -418,14 +430,15 @@ Four patterns, and what we took:
    show. **REVERSED (owner, 2026-08-22): "no need to add urls in home page".**
    A panel of raw `llms.txt` bytes is evidence aimed at a reader who will never
    fetch it, and it put addresses in front of the primary action. The artifact
-   is now a drawing of the same claim; `recordIndexText` stays as the one
-   builder behind the `llms.txt` route, which is where an agent looks anyway.
+   is the record itself — see the note under §4 on why a drawing could not be;
+   `recordIndexText` stays as the one builder behind the `llms.txt` route,
+   which is where an agent looks anyway.
 3. **A humans/agents switch.** Vercel's AI SDK puts one under its headline.
    **Adopted, then REVERSED with the panel it switched (owner, 2026-08-22).**
    A control that toggles between two audiences only earns its place if each
    side leads somewhere different; with the addresses gone, both sides led to
-   the same record, so the switch was ceremony. The claim is carried by the
-   drawing instead.
+   the same record, so the switch was ceremony. The record on the cover
+   carries the claim instead, by being the thing itself.
 4. **Page actions (`Copy page`) beside `rel="alternate" type="text/markdown"`.**
    MCP and Cursor both ship it; MCP's page carries the same alternate tag our
    document pages emit. **Not yet taken** — worth its own change on the document

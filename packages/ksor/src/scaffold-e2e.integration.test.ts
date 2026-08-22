@@ -455,6 +455,29 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // is what a citation carries, so it belongs where an agent's operator can
     // read it without opening a file.
     expect(homeHtml, "the home page names the instance slug").toContain("walkthrough");
+
+    // The front door shows the RECORD, not a drawing of the idea of one
+    // (owner, 2026-08-22: four abstract illustrations rejected — "none of them
+    // is suitable for KSoR"). A stock diagram is the one thing on this page
+    // that can never be true of the adopter's corpus; these three assertions
+    // are what makes the picture the corpus:
+    //   the document `Open the record` opens, set as the leading card…
+    expect(homeHtml, "the front door names the document it opens on").toContain(
+      "Your first governed document",
+    );
+    //   …the entries of the record standing behind it…
+    expect(homeHtml, "the front door shows the record's next entries").toContain(
+      "Refund policy v5",
+    );
+    //   …under the label that ties the leading card to the button, which is
+    //   the one string only this design emits (the two assertions above would
+    //   also pass on the old cover, which named the first document in a meta
+    //   line — they stay as regression guards, this one is the new contract).
+    expect(homeHtml, "the record stands on the front door as the record").toContain("Opens here");
+    // The count is COMPUTED from the record, so it is asserted as a value and
+    // rendered as one text node — `{n} documents` renders as `3<!-- -->
+    // documents` and would never match (the React-splits-interpolation trap).
+    expect(homeHtml, "the front door counts the record it is showing").toContain("3 documents");
     // The agent addresses came OFF the front door (owner, 2026-08-22): no URLs
     // on the home page. Discoverability is unharmed and still asserted below —
     // `/llms.txt` sits where every agent looks for it, `/llms-full.txt` and the

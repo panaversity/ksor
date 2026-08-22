@@ -2,7 +2,8 @@ import Link from "next/link";
 import Image, { type StaticImageData } from "next/image";
 import type { ReactElement } from "react";
 
-import { RecordArtwork } from "@/components/record-artwork";
+import { RecordStack } from "@/components/record-stack";
+import type { RecordEntry } from "@/lib/source";
 
 /**
  * The cover of the record: one screen, standing alone.
@@ -12,9 +13,10 @@ import { RecordArtwork } from "@/components/record-artwork";
  * is a `--ksor-cover-*` token, so the whole composition inverts with the theme
  * rather than staying dark in both, and the accent inverts with it.
  *
- * The record's own words on the left, the record drawn on the right. The
- * drawing is where this page spends its boldness; everything around it is
- * deliberately quiet.
+ * The record's own words on the left, the record ITSELF on the right — the
+ * document it opens on, and the entries standing behind it. That stack is
+ * where this page spends its boldness; everything around it is deliberately
+ * quiet.
  */
 export function HomeCover({
   foot,
@@ -24,7 +26,8 @@ export function HomeCover({
   purpose,
   documents,
   firstUrl,
-  firstTitle,
+  lead,
+  behind,
 }: {
   mark: StaticImageData;
   name: string;
@@ -32,7 +35,10 @@ export function HomeCover({
   purpose: string | null;
   documents: number;
   firstUrl: string;
-  firstTitle: string;
+  /** The document `Open the record` opens, as the record describes it. */
+  lead: RecordEntry;
+  /** The entries standing behind it in the stack. */
+  behind: readonly RecordEntry[];
   /** Signed from inside the cover, so the front door is one screen. */
   foot?: ReactElement;
 }): ReactElement {
@@ -114,26 +120,14 @@ export function HomeCover({
                   &rarr;
                 </span>
               </Link>
-
-              {/* Where the button lands, said once and quietly. Uppercase made a
-              document's title shout; it is the record's word, not a label. */}
-              <span className="ms-1 font-mono text-xs text-[var(--ksor-cover-muted)]">
-                <span className="tracking-widest uppercase tabular-nums">
-                  {documents} documents
-                </span>
-                <span aria-hidden className="mx-2 text-[var(--ksor-cover-rule)]">
-                  ·
-                </span>
-                opens on {firstTitle}
-              </span>
             </div>
           </div>
 
-          {/* The illustration carries the second audience: it says the record
-            projects into pages, markdown and an agent door without the page
-            printing a list of addresses at a reader who will never fetch one. */}
-          <div className="flex justify-center lg:justify-end lg:self-center">
-            <RecordArtwork />
+          {/* The record, not a picture of one. It also carries what the meta
+              line beside the button used to say — which document opens, and
+              how many the record holds — so neither is said twice. */}
+          <div className="flex justify-center lg:justify-end">
+            <RecordStack lead={lead} behind={behind} documents={documents} />
           </div>
         </div>
       </div>

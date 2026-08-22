@@ -95,7 +95,7 @@ state.
 **The front door is the record's cover, and it is one screen.** The identity
 takes the whole window under the navbar over a faintly ruled ground: the
 record's name, the authority sentence it declares in `instance.md`, one way in,
-and a drawing of what a system of record does. The cover follows the theme
+and the record itself standing beside it. The cover follows the theme
 rather than staying dark in both — pale stock in the light, and in the dark it
 rises one step above the page instead of turning white, because a cover is the
 surface that catches the light. Every machine address came off the page:
@@ -103,13 +103,18 @@ surface that catches the light. Every machine address came off the page:
 markdown twin, so nothing became less discoverable by leaving the front door,
 and the page stopped printing URLs at a reader who will never fetch one.
 
-**The drawing replaces a second list.** The right of the cover illustrates the
-product's own definition — one governed source, sealed, projecting into the
-pages a person reads, the markdown a consumer fetches, and the door an agent
-connects through, with the connectors running one way because that direction is
-the claim. It is SVG rather than a picture file: no binary in the adopter's
-repo, no request at runtime, sharp at any size, and every stroke follows the
-theme.
+**The front door shows the record, not a drawing of one.** The right of the
+cover is the document `Open the record` opens — its own title, its own words,
+its owner and any caveat status — with the record's next entries standing
+behind it, and the count of everything the record holds beneath. Four abstract
+illustrations were drawn for that space first and all four were rejected; the
+reason is the useful part, and it is now written into the component: a stock
+drawing is the ONE thing on this page that can never be true of the adopter's
+corpus, so every KSoR would have shipped the same picture of nothing in
+particular. A record of one document and a record of two hundred now get
+visibly different front doors. Nothing on the page is authored — every string
+is a title, description, owner or status the record itself declares — and the
+depth is CSS, so it costs no image, needs no request, and follows the theme.
 
 **The cover's composition is centred and its type ramp closed.** The signature
 line at the foot took the section's free space as top margin, which cancelled

@@ -191,7 +191,14 @@ export interface RecordEntry {
   readonly documents: number;
 }
 
-function entryFor(page: KnowledgePage): RecordEntry {
+/**
+ * The record's entry for one page — what any listing needs.
+ *
+ * Exported because the front door leads with the document `Open the record`
+ * opens, which is the first page in governed order and may sit BELOW the top
+ * level, where `entriesUnder(null)` would never return it.
+ */
+export function entryFor(page: KnowledgePage): RecordEntry {
   const data: Record<string, unknown> = page.data as unknown as Record<string, unknown>;
   const description = typeof data["description"] === "string" ? data["description"].trim() : "";
   const status = typeof data["status"] === "string" ? data["status"].trim() : "";
