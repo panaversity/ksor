@@ -126,3 +126,21 @@ the middle — and is now 12 / 64 / 20. The accent rule under the title was stil
 pinned to the dark theme's blue from when the cover was dark in both themes,
 which left it all but invisible on the pale light cover; it takes the token
 again, so it inverts with everything else.
+
+**A document's section headings speak in the record's voice, and its
+governance strip has a hierarchy.** Only the title was styled; h2, h3 and h4
+fell through to the shell's prose defaults, which measured 24 / 20 / 16px in
+the SANS body face — so inside one document the title was the record speaking
+and every section heading was the site speaking, and h4 was the body size
+with only its weight to tell it apart. The ramp is now 38 / 28 / 22 / 18 in
+the display serif, scoped to the container the record's own markdown renders
+in so the site's own headings keep their voice.
+
+In the strip under the title, the label and its value were both mono a single
+pixel apart, so "Owner Product Effective 2026-08-22" read as one
+undifferentiated run. The label is now 10px and letterspaced against a 13px
+value that carries the weight. The "Markdown" link stopped wearing the
+bordered badge that means "a status the record declares": it is the one
+ACTION on a row of FACTS, so it takes the accent, which on this site means a
+link. The gap between facts matches the register's.
+

@@ -313,6 +313,66 @@ html > body[data-scroll-locked] {
   text-wrap: pretty;
 }
 
+/* The section headings inside a document. The shell styles the title and
+   leaves h2-h4 to its prose defaults, which measured 24 / 20 / 16px in the
+   SANS body face (read out of the built stylesheet, 2026-08-22). Two things
+   were wrong with that.
+
+   Voice: a section heading is the RECORD speaking, exactly like the title
+   above it, so it belongs in the display serif. Left in sans, a single
+   document spoke in two voices and the change of voice meant nothing —
+   which is the one thing the three faces on this site exist to carry.
+
+   Scale: h4 came out at 16px/600 — the body size. A minor heading and a bold
+   sentence were then the same object, told apart only by context. The ramp is
+   38 / 28 / 22 / 18 against a 16px body, so every level is distinct at a
+   glance and the smallest heading still leads the text under it.
+
+   Scoped INSIDE `.prose`, which is the container Fumadocs wraps the document's
+   own markdown in — the record's words, and nothing else. Scoped to the page
+   instead, this rule reached the site's own headings too and blew up
+   `Provenance`'s deliberately small mono "Sources" label into a 28px serif
+   heading (caught by measuring the rendered page, 2026-08-22): an id beats the
+   Tailwind utilities a component sets on itself, so the component lost an
+   argument it did not know it was having.
+
+   Specificity, not luck: `#nd-page .prose` (1,1,0) beats the prose rule's
+   single class (0,1,0), because that selector wraps its element in `:where()`,
+   which contributes nothing. */
+#nd-page .prose :is(h2, h3, h4) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  text-wrap: balance;
+}
+
+/* Space above a heading, not below it: a heading belongs to the text it
+   introduces. The prose defaults set both in `em`, so raising the sizes above
+   would have scaled the gaps with them and left h2 floating on 56px of air. */
+#nd-page .prose h2 {
+  font-size: 1.75rem;
+  line-height: 1.25;
+  margin-top: 2.75rem;
+  margin-bottom: 0.875rem;
+}
+
+#nd-page .prose h3 {
+  font-size: 1.375rem;
+  line-height: 1.35;
+  margin-top: 2rem;
+  margin-bottom: 0.625rem;
+}
+
+#nd-page .prose h4 {
+  font-size: 1.125rem;
+  line-height: 1.45;
+  /* No negative tracking this close to the body size — it only closes the
+     counters without buying any apparent tightness. */
+  letter-spacing: 0;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
 /* ── The page pager ──────────────────────────────────────────────────────────
    Fumadocs lays the neighbours out as a grid that becomes two columns when both
    exist. With only one — the first or last document of the record — it stays a
