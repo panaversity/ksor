@@ -139,11 +139,13 @@ describe("no document claims that serving publishes", () => {
   ];
 
   it.each(ADOPTER_FACING)("%s", (file) => {
-    // Read it OUTRIGHT. This skipped a missing file for years, and one of the
-    // five names was `.env.example` while the scaffold emits `env.example` —
-    // so the row for the file that actually carries the serve variables never
-    // ran, in the guard whose claim had already been wrong four times. A name
-    // that stops matching must fail here, not quietly stop asserting.
+    // Read it OUTRIGHT. A `try/catch { return }` here meant a name that stopped
+    // matching stopped asserting, silently: this list said `.env.example`, which
+    // is the EMITTED name — materialize.ts:23 maps `env.example` -> `.env.example`
+    // on the way out — while this guard reads the TEMPLATE tree, where the file
+    // is `env.example`. So the row covering the file that actually carries the
+    // serving variables never ran, in the guard whose claim had already been
+    // wrong four times.
     const full = path.join(here, "..", "templates", "scaffold", file);
     const text = readFileSync(full, "utf8");
     for (const shape of FUSED) {

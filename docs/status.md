@@ -6,7 +6,7 @@ updated: 2026-08-22.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.13** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.14** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -16,15 +16,17 @@ unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
 
-Verified end to end against each published version (most recently 0.0.13,
-2026-08-22: fresh `npm install` into a bare project, driven by a real MCP
-client over live Postgres + pgvector with real Gemini embeddings). What that
-walk covers: install · `schema` · `grant` · first `ingest` builds and flips · a
-**second ingest consumes nothing** ("unchanged — generation N already serves
-this corpus") · the shrink guard refusing a catastrophic deletion · `serve`
-boots from `.env` alone · three MCP tools · `search` returns cited passages
-carrying their generation · `read` is byte-faithful · snapshot pinning survives
-a generation flip · both surfaces refuse a withdrawn document.
+Verified end to end against each published version (most recently 0.0.14,
+2026-08-22: fresh `npm install` into a bare project, driven by the real
+`@modelcontextprotocol/client` SDK over live Postgres 17.7 + pgvector 0.8.2
+with real Gemini embeddings). What that walk covers: install · `schema` ·
+`grant` · first `ingest` builds and flips · a **second ingest consumes nothing**
+("unchanged — generation N already serves this corpus") · the shrink guard
+refusing a catastrophic deletion · `serve` boots and prints its posture · three
+MCP tools answer · `search` returns cited passages carrying their generation ·
+`read` is byte-faithful and carries provenance pinned to the serving generation
+· snapshot pinning survives a generation flip · both surfaces refuse a
+withdrawn document.
 
 ### Retrieval, measured rather than asserted
 
@@ -37,6 +39,20 @@ almost no vocabulary with the question (2026-08-21):
   matches nothing. The shipped "hybrid" is empirically vector-only for the
   query shape this product exists to serve; the keyword arm earns its place on
   exact-term lookup, not on questions.
+
+**Most of a realistic corpus never reaches search** (issue #55). Sections
+shorter than the navigation threshold are stored and readable but excluded from
+the search index. Walked on 0.0.14 with four documents — three of them ordinary
+short policy statements (a refund window, an escalation path, a badge rule),
+each 200-300 characters — and **three of the four chunks were classified
+unsearchable**, leaving the scaffold's own placeholder as the only document
+`search` could return. Asked "how long does a buyer have to send something
+back", against a record that states thirty days, the door returned the
+placeholder: the answer was in the corpus, correctly ingested, and unreachable.
+`ksor ingest` reports this honestly since 0.0.13 ("FOUND ONLY BY NAME"), which
+is how it was caught — but honest is not fixed, and short documents are what
+institutional knowledge is largely made of. The threshold's direction is
+undecided: it needs measuring against both corpus shapes before it moves.
 
 **The vector index is NOT being used** (issue #59). `idx_chunks_hnsw` is built
 and maintained, and the query `ksor serve` sends plans a sequential scan plus a
@@ -130,9 +146,9 @@ cannot land unnoticed.
     surface (decision 11 revision 2026-08-20), `ksor init` now declares
     `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
     version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
-    first-class in every new project. **Released in 0.0.8-0.0.13.**
+    first-class in every new project. **Released in 0.0.8-0.0.14.**
 
-- **Governance, honesty and measurement work (0.0.8-0.0.13, 2026-08-21/22).**
+- **Governance, honesty and measurement work (0.0.8-0.0.14, 2026-08-21/22).**
   Reading order is one rule across the website, `llms.txt` and the MCP
   `outline` tool — the door had been reading the predecessor's Docusaurus keys,
   which no compliant record may declare. `ksor serve` reports its own posture
