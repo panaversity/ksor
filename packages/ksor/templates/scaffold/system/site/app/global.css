@@ -73,13 +73,18 @@
   --sidebar-border: oklch(0.9 0.004 255);
   --sidebar-ring: #1d4ed8;
 
-  /* The cover: the surface the front door's band is printed on. Ink with the
-     brand in it — hue 258 sits between the text's 255 and the accent's 264, and
-     0.04 chroma is enough to read as "our blue, darkened" rather than as a
-     black rectangle that happens to be on the page. */
-  --ksor-cover: oklch(0.2 0.042 258);
-  --ksor-cover-foreground: oklch(0.97 0.006 258);
-  --ksor-cover-panel: oklch(0.245 0.04 258);
+  /* The cover: the surface the front door's band is printed on. It follows the
+     theme like everything else — in the light it is pale stock, a shade of the
+     brand rather than a shade of grey (hue 258, between the text's 255 and the
+     accent's 264). It was ink in both themes for one afternoon, which made the
+     light theme a dark page with a white foot. */
+  --ksor-cover: oklch(0.965 0.013 258);
+  --ksor-cover-foreground: oklch(0.2 0.03 258);
+  --ksor-cover-muted: oklch(0.5 0.022 258);
+  --ksor-cover-rule: oklch(0.885 0.016 258);
+  --ksor-cover-hover: oklch(0.935 0.018 258);
+  --ksor-cover-panel: oklch(1 0 0);
+  --ksor-cover-panel-rule: oklch(0.9 0.014 258);
 }
 
 .dark {
@@ -115,12 +120,16 @@
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: #7fb0f9;
 
-  /* In the dark the cover does not turn white — it rises one step ABOVE the
-     page (0.245 against the background's 0.155), because a cover is the surface
-     that catches the light. Same object, same lighting, darker room. */
+  /* In the dark the cover rises one step ABOVE the page (0.245 against the
+     background's 0.155) rather than inverting: a cover is the surface that
+     catches the light. Same object, same lighting, darker room. */
   --ksor-cover: oklch(0.245 0.038 258);
   --ksor-cover-foreground: oklch(0.97 0.006 258);
+  --ksor-cover-muted: oklch(0.72 0.022 258);
+  --ksor-cover-rule: oklch(0.34 0.03 258);
+  --ksor-cover-hover: oklch(0.3 0.035 258);
   --ksor-cover-panel: oklch(0.285 0.036 258);
+  --ksor-cover-panel-rule: oklch(0.36 0.03 258);
 }
 
 /* The token → utility mapping shadcn components compile against, as

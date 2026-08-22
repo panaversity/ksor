@@ -95,11 +95,11 @@ export function HomeCover({
                 width={30}
                 height={30}
                 priority
-                className="size-[30px] rounded ring-1 ring-white/15"
+                className="size-[30px] rounded ring-1 ring-[var(--ksor-cover-rule)]"
               />
-              <p className="font-mono text-xs tracking-[0.18em] text-white/50 uppercase">
+              <p className="font-mono text-xs tracking-[0.18em] text-[var(--ksor-cover-muted)] uppercase">
                 System of record
-                <span aria-hidden className="mx-2 text-white/25">
+                <span aria-hidden className="mx-2 text-[var(--ksor-cover-rule)]">
                   /
                 </span>
                 <span className="normal-case">{name}</span>
@@ -116,7 +116,7 @@ export function HomeCover({
           </div>
 
           {purpose === null ? null : (
-            <p className="relative mt-8 max-w-2xl text-lg/relaxed text-pretty text-white/70 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:[animation-delay:120ms] motion-safe:[animation-fill-mode:backwards]">
+            <p className="relative mt-8 max-w-2xl text-lg/relaxed text-pretty text-[var(--ksor-cover-muted)] motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:[animation-delay:120ms] motion-safe:[animation-fill-mode:backwards]">
               {purpose}
             </p>
           )}
@@ -126,7 +126,7 @@ export function HomeCover({
               that says only "open" makes you click to find out. */}
             <Link
               href={firstUrl}
-              className="group inline-flex items-center gap-2.5 rounded-md bg-white px-6 py-3.5 text-sm font-medium text-[var(--ksor-cover)] transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transition-none"
+              className="group inline-flex items-center gap-2.5 rounded-md bg-fd-primary px-6 py-3.5 text-sm font-medium text-fd-primary-foreground transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring motion-reduce:transition-none"
             >
               Open the record
               <span
@@ -143,10 +143,10 @@ export function HomeCover({
               <button
                 type="button"
                 onClick={() => search.setOpenSearch(true)}
-                className="inline-flex items-center gap-2.5 rounded-md border border-white/20 px-5 py-3.5 text-sm text-white/80 transition-colors hover:border-white/40 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex items-center gap-2.5 rounded-md border border-[var(--ksor-cover-rule)] px-5 py-3.5 text-sm text-[var(--ksor-cover-foreground)] transition-colors hover:bg-[var(--ksor-cover-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
               >
                 Search the record
-                <kbd className="rounded border border-white/20 px-1.5 py-0.5 font-mono text-[0.6875rem] text-white/60">
+                <kbd className="rounded border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 font-mono text-[0.6875rem] text-[var(--ksor-cover-muted)]">
                   ⌘K
                 </kbd>
               </button>
@@ -154,9 +154,9 @@ export function HomeCover({
 
             {/* Where the button lands, said once and quietly. Uppercase made a
               document's title shout; it is the record's word, not a label. */}
-            <span className="ms-1 font-mono text-xs text-white/40">
+            <span className="ms-1 font-mono text-xs text-[var(--ksor-cover-muted)]">
               <span className="tracking-widest uppercase tabular-nums">{documents} documents</span>
-              <span aria-hidden className="mx-2 text-white/20">
+              <span aria-hidden className="mx-2 text-[var(--ksor-cover-rule)]">
                 ·
               </span>
               opens on {firstTitle}
@@ -168,32 +168,34 @@ export function HomeCover({
             where a thin list after a dark band read as an afterthought — and a
             title page that does not say what is inside is just a poster. */}
         <div className="lg:self-end motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:[animation-delay:320ms] motion-safe:[animation-fill-mode:backwards]">
-          <p className="border-b border-white/15 pb-2.5 font-mono text-xs tracking-[0.18em] text-white/45 uppercase">
+          <p className="border-b border-[var(--ksor-cover-rule)] pb-2.5 font-mono text-xs tracking-[0.18em] text-[var(--ksor-cover-muted)] uppercase">
             Contents
           </p>
           <ul>
             {entries.map((entry) => (
-              <li key={entry.url} className="border-b border-white/10">
+              <li key={entry.url} className="border-b border-[var(--ksor-cover-rule)]">
                 <Link
                   href={entry.url}
-                  className="group -mx-3 flex flex-col gap-1 rounded-md px-3 py-4 transition-colors hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  className="group -mx-3 flex flex-col gap-1 rounded-md px-3 py-4 transition-colors hover:bg-[var(--ksor-cover-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
                 >
                   <span className="flex items-baseline justify-between gap-4">
-                    <span className="font-display text-lg font-semibold transition-colors group-hover:text-[#7fb0f9]">
+                    <span className="font-display text-lg font-semibold transition-colors group-hover:text-fd-primary">
                       {entry.title}
                     </span>
-                    <span className="flex shrink-0 items-baseline gap-2 font-mono text-[0.6875rem] tracking-[0.14em] text-white/40 uppercase">
+                    <span className="flex shrink-0 items-baseline gap-2 font-mono text-[0.6875rem] tracking-[0.14em] text-[var(--ksor-cover-muted)] uppercase">
                       {entry.documents === 0 ? null : <span>{entry.documents} docs</span>}
                       {entry.owner === null ? null : <span>{entry.owner}</span>}
                       {entry.status === null ? null : (
-                        <span className="rounded-sm border border-white/25 px-1.5 py-0.5 text-white/70">
+                        <span className="rounded-sm border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 text-[var(--ksor-cover-foreground)]">
                           {entry.status}
                         </span>
                       )}
                     </span>
                   </span>
                   {entry.description === null ? null : (
-                    <span className="text-sm text-pretty text-white/45">{entry.description}</span>
+                    <span className="text-sm text-pretty text-[var(--ksor-cover-muted)]">
+                      {entry.description}
+                    </span>
                   )}
                 </Link>
               </li>
@@ -204,8 +206,8 @@ export function HomeCover({
 
       {/* The panel slides out from under the cover. */}
       <div className="relative mx-auto -mb-24 w-full max-w-6xl px-6">
-        <figure className="overflow-hidden rounded-xl border border-white/12 bg-[var(--ksor-cover-panel)] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)]">
-          <figcaption className="flex items-center gap-1 border-b border-white/10 px-2.5 py-2">
+        <figure className="overflow-hidden rounded-xl border border-[var(--ksor-cover-panel-rule)] bg-[var(--ksor-cover-panel)] shadow-[0_18px_50px_-24px_rgba(0,0,0,0.35)]">
+          <figcaption className="flex items-center gap-1 border-b border-[var(--ksor-cover-panel-rule)] px-2.5 py-2">
             {artifacts.map((artifact, index) => (
               <button
                 key={artifact.label}
@@ -213,8 +215,10 @@ export function HomeCover({
                 onClick={() => setTab(index)}
                 aria-pressed={index === tab}
                 className={
-                  "rounded px-2.5 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white " +
-                  (index === tab ? "bg-white/10 text-white" : "text-white/45 hover:text-white/80")
+                  "rounded px-2.5 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring " +
+                  (index === tab
+                    ? "bg-fd-accent text-[var(--ksor-cover-foreground)]"
+                    : "text-[var(--ksor-cover-muted)] hover:text-[var(--ksor-cover-foreground)]")
                 }
               >
                 {artifact.label}
@@ -223,7 +227,7 @@ export function HomeCover({
             <button
               type="button"
               onClick={copy}
-              className="ms-auto rounded px-2.5 py-1 font-mono text-xs text-white/45 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="ms-auto rounded px-2.5 py-1 font-mono text-xs text-[var(--ksor-cover-muted)] transition-colors hover:text-[var(--ksor-cover-foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
             >
               {copied ? "copied" : "copy"}
             </button>
@@ -231,7 +235,7 @@ export function HomeCover({
 
           {shown === undefined ? null : (
             <pre
-              className="max-h-64 overflow-hidden px-5 py-4 font-mono text-[0.78125rem]/relaxed whitespace-pre-wrap text-white/55"
+              className="max-h-64 overflow-hidden px-5 py-4 font-mono text-[0.78125rem]/relaxed whitespace-pre-wrap text-[var(--ksor-cover-muted)]"
               style={{
                 maskImage: "linear-gradient(to bottom, black calc(100% - 3rem), transparent)",
               }}
@@ -242,17 +246,17 @@ export function HomeCover({
 
           {/* Every machine door, in the one place they belong — beside the bytes
               they serve, instead of competing with the button above. */}
-          <div className="grid gap-x-8 gap-y-2 border-t border-white/10 px-5 py-3.5 sm:grid-cols-3">
+          <div className="grid gap-x-8 gap-y-2 border-t border-[var(--ksor-cover-panel-rule)] px-5 py-3.5 sm:grid-cols-3">
             {doors.map((door) => (
               <a
                 key={door.label}
                 href={door.href}
-                className="group flex flex-col gap-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="group flex flex-col gap-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
               >
-                <span className="font-mono text-xs text-white/80 underline-offset-4 group-hover:text-white group-hover:underline">
+                <span className="font-mono text-xs text-[var(--ksor-cover-foreground)] underline-offset-4 group-hover:text-fd-primary group-hover:underline">
                   {door.label}
                 </span>
-                <span className="text-[0.6875rem] text-white/40">{door.note}</span>
+                <span className="text-[0.6875rem] text-[var(--ksor-cover-muted)]">{door.note}</span>
               </a>
             ))}
           </div>
