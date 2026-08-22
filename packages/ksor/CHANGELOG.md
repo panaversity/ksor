@@ -1,5 +1,85 @@
 # @panaversity/ksor
 
+## 0.0.14
+
+### Patch Changes
+
+- a0d98b0: Cut dead weight, and repair two guards that had quietly stopped guarding
+
+  A sweep across every package, with each candidate handed to a second reviewer
+  whose job was to prove it still alive. Net −154 lines. Nothing an adopter can
+  observe changes; two things that were supposed to fail no longer stay silent.
+
+  **The two repairs.** A guard asserting that no scaffolded document describes
+  serving as publishing — a claim this repo has had to correct four times — ran
+  `readFileSync` inside a `try` whose `catch` returned quietly, and one of its five
+  filenames was `.env.example` while the scaffold emits `env.example`. So the row
+  covering the file that actually carries the serving variables had never executed.
+  The name is fixed and a missing file now fails instead of passing. Separately,
+  two doc-blocks described a stdio transport in the present tense; there is no
+  stdio door in the product, and the suite claiming to drive one drives HTTP.
+
+  **The removals.** A 134-line live-walk script pinned to `@panaversity/ksor@0.0.4`
+  that nothing referenced. `AuthConfig.jwksUrl`, computed and stored but never read
+  — its live twin is `explicitJwksUrl`; the boot-time validation of
+  `KSOR_JWKS_URL` stays exactly where it was. An `allowedAudiences.length > 0 &&`
+  operand that no path can reach as false, and whose false side would have skipped
+  the audience allowlist entirely. A `PoolTimeoutError` message parameter no caller
+  passed, which was also the one input where two retry classifiers disagreed —
+  removing it closes that. Two `instanceof X || instanceof Error` disjuncts where
+  `X extends Error`, so the first could never decide anything. One unused icon
+  export in the workbench shell.
+
+  **Left alone deliberately.** `SearchScope.kinds` is genuinely dead, but removing
+  it renumbers positional parameters across three SQL statements, two of which
+  derive a shared CTE by string substitution, and the test that would catch a wrong
+  renumber is gated on a database. That is a change to make on its own, with the
+  gate watching — not alongside a release.
+
+- ce1595b: Ingest names the real reason it could not record a commit
+
+  Every first ingest of a freshly scaffolded project printed "knowledge/ is not in
+  a git repository". That is false: `ksor init` runs `git init`, so the repository
+  exists — it simply has no commit yet, and `rev-parse HEAD` fails with "unknown
+  revision" rather than because nothing is there. The reader was sent to `git
+init`, which they had already run, in the one message that decides whether an
+  answer can be traced back to a reviewed commit.
+
+  Three different states were collapsing into that one sentence, and each has a
+  different next command:
+
+  ```
+  knowledge/ is in a git repository with no commits yet …
+    fix: commit the record (git add knowledge && git commit) and re-run
+
+  knowledge/ is not in a git repository …
+    fix: git init, commit the record, and re-run
+
+  git is not installed …
+    fix: install git, or pass --source-commit <sha> if the record is versioned elsewhere
+  ```
+
+  Verified on a real scaffold: the fresh case prints the first, and committing the
+  record turns the next ingest's `source:` line into an actual SHA.
+
+- 474dedc: Internal: the env-contract drift test scans only the checkout's source
+
+  No adopter-visible behaviour changes. The test that guarantees every
+  adopter-settable environment variable is named in the scaffold's `env.example`
+  walked `packages/` with a `statSync` per entry, and descended into the fake npm
+  install another suite roots inside `packages/ksor`. That cost two ways: the
+  copied template sources were scanned twice, and an entry deleted between the
+  `readdir` and the `statSync` crashed the whole run — which is what took CI red
+  on run 32526491721, on an `llms.txt` being cleaned up concurrently.
+
+  The walk now takes each entry's type from the readdir snapshot itself, so a
+  vanishing entry cannot crash it, and it skips transient install trees, so its
+  input no longer depends on whether another suite is mid-run. The `REPO_ONLY`
+  exemption list was deleted as dead: it named seven variables that no scanned
+  file can contain, because the walk excludes test files in the first place. The
+  honesty check that is supposed to catch stale exemptions now covers every
+  exemption list, which is what its name always claimed.
+
 ## 0.0.13
 
 ### Patch Changes
