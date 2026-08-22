@@ -39,6 +39,7 @@ import { buildGeneration } from "./ingest/build.js";
 import { buildShippedProvider } from "./lib/providers/registry.js";
 import { embedQueryVlit } from "./lib/query-embed.js";
 import { UnknownSlug } from "./lib/read.js";
+import { mint } from "./lib/snapshot.js";
 import { keyRingFromEnv } from "./lib/snapshot.js";
 import { applySchema } from "./schema.js";
 import { outlineDocuments, readDocument, search } from "./service.js";
@@ -419,4 +420,161 @@ describe.runIf(adminDsn === "")("the governance chain (db) — gated", () => {
   it("skips without KSOR_DB_URL", () => {
     expect(adminDsn).toBe("");
   });
+});
+
+/**
+ * Issue #87 — a pin decides which generation's CONTENT is served, never whether
+ * the caller may still have it.
+ *
+ * A snapshot token exists so a citation keeps resolving to the same bytes. It
+ * pins a generation, and the audience predicate evaluated `visibility` on the
+ * PINNED row — which still said `public` for a document the record had since
+ * restricted. Reproduced end to end: `outline` omitted it, an unpinned `read`
+ * refused it, and `read` with a pre-flip token served it in full to a public
+ * caller. Three routes refusing and one serving, on the same surface, in the
+ * same second — decision 19 failing inside one door.
+ *
+ * `servableGenerations` did not catch it: a flip sets `rollback_generation` to
+ * the generation just superseded, so a pre-flip pin IS the rollback pointer and
+ * is servable by design.
+ *
+ * The rule now: governance is read from the record as it stands. Pins yield.
+ * A citation may stop resolving within the token's life, which is what "the
+ * record changed" should look like — and the alternative is a window in which a
+ * withdrawal is not a withdrawal.
+ */
+describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () => {
+  const DB2 = "ksor_pin_governance";
+  const T = "pincorp";
+  let pool2: pg.Pool;
+  let admin2: pg.Pool;
+  let work2: string;
+  let inst2: ContentInstance;
+
+  // ONE ring for the whole suite. `keyRingFromEnv(undefined)` mints a RANDOM key
+  // per call, so minting with one and validating with another makes every token
+  // silently invalid — the read then "refreshes" to the active generation and
+  // looks like a refusal. That artifact hid this defect from a first draft of
+  // these tests; the token has to be genuinely valid for the assertion to mean
+  // anything.
+  const RING = keyRingFromEnv(undefined);
+
+  const doorAt = (audience: string | null): ServiceContext => ({
+    pool: pool2,
+    instance: inst2,
+    ring: RING,
+    instanceDigest: createHash("sha256").update("pin").digest("hex"),
+    embedQuery: (q: string) =>
+      embedQueryVlit(q, { provider: buildShippedProvider("fake", { apiKey: null }) }),
+    audience,
+  });
+
+  const pinFor = (generation: number): string =>
+    mint(
+      RING,
+      {
+        corpusId: inst2.corpusId,
+        tenantId: inst2.tenantId,
+        instanceDigest: createHash("sha256").update("pin").digest("hex"),
+      },
+      generation,
+    ).token;
+
+  const write = async (visibility: string): Promise<void> => {
+    writeFileSync(
+      path.join(work2, "knowledge", "layoffs.md"),
+      `---\ntitle: Layoffs\nstatus: approved\nvisibility: ${visibility}\n---\n\n` +
+        `# Layoffs\n\nThe restructuring plan ${SECRET} covers three sites and the timetable ` +
+        `for consultation, including which roles are affected and when each group is told. ` +
+        `It is the reference managers use when preparing individual conversations.\n`,
+      "utf8",
+    );
+  };
+
+  beforeAll(async () => {
+    const { Pool } = (await import("pg")).default;
+    admin2 = new Pool({ connectionString: adminDsn });
+    await admin2.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin2.query(`CREATE DATABASE ${DB2}`);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB2}`;
+    pool2 = contentPool(url.toString(), 4);
+    await applySchema(pool2, 1536);
+    await grantIngest(pool2, T);
+    work2 = mkdtempSync(path.join(tmpdir(), "ksor-pin-"));
+    mkdirSync(path.join(work2, "knowledge"), { recursive: true });
+    writeFileSync(
+      path.join(work2, "knowledge", "handbook.md"),
+      `---\ntitle: Handbook\nstatus: approved\nvisibility: public\n---\n\n# Handbook\n\n` +
+        `Onboarding, expenses and travel, written for everyone and left untouched by this ` +
+        `test so the control means something.\n`,
+      "utf8",
+    );
+    await write("public");
+    inst2 = {
+      name: T,
+      corpusId: T,
+      tenantId: T,
+      dsnEnv: "KSOR_DB_URL",
+      abstain: { vectorFloor: null, keywordFloor: null },
+      textSearchConfig: "english",
+      maximumResponseCharacters: 120_000,
+      instructions: "",
+      audiences: ["public", "internal"],
+      defaultVisibility: "public",
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: 1536,
+    } as ContentInstance;
+    await buildGeneration(pool2, inst2, {
+      provider: buildShippedProvider("fake", { apiKey: null }),
+      knowledgeDir: path.join(work2, "knowledge"),
+      flip: true,
+      sourceCommit: "gen1",
+    });
+  }, 600_000);
+
+  afterAll(async () => {
+    await pool2?.end().catch(() => undefined);
+    await admin2?.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin2?.end().catch(() => undefined);
+    if (work2 !== undefined && work2 !== "") rmSync(work2, { recursive: true, force: true });
+  });
+
+  it("serves the pinned read while the document is still public — the control", async () => {
+    const doc = await readDocument(doorAt("public"), "layoffs", { snapshotToken: pinFor(1) });
+    expect(doc.text, "a public caller may pin and read a public document").toContain(SECRET);
+  }, 120_000);
+
+  it("REFUSES the same pinned read once the record restricts it", async () => {
+    await write("internal");
+    await buildGeneration(pool2, inst2, {
+      provider: buildShippedProvider("fake", { apiKey: null }),
+      knowledgeDir: path.join(work2, "knowledge"),
+      flip: true,
+      sourceCommit: "gen2",
+    });
+
+    // Every other route already refuses; this is the fourth.
+    await expect(
+      readDocument(doorAt("public"), "layoffs"),
+      "unpinned read — already refused before this fix",
+    ).rejects.toBeInstanceOf(UnknownSlug);
+    await expect(
+      readDocument(doorAt("public"), "layoffs", { snapshotToken: pinFor(1) }),
+      "and the PIN must not re-open what the record just closed",
+    ).rejects.toBeInstanceOf(UnknownSlug);
+  }, 120_000);
+
+  it("still serves the pinned read to the tier the record DOES allow", async () => {
+    const doc = await readDocument(doorAt("internal"), "layoffs", { snapshotToken: pinFor(1) });
+    expect(doc.text, "governance decides, not the pin — internal may still read it").toContain(
+      SECRET,
+    );
+  }, 120_000);
+
+  it("leaves an untouched document pinning exactly as before", async () => {
+    const doc = await readDocument(doorAt("public"), "handbook", { snapshotToken: pinFor(1) });
+    expect(doc.text, "the property pins exist for is unaffected").toContain("Onboarding");
+  }, 120_000);
 });
