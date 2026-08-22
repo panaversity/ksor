@@ -149,10 +149,10 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
           if (!req.url().startsWith(base)) externalRequests.push(req.url());
         });
 
-        await page.goto(`${base}/docs/example/`, { waitUntil: "networkidle" });
+        await page.goto(`${base}/docs/what-is-a-ksor/`, { waitUntil: "networkidle" });
         await expect
           .poll(() => page.locator("h1").first().textContent(), { timeout: 10_000 })
-          .toContain("Your first governed document");
+          .toContain("What a Knowledge System of Record is");
         const background = await page.evaluate(
           () => getComputedStyle(document.body).backgroundColor,
         );
@@ -206,7 +206,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     });
     try {
       // Wait for the dev server, then confirm the page, then edit and poll.
-      const url = "http://localhost:3217/docs/example/";
+      const url = "http://localhost:3217/docs/what-is-a-ksor/";
       await expect
         .poll(
           async () => {
@@ -227,7 +227,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         "the dev server must be this project's",
       ).toBe("# walkthrough");
       const marker = "hot-reload-proof-4173";
-      appendFileSync(path.join(project, "knowledge", "example.md"), `\n${marker}\n`);
+      appendFileSync(path.join(project, "knowledge", "what-is-a-ksor.md"), `\n${marker}\n`);
       await expect
         .poll(async () => (await fetch(url)).text(), { timeout: 60_000, interval: 2_000 })
         .toContain(marker);
@@ -274,6 +274,16 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       "refund-policy-v5",
       ["title: Refund policy v5", "status: approved", "order: 3", "owner: Finance"].join("\n"),
       "Refunds are issued within 60 days of purchase.",
+    );
+    // A document declaring the bare minimum. The scaffold used to ship one
+    // (example.md, title+status+order only) and the "infers nothing"
+    // assertions below leaned on it; the starter record now seeds five
+    // documents that all declare an owner, so the fixture the assertion
+    // needs is written here instead of borrowed from the shipped corpus.
+    doc(
+      "bare-note",
+      ["title: A bare note", "status: draft", "order: 12"].join("\n"),
+      "Declares only title, status and order.",
     );
 
     // The fixtures must be legal record content, or this suite proves the site
@@ -463,12 +473,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // are what makes the picture the corpus:
     //   the document `Open the record` opens, set as the leading card…
     expect(homeHtml, "the front door names the document it opens on").toContain(
-      "Your first governed document",
+      "What a Knowledge System of Record is",
     );
-    //   …the entries of the record standing behind it…
-    expect(homeHtml, "the front door shows the record's next entries").toContain(
-      "Refund policy v5",
-    );
+    //   …the entries of the record standing behind it, which is the next
+    //   THREE in governed order — this fixture's `refund-policy` (order 2)
+    //   among them, carrying its withdrawal where a reader chooses. Asserting
+    //   a deeper entry would be asserting the stack's depth, not that the
+    //   record reaches the page.
+    expect(homeHtml, "the front door shows the record's next entries").toContain("Refund policy");
     //   …under the label that ties the leading card to the button, which is
     //   the one string only this design emits (the two assertions above would
     //   also pass on the old cover, which named the first document in a meta
@@ -477,7 +489,8 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // The count is COMPUTED from the record, so it is asserted as a value and
     // rendered as one text node — `{n} documents` renders as `3<!-- -->
     // documents` and would never match (the React-splits-interpolation trap).
-    expect(homeHtml, "the front door counts the record it is showing").toContain("3 documents");
+    // Five seeded by `ksor init` plus the three this test writes.
+    expect(homeHtml, "the front door counts the record it is showing").toContain("8 documents");
     // The agent addresses came OFF the front door (owner, 2026-08-22): no URLs
     // on the home page. Discoverability is unharmed and still asserted below —
     // `/llms.txt` sits where every agent looks for it, `/llms-full.txt` and the
@@ -539,7 +552,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(successorLine).not.toContain("SUPERSEDED");
     expect(successorLine).not.toContain("APPROVED");
     // …and the draft the scaffold ships is marked, because draft is a caveat.
-    expect(index.split("\n").find((line) => line.includes("(/docs/example)"))).toContain("DRAFT");
+    expect(index.split("\n").find((line) => line.includes("(/docs/bare-note)"))).toContain("DRAFT");
 
     const full = agentFile("llms-full.txt");
     const withdrawnBlock = blockFor(full, "# Refund policy (");
@@ -553,10 +566,10 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(withdrawnBlock).toContain("Refunds are issued within 30 days");
     // Nothing inferred here either: a document declaring only title+status
     // gets exactly one key.
-    const exampleBlock = blockFor(full, "# Your first governed document (");
-    expect(exampleBlock).toContain("status: draft");
-    expect(exampleBlock).not.toContain("owner:");
-    expect(exampleBlock).not.toContain("provenance:");
+    const bareBlock = blockFor(full, "# A bare note (");
+    expect(bareBlock).toContain("status: draft");
+    expect(bareBlock).not.toContain("owner:");
+    expect(bareBlock).not.toContain("provenance:");
 
     // An approved document carries no status chip: that is what a reader
     // already assumes, and a label that never varies stops being read. What
@@ -578,10 +591,10 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // The withdrawn document must NOT claim to replace anything here.
     expect(superseded).not.toContain("Replaces");
 
-    // Nothing inferred: the shipped example declares only title/status/order,
-    // so it renders its status and NO other governance furniture — never an
-    // "unknown" owner, which would read as governed.
-    const bare = visible("docs/example");
+    // Nothing inferred: a document declaring only title/status/order renders
+    // its status and NO other governance furniture — never an "unknown"
+    // owner, which would read as governed.
+    const bare = visible("docs/bare-note");
     expect(bare).toMatch(/Status draft/);
     expect(bare).not.toContain("Owner");
     expect(bare).not.toContain("Sources");

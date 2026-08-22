@@ -197,7 +197,7 @@ describe("scaffolded format-checker — torture", () => {
   });
 
   it("resolves angle-bracketed destinations without their brackets", () => {
-    const benign = probe({ "knowledge/angle-ok.md": doc("[a](<./example.md>)") });
+    const benign = probe({ "knowledge/angle-ok.md": doc("[a](<./what-is-a-ksor.md>)") });
     expect(benign.status, benign.output).toBe(0);
 
     const broken = probe({ "knowledge/angle-bad.md": doc("[a](<./missing.md>)") });
@@ -569,7 +569,7 @@ describe("scaffolded format-checker — torture", () => {
       // and forgets the pointer.
       const stale = probe({
         "knowledge/live.md":
-          "---\ntitle: Live\nstatus: approved\nsuperseded_by: ./example.md\n---\n\nStill current.\n",
+          "---\ntitle: Live\nstatus: approved\nsuperseded_by: ./what-is-a-ksor.md\n---\n\nStill current.\n",
       });
       expect(stale.status, stale.output).toBe(1);
       expect(stale.output).toContain("superseded_by on a document that is status: approved");
@@ -895,15 +895,25 @@ describe("scaffolded format-checker — torture", () => {
 
     const good = probe({
       "knowledge/replaced.md": doc(
-        "Replaced by the example.",
-        "title: Replaced\nstatus: superseded\nsuperseded_by: ./example.md",
+        "Replaced by a document the starter record ships.",
+        "title: Replaced\nstatus: superseded\nsuperseded_by: ./what-is-a-ksor.md",
       ),
     });
     expect(good.status, good.output).toBe(0);
   });
 
   it("refuses an empty record", () => {
-    const result = probe({ "knowledge/example.md": null });
+    // Every seeded document, DISCOVERED rather than listed. The starter record
+    // grows and shrinks; a hardcoded filename made this probe pass with five
+    // documents still on disk the day the seed stopped being one file
+    // (found live 2026-08-22) — it asserted an empty record while reading a
+    // full one.
+    const seeded = Object.fromEntries(
+      readdirSync(path.join(project, "knowledge"), { recursive: true, encoding: "utf8" })
+        .filter((rel) => rel.endsWith(".md"))
+        .map((rel) => [path.posix.join("knowledge", rel.split(path.sep).join("/")), null]),
+    );
+    const result = probe(seeded);
     expect(result.status, result.output).toBe(1);
     expect(result.output, "checker output").toContain("the record has no documents");
   });
