@@ -47,6 +47,7 @@ import { buildGeneration, flipRefusal } from "./ingest/build.js";
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
+import { overlapAdvice } from "./calibrate/overlap.js";
 import { GeminiTextGenerator } from "./lib/providers/gemini.js";
 import { runGc } from "./ingest/gc.js";
 
@@ -769,6 +770,8 @@ async function calibrateCommand(args: string[]): Promise<number> {
     }),
   );
   process.stdout.write(renderReport(report) + "\n");
+  const advice = overlapAdvice(report);
+  if (advice !== null) process.stdout.write(advice);
   return 0;
 }
 
