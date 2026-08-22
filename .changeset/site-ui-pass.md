@@ -112,3 +112,16 @@ opening the real search dialog — and every machine address moved into the pane
 where the bytes are, instead of competing with the primary action. Document
 pages keep the same three voices, and their governance strip reads as the
 record's checkable facts.
+
+**The front door carries a drawing instead of a second list, and no addresses.**
+The record's index is already on the page as the bytes in the panel, so listing
+it again beside them was the same information twice; the right of the cover is
+now an illustration of what the product does, drawn from the README's own
+definition — one governed source, sealed, projecting into the pages a person
+reads, the markdown a consumer fetches, and the door an agent connects through,
+with the connectors running one way because that direction is the claim. It is
+SVG rather than a picture file: no binary in the adopter's repo, no request at
+runtime, sharp at any size, and every stroke follows the theme. The agent
+addresses came off the page entirely — `/llms.txt` sits where agents look for
+it and each document advertises its own markdown twin, so nothing became less
+discoverable by leaving the front door.

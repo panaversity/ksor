@@ -5,14 +5,7 @@ import Image, { type StaticImageData } from "next/image";
 import { useState, type ReactElement } from "react";
 import { useSearchContext } from "fumadocs-ui/contexts/search";
 
-import type { RecordEntry } from "@/lib/source";
-
-/** One agent-readable surface: the address, and what a consumer gets from it. */
-export interface AgentDoor {
-  readonly href: string;
-  readonly label: string;
-  readonly note: string;
-}
+import { RecordArtwork } from "@/components/record-artwork";
 
 /** One tab of the panel: a file the build actually publishes. */
 export interface RecordArtifact {
@@ -45,9 +38,7 @@ export function HomeCover({
   documents,
   firstUrl,
   firstTitle,
-  doors,
   artifacts,
-  entries,
 }: {
   mark: StaticImageData;
   name: string;
@@ -56,9 +47,7 @@ export function HomeCover({
   documents: number;
   firstUrl: string;
   firstTitle: string;
-  doors: readonly AgentDoor[];
   artifacts: readonly RecordArtifact[];
-  entries: readonly RecordEntry[];
 }): ReactElement {
   const [tab, setTab] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -164,43 +153,10 @@ export function HomeCover({
           </div>
         </div>
 
-        {/* The contents, ON the cover. They used to sit below it on white,
-            where a thin list after a dark band read as an afterthought — and a
-            title page that does not say what is inside is just a poster. */}
-        <div className="lg:self-end motion-safe:animate-in motion-safe:fade-in motion-safe:duration-500 motion-safe:[animation-delay:320ms] motion-safe:[animation-fill-mode:backwards]">
-          <p className="border-b border-[var(--ksor-cover-rule)] pb-2.5 font-mono text-xs tracking-[0.18em] text-[var(--ksor-cover-muted)] uppercase">
-            Contents
-          </p>
-          <ul>
-            {entries.map((entry) => (
-              <li key={entry.url} className="border-b border-[var(--ksor-cover-rule)]">
-                <Link
-                  href={entry.url}
-                  className="group -mx-3 flex flex-col gap-1 rounded-md px-3 py-4 transition-colors hover:bg-[var(--ksor-cover-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-                >
-                  <span className="flex items-baseline justify-between gap-4">
-                    <span className="font-display text-lg font-semibold transition-colors group-hover:text-fd-primary">
-                      {entry.title}
-                    </span>
-                    <span className="flex shrink-0 items-baseline gap-2 font-mono text-[0.6875rem] tracking-[0.14em] text-[var(--ksor-cover-muted)] uppercase">
-                      {entry.documents === 0 ? null : <span>{entry.documents} docs</span>}
-                      {entry.owner === null ? null : <span>{entry.owner}</span>}
-                      {entry.status === null ? null : (
-                        <span className="rounded-sm border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 text-[var(--ksor-cover-foreground)]">
-                          {entry.status}
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                  {entry.description === null ? null : (
-                    <span className="text-sm text-pretty text-[var(--ksor-cover-muted)]">
-                      {entry.description}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
+        {/* The illustration, not a second list: the record's index is already
+            visible in the panel below, as the bytes an agent is served. */}
+        <div className="flex justify-center lg:justify-end lg:self-center">
+          <RecordArtwork />
         </div>
       </div>
 
@@ -244,22 +200,18 @@ export function HomeCover({
             </pre>
           )}
 
-          {/* Every machine door, in the one place they belong — beside the bytes
-              they serve, instead of competing with the button above. */}
-          <div className="grid gap-x-8 gap-y-2 border-t border-[var(--ksor-cover-panel-rule)] px-5 py-3.5 sm:grid-cols-3">
-            {doors.map((door) => (
-              <a
-                key={door.label}
-                href={door.href}
-                className="group flex flex-col gap-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-              >
-                <span className="font-mono text-xs text-[var(--ksor-cover-foreground)] underline-offset-4 group-hover:text-fd-primary group-hover:underline">
-                  {door.label}
-                </span>
-                <span className="text-[0.6875rem] text-[var(--ksor-cover-muted)]">{door.note}</span>
-              </a>
-            ))}
-          </div>
+          {/* Says what the panel is, without becoming a link: the addresses
+              came off this page (owner, 2026-08-22). The doors are still
+              published — `/llms.txt` sits where every agent looks for it, and
+              every document page advertises its markdown twin — they are just
+              not furniture on the front door. */}
+          {shown === undefined ? null : (
+            <p className="border-t border-[var(--ksor-cover-panel-rule)] px-5 py-2.5 font-mono text-[0.6875rem] tracking-wider text-[var(--ksor-cover-muted)] uppercase">
+              {shown.truncated
+                ? "the first lines of what an agent is served"
+                : "what an agent is served"}
+            </p>
+          )}
         </figure>
       </div>
     </section>

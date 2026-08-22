@@ -4,14 +4,7 @@ import mark from "@/app/icon.png";
 import { FooterMark } from "@/components/footer-mark";
 import { HomeCover, type RecordArtifact } from "@/components/home-cover";
 import { appName, appPurpose, appTitle } from "@/lib/shared";
-import {
-  basePath,
-  entriesUnder,
-  getLLMText,
-  getSortedPages,
-  markdownPath,
-  recordIndexText,
-} from "@/lib/source";
+import { basePath, getLLMText, getSortedPages, markdownPath, recordIndexText } from "@/lib/source";
 
 /**
  * The front door of a system of record.
@@ -76,20 +69,6 @@ export default async function HomePage(): Promise<ReactElement> {
         documents={pages.length}
         firstUrl={first.url}
         firstTitle={first.data.title}
-        // What the record holds, on the cover itself: a front door that lists
-        // nothing that is in it was finding F2.
-        entries={entriesUnder(null)}
-        // Every agent door, not just the first: the build publishes all three
-        // and an agent cannot use what nothing announces (product principle 8).
-        doors={[
-          { href: `${basePath}/llms.txt`, label: "llms.txt", note: "the record’s index" },
-          {
-            href: `${basePath}/llms-full.txt`,
-            label: "llms-full.txt",
-            note: "every document, one file",
-          },
-          { href: markdownHref, label: "/md/….md", note: "any document as markdown" },
-        ]}
         artifacts={[
           head(recordIndexText(), `${basePath}/llms.txt`, "llms.txt"),
           head(

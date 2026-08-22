@@ -435,22 +435,13 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       path.join(project, "system", "site", "out", "index.html"),
       "utf8",
     );
-    // Sliced from the contents heading: the front door lists the record ON the
-    // cover now, under "Contents" — a title page that does not say what is
-    // inside is a poster (2026-08-22). Everything below this line is asserted
-    // against that listing, not against the whole page, because the page also
-    // carries the record's index as bytes in the hero panel.
-    const homeListing = homeHtml.slice(homeHtml.indexOf("Contents"));
-    expect(homeListing, "the home page lists the record's top level").toContain(
-      "/docs/refund-policy",
-    );
-    // The withdrawn document carries its status on the card…
-    expect(homeListing).toContain("superseded");
-    // …and who stands behind a document is on the front door too. The record
-    // declares an owner on every serious document; a listing that shows the
-    // title and hides the owner makes the reader open a page to learn whether
-    // anyone owns it (2026-08-22).
-    expect(homeListing, "the listing names who stands behind each document").toContain("Finance");
+    // The record is ON the front door, but as BYTES rather than as a list of
+    // links: the hero panel renders the same index `/llms.txt` serves, so the
+    // withdrawn policy and its replacement are both visible there. That is
+    // asserted below against the built llms.txt, byte for byte, which is a
+    // stronger check than the markup assertions this replaced — those matched a
+    // heading that moved twice in one day (owner removed the contents list and
+    // the addresses, 2026-08-22).
     // …and the framework's own marketing copy is gone from the adopter's page:
     // critical rule 1 says the site never contains authored content.
     expect(homeHtml).not.toContain("Knowledge you can govern");
@@ -464,12 +455,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // is what a citation carries, so it belongs where an agent's operator can
     // read it without opening a file.
     expect(homeHtml, "the home page names the instance slug").toContain("walkthrough");
-    // Every agent door, not just the first one. The page advertised llms.txt
-    // alone while the build also publishes llms-full.txt and a .md twin per
-    // document — surfaces an agent cannot use if nothing says they exist
-    // (product principle 8: discoverability decides whether agents find you).
-    expect(homeHtml, "the home page points at the full-corpus file").toContain("llms-full.txt");
-    expect(homeHtml, "…and at the per-document markdown").toContain("/md/");
+    // The agent addresses came OFF the front door (owner, 2026-08-22): no URLs
+    // on the home page. Discoverability is unharmed and still asserted below —
+    // `/llms.txt` sits where every agent looks for it, `/llms-full.txt` and the
+    // per-document `.md` twins are published and advertised by each document's
+    // `rel="alternate"`, and the record's index is visible on this page as the
+    // BYTES in the hero panel rather than as a list of links.
 
     // The front door stands ALONE — no sidebar, no document chrome (owner,
     // 2026-08-22). It wore the full docs shell for part of that day, on the
