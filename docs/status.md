@@ -6,7 +6,7 @@ updated: 2026-08-22.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.17** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.18** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -16,7 +16,7 @@ unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
 
-Verified end to end against each published version (most recently 0.0.17,
+Verified end to end against each published version (most recently 0.0.18,
 2026-08-22: fresh `npm install` into a bare project, driven by the real
 `@modelcontextprotocol/client` SDK over live Postgres 17.7 + pgvector 0.8.2
 with real Gemini embeddings). What that walk covers: install · `schema` ·
@@ -27,6 +27,33 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### What attacking the door found (0.0.18)
+
+Before exposing the MCP surface publicly, five independent attackers ran against
+it — one per guarantee — each trying to break it and each verified adversarially
+afterwards. Three holes were confirmed by live reproduction against real
+Postgres; two are fixed, one is a decision.
+
+- **A takedown stopped applying when the document moved.** Denials are recorded
+  against a `stable_id`, and the serving predicate matches them against the
+  documents in the generation being served — so an id that no longer exists
+  denied nothing. Since ids are path-derived, an ordinary rename was enough:
+  search, read, outline and the site all served a withdrawn document again, with
+  no error anywhere. Both the ingest that would create that state and the door
+  that would serve it now refuse (issue #85).
+- **A withdrawn section did not cover its own directory** when it had no
+  `index.md` and its documents lived a level below, so a file written directly
+  under it published to the site (issue #86).
+- **A snapshot pin outlives a governance change** — a pre-flip token reads a
+  just-restricted document for up to the token TTL. Open deliberately: pins exist
+  so citations stay stable and governance exists to revoke, and which yields is a
+  product decision (issue #87).
+
+Attacks that HELD: DNS-rebinding via the Host header in every spelling tried,
+unauthenticated public bind across every host form, empty audience allowlists,
+and audience isolation across search, read, outline, citations, counts and
+positions.
 
 ### Install weight (0.0.17)
 
@@ -234,9 +261,9 @@ either stops being true.
     surface (decision 11 revision 2026-08-20), `ksor init` now declares
     `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
     version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
-    first-class in every new project. **Released in 0.0.8-0.0.17.**
+    first-class in every new project. **Released in 0.0.8-0.0.18.**
 
-- **Governance, honesty and measurement work (0.0.8-0.0.17, 2026-08-21/22).**
+- **Governance, honesty and measurement work (0.0.8-0.0.18, 2026-08-21/22).**
   Reading order is one rule across the website, `llms.txt` and the MCP
   `outline` tool — the door had been reading the predecessor's Docusaurus keys,
   which no compliant record may declare. `ksor serve` reports its own posture
