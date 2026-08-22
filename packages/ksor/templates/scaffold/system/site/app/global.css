@@ -347,19 +347,28 @@ html > body[data-scroll-locked] {
 }
 
 /* The section headings inside a document. The shell styles the title and
-   leaves h2-h4 to its prose defaults, which measured 24 / 20 / 16px in the
-   SANS body face (read out of the built stylesheet, 2026-08-22). Two things
-   were wrong with that.
+   leaves the body's headings to its prose defaults — 30 / 24 / 20 / 16px for
+   h1-h4 in the SANS body face, and nothing at all for h5-h6, which the prose
+   plugin never defines and preflight resets to inherit (read out of the built
+   stylesheet, 2026-08-22). Two things were wrong with that.
 
    Voice: a section heading is the RECORD speaking, exactly like the title
    above it, so it belongs in the display serif. Left in sans, a single
    document spoke in two voices and the change of voice meant nothing —
    which is the one thing the three faces on this site exist to carry.
 
-   Scale: h4 came out at 16px/600 — the body size. A minor heading and a bold
-   sentence were then the same object, told apart only by context. The ramp is
-   38 / 28 / 22 / 18 against a 16px body, so every level is distinct at a
-   glance and the smallest heading still leads the text under it.
+   Scale: h4 came out at 16px/600 — the body size — and h5/h6 at 16px/400 with
+   NO margins, which is a paragraph. The ramp is 38 / 32 / 28 / 22 / 18 / 16 —
+   the page title, then h1 down to h6 — against a 16px body. The size step runs
+   out at h5, so below it the serif, the weight and the air above it are what
+   make a heading.
+
+   A body `# heading` should not exist — the frontmatter title IS the page's
+   h1 (scaffolded AGENTS.md) — but nothing enforces it and this repo's own
+   fixture corpus opens one (workbench/example-corpus/knowledge/about.md:9).
+   `#nd-page > h1` is a CHILD combinator, so it reached the page title only,
+   and a body h1 fell through both rules to 30px sans weight 800: the loudest
+   thing on the page, in the site's voice, for the record's own words.
 
    Scoped INSIDE `.prose`, which is the container Fumadocs wraps the document's
    own markdown in — the record's words, and nothing else. Scoped to the page
@@ -372,7 +381,7 @@ html > body[data-scroll-locked] {
    Specificity, not luck: `#nd-page .prose` (1,1,0) beats the prose rule's
    single class (0,1,0), because that selector wraps its element in `:where()`,
    which contributes nothing. */
-#nd-page .prose :is(h2, h3, h4) {
+#nd-page .prose :is(h1, h2, h3, h4, h5, h6) {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.008em;
@@ -382,6 +391,13 @@ html > body[data-scroll-locked] {
 /* Space above a heading, not below it: a heading belongs to the text it
    introduces. The prose defaults set both in `em`, so raising the sizes above
    would have scaled the gaps with them and left h2 floating on 56px of air. */
+#nd-page .prose h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+}
+
 #nd-page .prose h2 {
   font-size: 1.75rem;
   line-height: 1.25;
@@ -396,6 +412,17 @@ html > body[data-scroll-locked] {
   margin-bottom: 0.625rem;
 }
 
+/* The floor of the ramp. The size step is spent here, so weight and air do
+   the work: at 16px/400 with no margins at all, a fifth-level heading was
+   byte-identical to the paragraph under it and glued to the one above. */
+#nd-page .prose :is(h5, h6) {
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  margin-top: 1.5rem;
+  margin-bottom: 0.375rem;
+}
+
 #nd-page .prose h4 {
   font-size: 1.125rem;
   line-height: 1.45;
@@ -404,6 +431,18 @@ html > body[data-scroll-locked] {
   letter-spacing: 0;
   margin-top: 1.75rem;
   margin-bottom: 0.5rem;
+}
+
+/* Re-assert the shell's own reset, which the ramp above broke. The prose
+   plugin zeroes the first block's top margin, but writes that rule as
+   `.prose :where(> :first-child)`, and `:where()` contributes nothing to
+   specificity — so every heading rule above beat it, and a document whose body
+   OPENED with a heading started 44px lower than one that opened with a
+   sentence (measured, 2026-08-22). The top of a document must not move with
+   the author's choice of first block. This selector is (1,2,0) against the
+   heading rules' (1,1,1), so it takes the argument back. */
+#nd-page .prose > :first-child {
+  margin-top: 0;
 }
 
 /* ── The page pager ──────────────────────────────────────────────────────────

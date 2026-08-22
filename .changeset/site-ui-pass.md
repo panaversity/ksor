@@ -154,3 +154,15 @@ pair on the root, and a `superseded` chip wears it in all five places one
 renders: the sidebar, the section listing, the front door's stack, the
 document's own governance strip, and search results. The colour is additive and
 never the whole signal — the word "superseded" is beside it everywhere.
+
+**The ramp covers every level a document can write, and the top of a document
+stopped moving.** Three defects an audit of the shipped stylesheet turned up
+after the first pass: a body `# heading` was reached by neither rule — the page
+title's selector is a child combinator — so it rendered at 30px in the SANS
+face at weight 800, the loudest thing on the page, in the site's voice, for the
+record's own words; `h5` and `h6` were 16px/400 with no margins at all, which
+is a paragraph, because the prose plugin never defines them and preflight
+resets them; and the ramp's own margins beat the shell's "first block has no
+top margin" rule, which is written with `:where()` and therefore has no
+specificity, so a document whose body opened with a heading started 44px lower
+than one that opened with a sentence. All three fixed and measured.
