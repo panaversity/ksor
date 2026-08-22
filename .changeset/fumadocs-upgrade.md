@@ -41,3 +41,22 @@ the rule the shell has no opinion about: only a CAVEAT is drawn, so `approved`
 renders nothing and the marker stays rare enough to be noticed. The tree nodes
 also gain a real `status` field rather than only a decorated name.
 
+**Every document can be handed to an agent in one click.** Beside the link to a
+document's markdown twin there is now a `Copy` action that fetches that same
+twin — the bytes `/md/<path>.md` already serves, so there is no second
+rendering of the document to drift — and puts them on the clipboard. Opening
+the markdown and handing it to an agent are different acts, and a reader who
+wants the second should not have to perform the first.
+
+Fumadocs ships an `ai/page-actions` component that does this alongside "Open in
+ChatGPT" and "Open in Claude". Those two are deliberately not taken: this
+product's claim is that one corpus answers in ANY assistant because the agent
+surface is an open standard, and hardcoding two vendors into every adopter's
+page argues the opposite. What is taken is the shell's own `useCopyButton`
+hook, which owns the copied-state timing — the only part worth not rewriting —
+so the action costs no new dependency and no registry component.
+
+It fails honestly: `navigator.clipboard` exists only in a secure context, so a
+site served over plain http on a LAN address has no clipboard at all, and the
+button says "Copy failed" rather than reporting a success it did not have.
+

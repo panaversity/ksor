@@ -345,7 +345,22 @@ simplify an implementation.
     `tableOfContent.header`, as a small "About this document" block (owner,
     effective, status, sources count) — Stripe's right-rail metadata pattern,
     applied to governance instead of code samples. Fills F8's dead space and
-    un-crowds the title.
+    un-crowds the title. **NOT TAKEN (2026-08-22), on evidence from the API
+    rather than taste.** `DocsPage` has two table-of-contents props, and they
+    are separate: `tableOfContent` renders the desktop rail, and
+    `tableOfContentPopover` renders the small-screen popover (verified against
+    fumadocs-ui 16.14.5's `page/index.d.ts`; `TOCProps` does carry the `header`
+    and `footer` slots this proposal names). Content passed to the rail
+    therefore does NOT reach a phone, where the rail collapses — so the move
+    would put owner, effective date and status behind a click on exactly the
+    devices where the page is hardest to read, and F3 is the finding that says
+    governance must be visible BEFORE the click, not after it. The dead space
+    this was meant to fill had a different cause, since fixed: the article was
+    centred in whatever the rail left, so the prose moved between documents.
+    With the measure capped and the column held, the rail is quiet rather than
+    wasted. Revisit only with a treatment that survives the popover — passing
+    the same block to both props, or a strip that reflows into the rail above a
+    breakpoint while staying under the title below it.
 11. **A caution role in the palette**, distinct from the brand accent, used by
     the supersession notice only.
 12. **Group `llms.txt` by folder** under `##` headings, in the governed order.

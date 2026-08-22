@@ -1,4 +1,6 @@
 import Link from "next/link";
+
+import { CopyMarkdown } from "@/components/copy-markdown";
 import type { ReactElement } from "react";
 
 import {
@@ -199,6 +201,12 @@ export function GovernanceMeta({
             &rarr;
           </span>
         </a>
+      )}
+      {markdownUrl === undefined ? null : (
+        // Beside the link, not instead of it: opening the markdown and handing
+        // it to an agent are different acts, and a reader who wants the second
+        // should not have to perform the first.
+        <CopyMarkdown href={markdownUrl} />
       )}
     </dl>
   );
