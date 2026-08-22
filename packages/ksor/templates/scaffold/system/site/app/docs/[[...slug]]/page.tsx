@@ -1,6 +1,7 @@
 import { entriesUnder, getSortedPages, markdownPath, source } from "@/lib/source";
 import { RecordIndex } from "@/components/record-index";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
+import { TOCPopover, TOCProvider } from "fumadocs-ui/layouts/docs/page/slots/toc";
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/components/mdx";
 import type { Metadata } from "next";
@@ -13,6 +14,7 @@ import {
 } from "@/components/governance";
 import { predecessorsOf, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
 import { showGovernance } from "@/lib/shared";
+import { RecordToc, TocItems } from "@/components/record-toc";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
@@ -62,61 +64,70 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   }));
 
   return (
-    <DocsPage
-      toc={page.data.toc}
-      full={page.data.full}
-      // One active heading at a time. The shell defaults `single` to false,
-      // which marks EVERY heading currently on screen as active — and a
-      // governed record is full of short documents whose headings all fit on
-      // one screen, so the whole rail lit up in the accent at once (measured:
-      // four of five entries `data-active="true"` on a five-heading document).
-      // An accent that marks everything marks nothing.
-      tableOfContent={{ single: true }}
-      // The table-of-contents column is HELD on every page, including the many
-      // in a governed record that have no headings at all and render nothing
-      // into it. Collapsing it for those documents (which this file did, from
-      // 2026-08-21) bought a wider column at the price of a moving one: the
-      // article is centred in whatever the column leaves, so the prose jumped
-      // 134px sideways between a document with headings and one without
-      // (measured at 1728px: text at x=446 against x=580). A reader clicking
-      // through a record saw the page slide under them.
-      //
-      // Held, the grid is `0 | 268 | main | 268 | 0` — sidebar and rail the
-      // same width, so the main column is centred in the viewport and the
-      // reading measure capped in global.css sits centred inside it, in the
-      // same place on every document. The rail is the natural home for the
-      // governance facts this record already carries; until it holds them it
-      // is quiet space on the side, which is what the earlier collapse was
-      // really objecting to — the 900px measure beside it, since fixed.
-    >
-      {successor === null ? null : <SupersededNotice successor={successor} />}
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
-      {showGovernance ? (
-        <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
-      ) : null}
-      {/* grow-0, against the shell's own `flex-1`: the article is a flex column
+    <TocItems items={page.data.toc}>
+      <DocsPage
+        toc={page.data.toc}
+        full={page.data.full}
+        // The rail is ours; the provider and the small-screen popover stay the
+        // shell's. Its own rail marks a heading active when 90% of it is visible
+        // anywhere in the viewport and then highlights whichever became active
+        // last, which on this record's short-sectioned documents ran two to four
+        // headings AHEAD of the reader. The observer's options are not
+        // configurable and the observer is not exported, so the selection could
+        // only be replaced — `slots.toc.main` is the seam for that.
+        slots={{
+          toc: {
+            provider: TOCProvider,
+            main: RecordToc,
+            popover: TOCPopover,
+          },
+        }}
+        // The table-of-contents column is HELD on every page, including the many
+        // in a governed record that have no headings at all and render nothing
+        // into it. Collapsing it for those documents (which this file did, from
+        // 2026-08-21) bought a wider column at the price of a moving one: the
+        // article is centred in whatever the column leaves, so the prose jumped
+        // 134px sideways between a document with headings and one without
+        // (measured at 1728px: text at x=446 against x=580). A reader clicking
+        // through a record saw the page slide under them.
+        //
+        // Held, the grid is `0 | 268 | main | 268 | 0` — sidebar and rail the
+        // same width, so the main column is centred in the viewport and the
+        // reading measure capped in global.css sits centred inside it, in the
+        // same place on every document. The rail is the natural home for the
+        // governance facts this record already carries; until it holds them it
+        // is quiet space on the side, which is what the earlier collapse was
+        // really objecting to — the 900px measure beside it, since fixed.
+      >
+        {successor === null ? null : <SupersededNotice successor={successor} />}
+        <DocsTitle>{page.data.title}</DocsTitle>
+        <DocsDescription>{page.data.description}</DocsDescription>
+        {showGovernance ? (
+          <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
+        ) : null}
+        {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to
           402px and pushed Sources and everything after it to the bottom of the
           screen — a governance block floating 400px below the document it
           describes (measured, 2026-08-21). Short documents now end where their
           text ends. */}
-      <DocsBody style={{ flexGrow: 0 }}>
-        <MDX
-          components={getMDXComponents({
-            // relative links between documents in knowledge/ resolve to
-            // their rendered pages
-            a: createRelativeLink(source, page),
-          })}
-        />
-      </DocsBody>
-      {/* A folder's index page lists what the folder holds. Without it the
+        <DocsBody style={{ flexGrow: 0 }}>
+          <MDX
+            components={getMDXComponents({
+              // relative links between documents in knowledge/ resolve to
+              // their rendered pages
+              a: createRelativeLink(source, page),
+            })}
+          />
+        </DocsBody>
+        {/* A folder's index page lists what the folder holds. Without it the
           page ended at its own sentence and the documents below it were
           reachable only from the sidebar (research/site-design.md F5). Empty
           for a leaf document, which renders nothing. */}
-      <RecordIndex entries={entriesUnder(page.url)} heading="In this section" />
-      {showGovernance ? <Provenance entries={governance.provenance} /> : null}
-    </DocsPage>
+        <RecordIndex entries={entriesUnder(page.url)} heading="In this section" />
+        {showGovernance ? <Provenance entries={governance.provenance} /> : null}
+      </DocsPage>
+    </TocItems>
   );
 }
 

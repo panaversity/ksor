@@ -73,3 +73,21 @@ accent only when something has happened — the copy that succeeded. They wore
 the accent at rest, which said "link" about controls that were merely sitting
 there and added to a page already too blue to read.
 
+**"On this page" marks the section you are in, exactly.** The shell decides the
+active heading with an intersection observer set to `{ threshold: 0.9 }` and no
+`rootMargin` — a heading counts as active whenever 90% of it is visible
+ANYWHERE in the viewport — and then highlights whichever became active most
+recently. On a long page that reads fine. On a governed record it does not:
+these documents are short-sectioned, so several headings share the screen and
+the one arriving from the BOTTOM always won. The marker sat two to four
+headings ahead of the reader (measured: reading "owner" while the rail marked
+"description").
+
+Those observer options are not configurable and the observer is not exported,
+so the selection could not be corrected — only replaced. The scaffold now
+supplies the rail through `DocsPage`'s `slots.toc.main`, keeping the shell's
+provider and its small-screen popover exactly as they are. The rule is a
+reading line rather than visibility: the active heading is the last one whose
+top has passed it, which is what a person means by "the section I am in".
+Measured at eight scroll positions across a 7.8-screen document: exact at every
+one. The bar is the row's own border, so it cannot drift from what it marks.
