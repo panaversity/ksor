@@ -2,8 +2,8 @@
  * Composition (oracle main.py's boot order, adapted): instance → DSN via
  * the declared env NAME → provider → pool → space guard → service context.
  * Auth is built by the door that needs it (http.ts) — BEFORE the pool
- * serves anything; stdio is the local loopback-equivalent door and runs
- * with auth off by construction.
+ * serves anything; a loopback bind is the local-equivalent door and is the
+ * only posture that may run with auth explicitly disabled.
  */
 
 import { createHash } from "node:crypto";

@@ -128,7 +128,7 @@ describe("no document claims that serving publishes", () => {
     "AGENTS.md",
     "CLAUDE.md",
     "instance.md",
-    ".env.example",
+    "env.example",
   ] as const;
 
   /** Shapes that assert the retired chain, in any of its phrasings. */
@@ -139,13 +139,13 @@ describe("no document claims that serving publishes", () => {
   ];
 
   it.each(ADOPTER_FACING)("%s", (file) => {
+    // Read it OUTRIGHT. This skipped a missing file for years, and one of the
+    // five names was `.env.example` while the scaffold emits `env.example` —
+    // so the row for the file that actually carries the serve variables never
+    // ran, in the guard whose claim had already been wrong four times. A name
+    // that stops matching must fail here, not quietly stop asserting.
     const full = path.join(here, "..", "templates", "scaffold", file);
-    let text: string;
-    try {
-      text = readFileSync(full, "utf8");
-    } catch {
-      return; // not every name is present in every scaffold revision
-    }
+    const text = readFileSync(full, "utf8");
     for (const shape of FUSED) {
       const hit = shape.exec(text);
       expect(

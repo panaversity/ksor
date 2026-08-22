@@ -30,24 +30,14 @@ export type AuthConfig = {
   /** This server's canonical URI (the RFC 8707 audience clients bind to). */
   resourceUrl: string;
   /**
-   * Where this SSO publishes its JWKS.
-   *
-   * `KSOR_SSO_URL` is documented as "the AS base", and the verifier used to
-   * append one vendor's layout (`/api/auth/jwks`, Better Auth's) with no
-   * override. Every other provider — Auth0, Okta, Entra, Keycloak, Cognito —
-   * therefore failed the JWKS fetch, which is classified TRANSIENT rather than
-   * misconfiguration, so every request 503'd with nothing naming the cause
-   * (review 2026-08-20). `KSOR_JWKS_URL` states it; the vendor default is only
-   * the fallback.
-   */
-  jwksUrl: string;
-  /**
    * The explicit `KSOR_JWKS_URL`, or null when the operator did not say.
    *
    * Null means DISCOVER — read `jwks_uri` from the AS's own metadata document
    * (RFC 8414, then OpenID Discovery) rather than appending one vendor's path.
-   * `jwksUrl` above is what a caller gets if discovery is never run, and is
-   * therefore a guess whenever this is null (issue #26).
+   * When discovery is never run, the verifier falls back to one vendor's
+   * layout (`${ssoUrl}/api/auth/jwks`, Better Auth's) — a guess, which is why
+   * every other provider once failed the JWKS fetch as TRANSIENT with nothing
+   * naming the cause (review 2026-08-20, issue #26).
    */
   explicitJwksUrl: string | null;
   allowedAudiences: readonly string[];
@@ -218,12 +208,12 @@ function configFromEnv(env: Env): AuthConfig | null {
   // Explicit when given; otherwise the vendor layout that used to be the only
   // option, so an existing Better Auth deployment keeps working unchanged.
   const explicit = (env.KSOR_JWKS_URL ?? "").trim();
-  const jwksUrl = explicit || `${ssoUrl}/api/auth/jwks`;
-  assertHttpUrl("KSOR_JWKS_URL", jwksUrl, true);
+  // Validated at BOOT even though only `explicitJwksUrl` is carried forward:
+  // a malformed KSOR_JWKS_URL must refuse here, not at the first token.
+  assertHttpUrl("KSOR_JWKS_URL", explicit || `${ssoUrl}/api/auth/jwks`, true);
   return {
     ssoUrl,
     resourceUrl,
-    jwksUrl,
     explicitJwksUrl: explicit === "" ? null : explicit,
     allowedAudiences,
     issuer,
@@ -411,7 +401,7 @@ function createVerify(
           cause: err,
         });
       }
-      if (config.allowedAudiences.length > 0 && !audOk(claims.aud, config.allowedAudiences)) {
+      if (!audOk(claims.aud, config.allowedAudiences)) {
         reject(key);
         throw new TokenVerifyError(
           `token aud ${JSON.stringify(claims.aud ?? null)} not in allowlist ` +
