@@ -26,15 +26,16 @@ const chunksFor = (cleaned: string, maxChars: number | null) =>
   maxChars === null ? chunkText(cleaned) : chunkText(cleaned, maxChars);
 
 describe("chunk policy", () => {
-  it("has moved ONE version past the oracle, deliberately", () => {
-    // The port needed no bump for three releases, which is what the previous
-    // wording recorded. Issue #55 is the first DELIBERATE divergence: the
-    // oracle decides `nav` by length and we decide it by shape. The policy
-    // string is persisted per source row and gates carry-forward, so this bump
-    // is what makes an existing corpus RE-CHUNK instead of serving chunks
-    // labelled by a rule that no longer exists.
+  it("has moved TWO versions past the oracle, deliberately", () => {
+    // The port needed no bump for three releases. Both bumps since are the same
+    // decision applied twice: navigation is a SHAPE, not a length. v6 moved
+    // `classify()` (issue #55); v7 moved widget dominance, which had been left
+    // on the old threshold so a section with real explanation before a quiz lost
+    // the explanation too (issue #75). The policy string is persisted per source
+    // row and gates carry-forward, so each bump is what makes an existing corpus
+    // RE-CHUNK instead of serving chunks labelled by a rule that no longer runs.
     expect(chunkingFixtures.policy).toBe("heading-aware-1500-content-only-v5");
-    expect(CHUNK_POLICY).toBe("heading-aware-1500-content-only-v6");
+    expect(CHUNK_POLICY).toBe("heading-aware-1500-content-only-v7");
   });
 });
 
@@ -275,5 +276,43 @@ describe("how we differ from the oracle, and only how", () => {
     // would have confirmed whatever rule was already there.
     const withLinks = chunkingFixtures.cases.filter((c) => /\[[^\]]+\]\([^)]+\)/.test(c.cleaned));
     expect(withLinks.map((c) => c.name)).toEqual([]);
+  });
+});
+
+/**
+ * Issue #75 — the same question, asked in the neighbouring path.
+ *
+ * #55 moved `classify()` from length to shape. `segmentMarkerType()`, which
+ * decides whether a WHOLE heading-segment is dominated by a widget, was left on
+ * the old threshold: under 250 characters of teaching body before the widget and
+ * every fragment of the section is labelled `assessment` or `embed`, both of
+ * which no retrieval arm returns. So a section carrying real explanation before
+ * a quiz lost the explanation too.
+ */
+describe("widget dominance is decided by shape as well (#75)", () => {
+  const QUIZ = '\n<Quiz questions={[{ question: "q", options: ["a","b"], answer: 0 }]} />\n';
+
+  it("a heading with only a quiz under it is still widget-dominated", () => {
+    const chunks = chunkText("## Check\n" + QUIZ);
+    expect(chunks.every((c) => c.sourceType === "assessment")).toBe(true);
+  });
+
+  it("real explanation before a quiz keeps its own classification", () => {
+    // 180 characters — under the old threshold, and a complete explanation.
+    const teaching =
+      "\nA governed slice is one bounded promise a Worker makes, with the record " +
+      "behind it and a named owner who answers for it when it is wrong.\n";
+    expect(teaching.length).toBeLessThan(250);
+    const chunks = chunkText("## Slices\n" + teaching + QUIZ);
+    expect(
+      chunks.some((c) => c.sourceType === "prose"),
+      `the explanation was swallowed by the quiz: ${JSON.stringify(chunks.map((c) => c.sourceType))}`,
+    ).toBe(true);
+  });
+
+  it("a link list before a quiz is NOT teaching, so the section stays widget-dominated", () => {
+    const links = "\n- [One](a.md)\n- [Two](b.md)\n- [Three](c.md)\n";
+    const chunks = chunkText("## See also\n" + links + QUIZ);
+    expect(chunks.every((c) => c.sourceType === "assessment")).toBe(true);
   });
 });
