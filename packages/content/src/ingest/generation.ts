@@ -111,6 +111,47 @@ export async function allocateRun(
  *
  * Returns 0 when there is no complete embedded generation — the first ingest.
  */
+/**
+ * Every generation whose vectors this build may copy, best source FIRST.
+ *
+ * Ordered by how much the source has been vetted, then by recency:
+ *
+ *   1. complete runs (`ready` / `active` / `retired`), newest first
+ *   2. ABANDONED runs (`building`), newest first
+ *
+ * The second group used to be excluded outright, and that threw away work an
+ * operator had already paid for: a killed `ksor ingest` leaves its generation in
+ * `building`, so the rerun carried NOTHING and re-embedded the whole corpus.
+ * Reproduced live — an 81-document book killed at 4,736 of 6,963 chunks, whose
+ * rerun reported `carried 0, pending 6963` (issue #97).
+ *
+ * Nothing about an abandoned run makes its vectors wrong. An embedding is a pure
+ * function of (embed input, model); the match key in `carryForward` establishes
+ * identity on its own; and carry only ever fills `pending` rows, so a later pass
+ * can never overwrite an earlier, better-vetted one. The run's STATE therefore
+ * decides priority, not eligibility — which is what ordering expresses and
+ * exclusion could not.
+ */
+export async function carrySources(
+  client: pg.PoolClient,
+  opts: { tenantId: string; corpusId: string; excludeGeneration: number },
+): Promise<number[]> {
+  const res = await client.query<{ gen: string; rank: number }>(
+    `
+    SELECT DISTINCT c.generation AS gen,
+           CASE WHEN r.state IN ('ready','active','retired') THEN 0 ELSE 1 END AS rank
+      FROM chunks c
+      JOIN ingestion_runs r ON r.tenant_id = c.tenant_id AND r.generation = c.generation
+     WHERE c.tenant_id = $1 AND r.corpus_id = $2
+       AND r.state IN ('ready', 'active', 'retired', 'building')
+       AND c.generation <> $3 AND c.embedding_status = 'embedded'
+     ORDER BY rank, gen DESC
+    `,
+    [opts.tenantId, opts.corpusId, opts.excludeGeneration],
+  );
+  return res.rows.map((r) => Number(r.gen));
+}
+
 export async function bestCarrySource(
   client: pg.PoolClient,
   opts: { tenantId: string; corpusId: string; excludeGeneration: number },
