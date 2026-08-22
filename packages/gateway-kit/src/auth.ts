@@ -293,6 +293,29 @@ function isBadToken(err: unknown): boolean {
   );
 }
 
+/**
+ * The `iss` a token CLAIMS, read without verifying anything.
+ *
+ * Sound for exactly one purpose: REFUSING. A token that passes this check still
+ * has its signature verified in full, so an attacker gains nothing by lying here
+ * — the worst they achieve is being refused for a different reason. It must
+ * never be used to admit anything.
+ *
+ * Returns null when the payload is not readable JSON, which sends the token down
+ * the ordinary path rather than inventing a verdict about it.
+ */
+function claimedIssuer(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (payload === undefined || payload === "") return null;
+    const decoded: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const iss = (decoded as { iss?: unknown }).iss;
+    return typeof iss === "string" && iss !== "" ? iss : null;
+  } catch {
+    return null;
+  }
+}
+
 function describeError(err: unknown): string {
   return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 }
@@ -378,6 +401,25 @@ function createVerify(
 
     let claims: TokenClaims | null = null;
     if (token.split(".").length === 3) {
+      // The cheap decisive check FIRST. An unknown `kid` raises
+      // JWKSNoMatchingKey, which is classified transient below because the usual
+      // cause is key-rotation lag — but a token from ANOTHER issuer raises the
+      // same error, and answering 503 for a credential that can never work makes
+      // a client retry forever and a misconfiguration read as an outage
+      // (reproduced against a real Hydra door holding a real Keycloak token).
+      // Only when the operator has DECLARED the issuer is there ground to stand
+      // on; otherwise nothing here changes.
+      if (config.issuer !== null) {
+        const claimed = claimedIssuer(token);
+        if (claimed !== null && claimed !== config.issuer) {
+          reject(key);
+          throw new TokenVerifyError(
+            `token iss ${JSON.stringify(claimed)} is not this record's authorization server ` +
+              `${JSON.stringify(config.issuer)}`,
+            { transient: false },
+          );
+        }
+      }
       try {
         claims = await verifyJwt(token);
       } catch (err) {

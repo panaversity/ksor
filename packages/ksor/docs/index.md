@@ -32,6 +32,10 @@ instead of their training memory. The corpus grows with each implemented verb.
   export the manifest the site build reads), `ksor calibrate` (measure the
   abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
   implemented: each prints an honest notice and exits `2`.
+  - **[authorization.md](./authorization.md)** — putting the record behind an
+    authorization server, with worked recipes for two of them, executed rather
+    than written. `ksor serve` refuses to boot unauthenticated on a public bind,
+    so this is the last step of a deployment, not an optional hardening pass.
 - Exit codes are a contract: `1` refused (first stderr line is a stable
   slug such as `error: bad-name`, followed by a remedy), `2` designed but
   not implemented, `3` the environment cannot run ksor
