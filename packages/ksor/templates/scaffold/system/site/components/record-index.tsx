@@ -1,11 +1,12 @@
+import { ArrowRight, FileText, Folder } from "lucide-react";
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import type { RecordEntry } from "@/lib/source";
 import { statusTone } from "@/lib/governance";
+import type { RecordEntry } from "@/lib/source";
 
 /**
- * What the record holds below this point — as a register, not as tiles.
+ * What the record holds below this point.
  *
  * The site renders the record; this renders its shape. Every value comes from
  * the record — title, description, status, owner and the count below an entry
@@ -17,12 +18,18 @@ import { statusTone } from "@/lib/governance";
  * contains were reachable only from the sidebar. The home page had the same
  * gap — it said "5 documents" and linked to one (research/site-design.md F2/F5).
  *
- * The row is the design's second voice: the title in the record's serif on the
- * left, and on the right, in mono, what the record says ABOUT it — who owns it,
- * how much it holds, whether it carries a caveat. A reader choosing between two
- * documents should see that one of them was withdrawn BEFORE opening it, and
- * should see it in the same column every time. `approved` stays silent (see
- * `caveatStatus`): a label on every row is a label nobody reads.
+ * Each entry is a CARD, not a hairline row (owner, 2026-08-22, choosing it from
+ * four prototyped treatments). The register the design language called for was
+ * honest about hierarchy and silent about being usable: at rest a row carried
+ * no affordance at all — only a hover tint and a hover colour — so on a touch
+ * screen, where there is no hover, nothing ever said the row was a link. A card
+ * is a surface a reader expects to press, and the arrow says where pressing
+ * leads before anyone has moved a pointer.
+ *
+ * What survives from the register is the part that was never about looks: the
+ * record's serif for its own words, mono for what the record says ABOUT them —
+ * who owns it, how much it holds, whether it carries a caveat — and `approved`
+ * staying silent, because a label on every row is a label nobody reads.
  *
  * Server-rendered plain markup — it survives print, a failed bundle and
  * JavaScript off, like every other governance fact.
@@ -38,62 +45,75 @@ export function RecordIndex({
 
   return (
     <section className="mt-14">
-      {/* One rule, heavier than the row rules under it: the head of a register.
-          No count beside it — the hero already states how many documents the
-          record holds, and a second number counting something else (top-level
-          entries) reads as a contradiction. */}
-      <h2 className="border-b border-fd-foreground/70 pb-2.5 font-mono text-xs tracking-[0.18em] text-fd-muted-foreground uppercase">
+      {/* The head of the list stays a register head: this is a label, and a
+          label is machine-facing furniture whatever the rows below it are. */}
+      <h2 className="mb-3 font-mono text-xs tracking-[0.18em] text-fd-muted-foreground uppercase">
         {heading}
       </h2>
 
-      <ul>
-        {entries.map((entry) => (
-          <li key={entry.url} className="border-b border-fd-border">
-            {/* The whole row is the target, and it says so on hover: the tint
-                bleeds past the text into the page's own gutters, so a row reads
-                as a row rather than as a link with a background. */}
-            <Link
-              href={entry.url}
-              className="group -mx-3 grid gap-x-8 gap-y-1.5 rounded-md px-3 py-5 transition-colors hover:bg-fd-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring sm:grid-cols-[1fr_auto]"
-            >
-              <span className="font-display text-xl leading-snug font-semibold tracking-[-0.008em] transition-colors group-hover:text-fd-primary">
-                {entry.title}
-              </span>
+      <ul className="grid gap-3">
+        {entries.map((entry) => {
+          // A folder and a leaf are different things to open, and the icon is
+          // read before the count is.
+          const Icon = entry.documents > 0 ? Folder : FileText;
+          return (
+            <li key={entry.url}>
+              <Link
+                href={entry.url}
+                className="group flex items-start gap-4 rounded-lg border border-fd-border bg-fd-muted/40 px-5 py-4 transition-all hover:-translate-y-px hover:border-fd-primary/40 hover:bg-fd-muted hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              >
+                <Icon
+                  aria-hidden
+                  className="mt-1 size-4 shrink-0 text-fd-muted-foreground transition-colors group-hover:text-fd-primary"
+                />
 
-              {/* What the record says about it, always in the same column and
-                  always in mono: this half of the row is metadata, and it
-                  should not be mistaken for the document's own words. Separated
-                  by dots, because three uppercase mono runs with only a gap
-                  between them read as one long string. */}
-              <span className="flex items-baseline gap-2 font-mono text-xs tracking-wider text-fd-muted-foreground uppercase sm:col-start-2 sm:row-start-1 sm:justify-end">
-                {entry.documents === 0 ? null : (
-                  <span className="tabular-nums">
-                    {entry.documents} {entry.documents === 1 ? "doc" : "docs"}
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="font-display text-lg leading-snug font-semibold tracking-[-0.008em] transition-colors group-hover:text-fd-primary">
+                      {entry.title}
+                    </span>
+                    {entry.status === null ? null : (
+                      <span
+                        className={`rounded-sm border border-fd-border px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-fd-foreground uppercase ${statusTone(entry.status)}`}
+                      >
+                        {entry.status}
+                      </span>
+                    )}
                   </span>
-                )}
-                {entry.documents === 0 || entry.owner === null ? null : (
-                  <span aria-hidden className="text-fd-border">
-                    ·
-                  </span>
-                )}
-                {entry.owner === null ? null : <span>{entry.owner}</span>}
-                {entry.status === null ? null : (
-                  <span
-                    className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest text-fd-foreground ${statusTone(entry.status)}`}
-                  >
-                    {entry.status}
-                  </span>
-                )}
-              </span>
 
-              {entry.description === null ? null : (
-                <span className="max-w-2xl text-sm text-pretty text-fd-muted-foreground sm:col-start-1 sm:row-start-2">
-                  {entry.description}
+                  {entry.description === null ? null : (
+                    <span className="mt-1 block text-sm text-pretty text-fd-muted-foreground">
+                      {entry.description}
+                    </span>
+                  )}
                 </span>
-              )}
-            </Link>
-          </li>
-        ))}
+
+                {/* What the record says about it, in the same column every
+                    time, so two entries can be compared without reading. */}
+                <span className="flex shrink-0 items-center gap-3 self-center">
+                  <span className="hidden items-baseline gap-2 font-mono text-xs tracking-wider text-fd-muted-foreground uppercase tabular-nums sm:flex">
+                    {entry.documents === 0 ? null : (
+                      <span>{`${entry.documents} ${entry.documents === 1 ? "doc" : "docs"}`}</span>
+                    )}
+                    {entry.documents === 0 || entry.owner === null ? null : (
+                      <span aria-hidden className="text-fd-border">
+                        ·
+                      </span>
+                    )}
+                    {entry.owner === null ? null : <span>{entry.owner}</span>}
+                  </span>
+
+                  {/* The affordance the register never had: a mark that says
+                      "this opens something", visible without a pointer. */}
+                  <ArrowRight
+                    aria-hidden
+                    className="size-4 text-fd-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-fd-primary motion-reduce:transition-none"
+                  />
+                </span>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

@@ -56,8 +56,13 @@ Change it deliberately, not accidentally — and if you change it, change it eve
 - **One accent, spent narrowly.** `--primary` is the whole brand. Actions, links, active state. A
   page where the accent is everywhere has no accent. `--ksor-caution` is the only other coloured
   thing and it means the opposite (a withdrawn document).
-- **The record lists as a register**: title in serif, metadata in mono in a fixed column, hairline
-  rows. Not tiles.
+- **The record lists as CARDS** — a bordered surface per entry, an icon, the title in the
+  record's serif, its metadata in mono, and an arrow. It listed as a hairline register until
+  2026-08-22, and the register lost: it was honest about hierarchy and silent about being
+  usable, because at rest a row carried no affordance at all — only a hover tint — so on a
+  touch screen nothing ever said the row was a link. Four treatments were prototyped on a
+  route and the owner chose the card. What did NOT change is the voice: serif for the record's
+  own words, mono for what the record says about them, and `approved` staying silent.
 
 ## Traps this shell has already sprung
 

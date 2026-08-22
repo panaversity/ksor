@@ -189,3 +189,11 @@ deep teal, as a light/dark pair — chosen because the two colours already on
 this site are spoken for: the accent means link or action, so tinting code with
 it would make every key look clickable, and `--ksor-caution` means the record
 withdrew something.
+
+**A record's entries look clickable before you touch them.** The list a folder
+page shows was a hairline register whose rows were links and said so only on
+hover — so on a touch screen, where there is no hover, nothing ever indicated
+they could be opened. Each entry is a card now: a bordered surface, an icon
+that distinguishes a folder from a document, the title in the record's serif,
+its metadata in mono, and an arrow that says where pressing leads. The voice is
+unchanged, and so is the rule that `approved` shows no label.
