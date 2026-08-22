@@ -327,6 +327,24 @@ ksor` — for everything, and the content SoR is always present. This
     self-contained. The prior revision (separate `@panaversity/ksor-content-
 gateway` package, serve-by-spawn) is superseded._
 
+    _Revision 2026-08-22 (issue #54): `@google/genai` is REMOVED. It was 17 MB
+    installed and brought 30 transitive packages with it — 54 MB and 52
+    top-level packages for a `ksor init` that needs neither — to make exactly
+    two HTTP calls that `providers/gemini.ts` already wrapped behind a
+    structurally-typed client slice. `lib/providers/gemini-rest.ts` implements
+    that slice with `fetch`: **22 MB, 22 packages**. The swap was gated on one
+    measurement taken BEFORE any code was written — SDK and REST return
+    byte-identical vectors for the same text, model, `outputDimensionality` and
+    `taskType` (max per-component difference 0.000e+0 at 1536 dims), so no
+    stored embedding and no calibrated floor moved. Had they differed by a
+    rounding step this would have silently invalidated `vector_floor` on every
+    record. The seam is unchanged and still vendor-neutral, so a provider that
+    prefers an SDK can supply one through `clientFactory`; the live call in
+    `gemini.live.db.test.ts` remains the drift tripwire and now meets the vendor
+    without a library in between. Reversed if the vendor's REST contract starts
+    changing faster than we can follow it, which the live test is what would
+    tell us._
+
 13. **The content gateway's HTTP door composes the SDK's Web-standard
     transport, not a hand-rolled one** (owner-directed, 2026-08-19). The MCP
     surface IS the product; shipping a door hand-built on `node:http` — which

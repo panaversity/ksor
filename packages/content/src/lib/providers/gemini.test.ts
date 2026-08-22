@@ -1,8 +1,15 @@
-/** Shape-level tests only: a fake genai client object stands in for the SDK —
- * the network is never touched, and the SDK classes are only instantiated to
- * pin the duck-typed predicate against the real error shape. */
+/** Shape-level tests only: a fake client object stands in for the transport —
+ * the network is never touched.
+ *
+ * The error cases used to instantiate the SDK's own `ApiError`, which pinned the
+ * duck-typed predicate against the VENDOR's real shape. The SDK is gone (issue
+ * #54) and `GeminiHttpError` is ours, so that particular assurance moved: the
+ * live call in `gemini.live.db.test.ts` is now what meets a real vendor error.
+ * What these keep is the property that actually matters here — the predicate
+ * reads a numeric `status` and nothing else, so it survives whatever throws,
+ * which is why the last case below is a bare object. */
 
-import { ApiError } from "@google/genai";
+import { GeminiHttpError } from "./gemini-rest.js";
 import { describe, expect, it } from "vitest";
 import {
   GeminiEmbeddingProvider,
@@ -158,13 +165,13 @@ describe("client lifecycle", () => {
 
 describe("the exception taxonomy (the two predicates)", () => {
   it("disagrees on a rate limit: ingest patient, read fail-fast", () => {
-    const rateLimit = new ApiError({ message: "quota", status: 429 }); // the REAL SDK error shape
+    const rateLimit = new GeminiHttpError(429, "quota");
     expect(isRetryable(rateLimit), "ingest on 429").toBe(true);
     expect(isRetryableQuery(rateLimit), "read on 429").toBe(false);
   });
 
   it("agrees on server errors and transport blips (both retry)", () => {
-    const server = new ApiError({ message: "overloaded", status: 503 });
+    const server = new GeminiHttpError(503, "overloaded");
     const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
     const reset = Object.assign(new Error("socket reset"), { code: "ECONNRESET" });
     const fetchFailed = new TypeError("fetch failed");
@@ -181,7 +188,7 @@ describe("the exception taxonomy (the two predicates)", () => {
     const poison = new Error("degenerate embedding (empty / all-zero / non-finite)");
     expect(isRetryable(poison)).toBe(false);
     expect(isRetryableQuery(poison)).toBe(false);
-    const clientError = new ApiError({ message: "bad request", status: 400 });
+    const clientError = new GeminiHttpError(400, "bad request");
     expect(isRetryable(clientError)).toBe(false);
     expect(isRetryableQuery(clientError)).toBe(false);
     expect(isRetryable("not an error")).toBe(false);
@@ -234,5 +241,17 @@ describe("GeminiTextGenerator (build plane)", () => {
     const gen = new GeminiTextGenerator({ apiKey: "unused", clientFactory: () => client });
     expect(await gen.generate("p")).toBe("");
     expect(calls[0]?.config.maxOutputTokens).toBe(64);
+  });
+});
+
+describe("the retry predicate reads a status, not a class (#54)", () => {
+  it("classifies anything Error-shaped that carries a numeric status", () => {
+    // The predicate was written to survive SDK refactors. It now has to survive
+    // the SDK's ABSENCE, which is the same property: nothing here names a type.
+    const anonymous = Object.assign(new Error("overloaded"), { status: 503 });
+    expect(isRetryable(anonymous)).toBe(true);
+    expect(isRetryableQuery(anonymous)).toBe(true);
+    const refused = Object.assign(new Error("bad request"), { status: 400 });
+    expect(isRetryable(refused)).toBe(false);
   });
 });
