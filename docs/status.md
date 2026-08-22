@@ -116,14 +116,40 @@ Q: what happens if I lose my badge
    -> badges, escalation, refunds
 ```
 
-**The vector index is NOT being used** (issue #59). `idx_chunks_hnsw` is built
-and maintained, and the query `ksor serve` sends plans a sequential scan plus a
-top-N heapsort instead: measured 814 ms at 20,001 chunks, against 1.2 ms for
-the same rows from the same index when the query is simple. Answers are
-correct; the work to get them grows with the corpus. Small records will not
-notice. A characterization test
-(`packages/content/src/lib/vector-plan.db.test.ts`) pins the bad plan so a fix
-cannot land unnoticed.
+**The vector index is NOT being used, and fixing it is a governance decision**
+(issue #59, diagnosed 2026-08-22). `idx_chunks_hnsw` is built and maintained,
+and the query `ksor serve` sends plans a sequential scan instead: measured
+**648 ms** at 20,001 chunks. Answers are correct — a sequential scan is EXACT —
+but the work to get them grows with the corpus.
+
+The cause recorded here previously (a window function, then joins and
+unestimable predicates) was incomplete. Each clause was tested on its own; the
+root is a cost mispricing, with three compounding contributors:
+
+- Postgres prices a full sequential pass over 20,000 chunks — including 20,000
+  × 1536-dimension distance computations — at **1904**, work that actually takes
+  ~130 ms. The HNSW scan's startup cost alone is 2137, so the index can only
+  win at small `LIMIT`s.
+- The ordered scan must therefore touch `chunks` with estimable predicates only.
+  `SERVABLE` inside it flips the plan back to sequential: **478 ms inside, 2.3 ms
+  outside**, same rows.
+- `hnsw.ef_search = 100` raises the cost further, and the ceiling is
+  size-dependent: at 20,000 rows the index is chosen up to 80 and lost at 90; at
+  5,000 rows it is never chosen at any setting — correctly, since a sequential
+  pass over 5,000 rows is fast _and_ exact.
+
+A restructured arm (order over `chunks` alone, overfetch ≤ 100, filter after)
+reaches **36 ms against 648 ms** — but only with `ef_search` at pgvector's
+default, and that is the setting where, on a bed with real cluster structure,
+the index **missed the true nearest neighbour for 1 query in 100**, dropping the
+top-1 similarity by 0.99. This record's measured in-corpus/out-of-corpus
+separation is ~0.01, so a miss that size flips an ABSTENTION: the corpus holds
+the answer and the door says it does not.
+
+So the speed and the approximation cannot be separated, and taking it is an
+owner decision rather than a tuning change. Both the plan and the fix path are
+pinned by `packages/content/src/lib/vector-plan.db.test.ts`, which fails if
+either stops being true.
 
 ## Implemented (released in 0.0.7)
 
