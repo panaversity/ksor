@@ -137,6 +137,18 @@ export function buildManifestFromTree(
   const files: ManifestFile[] = [];
   const sources = new Map<string, string>();
   const skipped: string[] = [];
+  /** foreign ordering key -> the documents that declare it and no `order:`. */
+  const foreignOrder = new Map<string, string[]>();
+
+  const noteForeignOrder = (meta: Record<string, unknown>, path: string): void => {
+    if (meta["order"] !== undefined && meta["order"] !== null) return; // the governed key wins; nothing fell back
+    for (const key of FOREIGN_ORDER_KEYS) {
+      if (meta[key] === undefined || meta[key] === null) continue;
+      const seen = foreignOrder.get(key) ?? [];
+      seen.push(path);
+      foreignOrder.set(key, seen);
+    }
+  };
 
   const fullPath = (relSegs: readonly string[], name: string): string =>
     `${rootPath}/${[...relSegs, name].join("/")}`;
@@ -167,8 +179,10 @@ export function buildManifestFromTree(
         continue;
       }
       if (INDEX_NAMES.includes(f.name)) continue; // the parent section's own content — handled by the caller
+      const fileMeta = frontmatterMeta(f.text);
+      noteForeignOrder(fileMeta, fullPath(relSegs, f.name));
       ordered.push({
-        order: orderValue(frontmatterMeta(f.text)["order"]),
+        order: orderValue(fileMeta["order"]),
         tie: tieKey(f.name),
         entry: f,
       });
@@ -180,6 +194,7 @@ export function buildManifestFromTree(
       }
       const index = indexOf(d, fullPath(relSegs, d.name));
       const dirMeta = index === null ? {} : frontmatterMeta(index.text);
+      if (index !== null) noteForeignOrder(dirMeta, fullPath(relSegs, `${d.name}/${index.name}`));
       ordered.push({
         order: orderValue(dirMeta["order"]),
         tie: tieKey(d.name),
@@ -256,6 +271,17 @@ export function buildManifestFromTree(
   walk(root, [], null);
   // reported before any emptiness error, so an all-skips tree explains itself
   for (const s of skipped) onSkip(`plain-tree: skipped ${s}`);
+  // Same channel as a skip, and for the same reason: a fallback nobody is told
+  // about produces a WRONG reading order, not a missing one (#74).
+  for (const [key, paths] of foreignOrder) {
+    const shown = paths.slice(0, 3).join(", ");
+    const more = paths.length - Math.min(3, paths.length);
+    onSkip(
+      `plain-tree: ${paths.length} document(s) declare \`${key}\`, which this record does not ` +
+        `read — reading order fell back to file name (${shown}${more > 0 ? `, and ${more} more` : ""}). ` +
+        "Rename it to `order:` to keep the intended sequence.",
+    );
+  }
   if (files.length === 0)
     throw new ManifestError(`plain-tree root ${rootPath} contains no Markdown`);
 
@@ -366,6 +392,23 @@ function codePointCompare(a: string, b: string): number {
 
 // ^\uFEFF? — a BOM-prefixed file must not serve its YAML as a chunk
 // (review finding, 2026-08-19).
+/**
+ * Ordering keys OTHER ecosystems read, which this record does not.
+ *
+ * Reading order here is the governed `order:` key alone (decision 9 retired the
+ * predecessor's Docusaurus keys; the MCP door had been reading them). But a
+ * corpus arriving from Docusaurus, Hugo or Jekyll carries its own, and ignoring
+ * one silently produces a WRONG order rather than a missing one — filename
+ * order, served to `llms.txt`, the sidebar and the `outline` tool alike. Found
+ * on a real 81-document book where 73 files declared `sidebar_position` (#74).
+ */
+const FOREIGN_ORDER_KEYS: readonly string[] = [
+  "sidebar_position", // Docusaurus, and the predecessor
+  "position", // the predecessor's own
+  "weight", // Hugo
+  "nav_order", // Jekyll / Just-the-Docs
+];
+
 /** Re-exported so every reader of a document agrees where its frontmatter ENDS. */
 export const FRONTMATTER: RegExp = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 
@@ -391,8 +434,12 @@ const YAML_BOOLS: Record<string, boolean> = {
 };
 
 /**
- * Minimal PyYAML-compatible frontmatter reader for the FOUR scalar keys this
- * adapter consumes (`title`, `position`, `sidebar_position`, `sor_id`) — the
+ * Minimal PyYAML-compatible frontmatter reader. It parses every top-level
+ * scalar; the adapter consumes `title`, `order` and `sor_id`, and reads the rest
+ * only to WARN about them (see FOREIGN_ORDER_KEYS). The wording here named
+ * `position` and `sidebar_position` until now, which is what this adapter read
+ * before ordering became one governed key — the keys it names are the ones it
+ * stopped reading. The
  * kernel discards every other frontmatter key at build time (taxonomy comes
  * from the manifest), so a YAML dependency would buy nothing (guard rule 5).
  * Scope, deliberately narrow pending a shared markdown module: top-level

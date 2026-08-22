@@ -303,3 +303,72 @@ describe("frontmatterMeta", () => {
     expect(frontmatterMeta("---\nnot a mapping line\n---\n")).toEqual({});
   });
 });
+
+/**
+ * Issue #74 — an ordering key this record does not read must not be ignored in
+ * silence.
+ *
+ * Found by ingesting a real 81-document Docusaurus book: 73 files declared
+ * `sidebar_position`, ksor read only the governed `order:` key, ordering fell
+ * back to filename — alphabetical — and nothing in the output said why. That
+ * order is what `llms.txt`, the sidebar and the MCP `outline` all serve, so the
+ * book was served scrambled and the reader had no way to learn it.
+ *
+ * Ignoring the key is correct; the silence is the defect. This adapter already
+ * holds the principle for its other fallbacks: a skip is REPORTED, never silent.
+ */
+describe("a foreign ordering key is reported, not silently ignored (#74)", () => {
+  const withPos = (name: string, key: string, value: string): TreeEntry =>
+    file(name, `---\ntitle: T\n${key}: ${value}\n---\n\n# T\n\ntext\n`);
+
+  it("names the key, the count and the remedy", () => {
+    const lines: string[] = [];
+    build(
+      dir(
+        "root",
+        withPos("a.md", "sidebar_position", "3"),
+        withPos("b.md", "sidebar_position", "1"),
+        withPos("c.md", "sidebar_position", "2"),
+      ),
+      (l) => lines.push(l),
+    );
+    const said = lines.join("\n");
+    expect(said, `nothing was reported. Lines: ${JSON.stringify(lines)}`).toMatch(
+      /sidebar_position/,
+    );
+    expect(said, "the count must be there — 3 of 3 is a different problem from 3 of 300").toMatch(
+      /\b3\b/,
+    );
+    expect(said, "and the remedy: the governed key it should be renamed to").toMatch(/order:/);
+  });
+
+  it("says nothing when the document ALSO declares the governed key", () => {
+    // `order:` wins, so there is no fallback and nothing to warn about. A
+    // warning here would train the reader to ignore the channel.
+    const lines: string[] = [];
+    build(
+      dir(
+        "root",
+        file("a.md", `---\ntitle: T\norder: 1\nsidebar_position: 9\n---\n\n# T\n\ntext\n`),
+      ),
+      (l) => lines.push(l),
+    );
+    expect(lines.filter((l) => l.includes("sidebar_position"))).toEqual([]);
+  });
+
+  it("says nothing about a corpus that declares no foreign key at all", () => {
+    const lines: string[] = [];
+    build(dir("root", file("a.md"), file("b.md")), (l) => lines.push(l));
+    expect(lines.filter((l) => /ordering key/.test(l))).toEqual([]);
+  });
+
+  it("covers the other ecosystems' keys, not just Docusaurus's", () => {
+    const lines: string[] = [];
+    build(dir("root", withPos("a.md", "weight", "3"), withPos("b.md", "nav_order", "1")), (l) =>
+      lines.push(l),
+    );
+    const said = lines.join("\n");
+    expect(said).toMatch(/weight/);
+    expect(said).toMatch(/nav_order/);
+  });
+});
