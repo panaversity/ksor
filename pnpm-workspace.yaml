@@ -28,9 +28,4 @@ minimumReleaseAgeExclude:
 # onlyBuiltDependencies key and hard-fails on undecided build scripts.)
 # All three arrived with the kernel conversion (decision 11), all three
 # verified safe to deny 2026-08-19:
-#   @google/genai — flagged script is its own dev `prepare`; the tarball
-#     ships dist already.
-#   esbuild — postinstall only fetches a fallback binary; the platform
-#     binary installs as an optionalDependency regardless.
-#   protobufjs — postinstall is a version-compat warning, nothing built.
-allowBuilds: { "@google/genai": false, esbuild: false, protobufjs: false }
+allowBuilds: { esbuild: false, protobufjs: false }

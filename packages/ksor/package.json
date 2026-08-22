@@ -56,7 +56,6 @@
     "publint": "publint"
   },
   "dependencies": {
-    "@google/genai": "^2.17.1",
     "@hono/node-server": "2.1.1",
     "@modelcontextprotocol/server": "^2.0.0",
     "@types/pg": "^8.21.0",
