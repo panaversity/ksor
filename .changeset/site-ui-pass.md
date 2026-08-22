@@ -181,3 +181,11 @@ in italic. And a fenced code block finally looks like a block: Fumadocs paints
 its surface with `bg-fd-card`, which in this palette is under 2% away from the
 page colour, so it takes `--muted` — the token that actually means "a surface
 on the page", and a light/dark pair.
+
+**Inline code carries its own colour.** A frontmatter key or a path in running
+text was set in the same ink as the prose, leaving a grey chip to do the whole
+job of saying "this is machine vocabulary". It now has a token of its own — a
+deep teal, as a light/dark pair — chosen because the two colours already on
+this site are spoken for: the accent means link or action, so tinting code with
+it would make every key look clickable, and `--ksor-caution` means the record
+withdrew something.

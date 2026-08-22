@@ -493,6 +493,31 @@ html > body[data-scroll-locked] {
   color: var(--color-fd-muted-foreground);
 }
 
+/* Inline code is the record's machine vocabulary — a frontmatter key, a path,
+   a command — and it was set in the same ink as the prose around it, so the
+   grey chip carried the whole distinction (owner, 2026-08-22).
+
+   It takes a colour of its own rather than one already spoken for. The accent
+   belongs to links and actions, and inline code is neither — tinting it blue
+   would make every key look clickable, which is the defect one rule up in
+   reverse. `--ksor-caution` is the other coloured thing here and it means "the
+   record withdrew this". So: a third token, a deep teal, far enough from the
+   accent's hue to be told apart at 13px and cool enough to sit in a palette
+   built on blue ink. A pair, like every colour on this site. */
+:root {
+  --ksor-code: #0f6f6a;
+}
+
+.dark {
+  --ksor-code: #6fd8c8;
+}
+
+#nd-page .prose :not(pre) > code {
+  color: var(--ksor-code);
+  background: color-mix(in oklab, var(--ksor-code) 7%, var(--color-fd-muted));
+  border-color: color-mix(in oklab, var(--ksor-code) 22%, transparent);
+}
+
 /* A code block has to look like a block. Fumadocs paints its surface with
    `bg-fd-card`, and `--card` in this palette is all but the page colour — the
    measured difference was under 2% lightness, so a fenced block read as loose
