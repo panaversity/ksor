@@ -62,7 +62,7 @@ status: approved
 Six months, with a written review at three and six.
 `;
 
-/** Long enough to clear the navigation threshold. */
+/** Ordinary prose, searchable under any rule — the upper control. */
 const LONG = `---
 title: Expense claims
 status: approved

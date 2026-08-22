@@ -6,7 +6,7 @@ updated: 2026-08-22.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.14** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.15** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -16,7 +16,7 @@ unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
 
-Verified end to end against each published version (most recently 0.0.14,
+Verified end to end against each published version (most recently 0.0.15,
 2026-08-22: fresh `npm install` into a bare project, driven by the real
 `@modelcontextprotocol/client` SDK over live Postgres 17.7 + pgvector 0.8.2
 with real Gemini embeddings). What that walk covers: install · `schema` ·
@@ -40,7 +40,8 @@ almost no vocabulary with the question (2026-08-21):
   query shape this product exists to serve; the keyword arm earns its place on
   exact-term lookup, not on questions.
 
-**Short documents reach search again** (issue #55, fixed 2026-08-22). Sections
+**Short documents reach search again** (issue #55, fixed 2026-08-22, released
+in 0.0.15). Sections
 were classified navigation by LENGTH — anything under 250 code points — and
 navigation is excluded from every retrieval arm. Walked on 0.0.14 with three
 ordinary short policy statements: three of four chunks unsearchable, and a
@@ -53,6 +54,21 @@ was returned **0** times — correctness, not permissiveness. The recorded line
 lives in `packages/content/src/evals/baseline.ts` and the harness prints every
 run against it. Adopters get it by re-running `ksor ingest`; unchanged content
 is not re-embedded.
+
+Re-walked on published 0.0.15 with the corpus that failed on 0.0.14 — the same
+three short policy statements plus an index page of links. Unsearchable went
+from **3 of 4 chunks (75%)** to **1 of 5 (20%)**, and the one is the index page,
+which is what navigation means. All three questions the record answers now
+return the right document at rank 1, and the index page appears in no result:
+
+```
+Q: how long does a buyer have to send something back
+   -> refunds, escalation, badges       (0.0.14 returned the placeholder page)
+Q: who handles a dispute the agent cannot settle
+   -> escalation, refunds, example
+Q: what happens if I lose my badge
+   -> badges, escalation, refunds
+```
 
 **The vector index is NOT being used** (issue #59). `idx_chunks_hnsw` is built
 and maintained, and the query `ksor serve` sends plans a sequential scan plus a
@@ -146,9 +162,9 @@ cannot land unnoticed.
     surface (decision 11 revision 2026-08-20), `ksor init` now declares
     `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
     version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
-    first-class in every new project. **Released in 0.0.8-0.0.14.**
+    first-class in every new project. **Released in 0.0.8-0.0.15.**
 
-- **Governance, honesty and measurement work (0.0.8-0.0.14, 2026-08-21/22).**
+- **Governance, honesty and measurement work (0.0.8-0.0.15, 2026-08-21/22).**
   Reading order is one rule across the website, `llms.txt` and the MCP
   `outline` tool — the door had been reading the predecessor's Docusaurus keys,
   which no compliant record may declare. `ksor serve` reports its own posture
