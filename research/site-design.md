@@ -405,9 +405,13 @@ Four patterns, and what we took:
    beside it. **Adopted, then REVERSED the same day (owner, 2026-08-22)**: a
    landing page should land, and the record's navigation belongs on the other
    side of `Open the record`. The shell extraction it produced stays —
-   `components/record-shell` is now the document pages' chrome, defined once —
-   and the emptiness that drove this pass is answered by the two-column hero
-   instead.
+   `components/record-shell` is now the document pages' chrome, defined once.
+   The emptiness that drove the pass is answered instead by the cover: the
+   identity claims a full-bleed band, the record's contents sit on it as a
+   second column, and the bytes panel crosses its lower edge onto the page —
+   the record moving from the audience that reads pages to the one that reads
+   bytes. That crossing is the design's one bold move; everything else on the
+   page is quiet by intent.
 2. **Asymmetric hero, live artifact beside the identity.** Anthropic's docs home
    pairs eyebrow + display title + one sentence + search with a running code
    sample. **Adopted, with the artifact changed**: ours renders the record's own

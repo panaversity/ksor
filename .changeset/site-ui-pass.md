@@ -98,8 +98,17 @@ because a web font is fetched at build time and the scaffold's build must work
 offline and byte-identically. The palette moves from neutral grey to a cool ink
 (`oklch(0.17 0.012 255)`) that sits with the accent instead of beside it, with
 firmer hairlines, and the accent is spent only on actions, links and the active
-state. The front door is built as the thing it describes: a rule down the
-middle, people on the left, the bytes an agent is served on the right, both true
-at once — which is what "one source, two surfaces" looks like when it is a
-layout rather than a sentence. The record lists as a register: serif title, mono
-metadata in a fixed column, hairline rows.
+state.
+
+**The front door is the record's cover.** The identity claims a full-bleed band
+over a faintly ruled ground — ink on white in the light theme, and in the dark
+it rises one step above the page rather than turning white, because a cover is
+the surface that catches the light. The record's contents sit on the cover as a
+second column, and the panel showing the bytes an agent is served (`llms.txt`
+and a document's markdown twin, tabs and a copy button) crosses the cover's
+lower edge onto the page below. That crossing is the one bold move; the rest is
+quiet. Two ways in sit side by side — open the record, or search it, the second
+opening the real search dialog — and every machine address moved into the panel
+where the bytes are, instead of competing with the primary action. Document
+pages keep the same three voices, and their governance strip reads as the
+record's checkable facts.

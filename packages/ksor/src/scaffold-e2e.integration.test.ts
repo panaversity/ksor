@@ -435,7 +435,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       path.join(project, "system", "site", "out", "index.html"),
       "utf8",
     );
-    const homeListing = homeHtml.slice(homeHtml.indexOf("The record"));
+    // Sliced from the contents heading: the front door lists the record ON the
+    // cover now, under "Contents" — a title page that does not say what is
+    // inside is a poster (2026-08-22). Everything below this line is asserted
+    // against that listing, not against the whole page, because the page also
+    // carries the record's index as bytes in the hero panel.
+    const homeListing = homeHtml.slice(homeHtml.indexOf("Contents"));
     expect(homeListing, "the home page lists the record's top level").toContain(
       "/docs/refund-policy",
     );

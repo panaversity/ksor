@@ -238,7 +238,11 @@ Details in README → Deploying.
 - **Don't want any of it on the published pages?** Set `governance: false`
   under `site:` in `instance.md`. The record keeps every key — the agent
   surface and your audit trail still read them, and `llms.txt`/`llms-full.txt`
-  keep publishing them — and the pages simply stay plain. The supersession notice is the one thing it does not hide: a reader
+  keep publishing them — and the pages simply stay plain. One consequence worth
+  knowing: the home page shows the agent surface VERBATIM in its panel, so the
+  keys stay visible there even with this off. That panel's whole claim is that
+  it is the bytes an agent is served, and editing them to match a page setting
+  would make it lie. Remove the panel if you need the front page silent too. The supersession notice is the one thing it does not hide: a reader
   handed a replaced document with no word of its successor has been misled.
 - **`status` is shown only when it is a caveat.** `draft`, `review` and
   `superseded` appear as a small label; `approved` shows nothing, because a

@@ -1,9 +1,8 @@
 import type { ReactElement } from "react";
 
+import mark from "@/app/icon.png";
 import { FooterMark } from "@/components/footer-mark";
-import { HomeHero, type RecordArtifact } from "@/components/home-hero";
-import { RecordIndex } from "@/components/record-index";
-import { Separator } from "@/components/ui/separator";
+import { HomeCover, type RecordArtifact } from "@/components/home-cover";
 import { appName, appPurpose, appTitle } from "@/lib/shared";
 import {
   basePath,
@@ -23,9 +22,10 @@ import {
  * `instance.md` or from a document's own frontmatter — the site never contains
  * authored content (scaffolded AGENTS.md, critical rule 1).
  *
- * A landing page, standing on its own: no sidebar, no table of contents, no
- * document chrome. `Open the record` is the way in, and the record's own
- * navigation starts on the other side of it.
+ * A landing page standing on its own: no sidebar, no document chrome. The
+ * design lives in components/home-cover — this file's job is to hand it the
+ * record, including the bytes the build publishes, so the page can show the
+ * record rather than describe it.
  */
 export default async function HomePage(): Promise<ReactElement> {
   // The first document in sidebar order — never a hardcoded path, so deleting
@@ -34,7 +34,6 @@ export default async function HomePage(): Promise<ReactElement> {
   // here.
   const pages = getSortedPages();
   const [first] = pages;
-  const documents = `${pages.length} document${pages.length === 1 ? "" : "s"}`;
 
   if (first === undefined) {
     return (
@@ -49,7 +48,7 @@ export default async function HomePage(): Promise<ReactElement> {
   // The panel shows the record's published bytes, capped: a long first document
   // would otherwise ship its whole body into every visit to the front page.
   const head = (text: string, href: string, label: string): RecordArtifact => {
-    const limit = 1800;
+    const limit = 1600;
     const truncated = text.length > limit;
     return {
       label,
@@ -59,53 +58,51 @@ export default async function HomePage(): Promise<ReactElement> {
     };
   };
   const markdownHref = markdownPath(first.url);
-  const artifacts: readonly RecordArtifact[] = [
-    head(recordIndexText(), `${basePath}/llms.txt`, "llms.txt"),
-    head(await getLLMText(first, pages), markdownHref, markdownHref.split("/").pop() ?? "index.md"),
-  ];
 
   return (
     <main className="flex flex-1 flex-col">
-      <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-20 sm:py-28">
-        <HomeHero
-          eyebrow="KSoR"
-          name={appName}
-          // instance.md's own H1 — a human name, not the machine slug — so a
-          // fresh scaffold reads "Knowledge System of Record" until the intake
-          // interview writes the real one.
-          title={appTitle}
-          // The record's own words: instance.md's first paragraph, which is also
-          // what `ksor serve` gives the MCP server as its instructions. The
-          // framework's marketing line used to sit here, which put ksor's voice
-          // above somebody else's knowledge (research/site-design.md F7).
-          purpose={appPurpose}
-          documents={documents}
-          firstUrl={first.url}
-          // Every agent door, not just the first: the build publishes all three
-          // and an agent cannot use what nothing announces (product principle 8).
-          doors={[
-            { href: `${basePath}/llms.txt`, label: "llms.txt", note: "the record’s index" },
-            {
-              href: `${basePath}/llms-full.txt`,
-              label: "llms-full.txt",
-              note: "every document, one file",
-            },
-            { href: markdownHref, label: "/md/….md", note: "any document as markdown" },
-          ]}
-          artifacts={artifacts}
-        />
+      <HomeCover
+        mark={mark}
+        name={appName}
+        // instance.md's own H1 — a human name, not the machine slug — so a
+        // fresh scaffold reads "Knowledge System of Record" until the intake
+        // interview writes the real one.
+        title={appTitle}
+        // The record's own words: instance.md's first paragraph, which is also
+        // what `ksor serve` gives the MCP server as its instructions. The
+        // framework's marketing line used to sit here, which put ksor's voice
+        // above somebody else's knowledge (research/site-design.md F7).
+        purpose={appPurpose}
+        documents={pages.length}
+        firstUrl={first.url}
+        firstTitle={first.data.title}
+        // What the record holds, on the cover itself: a front door that lists
+        // nothing that is in it was finding F2.
+        entries={entriesUnder(null)}
+        // Every agent door, not just the first: the build publishes all three
+        // and an agent cannot use what nothing announces (product principle 8).
+        doors={[
+          { href: `${basePath}/llms.txt`, label: "llms.txt", note: "the record’s index" },
+          {
+            href: `${basePath}/llms-full.txt`,
+            label: "llms-full.txt",
+            note: "every document, one file",
+          },
+          { href: markdownHref, label: "/md/….md", note: "any document as markdown" },
+        ]}
+        artifacts={[
+          head(recordIndexText(), `${basePath}/llms.txt`, "llms.txt"),
+          head(
+            await getLLMText(first, pages),
+            markdownHref,
+            markdownHref.split("/").pop() ?? "index.md",
+          ),
+        ]}
+      />
 
-        {/* What the record actually holds. Before this the page announced a
-            document count and linked to exactly one of them, so a system of
-            record's front door listed nothing that was in it
-            (research/site-design.md F2). */}
-        <RecordIndex entries={entriesUnder(null)} heading="The record" />
-      </div>
-
-      {/* The sidebar carried the attribution and the audience notice while the
-          front door wore the docs chrome; standing alone, it carries its own. */}
-      <footer className="mx-auto w-full max-w-6xl px-6 pb-12">
-        <Separator className="mb-5" />
+      {/* The paper below the cover is a foot, not a section: the contents sit on
+          the cover, so nothing down here has to carry weight it cannot. */}
+      <footer className="mx-auto w-full max-w-6xl flex-1 px-6 pt-32 pb-8">
         <p className="font-mono text-xs tracking-wider text-fd-muted-foreground uppercase">
           <FooterMark />
         </p>
