@@ -299,7 +299,60 @@ describe("frontmatterMeta", () => {
 
   it("poisons the WHOLE meta on YAML PyYAML would refuse", () => {
     expect(frontmatterMeta("---\ntitle: Rule 10: Machine Badges\nposition: 3\n---\n")).toEqual({});
-    expect(frontmatterMeta("---\ntitle: >\n  folded\n---\n")).toEqual({});
     expect(frontmatterMeta("---\nnot a mapping line\n---\n")).toEqual({});
+    // A block scalar is NOT in this list: PyYAML parses it, so the document is
+    // valid and only the key is beyond this reader (#78).
+    expect(frontmatterMeta("---\ntitle: >\n  folded\n---\n")).toEqual({ title: null });
+  });
+});
+
+/**
+ * Issue #78 — a value this reader does not model is not an invalid document.
+ *
+ * `scalarValue` refused anything opening with `[ { | > & * !` and the caller
+ * treated the refusal as poison, emptying the whole meta. So one YAML list
+ * alongside the title took the title with it, and four documents in a real book
+ * were served under filename-derived names — "The System of Context: Connecting
+ * the Records to Real Work" stored as "System Of Context".
+ *
+ * The reader is documented as PyYAML-compatible, and PyYAML parses a flow
+ * sequence perfectly well. Only what PyYAML would REJECT may empty the meta.
+ */
+describe("valid YAML this reader does not model keeps the rest (#78)", () => {
+  const KEEPS = {
+    "a flow sequence": 'authors: ["Panaversity Team"]',
+    "a flow mapping": "slides: { height: 700 }",
+    "a block scalar": "summary: |",
+    "an anchor": "base: &defaults",
+  };
+  for (const [what, line] of Object.entries(KEEPS)) {
+    it(`${what} does not cost the document its title`, () => {
+      const meta = frontmatterMeta(
+        `---\ntitle: "Preface: The Right Side"\n${line}\norder: 3\n---\n\nbody\n`,
+      );
+      expect(meta["title"], `meta was emptied by ${what}: ${JSON.stringify(meta)}`).toBe(
+        "Preface: The Right Side",
+      );
+      expect(meta["order"], "and the governed ordering key went with it").toBe(3);
+    });
+  }
+
+  const POISONS = {
+    "an unquoted plain scalar containing ': '": "title: Preface: The Right Side",
+    "a key with a trailing colon in its value": "title: Preface:",
+  };
+  for (const [what, line] of Object.entries(POISONS)) {
+    it(`${what} still empties the meta — PyYAML raises there`, () => {
+      expect(frontmatterMeta(`---\n${line}\norder: 3\n---\n\nbody\n`)).toEqual({});
+    });
+  }
+
+  it("the real shape that lost four titles", () => {
+    const meta = frontmatterMeta(
+      '---\ntitle: "Preface: The Right Side of the Line"\n' +
+        'authors: ["Panaversity Team"]\ndate: "2026-07-04"\nsidebar_position: -9\n---\n\nbody\n',
+    );
+    expect(meta["title"]).toBe("Preface: The Right Side of the Line");
+    expect(meta["sidebar_position"], "so #74's warning can see it too").toBe(-9);
   });
 });

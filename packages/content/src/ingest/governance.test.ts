@@ -101,15 +101,17 @@ describe("list shapes the site accepts", () => {
 });
 
 describe("visibility is read from the TEXT, never from a map a sibling can empty", () => {
-  it("REFUSES when an unrelated key makes the parser drop the whole map", () => {
-    // `frontmatterMeta` empties the WHOLE map on any parse failure, so one
-    // sibling key this narrow parser cannot read silently dropped
-    // `visibility:` — the document took the default tier and was served while
-    // the site still hid it. The leak, entering through a third door.
+  it("READS visibility beside a flow list — the shape that used to drop it", () => {
+    // This case used to REFUSE, and refusing was right at the time: the reader
+    // emptied the WHOLE map on any shape it could not model, so a sibling
+    // `tags: [...]` silently dropped `visibility:` and the document took the
+    // default tier — served while the site still hid it, the leak's third door.
+    //
+    // #78 removed the cause: a flow list is valid YAML, so it no longer empties
+    // anything and `visibility` arrives intact. The guard below still stands for
+    // frontmatter PyYAML would genuinely reject.
     const text = doc(["title: T", "tags: [hr, payroll]", "visibility: internal"].join("\n"));
-    expect(() => read(text)).toThrow(/could not resolve it/i);
-    // and it names the actual cause, not just the symptom
-    expect(() => read(text)).toThrow(/flow list/i);
+    expect(read(text).visibility).toBe("internal");
   });
 
   it("REFUSES for an unquoted value containing a colon-space, the other poison shape", () => {
@@ -131,8 +133,12 @@ describe("one frontmatter grammar, not two", () => {
   // Two regexes disagreeing about where a block ENDS is how the leak found a
   // fourth door: a `----` or `--- ` close satisfied the adapter (poisoning its
   // map) and not this reader (so both guards went silent).
+  // The vehicle is a genuinely-poisoning shape — an unquoted value carrying
+  // ": ", which PyYAML rejects. It used to be a flow list, which #78 established
+  // is valid YAML and no longer empties anything; the point of THIS test is the
+  // block terminator, not the poison, so only the vehicle changed.
   const poisoned = (close: string): string =>
-    `---\ntitle: T\ntags: [hr, payroll]\nvisibility: internal\n${close}\n\nBody.\n`;
+    `---\ntitle: Report: Q3\nvisibility: internal\n${close}\n\nBody.\n`;
 
   for (const close of ["---", "----", "--- "]) {
     it(`REFUSES a poisoned map whatever closes the block: ${JSON.stringify(close)}`, () => {
