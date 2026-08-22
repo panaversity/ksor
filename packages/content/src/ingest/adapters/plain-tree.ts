@@ -274,10 +274,11 @@ export function buildManifestFromTree(
   // Same channel as a skip, and for the same reason: a fallback nobody is told
   // about produces a WRONG reading order, not a missing one (#74).
   for (const [key, paths] of foreignOrder) {
-    const shown = paths.slice(0, 3).join(", ");
-    const more = paths.length - Math.min(3, paths.length);
+    const rel = paths.map((x) => (x.startsWith(`${rootPath}/`) ? x.slice(rootPath.length + 1) : x));
+    const shown = rel.slice(0, 3).join(", ");
+    const more = rel.length - Math.min(3, rel.length);
     onSkip(
-      `plain-tree: ${paths.length} document(s) declare \`${key}\`, which this record does not ` +
+      `plain-tree: ${rel.length} document(s) declare \`${key}\`, which this record does not ` +
         `read — reading order fell back to file name (${shown}${more > 0 ? `, and ${more} more` : ""}). ` +
         "Rename it to `order:` to keep the intended sequence.",
     );
