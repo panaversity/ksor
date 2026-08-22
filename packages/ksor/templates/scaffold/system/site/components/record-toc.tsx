@@ -94,6 +94,24 @@ export function RecordToc(): ReactElement | null {
   // whose sections start at h3 does not render its whole rail indented.
   const top = Math.min(...items.map((item) => item.depth));
 
+  // The section the reader is IN, as well as the subsection they are AT.
+  // Marking only the exact heading meant that scrolling down into a
+  // subsection put the light on a minor entry and left the section it belongs
+  // to dark — the rail stopped answering "where am I" the moment it mattered
+  // most. Walk back from the active item, taking each heading shallower than
+  // the last: the parent, then its parent.
+  const ancestors = new Set<string>();
+  const activeIndex = items.findIndex((item) => item.url.slice(1) === activeId);
+  if (activeIndex > 0) {
+    let depth = items[activeIndex]?.depth ?? top;
+    for (let index = activeIndex - 1; index >= 0 && depth > top; index -= 1) {
+      const candidate = items[index];
+      if (candidate === undefined || candidate.depth >= depth) continue;
+      ancestors.add(candidate.url);
+      depth = candidate.depth;
+    }
+  }
+
   return (
     // The container is the shell's own, copied verbatim: it carries the grid
     // area, the rail width and the `max-xl:hidden` that hands small screens to
@@ -111,16 +129,23 @@ export function RecordToc(): ReactElement | null {
         {items.map((item) => {
           const id = item.url.slice(1);
           const here = id === activeId;
+          const within = ancestors.has(item.url);
           return (
             <a
               key={item.url}
               href={item.url}
               // The bar IS the border, so it cannot drift from the row it
               // marks — the shell drew it as a separately positioned track.
+              // Three states, not two: AT this heading, INSIDE its section, or
+              // neither. The section keeps the reader's place without competing
+              // with the line they are actually on — full ink and a dimmed bar
+              // against the accent and a solid one.
               className={`border-s-2 py-1.5 pe-2 transition-colors ${
                 here
                   ? "border-fd-primary text-fd-primary"
-                  : "border-fd-border text-fd-muted-foreground hover:text-fd-foreground"
+                  : within
+                    ? "border-fd-primary/40 text-fd-foreground"
+                    : "border-fd-border text-fd-muted-foreground hover:text-fd-foreground"
               }`}
               style={{ paddingInlineStart: `${(item.depth - top) * 0.75 + 1}rem` }}
               aria-current={here ? "location" : undefined}

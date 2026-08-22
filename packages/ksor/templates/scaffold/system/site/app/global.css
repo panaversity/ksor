@@ -433,6 +433,75 @@ html > body[data-scroll-locked] {
   margin-bottom: 0.5rem;
 }
 
+/* ── The document's furniture ────────────────────────────────────────────────
+   Everything under the headings: links, emphasis, quotes, tables, code. The
+   shell leaves nearly all of it at one weight of one ink, which is why a page
+   of real documentation read as a wall of black (owner, 2026-08-22). Measured
+   before touching anything: a link inside a paragraph rendered lab(4.41) at
+   weight 500 — the SAME colour and weight as the `<strong>` beside it, told
+   apart only by an underline. A reader cannot see what is clickable.
+
+   Every rule below is scoped to `.prose`, the container the record's own
+   markdown renders into, so the site's own furniture keeps its styling. */
+
+/* A link is what the accent is FOR. Only in running text: a heading carries an
+   anchor link around its own text, and colouring those turns every heading
+   blue — which is the same mistake in the other direction. */
+#nd-page .prose :is(p, li, td, th, blockquote) a {
+  color: var(--color-fd-primary);
+  text-decoration-color: color-mix(in oklab, var(--color-fd-primary) 30%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+}
+
+#nd-page .prose :is(p, li, td, th, blockquote) a:hover {
+  text-decoration-color: var(--color-fd-primary);
+}
+
+/* Emphasis is weight, not colour. The prose default sets 500 against a 400
+   body, which at 16px is not a difference a reader notices. */
+#nd-page .prose strong {
+  font-weight: 650;
+}
+
+/* A table is a register: its head is a column label, so it speaks in the mono
+   voice every other label on this site uses, and the rows are separated by
+   hairlines rather than by nothing. The prose default left `tbody tr` with a
+   0px bottom border — the cells simply floated. */
+#nd-page .prose thead th {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fd-muted-foreground);
+}
+
+#nd-page .prose tbody tr {
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+#nd-page .prose tbody tr:last-child {
+  border-bottom: 0;
+}
+
+/* A quotation is an aside, so it steps back rather than shouting in full ink.
+   Italic at 16px in a system sans is a default, not a choice — and it is the
+   least readable setting of the three things a blockquote could be. */
+#nd-page .prose blockquote {
+  font-style: normal;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* A code block has to look like a block. Fumadocs paints its surface with
+   `bg-fd-card`, and `--card` in this palette is all but the page colour — the
+   measured difference was under 2% lightness, so a fenced block read as loose
+   monospace text with a faint outline. `--muted` is the token that means
+   "a surface ON the page", and it is a pair, so this holds in both themes. */
+#nd-page .prose figure.shiki {
+  background: var(--color-fd-muted);
+}
+
 /* Re-assert the shell's own reset, which the ramp above broke. The prose
    plugin zeroes the first block's top margin, but writes that rule as
    `.prose :where(> :first-child)`, and `:where()` contributes nothing to

@@ -166,3 +166,18 @@ resets them; and the ramp's own margins beat the shell's "first block has no
 top margin" rule, which is written with `:where()` and therefore has no
 specificity, so a document whose body opened with a heading started 44px lower
 than one that opened with a sentence. All three fixed and measured.
+
+**A document reads like documentation, not a wall of black.** Under the
+headings almost everything was one weight of one ink: a link inside a paragraph
+rendered at the same colour and weight as the `<strong>` beside it, told apart
+only by an underline, so nothing on the page looked clickable. Links in running
+text now take the accent — in running text only, because a heading carries an
+anchor around its own words and colouring those turns every heading blue.
+Emphasis is heavier than the 500 the prose default gave it. A table's head
+speaks in the mono voice every other label on the site uses and its rows are
+separated by hairlines, where `tbody tr` previously had a 0px border and the
+cells simply floated. A quotation steps back in muted ink instead of shouting
+in italic. And a fenced code block finally looks like a block: Fumadocs paints
+its surface with `bg-fd-card`, which in this palette is under 2% away from the
+page colour, so it takes `--muted` — the token that actually means "a surface
+on the page", and a light/dark pair.
