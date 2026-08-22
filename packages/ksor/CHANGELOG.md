@@ -1,5 +1,123 @@
 # @panaversity/ksor
 
+## 0.0.16
+
+### Patch Changes
+
+- 144aba8: Ingest says when a document's ordering key is one this record does not read
+
+  A record's reading order comes from the governed `order:` key alone. A corpus
+  arriving from Docusaurus, Hugo or Jekyll carries its own — `sidebar_position`,
+  `weight`, `nav_order` — and ksor ignored them in silence, falling back to file
+  name. That is a WRONG order, not a missing one, and it is the order served to
+  `llms.txt`, the rendered sidebar and the MCP `outline` alike.
+
+  Found on a real 81-document book where 73 files declared `sidebar_position`. Its
+  second chapter came out ninth; its preface came out eleventh. Nothing said why.
+
+  ```
+  plain-tree: 73 document(s) declare `sidebar_position`, which this record does not
+  read — reading order fell back to file name (about.md, how-to-sell.md,
+  thesis.md, and 70 more). Rename it to `order:` to keep the intended sequence.
+  ```
+
+  It reports on the same channel the adapter already uses for skipped files, where
+  the principle was already written down: a skip is reported, never silent. A
+  document that declares BOTH keys says nothing — `order:` wins, so nothing fell
+  back, and a warning there would only teach the reader to ignore the channel.
+
+- 2e9c987: Ingest says what the navigation rule now is, not what it used to be
+
+  0.0.15 changed how a section is judged to be navigation — shape rather than
+  length — and left every sentence describing it behind. So a fresh `ksor ingest`
+  reported:
+
+  ```
+  not searchable: 1 of 5 chunk(s) (20%) are shorter than the navigation threshold
+  ```
+
+  There is no navigation threshold any more, and the page in question was not
+  short: it was an index of links, which is exactly what the rule now catches. The
+  remedy was wrong in the same way — "lengthen these sections" is no longer how a
+  page becomes searchable, and padding a link list would not have made it one.
+
+  ```
+  not searchable: 1 of 5 chunk(s) (20%) read as navigation rather than content
+  FOUND ONLY BY NAME: knowledge/index — no searchable chunk at all; a page of
+  links reads as navigation; give it prose of its own, or reach it by slug
+  ```
+
+  Found by running the published artifact rather than by reading the diff. The
+  same stale description was corrected in the three other places it had been
+  copied to.
+
+- 1e26c07: A YAML list in frontmatter no longer costs the document its title
+
+  The frontmatter reader emptied a document's ENTIRE metadata whenever a top-level
+  value opened with `[ { | > & * !`. One `authors: ["…"]` line beside the title,
+  and the title went with it — along with `order:` and `sor_id:`.
+
+  Found on a real 81-document book, where four chapters were served under names
+  derived from their filenames:
+
+  | served as                    | declared                                                        |
+  | ---------------------------- | --------------------------------------------------------------- |
+  | `Preface Agent Native`       | `Preface: The Right Side of the Line`                           |
+  | `System Of Context`          | `The System of Context: Connecting the Records to Real Work`    |
+  | `Designing The Vertical Sor` | `Designing the Vertical System of Record from First Principles` |
+
+  Titles reach the site, `llms.txt` and the MCP `outline`, so this was wrong on
+  every surface at once, and silently.
+
+  The reader is documented as PyYAML-compatible and empties the map only where
+  PyYAML raises. PyYAML does not raise on a flow sequence — it parses it. Two
+  different things were being conflated:
+
+  - **invalid** — an unquoted `a: b: c`, a trailing `:`. PyYAML raises; the map is
+    still emptied, unchanged.
+  - **valid but not modelled here** — a flow sequence or mapping, a block scalar,
+    an anchor. PyYAML parses these. Only the KEY is beyond the reader now; the
+    document survives.
+
+  **One identity change to know about.** A document that declares `sor_id:`
+  _alongside_ such a value previously had that override silently dropped, so its
+  stable_id fell back to the path. The override now stands, on both surfaces
+  together — so re-ingesting changes the stable_id of exactly those documents, and
+  any takedown row keyed on the old path-derived id must be re-pointed. The site
+  and the kernel change in step, which is the property `stable-id-conformance`
+  exists to hold.
+
+  One governance guard gets quieter and no weaker: ingest used to REFUSE a
+  document declaring `visibility:` beside a flow list, because the map was emptied
+  and the tier silently defaulted. The cause is gone, so it ingests with the right
+  visibility; the refusal still stands for frontmatter PyYAML genuinely rejects.
+
+- d4334c7: A quiz no longer swallows the explanation that precedes it
+
+  The previous release moved navigation from a length test to a shape test, so a
+  short fact stopped being mistaken for a link list. The rule that decides whether
+  a whole section is _a widget_ — a quiz, a slide embed — was left on the old
+  threshold: under 250 characters of teaching before the widget, and the entire
+  section was labelled `assessment` or `embed`, neither of which any search
+  returns.
+
+  So a section carrying a complete 180-character explanation followed by a
+  knowledge check lost the explanation too. Same defect as the last one, one path
+  over.
+
+  Both paths now ask the same question: is what comes BEFORE the widget actually
+  navigation-shaped? A heading with only a quiz under it is still a quiz. A link
+  list before a quiz is still a quiz. An explanation before a quiz is an
+  explanation, and stays searchable.
+
+  Found by ingesting a real 81-document curriculum corpus, where 610 chunks landed
+  as `assessment` and 186 as `embed` — together 79% of everything unsearchable in
+  that record.
+
+  `CHUNK_POLICY` moves to v7 (persisted provenance; the labels it names changed),
+  and `NAV_MAX_CHARS` is deleted — nothing reads it now. **Re-run `ksor ingest` to
+  pick this up**; unchanged content is not re-embedded.
+
 ## 0.0.15
 
 ### Patch Changes
