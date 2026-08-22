@@ -74,7 +74,7 @@ export function HomeCover({
   };
 
   return (
-    <section className="relative bg-[oklch(0.17_0.012_255)] text-[oklch(0.97_0.004_255)] dark:bg-[oklch(0.225_0.014_255)]">
+    <section className="relative bg-[var(--ksor-cover)] text-[var(--ksor-cover-foreground)]">
       {/* A ruled ground — the ledger's own lines, not a texture. */}
       <div
         aria-hidden
@@ -126,7 +126,7 @@ export function HomeCover({
               that says only "open" makes you click to find out. */}
             <Link
               href={firstUrl}
-              className="group inline-flex items-center gap-2.5 rounded-md bg-white px-6 py-3.5 text-sm font-medium text-[oklch(0.17_0.012_255)] transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transition-none"
+              className="group inline-flex items-center gap-2.5 rounded-md bg-white px-6 py-3.5 text-sm font-medium text-[var(--ksor-cover)] transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white motion-reduce:transition-none"
             >
               Open the record
               <span
@@ -204,7 +204,7 @@ export function HomeCover({
 
       {/* The panel slides out from under the cover. */}
       <div className="relative mx-auto -mb-24 w-full max-w-6xl px-6">
-        <figure className="overflow-hidden rounded-xl border border-white/12 bg-[oklch(0.21_0.012_255)] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] dark:bg-[oklch(0.26_0.014_255)]">
+        <figure className="overflow-hidden rounded-xl border border-white/12 bg-[var(--ksor-cover-panel)] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)]">
           <figcaption className="flex items-center gap-1 border-b border-white/10 px-2.5 py-2">
             {artifacts.map((artifact, index) => (
               <button
