@@ -259,16 +259,42 @@ html > body[data-scroll-locked] {
    "go here". A caution needs a role of its own; this is the only place it is
    used, and the word "Superseded" still carries the meaning without it
    (GOV.UK's rule: never rely on colour alone). */
-.ksor-caution {
+/* The caution colour is a TOKEN, declared as a light/dark pair on the root
+   rather than inside the one class that first used it. Every surface that has
+   to say "the record withdrew this" now spends the same colour — the banner
+   over a superseded document, and the chip that marks it in the sidebar, the
+   listings, the front door and search. Declared in both themes deliberately:
+   a colour written only on `:root` leaks into dark, because `:root` and
+   `.dark` have equal specificity and whichever comes later wins. */
+:root {
   --ksor-caution: #9c3f24;
+}
+
+.dark {
+  --ksor-caution: #e0906e;
+}
+
+.ksor-caution {
   border-color: color-mix(in oklab, var(--ksor-caution) 32%, transparent);
   border-left-color: var(--ksor-caution);
   background-color: color-mix(in oklab, var(--ksor-caution) 8%, transparent);
 }
 
 .dark .ksor-caution {
-  --ksor-caution: #e0906e;
   background-color: color-mix(in oklab, var(--ksor-caution) 12%, transparent);
+}
+
+/* A withdrawn document's status chip, wherever one renders. A `draft` chip and
+   a `superseded` chip were pixel-identical — the same hairline border and the
+   same muted text — so the two statuses that mean the most different things
+   looked the same at the moment a reader picks between two documents. The
+   colour is additive, never the whole signal: the word "superseded" is beside
+   it in every one of these places (GOV.UK's rule — never rely on colour alone).
+   Unlayered, so it beats the Tailwind utility that sets the chip's border and
+   text colour; the banner class above has always worked this way. */
+.ksor-withdrawn {
+  border-color: color-mix(in oklab, var(--ksor-caution) 45%, transparent);
+  color: var(--ksor-caution);
 }
 
 /* A search result whose document carries a caveat status. Appended in CSS so
@@ -286,6 +312,13 @@ html > body[data-scroll-locked] {
   font-size: 0.65rem;
   font-weight: 500;
   color: var(--color-fd-muted-foreground);
+}
+
+/* …and in search too, where a reader is choosing between results. The chip is
+   drawn by `content`, so the tone has to be set on the same pseudo-element. */
+[data-ksor-status="superseded"]::after {
+  border-color: color-mix(in oklab, var(--ksor-caution) 45%, transparent);
+  color: var(--ksor-caution);
 }
 
 /* ── The document's type ramp ────────────────────────────────────────────────

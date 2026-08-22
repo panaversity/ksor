@@ -44,4 +44,3 @@ never an `# h1`, because the frontmatter title is already the page heading.
 A record of headingless documents would leave both the document heading ramp
 and the "On this page" table of contents unexercised on exactly the pages an
 adopter reads first.
-

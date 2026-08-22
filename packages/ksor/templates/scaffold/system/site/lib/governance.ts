@@ -271,6 +271,20 @@ const ASSUMED_STATUS = "approved";
  * set, so reaching here with one means the record skipped the checker, and
  * showing what it wrote beats hiding it.
  */
+/**
+ * The tone class a status chip wears, in every surface that renders one.
+ *
+ * Only a WITHDRAWN document gets a colour. `draft` and `review` are ordinary
+ * states of a live document; `superseded` says the record has replaced it, and
+ * before this the three were pixel-identical chips — the same hairline, the
+ * same muted text — at exactly the moment a reader picks between a document
+ * and its successor. One function rather than the ternary repeated at five
+ * call sites, so the rule cannot drift between the sidebar and search.
+ */
+export function statusTone(status: string | null): string {
+  return status === "superseded" ? "ksor-withdrawn" : "";
+}
+
 export function caveatStatus(status: string | null): string | null {
   return status === null || status === ASSUMED_STATUS ? null : status;
 }

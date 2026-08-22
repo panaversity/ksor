@@ -143,3 +143,14 @@ value that carries the weight. The "Markdown" link stopped wearing the
 bordered badge that means "a status the record declares": it is the one
 ACTION on a row of FACTS, so it takes the accent, which on this site means a
 link. The gap between facts matches the register's.
+
+**A withdrawn document no longer looks like a draft.** `draft` and `superseded`
+rendered as pixel-identical chips — same hairline border, same muted text —
+which put the two statuses that mean the most different things in the same
+clothes at exactly the moment a reader picks between a document and its
+successor. `--ksor-caution` already existed to mean "the record withdrew this",
+but it was declared inside the one class that first used it; it is now a token
+pair on the root, and a `superseded` chip wears it in all five places one
+renders: the sidebar, the section listing, the front door's stack, the
+document's own governance strip, and search results. The colour is additive and
+never the whole signal — the word "superseded" is beside it everywhere.

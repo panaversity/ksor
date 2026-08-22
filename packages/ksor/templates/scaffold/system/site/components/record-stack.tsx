@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactElement } from "react";
 
+import { statusTone } from "@/lib/governance";
 import type { RecordEntry } from "@/lib/source";
 
 /**
@@ -121,7 +122,9 @@ export function RecordStack({
  */
 function StatusChip({ status }: { status: string }): ReactElement {
   return (
-    <span className="rounded-sm border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-[var(--ksor-cover-foreground)] uppercase">
+    <span
+      className={`rounded-sm border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-[var(--ksor-cover-foreground)] uppercase ${statusTone(status)}`}
+    >
       {status}
     </span>
   );

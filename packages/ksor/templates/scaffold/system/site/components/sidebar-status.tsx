@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { statusTone } from "@/lib/governance";
+
 /**
  * A sidebar row, with the document's status when the status is a caveat.
  *
@@ -21,7 +23,9 @@ export function withStatus(name: ReactNode, status: string | null): ReactNode {
   return (
     <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
       <span>{name}</span>
-      <span className="rounded border border-fd-border px-1 py-px text-[0.6rem] font-medium text-fd-muted-foreground">
+      <span
+        className={`rounded border border-fd-border px-1 py-px text-[0.6rem] font-medium text-fd-muted-foreground ${statusTone(status)}`}
+      >
         {status}
       </span>
     </span>

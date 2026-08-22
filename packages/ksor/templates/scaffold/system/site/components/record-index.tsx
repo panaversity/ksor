@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactElement } from "react";
 
 import type { RecordEntry } from "@/lib/source";
+import { statusTone } from "@/lib/governance";
 
 /**
  * What the record holds below this point — as a register, not as tiles.
@@ -77,7 +78,9 @@ export function RecordIndex({
                 )}
                 {entry.owner === null ? null : <span>{entry.owner}</span>}
                 {entry.status === null ? null : (
-                  <span className="rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest text-fd-foreground">
+                  <span
+                    className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest text-fd-foreground ${statusTone(entry.status)}`}
+                  >
                     {entry.status}
                   </span>
                 )}

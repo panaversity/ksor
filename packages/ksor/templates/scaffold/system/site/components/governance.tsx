@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 
 import {
   caveatStatus,
+  statusTone,
   isCalendarDate,
   sourceHref,
   type DocumentGovernance,
@@ -126,7 +127,9 @@ export function GovernanceMeta({
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
       {status === null ? null : (
         <Fact label="Status">
-          <span className="rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest uppercase">
+          <span
+            className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest uppercase ${statusTone(status)}`}
+          >
             {status}
           </span>
         </Fact>
