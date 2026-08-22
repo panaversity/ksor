@@ -6,7 +6,7 @@ updated: 2026-08-22.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.15** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.16** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -16,7 +16,7 @@ unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
 
-Verified end to end against each published version (most recently 0.0.15,
+Verified end to end against each published version (most recently 0.0.16,
 2026-08-22: fresh `npm install` into a bare project, driven by the real
 `@modelcontextprotocol/client` SDK over live Postgres 17.7 + pgvector 0.8.2
 with real Gemini embeddings). What that walk covers: install · `schema` ·
@@ -27,6 +27,36 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### What a real foreign corpus found (0.0.16)
+
+An 81-document Docusaurus book — 8.4 MB, 6,912 chunks — ingested with 0 failures
+and answered real questions at rank 1. It also surfaced three defects that no
+fixture had, each fixed in 0.0.16 and each verified against the published
+package:
+
+- **A quiz swallowed the explanation before it.** Widget dominance still decided
+  by length after navigation had moved to shape, so a section carrying a
+  complete 180-character explanation before a knowledge check lost the
+  explanation too. On that book: unsearchable **1,010 → 816** of 6,912, with 196
+  chunks moving back to prose and `nav` unchanged at 91.
+- **A YAML list discarded a document's whole metadata.** One `authors: ["…"]`
+  line beside the title emptied the map, so four chapters were served under
+  filename-derived names — "The System of Context: Connecting the Records to
+  Real Work" as "System Of Context". The reader claims PyYAML compatibility and
+  PyYAML parses a flow sequence; only what PyYAML REJECTS empties the map now.
+- **An ordering key was ignored in silence.** 73 files declared
+  `sidebar_position`; reading order fell back to file name — alphabetical — and
+  nothing said why. That order is what `llms.txt`, the sidebar and `outline` all
+  serve, so the book was served scrambled. Ingest now names the key, the count
+  and the remedy.
+
+Two things the same walk measured and did not change: at 6,912 chunks the
+database search costs **75 ms** against a **1,571 ms** query, so the embedding
+round trip is ~95% of what a user feels (issue #59 is a smaller prize than it
+looks); and abstention calibrated against scope-adjacent probes **did not
+separate** on that corpus — `ksor calibrate` refused to emit a floor rather than
+paste one that leaks, which is the fail-closed posture working.
 
 ### Retrieval, measured rather than asserted
 
@@ -162,9 +192,9 @@ cannot land unnoticed.
     surface (decision 11 revision 2026-08-20), `ksor init` now declares
     `@panaversity/ksor` as a scaffold dependency pinned to the exact CLI
     version, with `pnpm serve` / `pnpm ingest` scripts — so the served tool is
-    first-class in every new project. **Released in 0.0.8-0.0.15.**
+    first-class in every new project. **Released in 0.0.8-0.0.16.**
 
-- **Governance, honesty and measurement work (0.0.8-0.0.15, 2026-08-21/22).**
+- **Governance, honesty and measurement work (0.0.8-0.0.16, 2026-08-21/22).**
   Reading order is one rule across the website, `llms.txt` and the MCP
   `outline` tool — the door had been reading the predecessor's Docusaurus keys,
   which no compliant record may declare. `ksor serve` reports its own posture
