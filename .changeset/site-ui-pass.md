@@ -75,20 +75,12 @@ column lands in the same place on every document: x=464, 672px wide, on a
 document with a table of contents and on one without, verified in both.
 
 **The home page is the record's own front door.** It is a landing page that
-stands alone — no sidebar, no document chrome, `Open the record` as the way in —
-and the hero is split: the record's identity, its authority sentence
-and a humans/agents switch on the left; on the right a panel showing the
-record's OWN published bytes, the same `llms.txt` the route serves and the same
-markdown twin `/md/` serves, with a copy button. Below it the record lists as
-cards carrying who owns each entry, how many documents sit below it, and any
-caveat status. Every word still comes from `instance.md` or frontmatter — the
-site contains no authored content — and both audience blocks stay in the markup
-so a crawler, a reader without JavaScript and an agent parsing the HTML all find
-every door. The shape is borrowed deliberately from the docs homes of AI-first
-projects read on 2026-08-22 (Anthropic's asymmetric hero with a live artifact,
-Vercel AI SDK's humans/agents switch, Cursor and MCP rendering their first page
-inside the docs shell); what is ours is that the artifact is evidence rather
-than illustration.
+stands alone — no sidebar, no document chrome, `Open the record` as the way in,
+landing on the first document in governed order rather than a hardcoded path.
+Every word on it comes from `instance.md` or a document's frontmatter, because
+the site contains no authored content, and everything it says is in the
+server-rendered markup, so a crawler, a reader without JavaScript and an agent
+parsing the HTML all read the same page.
 
 **The site has a design, not a default theme.** Three voices, each marking who
 is speaking: the record's own words in a serif (its title, its documents'
@@ -100,28 +92,32 @@ offline and byte-identically. The palette moves from neutral grey to a cool ink
 firmer hairlines, and the accent is spent only on actions, links and the active
 state.
 
-**The front door is the record's cover.** The identity claims a full-bleed band
-over a faintly ruled ground — ink on white in the light theme, and in the dark
-it rises one step above the page rather than turning white, because a cover is
-the surface that catches the light. The record's contents sit on the cover as a
-second column, and the panel showing the bytes an agent is served (`llms.txt`
-and a document's markdown twin, tabs and a copy button) crosses the cover's
-lower edge onto the page below. That crossing is the one bold move; the rest is
-quiet. Two ways in sit side by side — open the record, or search it, the second
-opening the real search dialog — and every machine address moved into the panel
-where the bytes are, instead of competing with the primary action. Document
-pages keep the same three voices, and their governance strip reads as the
-record's checkable facts.
+**The front door is the record's cover, and it is one screen.** The identity
+takes the whole window under the navbar over a faintly ruled ground: the
+record's name, the authority sentence it declares in `instance.md`, one way in,
+and a drawing of what a system of record does. The cover follows the theme
+rather than staying dark in both — pale stock in the light, and in the dark it
+rises one step above the page instead of turning white, because a cover is the
+surface that catches the light. Every machine address came off the page:
+`/llms.txt` sits where agents look for it and each document advertises its own
+markdown twin, so nothing became less discoverable by leaving the front door,
+and the page stopped printing URLs at a reader who will never fetch one.
 
-**The front door carries a drawing instead of a second list, and no addresses.**
-The record's index is already on the page as the bytes in the panel, so listing
-it again beside them was the same information twice; the right of the cover is
-now an illustration of what the product does, drawn from the README's own
-definition — one governed source, sealed, projecting into the pages a person
-reads, the markdown a consumer fetches, and the door an agent connects through,
-with the connectors running one way because that direction is the claim. It is
-SVG rather than a picture file: no binary in the adopter's repo, no request at
-runtime, sharp at any size, and every stroke follows the theme. The agent
-addresses came off the page entirely — `/llms.txt` sits where agents look for
-it and each document advertises its own markdown twin, so nothing became less
-discoverable by leaving the front door.
+**The drawing replaces a second list.** The right of the cover illustrates the
+product's own definition — one governed source, sealed, projecting into the
+pages a person reads, the markdown a consumer fetches, and the door an agent
+connects through, with the connectors running one way because that direction is
+the claim. It is SVG rather than a picture file: no binary in the adopter's
+repo, no request at runtime, sharp at any size, and every stroke follows the
+theme.
+
+**The cover's composition is centred and its type ramp closed.** The signature
+line at the foot took the section's free space as top margin, which cancelled
+the centring and left 197px of dead space below the content and none above it
+(measured at a 996px-tall window); the composition now sits in the middle of the
+space above the signature, 157px clear at the top and 158px at the bottom. The
+ramp ran 12px eyebrow to a 76px title to an 18px lead — a jump with nothing in
+the middle — and is now 12 / 64 / 20. The accent rule under the title was still
+pinned to the dark theme's blue from when the cover was dark in both themes,
+which left it all but invisible on the pale light cover; it takes the token
+again, so it inverts with everything else.
