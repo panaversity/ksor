@@ -38,14 +38,8 @@ import { createHash } from "node:crypto";
 // alone — two copies once stamped sources.chunk_policy and
 // retrieval_log.chunk_policy_version from DIFFERENT files, drifting the
 // provenance the carry-forward skip-gate rests on (review, 2026-08-19).
-export {
-  CHUNK_POLICY,
-  MAX_CHARS,
-  NAV_MAX_CHARS,
-  HARD_MAX_CHARS,
-  MIN_CONTENT_CHARS,
-} from "../config.js";
-import { MAX_CHARS, NAV_MAX_CHARS, HARD_MAX_CHARS, MIN_CONTENT_CHARS } from "../config.js";
+export { CHUNK_POLICY, MAX_CHARS, HARD_MAX_CHARS, MIN_CONTENT_CHARS } from "../config.js";
+import { MAX_CHARS, HARD_MAX_CHARS, MIN_CONTENT_CHARS } from "../config.js";
 
 // --- Python text semantics, reproduced exactly ------------------------------
 
@@ -446,7 +440,7 @@ const NAV_LINE =
  * Is this segment NAVIGATION — a thing that points at content rather than
  * being content?
  *
- * The oracle answered this with length: under NAV_MAX_CHARS (250) meant nav.
+ * The oracle answered this with length: under 250 code points meant nav.
  * On the curriculum corpus it was tuned against, that proxy holds — a short
  * segment there really is a link list. On a handbook it inverts, because a
  * handbook's most valuable statements are its shortest ("Six months, with a
@@ -475,32 +469,50 @@ export function isNavShaped(content: string): boolean {
   return cpLen(prose) < MIN_CONTENT_CHARS;
 }
 
+/**
+ * Does a line-leading widget DOMINATE this span?
+ *
+ * The widget regexes match an opening tag only, so the tag's position is where
+ * teaching stops and markup begins. The question is therefore about what comes
+ * BEFORE it: if that is navigation-shaped, the span is the widget; if it is real
+ * explanation, the widget is a minority of a teaching passage.
+ *
+ * This used to be a length test — 250 characters of teaching body before the
+ * widget and the whole span became `assessment`, which no retrieval arm returns.
+ * #55 moved navigation from length to shape and left this path behind, so a
+ * section carrying 180 characters of real explanation before a `<Quiz>` lost the
+ * explanation with it (issue #75).
+ */
+function dominantWidget(span: string): SourceType | null {
+  for (const [re, label] of [
+    [JSX_ASSESS, "assessment"],
+    [JSX_EMBED, "embed"],
+  ] as const) {
+    const m = re.exec(span);
+    if (m !== null && isNavShaped(span.slice(0, m.index))) return label;
+  }
+  return null;
+}
+
 export function classify(content: string, headingPath: readonly string[]): SourceType {
-  if (JSX_ASSESS.test(content)) return "assessment";
+  const widget = dominantWidget(content);
+  if (widget !== null) return widget;
   const leaf = headingPath.length > 0 ? headingPath[headingPath.length - 1]! : "";
-  if (
-    JSX_EMBED.test(content) ||
-    content.includes("docs.google.com/presentation") ||
-    leaf.includes("Teaching Aid")
-  ) {
+  // Declared purpose rather than measured shape: a "Teaching Aid" heading and a
+  // slide-deck link say what the section IS. Left on the oracle's taxonomy
+  // deliberately — weighing these is a separate policy question.
+  if (content.includes("docs.google.com/presentation") || leaf.includes("Teaching Aid")) {
     return "embed";
   }
   if (isNavShaped(content)) return "nav";
   return "prose";
 }
 
-/** A segment DOMINATED by a line-leading widget (with < NAV_MAX_CHARS of
- * teaching body before it) labels EVERY fragment — a char-sliced widget must
- * not leak as prose. */
+/** A segment dominated by a line-leading widget labels EVERY fragment — a
+ * char-sliced widget must not leak as prose. Same question as `classify`, asked
+ * of the whole segment rather than one piece of it. */
 function segmentMarkerType(span: string): SourceType | null {
-  for (const [re, label] of [
-    [JSX_ASSESS, "assessment"],
-    [JSX_EMBED, "embed"],
-  ] as const) {
-    const m = re.exec(span);
-    if (m !== null && cpLen(teachingBody(span.slice(0, m.index))) < NAV_MAX_CHARS) return label;
-  }
-  return null;
+  return dominantWidget(span);
 }
 
 interface Segment {
