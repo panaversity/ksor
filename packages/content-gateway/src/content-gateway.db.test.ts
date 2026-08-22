@@ -1,7 +1,8 @@
 /**
  * The gateway acceptance — the product, driven the way a user's agent
- * drives it: a REAL MCP client spawning the BUILT gateway binary over
- * stdio (run `pnpm build` first; the suite spawns dist/cli.mjs), against a
+ * drives it: a REAL MCP client spawning the BUILT gateway binary and
+ * talking to it over HTTP (run `pnpm build` first; the suite spawns
+ * dist/cli.mjs), against a
  * live Postgres corpus embedded by the fake provider, with an abstention
  * floor the suite CALIBRATES itself (midpoint of the in/out-of-corpus
  * separation — the paste-value method in miniature). Includes the question
@@ -22,6 +23,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import {
   applySchema,
   buildShippedProvider,
+  WHOLE_RECORD_SCOPE,
   contentPool,
   embedInput,
   embedIntent,
@@ -159,7 +161,7 @@ describe.runIf(adminDsn !== "")("gateway acceptance (HTTP, real MCP client)", ()
             { tenantId: TENANT, corpusId: TENANT, kinds: null, pinnedGeneration: null },
             qv ?? [],
           ),
-        VECTOR_TXN_GUCS,
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
       );
     };
     const inScore = await score(IN_CORPUS_QUERY);
@@ -511,6 +513,97 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(body.snapshot.token.length).toBeGreaterThan(20);
   });
 
+  it("survives the managed-Postgres suspend/resume cycle a Neon deployment lives in", async () => {
+    // Neon suspends compute after ~5 minutes idle and every open connection is
+    // dropped with 57P01 (admin_shutdown). Terminating every backend of this
+    // database reproduces exactly that against a RUNNING gateway, driven by a
+    // real MCP client — the shape a deployment meets on the FIRST request after
+    // any quiet period, which for a low-traffic record is most requests.
+    //
+    // Walked live too (2026-08-21, Postgres 17.7 stopped and restarted under a
+    // served record): the request during suspension returned "content store
+    // temporarily unavailable", the first request after resume answered, and
+    // the process never died. This test holds the same guarantee in CI.
+    const answered = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    expect((answered.structuredContent as { ok: boolean }).ok, "warm baseline").toBe(true);
+
+    // SUSPEND: drop every backend this database holds, gateway's included.
+    // ASSERT that it killed something — the gateway keeps min:0 and reaps idle
+    // connections, so a version of this test that terminated NOTHING would pass
+    // trivially by opening a fresh connection, proving no reconnect at all.
+    const killed = await admin.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [dbName],
+    );
+    expect(
+      killed.rowCount ?? 0,
+      "nothing was terminated, so this test would prove nothing — the gateway held no connection " +
+        "to drop at this moment",
+    ).toBeGreaterThan(0);
+    // Stronger: NOTHING survives. Whatever the next call uses, it cannot be a
+    // connection that existed before the suspend, so a pass here is a real
+    // reconnect and not a lucky reuse.
+    const survivors = await admin.query(
+      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [dbName],
+    );
+    expect(survivors.rows[0].n, "a surviving connection would make the reconnect untested").toBe(0);
+
+    // RESUME is implicit — Postgres is still listening, as Neon is once the
+    // compute wakes. The next call must reconnect and answer, NOT surface the
+    // dead socket and NOT take the process down.
+    const afterResume = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    const body = afterResume.structuredContent as {
+      ok: boolean;
+      hits: { slug: string; provenance: { generation: number } }[];
+    };
+    expect(
+      body.ok,
+      `the first call after a suspend must answer: ${JSON.stringify(afterResume.content)}`,
+    ).toBe(true);
+    expect(body.hits.length, "and answer with real hits, not an empty success").toBeGreaterThan(0);
+    expect(body.hits[0]?.provenance.generation, "still citing the published generation").toBe(1);
+
+    // And it keeps working — the discarded client was replaced, not reused.
+    const third = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    expect((third.structuredContent as { ok: boolean }).ok).toBe(true);
+  }, 120_000);
+
+  it("/ready shares ONE probe however slow it is — coalescing keyed on the answer, not the start", async () => {
+    // /ready is unauthenticated and outside /mcp's in-flight cap, so it is the
+    // one door a flood can use to drain the pool. The cache was keyed on the
+    // probe's START against a 1s TTL, so a probe SLOWER than 1s stopped being
+    // shared — coalescing failed exactly when the database was unhealthy, which
+    // is the only time it matters. Against a waking compute one probe per
+    // second accumulated concurrent checkouts until the pool was gone
+    // (round-4 review of #43, found by two reviewers independently).
+    const burst = await Promise.all(
+      Array.from({ length: 12 }, () => fetch(`http://127.0.0.1:${port}/ready`)),
+    );
+    for (const r of burst) expect(r.status, "a healthy store answers ready").toBe(200);
+
+    // The real assertion is on the pool: twelve simultaneous probes must not
+    // have opened twelve connections. With coalescing, the whole burst shares
+    // at most a couple of checkouts.
+    const peak = await admin.query(
+      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+      [dbName],
+    );
+    expect(
+      peak.rows[0].n,
+      `12 concurrent /ready probes opened ${peak.rows[0].n} backends — they are not being shared`,
+    ).toBeLessThan(6);
+  }, 60_000);
+
   it("outline lists the record; read reconstructs a document byte-exact with provenance", async () => {
     const outline = await client.callTool({ name: "outline", arguments: {} });
     const nodes = (outline.structuredContent as { nodes: { slug: string }[] }).nodes;
@@ -534,6 +627,73 @@ Answer ONLY from this record. Abstention is a correct answer.
     expect(missing.isError, JSON.stringify(missing)).toBe(true);
     expect(JSON.stringify(missing.content)).toContain("outline");
   });
+
+  it("a search's snapshot token composes into read — the two tools fit together", async () => {
+    // search returns `snapshot` as an OBJECT and read used to take `snapshot`
+    // as a STRING, so an agent copying the field of that name from one into
+    // the field of that name in the other got an input-validation error rather
+    // than a pinned read. Declaring the output schemas turned that informal
+    // ambiguity into a validated contract that contradicted itself; read's
+    // input is now `snapshot_token` (round-9 review of #43).
+    const found = await client.callTool({
+      name: "search",
+      arguments: { query: IN_CORPUS_QUERY, k: 3 },
+    });
+    const body = found.structuredContent as {
+      hits: { slug: string }[];
+      snapshot: { token: string; generation: number };
+    };
+    expect(body.snapshot?.token, "a served search pins a generation").toBeTruthy();
+
+    const pinned = await client.callTool({
+      name: "read",
+      arguments: { slug: body.hits[0]!.slug, snapshot_token: body.snapshot.token },
+    });
+    expect(pinned.isError, JSON.stringify(pinned.content)).toBeFalsy();
+    const doc = pinned.structuredContent as { provenance: { generation: number } };
+    expect(
+      doc.provenance.generation,
+      "and the read answers from the generation the search pinned",
+    ).toBe(body.snapshot.generation);
+  }, 60_000);
+
+  it("outline PAGES to the end — a partial list is never mistaken for the record", async () => {
+    // A truncated outline with no continuation manufactures a false "not in
+    // the record": the agent asks for the structure, gets a partial list, and
+    // concludes a document is absent. `has_more` announced the truncation and
+    // nothing let the caller past it — the only recourse was re-asking with a
+    // bigger limit, and above the maximum the tail was unreachable at all
+    // (round-6 review of #43).
+    const whole = await client.callTool({ name: "outline", arguments: {} });
+    const all = (whole.structuredContent as { nodes: { slug: string }[]; has_more: boolean }).nodes;
+    expect(all.length, "the fixture needs at least two rows to page through").toBeGreaterThan(1);
+
+    const seen: string[] = [];
+    let offset = 0;
+    let pages = 0;
+    for (;;) {
+      const page = await client.callTool({ name: "outline", arguments: { limit: 1, offset } });
+      const body = page.structuredContent as {
+        nodes: { slug: string }[];
+        has_more: boolean;
+        offset: number;
+        next_offset: number | null;
+      };
+      expect(body.offset, "the page states where it started").toBe(offset);
+      seen.push(...body.nodes.map((n) => n.slug));
+      pages += 1;
+      expect(pages, "paging must terminate").toBeLessThan(all.length + 5);
+      if (!body.has_more) {
+        expect(body.next_offset, "the last page offers no continuation").toBeNull();
+        break;
+      }
+      expect(body.next_offset, "has_more means there IS a continuation").not.toBeNull();
+      offset = body.next_offset!;
+    }
+    expect(seen, "paging one row at a time reconstructs the whole outline").toEqual(
+      all.map((n) => n.slug),
+    );
+  }, 60_000);
 
   it("abstains on the out-of-corpus question — the only passing answer", async () => {
     const result = await client.callTool({

@@ -1,6 +1,8 @@
 -- sor-content schema v2 — the generational corpus store (specs/platform/generations.md §2 is the
 -- design this implements; specs/platform/spec.md §5 the roles; the legacy schema the quarry).
--- ONE schema file; no migration runner (spec §9: compatibility is a RANGE, recorded in schema_meta).
+-- This file provisions a FRESH database at the current version; an EXISTING one moves forward
+-- through schema/migrations/<from>-<to>__<slug>.sql (spec §9: compatibility is a RANGE, recorded
+-- in schema_meta). Both halves are required — the file alone cannot migrate rows an adopter has.
 --
 -- Carried from legacy verbatim where the eval lock demands it: HNSW (m=16, ef_construction=64)
 -- cosine, 'english' generated tsvector, per-tenant one-embedding-model trigger, fail-closed tenant
@@ -41,6 +43,12 @@ CREATE TABLE ingestion_runs (
     started_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
     heartbeat_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at            TIMESTAMPTZ,
+    -- The schema version in force when this generation was BUILT. A generation
+    -- carried forward across the 2.1 -> 2.2 migration has NULL visibility on
+    -- every node, which the serving predicate reads as the widest tier — so a
+    -- record with an audience model must refuse to serve such a generation
+    -- rather than quietly publish restricted documents (2.4).
+    schema_version         TEXT,
     UNIQUE (tenant_id, corpus_id, generation)
 );
 
@@ -59,6 +67,15 @@ CREATE TABLE content_nodes (
     position   INT  NOT NULL DEFAULT 0,
     permalink  TEXT,                                  -- CONFIRMED site route (/docs/…), sitemap-verified at publish; NULL = no proven page URL (a group, or an unlisted route) — never a guess
     status     TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published','draft','archived')),
+    -- Governance the AUTHOR declares, carried by the record itself (2.2) so every
+    -- surface reads one source instead of re-deriving it from markdown. `status`
+    -- above is the SERVING state of the row; `doc_status` is what the document says.
+    corpus_id     TEXT,                               -- which record this node belongs to
+    visibility    TEXT,                               -- audience tier; NULL = instance default_visibility
+    doc_status    TEXT,                               -- draft / approved / superseded, as authored
+    owner         TEXT,
+    provenance    JSONB,                              -- where the claims come from, as authored
+    superseded_by TEXT,                               -- stable_id of the replacement
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT nodes_stable_uniq  UNIQUE (tenant_id, generation, stable_id),
@@ -71,6 +88,12 @@ CREATE TABLE content_nodes (
 CREATE INDEX idx_nodes_gen      ON content_nodes (tenant_id, generation, kind);
 CREATE INDEX idx_nodes_parent   ON content_nodes (parent_id);
 CREATE INDEX idx_nodes_keywords ON content_nodes USING gin (keywords);
+-- NO index on visibility. The serving predicate is
+-- `coalesce(n.visibility, <runtime GUC>) = ANY(...)`, and a plain btree cannot
+-- serve a coalesce over a value that is only known per transaction — the index
+-- would be built and maintained and never read, which is exactly the defect
+-- the HNSW arm was just fixed for. The audience filter rides the
+-- (tenant_id, generation, kind) index that every serving arm already uses.
 CREATE UNIQUE INDEX nodes_root_slug_uniq ON content_nodes (tenant_id, generation, slug) WHERE parent_id IS NULL;
 
 CREATE TABLE slug_aliases (
@@ -117,6 +140,11 @@ CREATE TABLE chunks (
     embedding         VECTOR(1536),                  -- NULL while pending/failed; dim = the declared space
     embedding_status  TEXT NOT NULL DEFAULT 'embedded'
                       CHECK (embedding_status IN ('pending','embedded','failed')),
+    -- The text-search configuration is RENDERED from instance.md
+    -- (retrieval.text_search_config), the way the embedding dimension is. It
+    -- is STORED and GENERATED, so it cannot be changed without a re-ingest —
+    -- which is exactly why the record declares it rather than inheriting
+    -- 'english' from the DDL (audit finding 20).
     search_tsv        TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     embedded_at       TIMESTAMPTZ,
@@ -171,7 +199,7 @@ CREATE TABLE retrieval_log (
     actor       TEXT NOT NULL,                       -- NO default: unset errors loudly (carried)
     action      TEXT NOT NULL CHECK (action IN
                   ('content_served','similarity_searched','corpus_seeded','outline_served',
-                   'search_abstained','generation_activated','takedown_applied')),
+                   'search_abstained','generation_activated','takedown_applied','takedown_revoked')),
     source_id   TEXT,
     -- spec §7 audit fields (explicit + queryable; free detail rides JSONB)
     content_hash           TEXT,
@@ -193,9 +221,16 @@ CREATE TABLE schema_meta (
     compatible_from TEXT NOT NULL,
     applied_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- 2.1 adds takedown_denylist.scope (decision 14); additive with a default, so
--- a 2.0 reader still reads a 2.1 database — compatible_from stays 2.0.
-INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.1', '2.0');
+-- 2.1 adds takedown_denylist.scope (decision 14). 2.2 puts governance on the node
+-- row (corpus_id, visibility, doc_status, owner, provenance, superseded_by).
+-- 2.3 gives takedown a write plane and the ledger a reader (sor_content_auditor).
+-- 2.4 stamps each generation with the schema it was built against, so a
+-- generation predating the governance columns can be REFUSED rather than served
+-- at default_visibility.
+-- Both are additive and nullable, so a 2.0 reader still reads a 2.2 database —
+-- compatible_from stays 2.0. Existing databases move forward through
+-- schema/migrations/; schema.sql provisions a FRESH one at the current version.
+INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.4', '2.0');
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
@@ -229,6 +264,9 @@ CREATE TABLE ingest_tenant_grants (
 DO $$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_runtime') THEN CREATE ROLE sor_content_runtime NOLOGIN; END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_ingest')  THEN CREATE ROLE sor_content_ingest NOLOGIN;  END IF;
+  -- The ledger's READER (2.3). Without it retrieval_log was write-only under
+  -- every credential ksor ships: FORCE RLS, an INSERT policy, and no way back in.
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_auditor') THEN CREATE ROLE sor_content_auditor NOLOGIN; END IF;
 END $$;
 
 -- Explicit in-schema membership for the APPLYING role, so SET LOCAL ROLE works from day one
@@ -236,10 +274,10 @@ END $$;
 -- every fresh project until hand-fixed). Deployment LOGIN roles receive the same membership
 -- when they are provisioned (1h).
 DO $$ BEGIN
-  EXECUTE format('GRANT sor_content_runtime, sor_content_ingest TO %I WITH SET TRUE', current_user);
+  EXECUTE format('GRANT sor_content_runtime, sor_content_ingest, sor_content_auditor TO %I WITH SET TRUE', current_user);
 END $$;
 
-GRANT USAGE ON SCHEMA public TO sor_content_runtime, sor_content_ingest;
+GRANT USAGE ON SCHEMA public TO sor_content_runtime, sor_content_ingest, sor_content_auditor;
 -- runtime: read published corpora, write the ledger — NOTHING else.
 GRANT SELECT ON corpora, content_nodes, sources, chunks, slug_aliases, node_centroids, takedown_denylist, schema_meta TO sor_content_runtime;
 -- freshness on /health (2026-07-16): the runtime reads the active run's source_commit +
@@ -248,7 +286,15 @@ GRANT SELECT ON ingestion_runs TO sor_content_runtime;
 GRANT INSERT ON retrieval_log TO sor_content_runtime;
 GRANT USAGE, SELECT ON SEQUENCE retrieval_log_id_seq TO sor_content_runtime;
 -- ingest: build generations + flip, for AUTHORIZED tenants only (policy-checked via the grant table).
-GRANT SELECT ON schema_meta, takedown_denylist, ingest_tenant_grants TO sor_content_ingest;
+GRANT SELECT ON schema_meta, ingest_tenant_grants TO sor_content_ingest;
+-- Takedown is a WRITE to the record's governance: ingest imposes and lifts it
+-- through `ksor takedown`, authorized by the same grant table every other write
+-- is (2.3 — before it, the only door was a superuser psql prompt).
+GRANT SELECT, INSERT, UPDATE, DELETE ON takedown_denylist TO sor_content_ingest;
+-- The ledger needs a READER. Without one, retrieval_log was write-only under
+-- every credential ksor ships (2.3).
+GRANT SELECT ON retrieval_log TO sor_content_auditor;
+GRANT SELECT ON takedown_denylist, schema_meta, corpora, ingestion_runs TO sor_content_auditor;
 GRANT SELECT, INSERT, UPDATE, DELETE ON corpora, ingestion_runs, content_nodes, sources, chunks, slug_aliases, node_centroids TO sor_content_ingest;
 GRANT INSERT ON retrieval_log TO sor_content_ingest;
 GRANT USAGE, SELECT ON SEQUENCE retrieval_log_id_seq, ingestion_runs_run_id_seq TO sor_content_ingest;
@@ -274,10 +320,17 @@ CREATE POLICY tenant_read ON node_centroids    FOR SELECT USING (tenant_id = cur
 CREATE POLICY tenant_read ON takedown_denylist FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
 CREATE POLICY tenant_read ON ingestion_runs    FOR SELECT USING (tenant_id = current_setting('app.tenant_id', true));
 -- Ledger writes:
+CREATE POLICY tenant_read ON retrieval_log FOR SELECT
+  USING (tenant_id = current_setting('app.tenant_id', true));
 CREATE POLICY tenant_write ON retrieval_log FOR INSERT
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 -- Ingest mutations: tenant GUC match AND the grant table authorizes THIS role for THIS tenant
 -- (a CLI flag is not authorization — spec §5).
+CREATE POLICY takedown_write ON takedown_denylist FOR ALL TO sor_content_ingest
+  USING (tenant_id = current_setting('app.tenant_id', true)
+         AND EXISTS (SELECT 1 FROM ingest_tenant_grants g WHERE g.role_name = current_user AND g.tenant_id = takedown_denylist.tenant_id))
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)
+         AND EXISTS (SELECT 1 FROM ingest_tenant_grants g WHERE g.role_name = current_user AND g.tenant_id = takedown_denylist.tenant_id));
 CREATE POLICY ingest_write ON content_nodes FOR ALL TO sor_content_ingest
   USING (tenant_id = current_setting('app.tenant_id', true)
          AND EXISTS (SELECT 1 FROM ingest_tenant_grants g WHERE g.role_name = current_user AND g.tenant_id = content_nodes.tenant_id))

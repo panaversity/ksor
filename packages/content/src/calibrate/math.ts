@@ -43,6 +43,13 @@ export interface ReportMeta {
   readonly model: string;
   readonly dim: number;
   readonly door: CalibrationDoor;
+  /**
+   * Where the OUT-OF-CORPUS probes came from. The built-in set can only ever be
+   * far-domain — scope-adjacency is a property of the corpus, and a set shipped
+   * in the binary does not know the corpus — so a separability verdict resting
+   * on it is measuring the easy half of the question.
+   */
+  readonly oocSource: "built-in" | "provided";
 }
 
 /** The report dict of the oracle's `calibrate()`, key for key. */
@@ -59,6 +66,26 @@ export interface CalibrationReport {
   readonly target_precision: FloorStats | null;
   readonly paste: number;
   readonly paste_why: string;
+  /**
+   * min(in-corpus scores) − max(out-of-corpus scores): how much room the floor
+   * has before a real question falls under it or a probe climbs over it.
+   * NEGATIVE when the two distributions overlap, which is exactly the
+   * `separable: false` case — carried as a number so the size of the overlap is
+   * legible, not just its existence.
+   */
+  readonly margin: number;
+  /**
+   * Did the measurement separate in-corpus from out-of-corpus at all? When it
+   * did NOT, there is no floor to paste — only a diagnosis. Carried on the
+   * report so the renderer cannot hand out a number the maths just refused.
+   */
+  readonly separable: boolean;
+  /** See ReportMeta.oocSource. Carried so the renderer can qualify the verdict. */
+  readonly ooc_source: "built-in" | "provided";
+  /** The precision target the ALT floor was measured at — reported, not assumed. */
+  readonly target: number;
+  /** When the measurement was taken: the invariant says the DATE rides beside the number. */
+  readonly measured_at: string;
   readonly low_tail: ScoredQuery[];
   readonly detail: ScoredQuery[];
 }
@@ -160,7 +187,9 @@ export function recommendFloor(
  * decimals, falling back to hi exactly when rounding leaves the (narrow)
  * interval. Not separable: the precise zero-FA floor with the leak stated.
  */
-export function pasteValue(points: readonly Scored[]): [paste: number, why: string] {
+export function pasteValue(
+  points: readonly Scored[],
+): [paste: number, why: string, separable: boolean] {
   const inScores = points.filter((p) => p.in_corpus).map((p) => p.score);
   const oocScores = points.filter((p) => !p.in_corpus).map((p) => p.score);
   if (!inScores.length || !oocScores.length) {
@@ -181,12 +210,14 @@ export function pasteValue(points: readonly Scored[]): [paste: number, why: stri
     return [
       mid,
       `separable: max OOC ${pythonFormatFixed(lo, 3)} < min in-corpus ${pythonFormatFixed(hi, 3)}; midpoint has margin both ways`,
+      true,
     ];
   }
   const leak = statsAtFloor(points, hi).risk;
   return [
     hi,
     `NOT separable: max OOC ${pythonFormatFixed(lo, 3)} >= min in-corpus ${pythonFormatFixed(hi, 3)}; zero-FA floor leaks ${pythonFormatFixed(leak, 3)}`,
+    false,
   ];
 }
 
@@ -236,6 +267,59 @@ export const BUILT_IN_OOC = [
   "How do I write a resignation letter?",
 ] as const;
 
+/**
+ * The synthesized door's caveat — the DEFAULT door, and the one whose bias has
+ * a direction.
+ *
+ * Every synthesized query is generated FROM a passage and then scored against
+ * the corpus containing that passage, so it shares that passage's vocabulary in
+ * a way a reader's question does not. The in-corpus distribution is therefore
+ * shifted UP relative to real traffic, and the separation this door measures is
+ * an upper bound on the separation a record will actually see.
+ *
+ * Found live 2026-08-21: a real record calibrated through this door reported
+ * min in-corpus 0.682 against max OOC 0.580 and recommended 0.631. Questions
+ * the record demonstrably answers then scored 0.530-0.606 — every one of them
+ * below the recommended floor. Pasting it would have made the record abstain on
+ * questions whose answers it had just cited. Nothing in the block said the
+ * measurement had an easier question set than production would.
+ */
+export const SYNTHESIZED_CAVEAT: string =
+  "CAVEAT: synthesized queries are written FROM the passages they are then scored against, so " +
+  "they share vocabulary a reader's question will not. This door measures an UPPER BOUND on " +
+  "separation — treat the floor below as provisional until it has been checked against questions " +
+  "the corpus did not write (--queries-file), and re-run if real questions score under it.";
+
+/**
+ * What a separability verdict is worth when the probes came from the binary.
+ *
+ * Every entry in BUILT_IN_OOC is far-domain — dinner, taxes, football, boiling
+ * an egg. Those score low against ANY corpus, so max-OOC comes out artificially
+ * low and the margin is inflated from that end, exactly as synthesized in-corpus
+ * queries inflate it from the other. Measured on one record, changing ONLY the
+ * probe set: built-ins reported "separable, margin 0.072" and recommended a
+ * floor; eight scope-adjacent near-misses on the same corpus and the same
+ * in-corpus questions reported "NOT separable, margin -0.030". The recommended
+ * floor then answered six of those eight near-misses live, with citations
+ * (2026-08-21).
+ *
+ * The tool already knows this — the not-separable branch tells the operator to
+ * "widen the probe set (scope-adjacent near-misses, not only far-domain
+ * questions)". It said so only AFTER weak probes had failed to bless a floor,
+ * which is the one case where the advice is least needed.
+ *
+ * A shipped set cannot be scope-adjacent, because adjacency depends on a corpus
+ * the binary has never seen. So this is stated whenever built-ins are used, on
+ * BOTH branches, rather than pretending a better default exists.
+ */
+export const BUILT_IN_OOC_CAVEAT: string =
+  "CAVEAT: the out-of-corpus probes are the BUILT-IN set, which is entirely far-domain — a " +
+  "shipped set cannot be scope-adjacent, because adjacency depends on a corpus it has never " +
+  "seen. Far-domain probes score low against anything, so this margin is an OVER-estimate and " +
+  "a floor it blesses may still answer near-misses just outside your scope. Re-run with " +
+  "--ooc-file naming questions a reader might plausibly ask that this record does NOT cover, " +
+  "and trust that verdict over this one.";
+
 export const QUERIES_FILE_CAVEAT: string =
   "CAVEAT: --queries-file floors are measured on human/gold-derived queries — section-weighted " +
   "eval targets, NOT per-node passage samples — so this floor's low tail is a different distribution " +
@@ -253,14 +337,28 @@ export const QUERIES_FILE_CAVEAT: string =
  * len(in_queries) / len(ooc_probes), since every query is scored or the run
  * dies (requireScore).
  */
+/**
+ * The gap between the two distributions' facing edges. Both classes are
+ * guaranteed non-empty by `pasteValue`, which throws first on a one-sided
+ * measurement; this is defensive only, and NaN would be a lie either way.
+ */
+function marginOf(points: readonly Scored[]): number {
+  const inScores = points.filter((p) => p.in_corpus).map((p) => p.score);
+  const oocScores = points.filter((p) => !p.in_corpus).map((p) => p.score);
+  if (!inScores.length || !oocScores.length) return 0;
+  return Math.min(...inScores) - Math.max(...oocScores);
+}
+
 export function buildReport(
   detail: readonly ScoredQuery[],
   meta: ReportMeta,
   targetPrecision: number = 0.95,
+  /** Injected so the report is deterministic under test. */
+  now: Date = new Date(),
 ): CalibrationReport {
   const points: Scored[] = detail.map((d) => ({ score: d.score, in_corpus: d.in_corpus }));
   const rec = recommendFloor(points, targetPrecision);
-  const [paste, paste_why] = pasteValue(points);
+  const [paste, paste_why, separable] = pasteValue(points);
   // The weakest in-corpus queries drive the floor via min(); a ratifying
   // human must SEE them, or one atypical low scorer silently drags the
   // recommendation down. Stable ascending sort, first five — as the oracle.
@@ -281,6 +379,16 @@ export function buildReport(
     target_precision: rec.target_precision,
     paste,
     paste_why,
+    // Rounded like every other printed statistic; the sign survives rounding,
+    // so a hair of overlap does not read as a clean zero.
+    margin: pythonRound(marginOf(points), 4),
+    separable,
+    ooc_source: meta.oocSource,
+    target: rec.target,
+    // "Never copy a calibrated constant between corpora. Recalibrate; record
+    // the measurement and its DATE beside the number" — the date was the half
+    // the paste line never carried.
+    measured_at: now.toISOString().slice(0, 10),
     low_tail,
     detail: [...detail],
   };
@@ -297,16 +405,29 @@ export function renderReport(report: CalibrationReport): string {
   const lines: string[] = [];
   const z = report.zero_fa;
   const how = report.pinned ? "PINNED" : "served";
-  // A missing generation prints as Python's None literal — the oracle's
-  // bytes, kept identical because the paste line is machine-checked.
-  const gen = report.generation === null ? "None" : String(report.generation);
+  // The generation this was measured against. The oracle printed Python's
+  // `None` literal when it had none and ksor replicated the bytes; that put
+  // the string "None" into the provenance comment an operator pastes beside
+  // the floor, which is the one place the invariant "record the measurement
+  // beside the number" is implemented. Byte-fidelity to the oracle is for
+  // ALGORITHMS, never for reporting (review 2026-08-20).
+  const gen =
+    report.generation === null ? "unknown (no generation pinned)" : String(report.generation);
   lines.push(
     `\nmeasured on generation ${gen} (${how}), model ${report.model}, door: ${report.door}`,
   );
-  if (report.door === "queries-file") {
-    lines.push(QUERIES_FILE_CAVEAT);
-  }
+  lines.push(report.door === "queries-file" ? QUERIES_FILE_CAVEAT : SYNTHESIZED_CAVEAT);
+  if (report.ooc_source === "built-in") lines.push(BUILT_IN_OOC_CAVEAT);
   lines.push(`AURC = ${pythonFloatRepr(report.aurc)}  (lower = better separation)`);
+  // The margin is the number that decides, and it was the one number the block
+  // never printed: `paste_why` names both ends, leaving the subtraction to the
+  // reader. The probe counts ride with it because a margin measured over six
+  // probes is not the same claim as the same margin over sixty — both were on
+  // the report already and neither reached the page.
+  lines.push(
+    `separation margin: ${pythonFormatFixed(report.margin, 3)} ` +
+      `(over ${report.in_corpus_queries} in-corpus / ${report.ooc_probes} out-of-corpus probes)`,
+  );
   if (z) {
     lines.push(
       `zero-FA floor (never refuse a real question): ${pythonFormatFixed(z.floor, 3)} -> coverage ${pythonFormatFixed(z.coverage, 3)}, ooc leak ${pythonFormatFixed(z.risk, 3)}`,
@@ -314,11 +435,12 @@ export function renderReport(report: CalibrationReport): string {
   }
   const t = report.target_precision;
   if (t) {
-    // The oracle prints report.get("target", 0.95); the report dict never
-    // carries "target" (calibrate() does not record it), so the label always
-    // reads 0.95 whatever target was measured. Replicated as-is.
+    // The label states the precision this floor was actually measured at. The
+    // oracle read a key its own report never carried, so the line always said
+    // 0.95 whatever was measured — a report that describes a different
+    // measurement than the one it performed (review 2026-08-20).
     lines.push(
-      `ALT (${pythonFloatRepr(0.95)}-precision): floor = ${pythonFormatFixed(t.floor, 3)} -> coverage ${pythonFormatFixed(t.coverage, 3)}`,
+      `ALT (${pythonFloatRepr(report.target)}-precision): floor = ${pythonFormatFixed(t.floor, 3)} -> coverage ${pythonFormatFixed(t.coverage, 3)}`,
     );
   }
   lines.push("weakest in-corpus queries (these set the floor):");
@@ -326,8 +448,25 @@ export function renderReport(report: CalibrationReport): string {
     lines.push(`  ${pythonFormatFixed(d.score, 3)}  ${d.query}`);
   }
   lines.push(`\n${report.paste_why}`);
+  if (!report.separable) {
+    // NO paste-ready number. The measurement just said this corpus does not
+    // separate in-corpus from out-of-corpus at the floor it found — handing
+    // over a value anyway is handing over a floor known to leak, and the
+    // intended operator is a coding agent that will paste it (review
+    // 2026-08-20). `uncalibrated` is representable and REFUSES every serve,
+    // which is the honest state until the measurement succeeds.
+    lines.push(
+      "NOT pasting a floor: this measurement did not separate, so any number here " +
+        "would be one that is known to leak.\n" +
+        "Put the record in the fail-closed state and fix the measurement:\n" +
+        "  retrieval:\n    vector_floor: uncalibrated\n" +
+        "Then widen the probe set (scope-adjacent near-misses, not only far-domain " +
+        "questions), add in-corpus questions, and re-run.",
+    );
+    return lines.join("\n") + "\n";
+  }
   lines.push(
-    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}`,
+    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated ${report.measured_at} on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}`,
   );
   return lines.join("\n") + "\n";
 }

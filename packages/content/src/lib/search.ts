@@ -10,6 +10,7 @@
 import type pg from "pg";
 
 import { MIN_CONTENT_CHARS, RRF_K } from "../config.js";
+import { AUDIENCE_ALLOWED } from "./audience.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 
 /**
@@ -38,12 +39,26 @@ g AS (
 // Scoped takedown denial (decision 14): the shared `denied` set — per-node by
 // default, whole subtree when a row says so — bound PRE-fusion so a denied node
 // cannot leak by ranking. Definition lives in takedown.ts (one seam).
-const ARM_WHERE = `
+/**
+ * The arm predicate, built for the parameter numbering of the query that uses
+ * it — a FUNCTION, not a string the caller renumbers afterwards.
+ *
+ * It used to be derived with `ARM_WHERE.replaceAll("$5", "$4")`, which works
+ * only while the predicate happens to contain exactly one placeholder and no
+ * other text matching it. Adding any second parameter to the predicate breaks
+ * every derived query silently — and when it breaks, the failure arrives as a
+ * driver error that the serving layer correctly reduces to "content store
+ * temporarily unavailable", which tells you nothing about the cause. Found by
+ * tripping over it while trying a fix for issue #59; taking the number as an
+ * argument makes the coupling visible instead of textual.
+ */
+const armWhere = (kindsParam: string): string => `
         c.tenant_id = $1 AND c.generation = g.gen
           AND c.embedding_status = 'embedded' AND ${SERVABLE}
           AND n.status = 'published'
-          AND ($5::text[] IS NULL OR n.kind = ANY($5::text[]))
-          AND ${DENY}`;
+          AND (${kindsParam}::text[] IS NULL OR n.kind = ANY(${kindsParam}::text[]))
+          AND ${DENY}
+          AND ${AUDIENCE_ALLOWED}`;
 
 const JOINS = `
         FROM chunks c
@@ -52,22 +67,46 @@ const JOINS = `
                       AND s.generation = c.generation
         JOIN content_nodes n ON n.node_id = s.node_id AND n.tenant_id = s.tenant_id`;
 
-const HYBRID_SQL = `
+/**
+ * Exported ONLY so a test can EXPLAIN the real thing.
+ *
+ * The index regression this fixes was announced as fixed once before, and came
+ * back through a different clause, because nothing ever asserted the RESULT —
+ * that the plan opens `idx_chunks_hnsw`. A timing threshold would be flaky and
+ * would not have caught it either; the plan shape is the property that matters
+ * (issue #59).
+ */
+export const HYBRID_SQL: string = `
 WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
+    -- The top-k is taken by a PLAIN \`ORDER BY <distance> LIMIT\`, and the rank
+    -- is numbered OUTSIDE it. Ordering by a window column instead made the
+    -- HNSW index unusable: a window function must see every row in its
+    -- partition before it can number anything, so Postgres computed the
+    -- distance for every chunk in the generation and sorted — measured on
+    -- PG 17.7 / pgvector 0.8.2 at 6,667 rows: 1180 ms seq-scan+quicksort here
+    -- versus 14 ms via the index, with idx_chunks_hnsw built and maintained
+    -- but never used (review 2026-08-20). The arm's filters stay INSIDE the
+    -- ordered scan on purpose: hnsw.iterative_scan = relaxed_order (bound in
+    -- VECTOR_TXN_GUCS) is what keeps recall honest when a predicate rejects
+    -- candidates, which is the whole reason that knob is set.
     vec AS (
-        SELECT c.chunk_id, g.gen,
-               row_number() OVER (ORDER BY c.embedding <=> $3::vector, c.chunk_id) AS r,
-               1 - (c.embedding <=> $3::vector) AS sim
-        ${JOINS}
-        WHERE ${ARM_WHERE}
-        ORDER BY r LIMIT $6),
+        SELECT chunk_id, gen,
+               row_number() OVER (ORDER BY dist, chunk_id) AS r,
+               1 - dist AS sim
+        FROM (
+            SELECT c.chunk_id, g.gen, (c.embedding <=> $3::vector) AS dist
+            ${JOINS}
+            WHERE ${armWhere("$5")}
+            ORDER BY c.embedding <=> $3::vector, c.chunk_id
+            LIMIT $6
+        ) ranked),
     kw AS (
         SELECT c.chunk_id, g.gen,
                row_number() OVER (ORDER BY ts_rank_cd(c.search_tsv,
-                   websearch_to_tsquery('english', $4)) DESC, c.chunk_id) AS r
+                   websearch_to_tsquery($9::regconfig, $4)) DESC, c.chunk_id) AS r
         ${JOINS}
-        WHERE ${ARM_WHERE}
-          AND c.search_tsv @@ websearch_to_tsquery('english', $4)
+        WHERE ${armWhere("$5")}
+          AND c.search_tsv @@ websearch_to_tsquery($9::regconfig, $4)
         ORDER BY r LIMIT $6),
     fused AS (
         SELECT chunk_id, max(gen) AS gen, sum(1.0 / (${RRF_K} + r)) AS score
@@ -87,11 +126,11 @@ const KEYWORD_SQL = `
 WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
            c.content,
-           ts_rank_cd(c.search_tsv, websearch_to_tsquery('english', $3)) AS score,
+           ts_rank_cd(c.search_tsv, websearch_to_tsquery($7::regconfig, $3)) AS score,
            g.gen, n.permalink
     ${JOINS}
-    WHERE ${ARM_WHERE.replaceAll("$5", "$4")}
-      AND c.search_tsv @@ websearch_to_tsquery('english', $3)
+    WHERE ${armWhere("$4")}
+      AND c.search_tsv @@ websearch_to_tsquery($7::regconfig, $3)
     ORDER BY score DESC, c.chunk_id LIMIT $5`;
 
 /** The calibrator's standalone top-1 signal (the read path gets it free from HYBRID_SQL). */
@@ -99,7 +138,7 @@ const TOP_ONE_SQL = `
 WITH RECURSIVE ${GEN_CTE.replace("$8", "$5")}, ${DENIED_CTE}
     SELECT 1 - (c.embedding <=> $3::vector) AS score
     ${JOINS}
-    WHERE ${ARM_WHERE.replaceAll("$5", "$4")}
+    WHERE ${armWhere("$4")}
     ORDER BY c.embedding <=> $3::vector, c.chunk_id
     LIMIT 1`;
 
@@ -170,7 +209,21 @@ export interface SearchScope {
   readonly corpusId: string;
   readonly kinds: readonly string[] | null;
   readonly pinnedGeneration: number | null;
+  /**
+   * The Postgres text-search configuration to stem the QUERY with — it must
+   * match the one `chunks.search_tsv` was generated with, or the arms disagree
+   * about what a word is.
+   *
+   * PARAMETERISED as `$n::regconfig`, never spliced: the value comes from
+   * instance.md, and a configuration name reaching DDL-shaped SQL by
+   * concatenation is the one place this file would be injectable. Omitted =
+   * `english`, which is what every record built before the key existed has.
+   */
+  readonly textSearchConfig?: string;
 }
+
+/** What a scope that names no configuration means. */
+const DEFAULT_TS_CONFIG = "english";
 
 /** Caller MUST have bound VECTOR_TXN_GUCS into this transaction (see above). */
 export async function hybridSearch(
@@ -193,6 +246,7 @@ export async function hybridSearch(
       poolPerArm,
       limit,
       scope.pinnedGeneration,
+      scope.textSearchConfig ?? DEFAULT_TS_CONFIG,
     ],
   });
   return splitHits(result);
@@ -208,7 +262,15 @@ export async function keywordSearch(
   const result = await client.query({
     text: KEYWORD_SQL,
     rowMode: "array",
-    values: [scope.tenantId, scope.corpusId, query, scope.kinds, limit, scope.pinnedGeneration],
+    values: [
+      scope.tenantId,
+      scope.corpusId,
+      query,
+      scope.kinds,
+      limit,
+      scope.pinnedGeneration,
+      scope.textSearchConfig ?? DEFAULT_TS_CONFIG,
+    ],
   });
   // The same projection guard the hybrid arm gets via splitHits. Without it a
   // dropped or reordered KEYWORD_SQL column silently mis-maps score /

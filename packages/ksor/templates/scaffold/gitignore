@@ -15,3 +15,7 @@ system/site/.staged-knowledge/
 !.env.example
 
 .DS_Store
+
+# The takedown manifest the site build reads — exported from the database,
+# never hand-edited, and re-exported on every build.
+.ksor-denylist.json

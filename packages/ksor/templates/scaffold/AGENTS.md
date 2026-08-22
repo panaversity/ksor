@@ -58,8 +58,9 @@ pnpm check       # the format checker — run before handing off any knowledge c
 with honest abstention. It is the climbed rung — not required for `pnpm dev`.
 Stand it up in this order (each step's errors explain how to fix themselves):
 
-1. **Configure `instance.md`.** One block is required — the name of the
-   environment variable holding your DSN (never the DSN itself):
+1. **Configure `instance.md`.** One block is required, and it is already
+   there, commented out — uncomment it. It names the environment variable
+   holding your DSN (never the DSN itself):
 
    ```yaml
    database:
@@ -70,8 +71,13 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    `provider: gemini`, `model: gemini-embedding-001`, `dim: 1536`; write it out
    only to pin the space explicitly or to change it — and note that model and
    dim are the PERSISTED identity of the embedding space, so changing either
-   later means re-embedding the whole corpus. Keep `dim` at or below 2000: the
-   pgvector HNSW index refuses more, and `gemini-embedding-001` can emit 3072.
+   later means re-embedding the whole corpus. Keep `dim` at or below 2000 — the
+   schema indexes a `vector` column directly and pgvector's HNSW takes a
+   `vector` to 2000. `gemini-embedding-001` emits 3072 by default, so ksor asks
+   it for 1536. Google's published MTEB table runs 128–2048 and is flat at the
+   top of it — 1536 scores 68.17 against 2048's 68.16 — so there is no gradient
+   to climb toward the ceiling; going the other way, 768 costs 0.18 if you want
+   the storage back.
 
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
@@ -96,29 +102,76 @@ Stand it up in this order (each step's errors explain how to fix themselves):
      intended dev shape. A PUBLIC deployment configures the SSO door instead —
      see the comments in `.env.example` and "Serving safely" below.
 
-3. **Bring it up — one command:**
+3. **Bring it up.** Once, then every time:
 
    ```sh
-   pnpm serve   # schema → grant → ingest → serve
+   pnpm provision   # schema (or migrate) + grant — the privileged acts, run once
+   pnpm refresh # ingest the record, collect retired generations
+   pnpm serve   # the MCP server (one supervised process)
    ```
+
+   `provision` is separate on purpose: applying DDL and granting ingest are acts
+   an operator performs, not side effects of starting a server. (It is not
+   called `setup` because `pnpm setup` is pnpm's own command and would shadow
+   it — the step would print "No changes to the environment were made" and do
+   nothing.)
+
+   **Deploying to a container runtime you do not control** (Cloud Run, Fly,
+   Container Apps — anything that scales to zero and hands you a `$PORT`):
+   `ksor serve` is already shaped for it, and the posture is deliberate.
+
+   - It binds `$PORT` on `0.0.0.0` when the platform sets one.
+   - It holds **no idle database connections**. The pool minimum is 0 and an
+     unused connection is closed after 10s, so an idle instance keeps nothing
+     open against a serverless Postgres — and a busy one still reuses
+     connections instead of paying a TLS handshake per request.
+   - The first request after an idle period wakes the database, and that
+     connect is **retried** rather than failing: a cold start is a transient,
+     not a refusal.
+   - `SIGTERM` drains and exits within 8s, inside the ~10s a runtime usually
+     allows before `SIGKILL`.
+
+   What it does NOT do is open and close a connection per request. That is the
+   pattern connection poolers exist to remove — the handshake alone is ~26x the
+   cost of a pooled query even on localhost, before TLS — and it is not what
+   managed Postgres vendors recommend for a process that serves many requests.
+   Per-request connections are the right shape only for a per-invocation
+   runtime (an edge function), which is a different deployment and would want
+   an HTTP database driver rather than TCP.
+
+   Set `KSOR_SNAPSHOT_KEYS` for any such deployment: without it each cold start
+   mints a new signing key, so citations pinned before a scale-down stop
+   validating after it.
+
+   **`pnpm serve` serves; it does not publish.** It is `ksor serve` and nothing
+   else — it opens the port against whatever generation is already active and
+   needs no ingest privileges. Publishing is `pnpm ingest` (or `pnpm refresh`),
+   and it is a separate step ON PURPOSE: a container that re-ingested on boot
+   would pay the whole record's embedding cost on every cold start and would
+   need write credentials at runtime. So in a deployment, run `pnpm provision` and
+   `pnpm ingest` as DEPLOY steps and run `ksor serve` in the container, where
+   it honours `$PORT` and binds `0.0.0.0`. If you skip the ingest step, the
+   container serves the last generation you flipped — and on a FIRST deploy,
+   that is nothing at all.
 
    Every step is re-runnable, so this is also how you **refresh after editing
    `knowledge/`**: an applied schema reports "already applied", an existing
    grant reports "already granted", and ingest builds a fresh generation.
 
-   **`pnpm serve` is the only command this rung needs.** Run it the first
-   time, run it after editing `knowledge/`, run it to bring the server back —
-   it is always the right answer, so there is nothing to decide. Every step it
-   chains reports the state it found rather than failing: an applied schema
-   says "already applied", an existing grant says "already granted", and
-   unchanged chunks carry forward by content hash, so a rerun on an untouched
-   corpus makes **zero provider calls** (`embedded 0, carried N`).
+   **`pnpm refresh` after editing `knowledge/`; `pnpm serve` to bring the
+   server up.** Two commands, and the split is the point: serving must not
+   publish, or a restart, a crash-loop or an autoscaling event each republishes
+   your record. Everything is re-runnable and reports the state it found rather
+   than failing — an applied schema says "already applied", an existing grant
+   says "already granted".
 
-   A rerun on an unchanged record costs **nothing at all**: ingest compares the
-   corpus it just read against the generation already serving and, when they
-   are identical at the same commit, consumes no generation and writes no rows
-   ("unchanged — generation N already serves this corpus"). Edit a document and
-   the next run builds a generation for it, re-embedding only what changed.
+   A refresh on an unchanged record costs **nothing at all**: ingest compares
+   the corpus it just read against the generation already serving and, when
+   they are identical at the same commit, consumes no generation and writes no
+   rows ("unchanged — generation N already serves this corpus"). Edit a
+   document and the next refresh builds a generation for it, re-embedding only
+   what changed and carrying the rest forward by content hash — so an ordinary
+   edit makes a handful of provider calls, not a corpus-worth.
 
    Generations do accumulate as you edit. Reap the superseded ones when you
    think of it, or on a schedule:
@@ -128,10 +181,10 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    ```
 
    The individual verbs (`pnpm schema`, `pnpm grant`, `pnpm ingest`,
-   `pnpm serve`) exist for pipelines and split duties — a deploy step that
-   ingests while a different process serves, or a DBA who holds the credentials
-   that authorize ingest. Reach for them when something else runs the steps;
-   not as a daily choice.
+   `pnpm gc`) are what `provision` and `refresh` are made of. Reach for them
+   when duties are split — a deploy step that ingests while a different process
+   serves, or a DBA who holds the credentials that authorize ingest — not as a
+   daily choice.
 
 4. **Turn the abstention gate on — deliberately, once it serves.** This is the
    step that makes "not in this corpus" a real answer, and it is measured, never
@@ -174,7 +227,9 @@ abandoned ones.
 
 ### Serving safely (fail-closed posture)
 
-`pnpm serve` binds **loopback with auth off** — safe for local use. A **public**
+`pnpm serve` **refuses to boot unauthenticated** — there is no auth-off
+default. A local run says so deliberately with `KSOR_AUTH_DISABLED=1` and binds
+loopback, which is the intended dev shape. A **public**
 bind refuses to boot unless auth is configured (`KSOR_SSO_URL` +
 `KSOR_MCP_RESOURCE_URL` + `KSOR_JWT_ALLOWED_AUDIENCES`, making it an OAuth
 Resource Server) OR you deliberately set `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`.
@@ -183,7 +238,7 @@ bind, set `KSOR_ALLOWED_HOSTS` / `KSOR_ALLOWED_ORIGINS`; on more than one
 replica, set a shared `KSOR_SNAPSHOT_KEYS` (unset ⇒ a per-process key, so a
 search token minted by one replica fails on another).
 
-Two things worth being deliberate about:
+Three things worth being deliberate about:
 
 - **`KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` serves your whole record to anyone
   who can reach the port.** It exists for deployments fronted by your own
@@ -191,12 +246,110 @@ Two things worth being deliberate about:
 - **Set `KSOR_SSO_ISSUER` when your SSO stamps a stable `iss`.** Audience is
   always enforced against `KSOR_JWT_ALLOWED_AUDIENCES`; naming the issuer adds
   one more check for the cost of one variable.
+- **The signing keys are DISCOVERED; you rarely set `KSOR_JWKS_URL`.** The door
+  reads your SSO's own metadata document — RFC 8414
+  (`/.well-known/oauth-authorization-server`), then OpenID Discovery
+  (`/.well-known/openid-configuration`) — so Auth0, Okta, Entra, Keycloak,
+  Cognito, Google and Better Auth all work unmodified. The boot report's `keys`
+  line names which document answered and where the keys came from; set
+  `KSOR_JWKS_URL` only to override that, or when your SSO publishes no metadata
+  at all.
+
+### What a CLIENT has to do
+
+Once the SSO door is configured (the three variables above), the server is an
+OAuth **Resource Server**, which means a client is not told the authorization
+server — it discovers it. Nothing here needs configuring beyond those variables;
+this is what your agents will experience, and what to check when one cannot
+connect. With `KSOR_AUTH_DISABLED=1` — the local default `.env.example` ships —
+none of it applies: there is no challenge and the metadata document answers 404,
+because there is no authorization server to point at.
+
+1. The client calls `POST /mcp` with no token and gets **401** carrying
+
+   ```
+   WWW-Authenticate: Bearer resource_metadata="https://<your-host>/.well-known/oauth-protected-resource/mcp"
+   ```
+
+   That header is the whole handshake: it names a DOCUMENT, not the resource.
+
+2. The client fetches that document and finds the record's resource identifier
+   and its authorization server:
+
+   ```json
+   {
+     "resource": "https://<your-host>/mcp",
+     "authorization_servers": ["https://your-sso.example.com"]
+   }
+   ```
+
+   Those two values are `KSOR_MCP_RESOURCE_URL` and `KSOR_SSO_URL`.
+
+3. The client gets a token from that authorization server, asking for THIS
+   record as the resource (RFC 8707: `resource=https://<your-host>/mcp`), and
+   sends it as `Authorization: Bearer <token>`.
+
+Every 401 carries that same header, not just the first one — including the one
+your clients will hit most often, a token that expired mid-conversation. It
+arrives as `Bearer error="invalid_token", resource_metadata="…"`, so a client
+knows to refresh rather than to retry the dead token. A **503** is deliberately
+_not_ challenged: an unreachable key set is our outage, not your token's fault,
+and telling a client to re-authenticate over it would send a perfectly good user
+back through a login.
+
+The one thing that goes wrong here goes wrong quietly: a token minted for a
+different audience is a perfectly valid token, and this door rejects it. The
+`aud` claim must match one of `KSOR_JWT_ALLOWED_AUDIENCES` — normally the same
+value as `KSOR_MCP_RESOURCE_URL` — because a bearer accepted for any audience is
+a bearer stolen from one service and replayed against this one. If a client
+authenticates fine and still gets 401, compare its token's `aud` against that
+list before looking anywhere else.
+
+Tokens must be signed **RS256**; nothing else is accepted, and opaque tokens are
+not supported (there is no introspection call). When your SSO rotates its
+signing keys, an unknown key id answers **503**, not 401 — the token may well be
+good and the door's key set merely stale, so a client should retry rather than
+send the user back through a login.
+
+## Withdrawing a document — `ksor takedown`
+
+A takedown is the one governance act that must reach EVERY surface at once.
+It needs the database (the denial is a row, not a file), so it belongs to the
+served rung.
+
+```sh
+pnpm exec ksor takedown --instance instance.md <stable-id> --reason "legal request 2026-08"
+pnpm exec ksor takedown --instance instance.md <stable-id> --reason "..." --subtree
+pnpm exec ksor takedown --instance instance.md --list      # what is currently denied
+pnpm exec ksor takedown --instance instance.md --ledger    # who denied what, when
+pnpm exec ksor takedown --instance instance.md --revoke <stable-id>
+```
+
+The stable id is what a search result reports as `provenance.stable_id` — for
+most documents that is `knowledge/<path-without-.md>`. `--subtree` withdraws a
+section and everything beneath it, including documents added later.
+`--actor NAME` names who performed the act in the ledger, and a denial or a
+revocation is REFUSED without it. There is no default: a name taken from the
+environment reads like a person and is whatever the shell happened to be
+(`runner` under CI, `root` in a container), which is worse than no name at all
+in the one row that exists to record who did this. Read-only modes
+(`--list`, `--ledger`, `--export`) need nothing.
+
+**The MCP door stops serving it immediately. The SITE stops at its next
+build** — the site reads a file, not the database, and `pnpm build` refreshes
+that file for you (`pnpm export-denylist`). So after a takedown, rebuild and
+redeploy the site, or the human surface keeps publishing what the agent
+surface already refuses.
 
 ## Publishing
 
 `pnpm build` emits a fully static site (`system/site/out/`) deployable to
 any host — Vercel reads the shipped `vercel.json` (deploy from the repo
 ROOT, never `system/site/`), and every other host just serves the folder.
+Once `instance.md` declares a `database:`, `pnpm build` needs `KSOR_DB_URL` as
+well: it runs `pnpm export-denylist` first, which asks the database what has
+been withdrawn and writes `.ksor-denylist.json`. Without the DSN the build
+refuses rather than publish a document someone took down.
 `KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With
 `audiences:` declared, plain `pnpm build` is always the public tier;
 `KSOR_AUDIENCE=<audience> pnpm build` builds a wider tier that belongs
@@ -251,8 +404,12 @@ Details in README → Deploying.
 - `visibility:` names the one audience a document belongs to — a single value
   from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
   (an approved document can be restricted, and a draft is not hidden). Leave
-  it off and the document takes `default_visibility`. The key does nothing
-  until `instance.md` declares `audiences:`; once it does, `pnpm check`
+  it off and the document takes `default_visibility`. Using the key WITHOUT
+  an `audiences:` block is refused on both surfaces — `pnpm build` stops with
+  `ksor-visibility-without-audiences` and `pnpm serve` refuses to boot —
+  because a document marked restricted while nothing enforces it is the one
+  shape where the frontmatter is the only trace of a restriction that is not
+  happening. Once `audiences:` is declared, `pnpm check`
   refuses any link or `superseded_by:` pointing from a wider audience at a
   narrower one — the leak no single build can catch, because the build that
   publishes the link has already dropped its target.
@@ -281,8 +438,10 @@ Details in README → Deploying.
   takes the position that page declares.
 - Sidebar position is the governed `order:` key: documents that declare it come
   first, ascending; the rest follow in name order.
-- One order drives the sidebar, `llms.txt`, and the home page's first-document
-  link — set it once and every surface agrees.
+- One order drives every surface — the sidebar, `llms.txt`, the home page's
+  first-document link, and the MCP `outline` tool an agent reads to decide what
+  to read first. Set it once and they agree. The door picks up a reorder at the
+  next `pnpm refresh`, which costs no embedding: only the ordering changed.
 - Never `meta.json` or `sidebar_position`: the checker refuses framework files
   in the record, which has to read the same without the site.
 

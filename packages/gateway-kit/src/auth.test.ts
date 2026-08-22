@@ -305,3 +305,129 @@ describe("per-request identity resolvers (M-2)", () => {
     expect(currentIdentity()).toBeNull();
   });
 });
+
+/**
+ * Cleartext is refused where the CONTENT of the URL is trusted, and only
+ * there. The distinction is the whole finding: the JWKS behind the SSO base is
+ * the bearer gate's trust root, while the resource URL is an identifier that
+ * gets string-compared against a token's `aud` and echoed in a challenge.
+ */
+describe("cleartext http:// — refused for what is fetched, allowed for what is compared", () => {
+  it("refuses a remote cleartext SSO base (its JWKS is the trust root)", () => {
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_SSO_URL: "http://sso.example.org" })).toThrowError(
+      /trust root|cleartext/i,
+    );
+  });
+
+  it("refuses a remote cleartext KSOR_JWKS_URL for the same reason", () => {
+    expect(() =>
+      buildAuth({ ...SSO_ENV, KSOR_JWKS_URL: "http://keys.example.org/jwks" }),
+    ).toThrowError(/trust root|cleartext/i);
+  });
+
+  it("ALLOWS a cleartext resource URL — it is compared, never fetched", () => {
+    // The real deployment this blocked: a gateway behind a TLS-terminating
+    // proxy whose canonical resource identifier is the internal http:// URL.
+    const auth = buildAuth({
+      ...SSO_ENV,
+      KSOR_MCP_RESOURCE_URL: "http://content.internal:8080/mcp",
+    });
+    expect(auth.mode).toBe("public");
+  });
+
+  it("still refuses a resource URL that is not a URL at all", () => {
+    expect(() => buildAuth({ ...SSO_ENV, KSOR_MCP_RESOURCE_URL: "not a url" })).toThrowError(
+      /valid URL/i,
+    );
+  });
+});
+
+/**
+ * A token from ANOTHER authorization server is a refusal, not an outage.
+ *
+ * An unknown `kid` raises `JWKSNoMatchingKey`, which is classified transient —
+ * correctly, because the usual cause is key-rotation lag and the right answer is
+ * "retry, do not cache". But a token minted by a DIFFERENT issuer produces the
+ * same error, and a client then sees 503 "service unavailable" for a credential
+ * that can never work: it retries forever, and a misconfiguration reads as an
+ * outage in every dashboard. #26 predicted this exact shape — "silently fails
+ * against every other with a rotation-lag-shaped error" — and it was reproduced
+ * against a real Ory Hydra door presented with a real Keycloak token: 503.
+ *
+ * So when the operator has stated the issuer, the cheap decisive check runs
+ * first. The `iss` here is read from an UNVERIFIED payload, which is sound for
+ * exactly one purpose — REFUSING. It can never admit anything: a token that
+ * passes this check still has its signature verified in full below.
+ */
+describe("a token from another issuer is refused, not reported as unavailable", () => {
+  const ISS_ENV = { ...SSO_ENV, KSOR_SSO_ISSUER: "https://auth.example.org" };
+
+  /** A token whose payload really is base64url JSON, so `iss` is readable. */
+  const tokenIssuedBy = (iss: string): string => {
+    const payload = Buffer.from(JSON.stringify({ iss, sub: "user-1", aud: "x" })).toString(
+      "base64url",
+    );
+    return `header.${payload}.signature`;
+  };
+
+  it("refuses a foreign issuer WITHOUT calling the verifier at all", async () => {
+    const verifyJwt = vi.fn(async (): Promise<TokenClaims> => {
+      throw new joseErrors.JWKSNoMatchingKey();
+    });
+    const { verify } = publicAuth({ verifyJwt, now: () => T0 }, ISS_ENV);
+    const err = await verify(tokenIssuedBy("https://SOMEONE-ELSE.example.com")).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(TokenVerifyError);
+    expect(
+      (err as TokenVerifyError).transient,
+      "a foreign issuer can never become valid by retrying",
+    ).toBe(false);
+    expect(
+      verifyJwt,
+      "and it costs no JWKS fetch — the issuer settles it before any crypto",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("names the issuer it got and the one it expects", async () => {
+    const { verify } = publicAuth({ verifyJwt: async () => goodClaims(), now: () => T0 }, ISS_ENV);
+    const err = await verify(tokenIssuedBy("https://SOMEONE-ELSE.example.com")).catch(
+      (e: unknown) => e,
+    );
+    expect(String((err as Error).message)).toMatch(/SOMEONE-ELSE\.example\.com/);
+    expect(String((err as Error).message)).toMatch(/auth\.example\.org/);
+  });
+
+  it("lets the RIGHT issuer through to real verification", async () => {
+    const verifyJwt = vi.fn(async () => goodClaims());
+    const { verify } = publicAuth({ verifyJwt, now: () => T0 }, ISS_ENV);
+    await expect(verify(tokenIssuedBy("https://auth.example.org"))).resolves.toMatchObject({
+      sub: "user-1",
+    });
+    expect(verifyJwt, "the signature is still checked in full").toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps rotation lag transient when the issuer MATCHES", async () => {
+    // The behaviour the existing test protects, unchanged: same issuer, unknown
+    // kid, so this really might be rotation lag and retrying really might work.
+    const verifyJwt = vi.fn(async (): Promise<TokenClaims> => {
+      throw new joseErrors.JWKSNoMatchingKey();
+    });
+    const { verify } = publicAuth({ verifyJwt, now: () => T0 }, ISS_ENV);
+    const err = await verify(tokenIssuedBy("https://auth.example.org")).catch((e: unknown) => e);
+    expect((err as TokenVerifyError).transient).toBe(true);
+  });
+
+  it("says nothing about issuers when the operator has not declared one", async () => {
+    // KSOR_SSO_ISSUER unset means the operator has not stated it, and this check
+    // has no ground to stand on. Unchanged behaviour, deliberately.
+    const verifyJwt = vi.fn(async (): Promise<TokenClaims> => {
+      throw new joseErrors.JWKSNoMatchingKey();
+    });
+    const { verify } = publicAuth({ verifyJwt, now: () => T0 });
+    const err = await verify(tokenIssuedBy("https://SOMEONE-ELSE.example.com")).catch(
+      (e: unknown) => e,
+    );
+    expect((err as TokenVerifyError).transient).toBe(true);
+  });
+});

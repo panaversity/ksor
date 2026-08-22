@@ -180,15 +180,23 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    — each individually reversible with new evidence, recorded here:
    **conversation is the interface** (the human runs `ksor init <name>` once,
    then talks to the coding agent they already use; CLI verbs are for the
-   agent); **serving fails safe** (local serve binds loopback with auth off; a
-   public bind fails closed unless auth is configured or unauthenticated
-   serving is explicitly flagged — "disabled by default" must never silently
-   become an open server); **the governance level is derived, never declared**
+   agent); **serving fails safe** (serve refuses to boot unauthenticated at
+   all — a local run flags it explicitly and binds loopback; a public bind
+   additionally fails closed unless auth is configured — "disabled by default"
+   must never silently become an open server); **the governance level is derived, never declared**
    (tools report the level the governance artifacts achieve; no `governance:`
    key in `instance.md`); **no empty scaffolded directories** (an empty
    directory is an unanswered question in the adopter's repo — directories
    appear when the ladder or the work demands them); **the site is preview and
    review, not an editor** (the agent writes; the human checks).
+   _Revision 2026-08-20: the serving clause read "local serve binds loopback
+   with auth off", describing a default the code has never had — `buildAuth`
+   refuses to boot unless SSO is configured OR `KSOR_AUTH_DISABLED=1` is
+   explicit, loopback included (`packages/gateway-kit/src/auth.ts`). The
+   posture is unchanged and STRONGER than the sentence claimed; the wording is
+   corrected here and in the three docs that had copied it (both READMEs and
+   the scaffold's AGENTS.md), which were telling adopters a local `serve` would
+   come up without the flag it requires._
 
 8. **Scaffold structure: root workspace + system roof** (owner, 2026-08-18).
    `ksor init` emits the workspace manifests at the repo root (defaults beat
@@ -319,6 +327,24 @@ ksor` — for everything, and the content SoR is always present. This
     self-contained. The prior revision (separate `@panaversity/ksor-content-
 gateway` package, serve-by-spawn) is superseded._
 
+    _Revision 2026-08-22 (issue #54): `@google/genai` is REMOVED. It was 17 MB
+    installed and brought 30 transitive packages with it — 54 MB and 52
+    top-level packages for a `ksor init` that needs neither — to make exactly
+    two HTTP calls that `providers/gemini.ts` already wrapped behind a
+    structurally-typed client slice. `lib/providers/gemini-rest.ts` implements
+    that slice with `fetch`: **22 MB, 22 packages**. The swap was gated on one
+    measurement taken BEFORE any code was written — SDK and REST return
+    byte-identical vectors for the same text, model, `outputDimensionality` and
+    `taskType` (max per-component difference 0.000e+0 at 1536 dims), so no
+    stored embedding and no calibrated floor moved. Had they differed by a
+    rounding step this would have silently invalidated `vector_floor` on every
+    record. The seam is unchanged and still vendor-neutral, so a provider that
+    prefers an SDK can supply one through `clientFactory`; the live call in
+    `gemini.live.db.test.ts` remains the drift tripwire and now meets the vendor
+    without a library in between. Reversed if the vendor's REST contract starts
+    changing faster than we can follow it, which the live test is what would
+    tell us._
+
 13. **The content gateway's HTTP door composes the SDK's Web-standard
     transport, not a hand-rolled one** (owner-directed, 2026-08-19). The MCP
     surface IS the product; shipping a door hand-built on `node:http` — which
@@ -379,11 +405,204 @@ gateway` package, serve-by-spawn) is superseded._
     outline, and the calibration sampler; an empty denylist makes the seed
     empty and the recursion terminate at once, so the hot path pays nothing.
     Schema: `takedown_denylist.scope` (schema_meta 2.1, additive with a
-    default → a 2.0 reader still reads a 2.1 DB). When the `takedown` write
+    default → a 2.0 reader still reads a 2.1 DB; 2.2 adds the governance
+    columns the same additive way). When the `takedown` write
     verb lands it must make a container selection an EXPLICIT choice —
     expand to leaves (identity) or declare a subtree rule — never silently
     guess. Reversed per-clause with evidence; the `node` default is not
     reversible without an owner decision (it is the identity guarantee).
+
+15. **Governance is stored on the record, not re-derived per surface**
+    (2026-08-20, from the end-to-end review). The ingest adapter kept four
+    frontmatter keys and dropped the rest, so `visibility`, the authored
+    `status`, `owner` and `provenance` existed only in markdown and each
+    surface implemented its own subset — the site enforced `visibility:` and
+    the MCP door could not, because the record did not carry it (a document
+    marked `visibility: internal` was hidden from the website and served in
+    full to every agent, reproduced live). Schema 2.2 puts them on
+    `content_nodes`; ONE frontmatter module reads them; `lib/audience.ts` is
+    the single serving seam, bound the way `lib/takedown.ts` binds denial. A
+    new guarantee about a document is a COLUMN plus a seam, never a filter in
+    one surface's build step. Reversed only by an owner decision recorded here.
+
+16. **Forward migrations exist and are walked, not sorted** (2026-08-20).
+    `schema/migrations/<from>-<to>__<slug>.sql`: each file names both ends of
+    its step, so a missing step refuses instead of being silently skipped, and
+    each applies in one transaction with the `schema_meta` row recording it.
+    `schema.sql` remains the DDL source of truth for a FRESH database. This
+    retires "drop and recreate", which destroyed the two tables that cannot be
+    rebuilt from markdown. Reversed only with a recorded replacement.
+
+17. **A pool with a floor of ZERO — not a connection per call, not a pinned
+    set** (owner-directed, 2026-08-21). The question the owner asked is the
+    right one for a product that will run on Cloud Run against a serverless
+    Postgres: who holds a connection, and for how long. Three postures were
+    weighed and the middle one is ours.
+
+    _Connect per call_ pays a full handshake on every request. Measured
+    locally (Postgres 17.7, loopback, no TLS, n=30): a fresh connect + trivial
+    query is **3.02ms** median against **0.15ms** on an open one — a **2.87ms**
+    floor under every request that does no work at all. A remote TLS endpoint
+    is materially worse, because the handshake adds round trips this local
+    number does not contain. Paying that per request buys nothing an idle
+    timeout does not already buy.
+
+    _A pinned pool_ (`min: 2`, which ksor inherited from the predecessor) is
+    the posture the owner objected to, and the objection was correct — more so
+    than it looked. pg-pool reaps an idle connection ONLY while the pool is
+    above `min` (pg-pool 3.14 `index.js:409`), and it does not open anything
+    eagerly. So a non-zero `min` does not prewarm: it pins that many sockets
+    open forever and prewarms nothing. The predecessor's psycopg pool DID
+    prewarm, which is why 2 was reasonable there; ksor took the number without
+    the mechanism and got the cost with none of the benefit. Against a compute
+    that suspends on idle, those pinned sockets are also the ones most likely
+    to be dead on the next request.
+
+    **What ships: `min: 0` with a 10-second idle timeout.** A server that is
+    quiet for ten seconds holds NOTHING — no socket, no backend, nothing for a
+    suspend to kill and nothing billed on a per-connection plan — which is the
+    "connections are closed" property, obtained by expiry rather than by
+    per-request teardown. Inside a burst, connections are reused and the
+    handshake is paid once. `prewarmPool` exists for the deployment that wants
+    warm sockets and asks for them explicitly; it is never implied by `min`.
+
+    This posture is only safe because the reconnect path is real, so it is
+    part of the decision: `withGuardedClient` keeps an error listener attached
+    for the whole checkout (pg-pool removes the client's own during one, and a
+    socket dying mid-statement then reaches Node as an uncaught exception and
+    exits the process), and `acquire` distinguishes a saturated pool from a
+    slow connect so a cold reconnect is retried rather than reported as
+    exhaustion. Held by `idle.db.test.ts`, `checkout-error.db.test.ts`, and an
+    MCP-client suspend/resume test that terminates every backend and asserts
+    none survived before the next call answers.
+
+    Walked live 2026-08-21 against a served record: Postgres stopped under the
+    running gateway → the in-flight request returned "content store temporarily
+    unavailable" and the process stayed up; Postgres restarted → the FIRST
+    request answered with cited hits; SIGTERM → drained in 0.34s with the port
+    released and no orphan.
+
+    Reversed if a deployment target makes per-request connection genuinely
+    cheaper (a local pooler sidecar would), or if a measurement here shows the
+    idle window costing more than it saves.
+
+    _Revision 2026-08-21: the posture the reversal clause names is now an
+    OPT-IN rather than a fork — `KSOR_DB_CONNECT_PER_REQUEST=1` releases every
+    connection with destroy, so each call opens and closes its own. The default
+    is unchanged and unchanged for the same reason: measured on loopback,
+    per-request costs **2.58ms/call** against **0.13ms** pooled, and a remote
+    TLS endpoint widens that gap rather than narrowing it. What the option
+    buys is not a property the default lacks — a quiet server already holds
+    ZERO — it is the deployment where a pool is a fiction: an external pooler
+    sidecar, or a runtime that reuses no process between invocations. Both
+    postures are asserted in `connect-per-request.db.test.ts`, including the
+    measurement, so the default stays a choice rather than a habit._
+
+18. **One rule, two surfaces, one table** (2026-08-21, from the visibility
+    leak's fourth recurrence). The site and the kernel enforce the SAME
+    visibility rule in two languages — TypeScript in the site's build, SQL in
+    the serving predicate — and it drifted four separate times while each
+    side's own tests stayed green, because each side was internally consistent
+    with itself. So the rule stops living in two heads: `AUDIENCE_CASES`
+    (`packages/content/src/lib/audience-conformance.ts`) IS the rule, as a
+    decision table; the SQL predicate is asserted against every row through
+    real Postgres, and the TypeScript half against the same rows.
+    The TypeScript rule itself is ONE canonical file
+    (`packages/content/src/lib/audience-rule.ts`), copied byte-identically into
+    the scaffold — the site cannot import the kernel, whose package carries pg
+    and the embedding providers, so the copy is asserted by a drift test rather
+    than trusted. A surface that drifts now fails on the ROW it broke.
+    Extends to any guarantee two surfaces must both honour; the next one is
+    takedown, which is already single-seam on the serving side. Reversed if the
+    site ever can import the rule directly, which would make the table a
+    convenience rather than a guard.
+
+19. **A surface that refuses must refuse on BOTH surfaces** (2026-08-21, from
+    the governance review). Product principle 2 says the site and the MCP door
+    render the same corpus; the sharper form is that they must also REFUSE the
+    same corpus. Two states had the site stopping by name while the door came
+    up clean and served the restricted half: a generation built before
+    governance reached the node row (schema 2.2 added `visibility` and a
+    migration cannot backfill frontmatter, so every carried-forward node reads
+    as the widest tier), and a document declaring `visibility:` in a record
+    that declares no `audiences:` (an author restricted something and nothing
+    enforced it). Both are now boot checks in `assertGovernanceServable`, and
+    schema 2.4 stamps each generation with the schema it was built against so
+    the first is detectable at all. When a new refusal lands on either surface,
+    the question to answer is what the OTHER surface does in that state.
+    Reversed only by an owner decision recorded here.
+
+20. **The keyword arm stays in Postgres — never reimplemented in JS**
+    (2026-08-21, from an adversarial review of the artifact rung). A
+    database-free serving rung is more feasible than it looks: exact int8
+    cosine in plain JS measures 19ms at 5,000 chunks and beats HNSW on RECALL
+    because it is exact rather than approximate, the abstention gate reads only
+    the VECTOR arm, and the denial seam already exports JSON. The blocker is
+    not the vector arm — it is `websearch_to_tsquery`. Its parsing, stemming
+    and stop-word behaviour diverge from any reimplementation SILENTLY: no
+    error, just a different set of matches. And this record's own gold shows
+    how little room that leaves — in-corpus 0.730 / 0.671 against a
+    scope-adjacent near-miss at 0.683 (`behavioural.db.test.ts`), so the
+    abstention decision turns on about one hundredth. A tokenizer that stems
+    one word differently moves which questions get answered, and nothing goes
+    red. Reversed only by a measurement showing a JS implementation agreeing
+    with Postgres across the gold set — which is a bigger project than the arm
+    it would replace.
+
+21. **A governance act NAMES its actor; the tool never guesses one**
+    (2026-08-21, same review). `--actor` fell back to `$USER` / `$USERNAME` /
+    `"operator"`, so a ledger row read `runner` under CI and `root` in a
+    container: a self-asserted string wearing a schema, indistinguishable from
+    a person who was never there. `retrieval_log.actor` is `NOT NULL` with the
+    comment "NO default: unset errors loudly" — and the fallback is precisely
+    what stopped it erroring. `ksor takedown` now REFUSES a denial or a
+    revocation without `--actor`, before the DSN is even resolved (a missing
+    actor is an argument error, not an environment one). Read-only modes need
+    nothing. This is product principle "honest absence, never silent weakness"
+    applied to attribution, and it generalises: a column that records WHO must
+    never be populated from ambient state. Reversed only by an identity source
+    the tool can VERIFY rather than read — a bearer token's subject qualifies,
+    an environment variable never will.
+
+22. **Navigation is a SHAPE, not a length** (2026-08-22, issue #55 — the first
+    DELIBERATE divergence from the converted oracle). `classify()` labelled any
+    segment under 250 code points `nav`, and the serving predicate admits only
+    `prose`, so a record could be fully ingested and unable to answer questions
+    it plainly contained. On the curriculum corpus the oracle was tuned against
+    the proxy holds — a short segment there really is a link list. On a handbook
+    it inverts, because a handbook's most valuable statements are its shortest.
+    Walked live on 0.0.14: three ordinary policy statements, three of four
+    chunks unsearchable, and "how long does a buyer have to send something back"
+    answered with the scaffold's placeholder against a record stating thirty
+    days.
+
+    A segment is now `nav` when link lines are most of it, or when what remains
+    after them is under `MIN_CONTENT_CHARS` — the SAME floor the serving
+    predicate applies, so this never labels `prose` something search would
+    refuse anyway. Length is not consulted: a 180-character link list is nav and
+    a 51-character fact is prose, which is the ordering length got backwards.
+
+    Measured on the handbook gold, real Gemini embeddings, paired: short
+    substantive facts **0/9 → 9/9 at rank 1**, the long-prose control held at
+    **4/4**, and the link-list negative was returned **0** times — so the gain
+    is correctness rather than permissiveness, which is the distinction the gold
+    was built to make. Recorded in `evals/baseline.ts`; the harness prints
+    current against it and the floors may not fall silently.
+
+    `CHUNK_POLICY` moves v5 → v6 because it is persisted provenance and the
+    behaviour it labels changed. The oracle fixture is NOT regenerated — it
+    stays the record that the port was faithful — and the divergence is asserted
+    as a property instead: sourceType may differ only `nav` → `prose`, only
+    where the whole section carries real prose, and everything else stays
+    byte-identical. That corpus cannot settle the question either way; it
+    contains no markdown links at all, which is asserted so the next reader does
+    not mistake its 61 `nav` labels for evidence about navigation.
+
+    Adopters get it by re-running `ksor ingest`: chunks are re-classified on
+    every build, and carry-forward sets only the embedding fields
+    (`ingest/generation.ts:174`), so unchanged content is not re-embedded.
+    Reversed only by a measurement showing the shape rule admitting navigation
+    the length rule kept out.
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
@@ -530,13 +749,20 @@ cite the research they distill; guard rule 8 enforces the frontmatter
 
 ## Testing
 
-Two tiers by filename convention; pick the tightest tier that can express the
+Three tiers by filename convention; pick the tightest tier that can express the
 assertion.
 
 - `*.test.ts` — unit, colocated (packages `src/` and `scripts/`): pure, no
   fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
   tmp dirs (<15s)
+- `*.db.test.ts` — real Postgres, gated on `KSOR_DB_URL` (`pnpm test:db`; CI
+  provides the service). The kernel's guarantees are SQL, so the tier that runs
+  them against a real database is where they are actually held.
+
+The tiers are a contract, not a preference: a file that reads the filesystem
+belongs in the second one however small it is. Seven did not, and drifted there
+because the unit tier is the fastest to run (round-9 review of PR 43).
 
 Agent evals land with `ksor serve` (CI-only — they spend model tokens), in
 three classes, and being explicit about which class gates is the design:

@@ -1,7 +1,7 @@
 {
   "name": "@panaversity/ksor",
-  "version": "0.0.7",
-  "description": "Knowledge System of Record — the authoritative, governed source of knowledge that humans and AI agents operate from. Name reserved; implementation in progress.",
+  "version": "0.0.20",
+  "description": "Knowledge System of Record — compile governed markdown into a static site for people and an MCP server for AI agents, with citations and measured abstention.",
   "keywords": [
     "abstention",
     "citations",
@@ -56,7 +56,6 @@
     "publint": "publint"
   },
   "dependencies": {
-    "@google/genai": "^2.17.1",
     "@hono/node-server": "2.1.1",
     "@modelcontextprotocol/server": "^2.0.0",
     "@types/pg": "^8.21.0",

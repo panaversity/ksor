@@ -24,10 +24,18 @@ instead of their training memory. The corpus grows with each implemented verb.
   at `http://localhost:3000`; `pnpm build` writes a fully static export to
   `system/site/out/`. `KSOR_BASE_PATH=/repo pnpm build` targets sub-path
   hosting.
-- `ksor serve` runs the MCP server over a built record (with
-  `ingest`/`schema`/`calibrate`/`gc`) — the climbed rung, needing Postgres and
-  a provider key. Only `dev` and `build` remain designed, not implemented:
-  each prints an honest notice and exits `2`.
+- `ksor serve` runs the MCP server over a built record — the climbed rung,
+  needing Postgres and a provider key — alongside the write plane that keeps
+  the record current: `ksor schema` (provision or migrate the database),
+  `ksor grant` (authorize a tenant for ingest), `ksor ingest` (build and publish
+  a generation), `ksor takedown` (withdraw a document from EVERY surface, and
+  export the manifest the site build reads), `ksor calibrate` (measure the
+  abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
+  implemented: each prints an honest notice and exits `2`.
+  - **[authorization.md](./authorization.md)** — putting the record behind an
+    authorization server, with worked recipes for two of them, executed rather
+    than written. `ksor serve` refuses to boot unauthenticated on a public bind,
+    so this is the last step of a deployment, not an optional hardening pass.
 - Exit codes are a contract: `1` refused (first stderr line is a stable
   slug such as `error: bad-name`, followed by a remedy), `2` designed but
   not implemented, `3` the environment cannot run ksor
@@ -41,8 +49,9 @@ instead of their training memory. The corpus grows with each implemented verb.
 Read the scaffold's own `AGENTS.md` first — it is the working contract.
 Knowledge lives in `knowledge/` and never inside the site; frontmatter uses
 a closed key set (`title` + `status` required); `pnpm check` explains any
-violation and how to fix it. Sidebar order is the governed `order:`
-frontmatter key — never `meta.json` or `sidebar_position`. If the
+violation and how to fix it. Reading order is the governed `order:`
+frontmatter key — never `meta.json` or `sidebar_position` — and it drives
+every surface: the sidebar, `llms.txt`, and the MCP `outline` tool. If the
 instance declares an `audiences:` model, documents may carry a
 `visibility:` key and per-audience builds (`KSOR_AUDIENCE=<tier> pnpm
 build`) stage only what that tier may see — publication, not authorship:

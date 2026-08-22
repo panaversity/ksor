@@ -10,7 +10,7 @@
  *     nodes;
  *   - `index.md` (or `README.md`) inside a directory is that SECTION's own
  *     content, not a child;
- *   - ordering: frontmatter `position` (or `sidebar_position`) wins, else name
+ *   - ordering: the governed `order:` frontmatter key, else name (lib/order-rule.ts)
  *     sort;
  *   - titles: frontmatter `title`, else the filename humanized;
  *   - stable ids: frontmatter `sor_id`, else the tree-relative path;
@@ -30,6 +30,8 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import { governanceFromFrontmatter, NO_GOVERNANCE } from "../governance.js";
+import { compareSiblings, orderValue, tieKey, type Sibling } from "../../lib/order-rule.js";
 import {
   type Manifest,
   ManifestError,
@@ -42,8 +44,6 @@ import {
 } from "../manifest.js";
 
 const INDEX_NAMES: readonly string[] = ["index.md", "index.mdx", "README.md"];
-/** Frontmatter-position fallback for entries that declare none (oracle plain_tree.py:107,114). */
-const POSITION_FALLBACK = 10_000;
 
 export interface TreeFile {
   readonly kind: "file";
@@ -137,6 +137,18 @@ export function buildManifestFromTree(
   const files: ManifestFile[] = [];
   const sources = new Map<string, string>();
   const skipped: string[] = [];
+  /** foreign ordering key -> the documents that declare it and no `order:`. */
+  const foreignOrder = new Map<string, string[]>();
+
+  const noteForeignOrder = (meta: Record<string, unknown>, path: string): void => {
+    if (meta["order"] !== undefined && meta["order"] !== null) return; // the governed key wins; nothing fell back
+    for (const key of FOREIGN_ORDER_KEYS) {
+      if (meta[key] === undefined || meta[key] === null) continue;
+      const seen = foreignOrder.get(key) ?? [];
+      seen.push(path);
+      foreignOrder.set(key, seen);
+    }
+  };
 
   const fullPath = (relSegs: readonly string[], name: string): string =>
     `${rootPath}/${[...relSegs, name].join("/")}`;
@@ -160,16 +172,18 @@ export function buildManifestFromTree(
       else if (e.kind === "dir") dirs.push(e);
     }
 
-    const ordered: { position: number; nameLower: string; entry: TreeFile | TreeDir }[] = [];
+    const ordered: (Sibling & { entry: TreeFile | TreeDir })[] = [];
     for (const f of docs) {
       if (f.name.startsWith(".") || f.name.startsWith("_")) {
         skipped.push(fullPath(relSegs, f.name));
         continue;
       }
       if (INDEX_NAMES.includes(f.name)) continue; // the parent section's own content — handled by the caller
+      const fileMeta = frontmatterMeta(f.text);
+      noteForeignOrder(fileMeta, fullPath(relSegs, f.name));
       ordered.push({
-        position: positionOf(frontmatterMeta(f.text), POSITION_FALLBACK),
-        nameLower: f.name.toLowerCase(),
+        order: orderValue(fileMeta["order"]),
+        tie: tieKey(f.name),
         entry: f,
       });
     }
@@ -180,14 +194,16 @@ export function buildManifestFromTree(
       }
       const index = indexOf(d, fullPath(relSegs, d.name));
       const dirMeta = index === null ? {} : frontmatterMeta(index.text);
+      if (index !== null) noteForeignOrder(dirMeta, fullPath(relSegs, `${d.name}/${index.name}`));
       ordered.push({
-        position: positionOf(dirMeta, POSITION_FALLBACK),
-        nameLower: d.name.toLowerCase(),
+        order: orderValue(dirMeta["order"]),
+        tie: tieKey(d.name),
         entry: d,
       });
     }
 
-    ordered.sort((x, y) => x.position - y.position || codePointCompare(x.nameLower, y.nameLower));
+    // ONE rule, shared with the site — see lib/order-rule.ts (decision 18).
+    ordered.sort(compareSiblings);
     let position = 0;
     for (const { entry } of ordered) {
       position += 1;
@@ -209,6 +225,8 @@ export function buildManifestFromTree(
             kind: "section",
             parent: parentSid,
             position,
+            governance:
+              index === null ? NO_GOVERNANCE : governanceFromFrontmatter(meta, index.text),
           }),
         );
         if (index !== null) addFile(sid, [...dirSegs, index.name]);
@@ -225,6 +243,7 @@ export function buildManifestFromTree(
             kind: "document",
             parent: parentSid,
             position,
+            governance: governanceFromFrontmatter(meta, entry.text),
           }),
         );
         addFile(sid, [...relSegs, entry.name]);
@@ -244,6 +263,7 @@ export function buildManifestFromTree(
         title: titleOf(meta, rootName),
         kind: "document",
         position: 0,
+        governance: governanceFromFrontmatter(meta, rootIndex.text),
       }),
     );
     addFile(sid, [rootIndex.name]);
@@ -251,6 +271,18 @@ export function buildManifestFromTree(
   walk(root, [], null);
   // reported before any emptiness error, so an all-skips tree explains itself
   for (const s of skipped) onSkip(`plain-tree: skipped ${s}`);
+  // Same channel as a skip, and for the same reason: a fallback nobody is told
+  // about produces a WRONG reading order, not a missing one (#74).
+  for (const [key, paths] of foreignOrder) {
+    const rel = paths.map((x) => (x.startsWith(`${rootPath}/`) ? x.slice(rootPath.length + 1) : x));
+    const shown = rel.slice(0, 3).join(", ");
+    const more = rel.length - Math.min(3, rel.length);
+    onSkip(
+      `plain-tree: ${rel.length} document(s) declare \`${key}\`, which this record does not ` +
+        `read — reading order fell back to file name (${shown}${more > 0 ? `, and ${more} more` : ""}). ` +
+        "Rename it to `order:` to keep the intended sequence.",
+    );
+  }
   if (files.length === 0)
     throw new ManifestError(`plain-tree root ${rootPath} contains no Markdown`);
 
@@ -286,7 +318,7 @@ function indexOf(dir: TreeDir, dirPath: string): TreeFile | null {
   return present[0] ?? null;
 }
 
-function stableIdOf(
+export function stableIdOf(
   rootName: string,
   fileSegs: readonly string[],
   meta: Record<string, unknown>,
@@ -347,15 +379,6 @@ function titleOf(meta: Record<string, unknown>, fallbackStem: string): string {
   return String(t);
 }
 
-function positionOf(meta: Record<string, unknown>, fallback: number): number {
-  for (const key of ["position", "sidebar_position"]) {
-    const val = meta[key];
-    // booleans never parse as positions; int() truncation parity via trunc
-    if (typeof val === "number" && Number.isFinite(val)) return Math.trunc(val);
-  }
-  return fallback;
-}
-
 /** Python compares strings by code point; JS `<` compares UTF-16 units — they differ on astral names. */
 function codePointCompare(a: string, b: string): number {
   const as = [...a];
@@ -370,7 +393,25 @@ function codePointCompare(a: string, b: string): number {
 
 // ^\uFEFF? — a BOM-prefixed file must not serve its YAML as a chunk
 // (review finding, 2026-08-19).
-const FRONTMATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+/**
+ * Ordering keys OTHER ecosystems read, which this record does not.
+ *
+ * Reading order here is the governed `order:` key alone (decision 9 retired the
+ * predecessor's Docusaurus keys; the MCP door had been reading them). But a
+ * corpus arriving from Docusaurus, Hugo or Jekyll carries its own, and ignoring
+ * one silently produces a WRONG order rather than a missing one — filename
+ * order, served to `llms.txt`, the sidebar and the `outline` tool alike. Found
+ * on a real 81-document book where 73 files declared `sidebar_position` (#74).
+ */
+const FOREIGN_ORDER_KEYS: readonly string[] = [
+  "sidebar_position", // Docusaurus, and the predecessor
+  "position", // the predecessor's own
+  "weight", // Hugo
+  "nav_order", // Jekyll / Just-the-Docs
+];
+
+/** Re-exported so every reader of a document agrees where its frontmatter ENDS. */
+export const FRONTMATTER: RegExp = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
 
 const YAML_BOOLS: Record<string, boolean> = {
   yes: true,
@@ -394,8 +435,12 @@ const YAML_BOOLS: Record<string, boolean> = {
 };
 
 /**
- * Minimal PyYAML-compatible frontmatter reader for the FOUR scalar keys this
- * adapter consumes (`title`, `position`, `sidebar_position`, `sor_id`) — the
+ * Minimal PyYAML-compatible frontmatter reader. It parses every top-level
+ * scalar; the adapter consumes `title`, `order` and `sor_id`, and reads the rest
+ * only to WARN about them (see FOREIGN_ORDER_KEYS). The wording here named
+ * `position` and `sidebar_position` until now, which is what this adapter read
+ * before ordering became one governed key — the keys it names are the ones it
+ * stopped reading. The
  * kernel discards every other frontmatter key at build time (taxonomy comes
  * from the manifest), so a YAML dependency would buy nothing (guard rule 5).
  * Scope, deliberately narrow pending a shared markdown module: top-level
@@ -443,9 +488,29 @@ function scalarValue(raw: string): ScalarResult {
   if (/^[-+]?(?:\.[0-9]+|[0-9][0-9_]*\.[0-9_]*)(?:[eE][-+]?[0-9]+)?$/.test(plain)) {
     return { ok: true, value: Number.parseFloat(plain.replaceAll("_", "")) };
   }
-  // PyYAML refuses these in a plain value position; anything it would instead
-  // read as a non-scalar (flow map/seq) is equally outside this reader's scope.
+  // VALID YAML this reader does not model: a flow sequence or mapping, a block
+  // scalar, an anchor/alias/tag. PyYAML parses every one — the DOCUMENT is fine
+  // and only this KEY is beyond the reader, so it must not empty the map.
+  // Checked BEFORE the ": " test, because a flow mapping legitimately contains
+  // one (`meta: {a: 1}`).
+  //
+  // Refusing them used to poison the whole meta, which cost four documents in a
+  // real book their titles: "The System of Context: Connecting the Records to
+  // Real Work" was served as "System Of Context" because one `authors: [...]`
+  // line sat beside the title (issue #78). Recorded as a non-string, so
+  // `stableIdOf` still declines to take it as an override — which is what keeps
+  // this in step with the site (see denial-rule.ts).
+  if (/^[|>&*!{[]/.test(plain)) return { ok: true, value: null };
+  // INVALID: PyYAML raises on a plain scalar carrying ": " or ending in ":", so
+  // the oracle's error path empties the whole meta and so does this.
   if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { ok: false, value: null };
-  if (/^[|>&*!{[]/.test(plain)) return { ok: false, value: null };
+  // VALID, but not modelled here: a flow sequence or mapping, a block scalar, an
+  // anchor/alias/tag. PyYAML parses every one of these — so the document is fine
+  // and only this KEY is beyond the reader. Refusing them used to poison the
+  // whole meta, which cost four documents in a real book their titles: "The
+  // System of Context: Connecting the Records to Real Work" was served as
+  // "System Of Context", because one `authors: [...]` line sat beside the title
+  // (issue #78). The key is recorded present-with-unknown-value; the keys this
+  // adapter actually consumes survive.
   return { ok: true, value: plain };
 }

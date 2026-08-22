@@ -7,7 +7,7 @@
 // list (`provenance:` followed by `- item` lines) parses as an empty value.
 
 /** CRLF-normalized frontmatter block body, or null when the file has none. */
-export function frontmatterBlock(rawText) {
+function frontmatterBlock(rawText) {
   const text = rawText.replaceAll("\r\n", "\n");
   const match = /^---\n([\s\S]*?)\n---/.exec(text);
   return match ? match[1] : null;

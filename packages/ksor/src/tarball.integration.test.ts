@@ -36,6 +36,11 @@ const REQUIRED_IN_TARBALL = [
   // install (review finding, 2026-08-20 — decision 12's fold-in verified this
   // by hand only).
   "schema/schema.sql",
+  // ...and the forward-migration chain beside it. Copying only schema.sql
+  // shipped a CLI that could provision a FRESH database and threw ENOENT the
+  // moment it had to migrate an existing one — the exact case an adopter with
+  // data hits, and the one no fresh-install walk would ever catch.
+  "schema/migrations/2.1-2.2__governance-on-the-node-row.sql",
   "docs/index.md",
   "templates/LICENSE",
   "templates/scaffold/package.json",

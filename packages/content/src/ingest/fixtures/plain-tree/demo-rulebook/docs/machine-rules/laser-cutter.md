@@ -1,6 +1,7 @@
 ---
 title: "Rule 21: The Laser Cutter"
 position: 2
+order: 2
 ---
 
 # Rule 21: The Laser Cutter

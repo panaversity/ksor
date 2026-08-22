@@ -35,10 +35,39 @@ import {
   type Auth,
   type VerifiedIdentity,
 } from "@panaversity/ksor-gateway-kit";
-import { runProbe } from "@panaversity/ksor-content";
+import { runProbe, withProbeDeadline } from "@panaversity/ksor-content";
 
-import { buildServer } from "./server.js";
+import {
+  abstainPosture,
+  authPosture,
+  bootLine,
+  UNDESCRIBED_RECORD,
+  withoutSdkResponseModeWarning,
+} from "./boot-report.js";
+import { refusalBody } from "./refusal-body.js";
+import { buildServer, recordIsUndescribed } from "./server.js";
 import type { Composition } from "./compose.js";
+
+/**
+ * How long a drain may take before the process exits anyway. Long enough for a
+ * real in-flight exchange and a remote pool teardown; short enough that a
+ * wedged shutdown is a delay, never an orphaned server holding the port.
+ */
+// 8s, not 10: a container runtime that scales to zero typically allows ~10s
+// between SIGTERM and SIGKILL (Cloud Run's default), so a 10s deadline lands
+// exactly on the kill and never gets to run. Leave headroom for the exit.
+//
+// Read inside runHttp, NOT at module scope. `cli.ts` imports this module
+// statically, so a module-level env read evaluates before `main()` calls
+// `loadDotEnv()` — the knob would be frozen at its default and an adopter
+// setting KSOR_DRAIN_TIMEOUT_MS in `.env` would silently change nothing. This
+// is the same ESM-ordering trap that shipped a different setting inert in
+// 0.0.4, and the two sibling knobs below (`maxBodyBytes`, `maxInflight`) are
+// read inside the function for exactly this reason (round-4 review of #43,
+// confirmed independently by two reviewers against the shipped bundle:
+// dist/cli.mjs initialises the const ~5000 lines before loadDotEnv runs).
+const drainTimeoutMs = (): number =>
+  envInt(process.env, "KSOR_DRAIN_TIMEOUT_MS", 8_000, { minimum: 100 });
 
 export interface Security {
   /** Allowed Host header values; null = do not Host-gate (public, bearer-gated). */
@@ -109,6 +138,21 @@ export function resolveSecurity(bind: { host: string; port: number }): Security 
 
 export async function runHttp(composition: Composition): Promise<ServerType> {
   const auth: Auth = buildAuth(process.env);
+  // Say where the signing keys come from, at BOOT. Appending one vendor's path
+  // to KSOR_SSO_URL meant every other AS failed the fetch — classified
+  // transient, so the door came up clean and 503'd each request naming
+  // nothing. Discovery is memoized, so this is the same resolution the first
+  // verification uses (issue #26).
+  const keyLines: string[] = [];
+  if (auth.mode === "public") {
+    const keys = await auth.jwks();
+    // Held, not printed here: the boot report is ONE aligned block and this
+    // used to land in the middle of it unaligned, reading like a stray log line
+    // rather than part of the posture. Resolution still happens at boot — that
+    // is the point of the line — it is just said in its place.
+    keyLines.push(bootLine("keys", `${keys.source} — ${keys.url}`));
+    if (keys.advisory !== null) keyLines.push(bootLine("", keys.advisory));
+  }
   // RFC 9728 / MCP auth: WWW-Authenticate's `resource_metadata` must be the URL
   // of the metadata DOCUMENT (served at /.well-known/oauth-protected-resource/mcp
   // below), NOT the resource identifier — a client that follows the resource URL
@@ -137,7 +181,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     );
   }
   const security = resolveSecurity(bind);
-  const { ctx, instance, pool, spaceSkipReason, version } = composition;
+  const { ctx, instance, pool, spaceSkipReason, version, verifyBoot } = composition;
 
   // Fail-soft env (envInt), never Number(env ?? default): a set-but-empty
   // var (routine with `gcloud --set-env-vars`) or a typo must fall back, not
@@ -155,18 +199,54 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // cached ~1s: a load balancer still gets a fresh-enough answer, and a flood
   // shares the single in-flight probe instead of multiplying pool checkouts.
   const READY_TTL_MS = 1000;
-  let readyProbe: { at: number; verdict: Promise<boolean> } | null = null;
+  // `settledAt` is null while the probe is IN FLIGHT and a timestamp once it
+  // finishes. Both halves matter, and the first was missing: keying the TTL on
+  // the probe's START meant a probe SLOWER than the TTL stopped being shared —
+  // so coalescing failed exactly when the database was unhealthy, which is the
+  // only time it matters. Against a black-holed endpoint a connect attempt runs
+  // to the pool's 10s timeout, so one probe per second accumulated ~10
+  // concurrent checkouts, and /ready is unauthenticated and outside /mcp's
+  // in-flight cap — the pool-exhaustion amplifier this was written to prevent,
+  // rebuilt by an off-by-one-field (round-4 review of #43).
+  let readyProbe: { settledAt: number | null; verdict: Promise<boolean> } | null = null;
   const readiness = (): Promise<boolean> => {
-    const now = Date.now();
-    if (readyProbe !== null && now - readyProbe.at < READY_TTL_MS) return readyProbe.verdict;
-    const verdict = runProbe(pool, instance.tenantId, (client) =>
-      client.query("SELECT 1 FROM corpora LIMIT 1"),
-    ).then(
-      () => true,
-      () => false,
-    );
-    readyProbe = { at: now, verdict };
-    return verdict;
+    if (readyProbe !== null) {
+      // In flight: share it, however long it takes.
+      if (readyProbe.settledAt === null) return readyProbe.verdict;
+      // Settled recently: serve the cached verdict.
+      if (Date.now() - readyProbe.settledAt < READY_TTL_MS) return readyProbe.verdict;
+    }
+    const entry: { settledAt: number | null; verdict: Promise<boolean> } = {
+      settledAt: null,
+      // An instance whose boot checks could not run is NOT ready —
+      // that is what the word means, and reporting green let a platform route
+      // traffic to an instance where every tool call fails on a missing column
+      // (round-4 review of #43). The check retries here until the database
+      // answers, so a cold start becomes a slow ready rather than a permanent
+      // unverified state. A schema that is genuinely too old keeps failing,
+      // which keeps the instance out of rotation instead of serving errors.
+      //
+      // The WHOLE chain shares one budget: the deferred schema check runs
+      // first and is a bare query with no deadline of its own, so bounding
+      // only the probe let /ready answer in 10.25s while claiming 8 (found
+      // live, 2026-08-21).
+      verdict: withProbeDeadline(
+        (verifyBoot === null ? Promise.resolve() : verifyBoot()).then(() =>
+          runProbe(pool, instance.tenantId, (client) =>
+            client.query("SELECT 1 FROM corpora LIMIT 1"),
+          ),
+        ),
+      ).then(
+        () => true,
+        () => false,
+      ),
+    };
+    // Stamp on COMPLETION, so the TTL measures the age of an ANSWER.
+    void entry.verdict.then(() => {
+      entry.settledAt = Date.now();
+    });
+    readyProbe = entry;
+    return entry.verdict;
   };
 
   const app = new Hono();
@@ -258,11 +338,16 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // between them. `responseMode: "json"` keeps the response a single buffered
   // JSON body — we emit no mid-call notifications, and a stream would race the
   // per-request teardown (review, 2026-08-19).
-  const mcpHandler = createMcpHandler(() => buildServer(ctx, version), {
-    legacy: "stateless",
-    responseMode: "json",
-    onerror: (error) => console.error(`mcp handler: ${error.name}: ${error.message}`),
-  });
+  // The SDK warns about `responseMode: "json"` on every construction. It is our
+  // decision, recorded (decision 13) and true for this record, so it is not the
+  // adopter's warning to read — see withoutSdkResponseModeWarning.
+  const mcpHandler = withoutSdkResponseModeWarning(() =>
+    createMcpHandler(() => buildServer(ctx, version), {
+      legacy: "stateless",
+      responseMode: "json",
+      onerror: (error) => console.error(`mcp handler: ${error.name}: ${error.message}`),
+    }),
+  );
 
   /**
    * BUFFER the whole response before the caller's in-flight slot is released.
@@ -286,6 +371,46 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     // silently drifts if upstream adds a required field.
     authInfo?: AuthInfo,
   ): Promise<Response> => {
+    // The boot checks gate EVERY REQUEST, not just /ready.
+    //
+    // Reporting not-ready keeps a platform from ROUTING traffic; it does not
+    // stop anything that reaches the port. Proved live: with the store down at
+    // boot and up moments later, /ready answered {"ready":false} and a direct
+    // `read` still returned a `visibility: internal` document in full. A
+    // governance guarantee cannot rest on a health probe an attacker, a
+    // sidecar, or a stale load-balancer target is free to ignore — fail-closed
+    // has to mean refusing the REQUEST (round-6 review of #43, and the live
+    // walk of its own fix).
+    //
+    // Once verified this is a resolved promise, so the steady-state cost is a
+    // single await.
+    if (verifyBoot !== null) {
+      try {
+        await verifyBoot();
+      } catch (error) {
+        // LOG in full, ANSWER in the minimum. Which messages may go on the wire
+        // is decided in one place and by type — see refusal-body.ts. It used to
+        // be decided here by not deciding: the thrown error's message went out
+        // whoever threw it, so a `pg` connection failure put the database host,
+        // its resolved address, the port and the database user into an API
+        // response.
+        //
+        // The logging half is not decoration. The refusal tells the operator the
+        // reason is in the server's logs, and the deferred-boot line records
+        // only the error's NAME — so without this the full text existed nowhere
+        // and the refusal would be pointing at an empty page. This is also why
+        // the boot checks are NOT sanitised at their source: reducing a driver
+        // error to its class name before it reaches here would destroy the one
+        // copy an operator can act on.
+        console.error(
+          `refusing requests — boot checks failing: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+        );
+        return new Response(JSON.stringify(refusalBody(error)), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        });
+      }
+    }
     const response = await mcpHandler.fetch(request, authInfo === undefined ? {} : { authInfo });
     const body = await response.arrayBuffer();
     // A null-body status (204/205/304) throws if handed even a 0-byte buffer.
@@ -352,9 +477,30 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         identity = await auth.verify(token);
       } catch (error) {
         const transient = error instanceof TokenVerifyError && error.transient;
+        // EVERY 401 carries the challenge, not just the one for a missing
+        // token. The MCP authorization spec requires `WWW-Authenticate` on a
+        // 401 without qualification, and the case this branch serves — a token
+        // that expired mid-conversation — is the most common 401 a real client
+        // will ever see. Returning it bare left that client with no pointer
+        // back to the resource-metadata document, so it could not re-discover
+        // the authorization server it had just been talking to; only a caller
+        // that had never sent a token got told where to go. The suite missed it
+        // by asserting the STATUS of each rejection and never the header
+        // (found 2026-08-21, verifying the release that documented this door).
+        //
+        // 503 is deliberately bare: an unreachable JWKS is not an authorization
+        // failure, and challenging a caller whose token may be perfectly good
+        // would send them to re-authenticate over our outage.
         return c.json(
           { error: transient ? "token verification temporarily unavailable" : "invalid token" },
           transient ? 503 : 401,
+          transient
+            ? {}
+            : {
+                // RFC 6750 §3: `error` tells the client WHY, so it retries by
+                // refreshing rather than by repeating the same dead token.
+                "www-authenticate": `Bearer error="invalid_token", resource_metadata="${resourceMetadataUrl}"`,
+              },
         );
       }
       bearer = token;
@@ -431,28 +577,63 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     });
     s.once("error", reject);
   });
+  // The two lines that decide whether an operator should trust what happens
+  // next, said plainly: who may ask, and what the record will refuse.
+  if (recordIsUndescribed(instance.instructions)) {
+    console.error(bootLine("identity", UNDESCRIBED_RECORD));
+  }
   console.error(
-    `ksor gateway serving ${instance.corpusId} on http://${bind.host}:${bind.port}/mcp ` +
-      `(auth: ${auth.mode}, abstain gate: ${
-        instance.abstain.vectorFloor === null
-          ? "OFF (no floor)"
-          : instance.abstain.vectorFloor === "uncalibrated"
-            ? "REFUSING (uncalibrated)"
-            : `floor ${instance.abstain.vectorFloor}`
-      })`,
+    bootLine(
+      "auth",
+      authPosture(
+        auth.mode,
+        bind.host,
+        process.env["KSOR_ALLOW_PUBLIC_UNAUTHENTICATED"] === "1" && !loopback,
+      ),
+    ),
   );
+  for (const line of keyLines) console.error(line);
+  console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
+  console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));
 
   // Drain: close the listener FIRST, then the pool in its callback — the pool
   // must not be torn down under in-flight work (review, 2026-08-19).
+  let draining = false;
+  const drainDeadlineMs = drainTimeoutMs();
   const shutdown = (): void => {
+    // A second signal must not re-enter: `process.once` covers one signal each,
+    // but SIGTERM followed by SIGINT called this twice and ended the pool twice.
+    if (draining) return;
+    draining = true;
+    // SAY SO. Attaching a SIGTERM/SIGINT listener suppresses Node's default
+    // terminate, so from here on this process exits only because we let it —
+    // and it used to do that silently, which is how a stopped-looking server
+    // could still be holding its port with the operator's prompt already back
+    // (review 2026-08-20, an orphan found running long after).
+    console.error("ksor gateway: draining…");
+    // A hard deadline. Both closes below are unawaited network teardowns with
+    // no bound of their own; against a remote pooler either can hang, and an
+    // idle pooled socket keeps the event loop alive, so a hang here is an
+    // unkillable server rather than a slow one. Unref'd so it never DELAYS a
+    // clean exit — it only catches one that never arrives.
+    const deadline = setTimeout(() => {
+      // Non-zero: the drain did NOT finish, and a supervisor reading exit 0
+      // would record a clean stop for one that dropped work.
+      console.error(`ksor gateway: drain exceeded ${drainDeadlineMs}ms — exiting anyway`);
+      process.exit(75);
+    }, drainDeadlineMs);
+    deadline.unref();
+
     server.close(() => {
       // Close the MCP handler INSIDE the listener's callback, beside the pool:
       // once closed it throws "This MCP handler has been closed" for any new
       // fetch, which would escape as a bare 500 for requests still in the drain
       // window. The listener stops accepting first, in-flight exchanges finish,
       // then both are torn down (security re-verification, 2026-08-20).
-      void mcpHandler.close().catch(() => undefined);
-      void pool.end().catch(() => undefined);
+      void Promise.allSettled([mcpHandler.close(), pool.end()]).then(() => {
+        clearTimeout(deadline);
+        console.error("ksor gateway: stopped");
+      });
     });
     // close() waits for EXISTING connections to end; an idle keep-alive MCP
     // client (between requests) would keep its callback from ever firing — and

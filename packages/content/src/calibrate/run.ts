@@ -18,8 +18,13 @@
 import type pg from "pg";
 
 import { runRead } from "../db.js";
+// Calibration measures the floor over the WHOLE record, deliberately — the
+// threshold is a property of the corpus, not of one caller's tier. Stated,
+// because an unbound scope now denies (the seam fails closed).
+import { WHOLE_RECORD_SCOPE as CALIBRATION_SCOPE } from "../lib/audience.js";
 import { aembedIntent, type EmbeddingProvider, type TextGenerator } from "../lib/embedding.js";
 import { topOneScore, VECTOR_TXN_GUCS, type SearchScope } from "../lib/search.js";
+
 import { DENIED_CTE, DENY } from "../lib/takedown.js";
 import {
   buildReport,
@@ -52,11 +57,25 @@ ranked AS (
 )
 SELECT content FROM ranked WHERE rn <= $5`;
 
+/**
+ * The embedded-chunk count AND the generation it counted, in one statement.
+ *
+ * The generation was previously left null whenever none was pinned, so the
+ * provenance comment an operator pastes beside the floor read
+ * `on generation unknown (no generation pinned)` for the ordinary case — a
+ * calibration of the SERVED generation, whose number the same query already
+ * resolves. A floor is a threshold inside one generation's embedding space;
+ * "record the measurement beside the number" is not satisfied by recording that
+ * we did not look (found live 2026-08-21).
+ */
 const COUNT_SQL = `
-SELECT count(*) FROM chunks c
+SELECT count(*) AS count,
+       COALESCE($3::bigint, k.active_generation) AS generation
+FROM chunks c
 JOIN corpora k ON k.tenant_id = c.tenant_id
              AND c.generation = COALESCE($3::bigint, k.active_generation)
-WHERE c.tenant_id = $1 AND k.corpus_id = $2 AND c.embedding_status = 'embedded'`;
+WHERE c.tenant_id = $1 AND k.corpus_id = $2 AND c.embedding_status = 'embedded'
+GROUP BY k.active_generation`;
 
 const QUERY_PROMPT = (passage: string): string =>
   "Write ONE short question (at most 12 words) that a reader would naturally ask, which the " +
@@ -108,7 +127,7 @@ async function scoreQueries(
       pool,
       scope.tenantId,
       (client) => topOneScore(client, scope, vector ?? []),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...CALIBRATION_SCOPE },
     );
     if (score === null) {
       // The math treats a null score as fatal — surface it with the query.
@@ -133,10 +152,22 @@ export async function runCalibration(
     kinds: null,
     pinnedGeneration: generation,
   };
-  const embedded = await runRead(pool, options.tenantId, async (client) => {
-    const r = await client.query(COUNT_SQL, [options.tenantId, options.corpusId, generation]);
-    return Number(r.rows[0]?.count ?? 0);
-  });
+  const counted = await runRead(
+    pool,
+    options.tenantId,
+    async (client) => {
+      const r = await client.query(COUNT_SQL, [options.tenantId, options.corpusId, generation]);
+      const row = r.rows[0] as { count: unknown; generation: unknown } | undefined;
+      return {
+        embedded: Number(row?.count ?? 0),
+        // Null only when the count is zero and there is no row to read it from
+        // — which is the throw below, so nothing downstream sees it.
+        measured: row?.generation == null ? null : Number(row.generation),
+      };
+    },
+    CALIBRATION_SCOPE,
+  );
+  const embedded = counted.embedded;
   if (embedded === 0) {
     throw new Error(
       `no embedded chunks in ${generation === null ? "the served generation" : `generation ${generation}`} — ingest first`,
@@ -192,6 +223,7 @@ export async function runCalibration(
     inQueries = normalizeQueries(synthesized);
   }
 
+  const oocSource = options.oocProbes === undefined ? "built-in" : "provided";
   const ooc = normalizeQueries(options.oocProbes ?? BUILT_IN_OOC);
   const detail = [
     ...(await scoreQueries(pool, scope, options.provider, inQueries, true)),
@@ -200,11 +232,14 @@ export async function runCalibration(
   return buildReport(
     detail,
     {
-      generation,
+      // The generation actually measured, pinned or served — never null once a
+      // corpus has embedded chunks, which the throw above guarantees.
+      generation: counted.measured,
       pinned: generation !== null,
       model: options.provider.modelId,
       dim: options.provider.dim,
       door,
+      oocSource,
     },
     options.targetPrecision ?? 0.95,
   );

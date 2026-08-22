@@ -13,6 +13,8 @@ import {
 } from "./governance";
 import { appName, showGovernance } from "./shared";
 import { renderCaveatBadge } from "@/components/sidebar-status";
+import { orderValue } from "./order-rule";
+import { sortNodes } from "./page-order";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
@@ -42,54 +44,12 @@ export type KnowledgePage = (typeof source)["$inferPage"];
 // every rendered link.
 export const basePath: string = process.env.KSOR_BASE_PATH ?? "";
 
-// `order:` is a governed frontmatter key; a document without one, or with a
-// value that is not a number, sorts after every document that declares one.
+// Reading order is ONE rule, shared with the MCP door byte-for-byte — see
+// ./order-rule.ts. The site cannot import the kernel, so the rule is copied and
+// the copy is asserted; every case both surfaces must agree on is a row in the
+// kernel's ORDER_CASES table, and this half is asserted against the same rows.
 function orderOf(page: KnowledgePage): number {
-  const raw: unknown = page.data.order;
-  const value = typeof raw === "string" ? Number(raw) : raw;
-  return typeof value === "number" && Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
-}
-
-function nodeOrder(node: Node, orders: ReadonlyMap<string, number>): number {
-  if (node.type === "page") return orders.get(node.url) ?? Number.POSITIVE_INFINITY;
-  if (node.type === "folder" && node.index) {
-    return orders.get(node.index.url) ?? Number.POSITIVE_INFINITY;
-  }
-  return Number.POSITIVE_INFINITY;
-}
-
-// The tie-break key: a page's url, a folder's index url or first page's url.
-// Ties break on it so unordered documents read in plain name order, folders
-// interleaved — the canonical reading order both shells implement (found
-// live 2026-08-18: the loader's own tie order grouped folders after loose
-// files, silently diverging from the Docusaurus shell on the same record).
-function nodeName(node: Node): string {
-  if (node.type === "page") return node.url;
-  if (node.type === "folder") {
-    if (node.index) return node.index.url;
-    for (const child of node.children) {
-      const name = nodeName(child);
-      if (name !== "") return name;
-    }
-  }
-  return "";
-}
-
-function sortNodes(nodes: readonly Node[], orders: ReadonlyMap<string, number>): Node[] {
-  return nodes
-    .map((node) =>
-      node.type === "folder" ? { ...node, children: sortNodes(node.children, orders) } : node,
-    )
-    .sort((a, b) => {
-      const left = nodeOrder(a, orders);
-      const right = nodeOrder(b, orders);
-      if (left !== right) return left < right ? -1 : 1;
-      const leftName = nodeName(a);
-      const rightName = nodeName(b);
-      // Codepoint comparison, not locale: reading order must be one bytewise
-      // truth on every machine.
-      return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
-    });
+  return orderValue(page.data.order);
 }
 
 /**
@@ -106,7 +66,7 @@ export function getSortedPageTree(): Root {
   // left with the one thing the shell has no opinion about — the record's
   // governed `order:`.
   const tree = source.getPageTree();
-  return { ...tree, children: sortNodes(tree.children, orders) };
+  return { ...tree, children: sortNodes(tree.children, orders, 0) };
 }
 
 function collectUrls(nodes: readonly Node[], urls: string[]): void {

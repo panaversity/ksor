@@ -17,6 +17,7 @@
 import type pg from "pg";
 
 import { TOKEN_TTL_S } from "../lib/snapshot.js";
+import { schemaVersion } from "../schema.js";
 
 /** §5 rule 2: snapshot-token TTL (30 min) + 10 min = 40 min from retirement. */
 export const GC_GRACE_MS: number = (TOKEN_TTL_S + 10 * 60) * 1000;
@@ -71,10 +72,23 @@ export async function allocateRun(
     [opts.tenantId, opts.corpusId],
   );
   const generation = Number(next.rows[0].next);
+  // Stamp the schema this generation is being built against (2.4). A NULL here
+  // means the generation predates the governance columns, so its `visibility`
+  // is ABSENT rather than empty — and the serving door refuses such a
+  // generation when the record declares an audience model, instead of reading
+  // every NULL as the widest tier (round-5 review of #43).
   const run = await client.query(
     "INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit," +
-      " instance_bundle_sha256) VALUES ($1, $2, $3, 'building', $4, $5) RETURNING run_id",
-    [opts.tenantId, opts.corpusId, generation, opts.sourceCommit, opts.manifestSha256],
+      " instance_bundle_sha256, schema_version) VALUES ($1, $2, $3, 'building', $4, $5, $6) " +
+      "RETURNING run_id",
+    [
+      opts.tenantId,
+      opts.corpusId,
+      generation,
+      opts.sourceCommit,
+      opts.manifestSha256,
+      schemaVersion(),
+    ],
   );
   return { runId: Number(run.rows[0].run_id), generation };
 }

@@ -43,6 +43,7 @@ const usage =
   "  calibrate  measure the abstention floor\n" +
   "  schema     apply the database schema\n" +
   "  grant      authorize ingest for this corpus (or --revoke it)\n" +
+  "  takedown   deny a document from every surface (or --list / --revoke it)\n" +
   "  gc         collect superseded generations\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
@@ -65,7 +66,38 @@ function loadDotEnv(): void {
 
 async function main(args: readonly string[]): Promise<number> {
   loadDotEnv();
-  if (args.includes("--help") || args.includes("-h")) {
+  const wantsHelp = args.includes("--help") || args.includes("-h");
+  // Only the TOP-LEVEL help short-circuits. `ksor ingest --help` used to print
+  // the generic usage and exit 0, so the corpus verbs' flags (--instance,
+  // --knowledge, --flip, --apply, --revoke, --export) were documented nowhere
+  // the binary could reach (review 2026-08-20). A verb + --help is the verb's
+  // question to answer.
+  const { word: helpWord, verb: helpVerb } = resolveCommand(args);
+  // An UNKNOWN word is refused even under --help. `ksor takedwon --help`
+  // printed the usage and exited 0, which tells a caller the word was valid —
+  // a script or an agent checking the exit code concludes the verb exists. The
+  // refusal lists the vocabulary anyway, so it is both correct and MORE
+  // informative (round-10 review of PR 43). `ksor --help` with no word at all
+  // is still the generic usage.
+  if (wantsHelp && helpVerb === null && helpWord !== null) {
+    process.stderr.write(
+      `error: unknown-verb\n"${helpWord}" is not a ksor verb. The vocabulary is: ${verbs.join(", ")}.\n`,
+    );
+    return 1;
+  }
+  if (
+    wantsHelp &&
+    (helpVerb === null ||
+      helpVerb === "init" ||
+      helpVerb === "serve" ||
+      helpVerb === "dev" ||
+      helpVerb === "build")
+  ) {
+    // Only the CORPUS verbs answer their own --help (their dispatcher prints a
+    // per-verb block). Everything else answers HERE, because narrowing this to
+    // `verb === null` made `ksor serve --help` BOOT THE SERVER and
+    // `ksor init --help` refuse with bad-name — asking a question must never
+    // perform the act (round-1 review of PR #43).
     process.stdout.write(usage);
     return 0;
   }
@@ -134,6 +166,7 @@ async function main(args: readonly string[]): Promise<number> {
     verb === "ingest" ||
     verb === "schema" ||
     verb === "grant" ||
+    verb === "takedown" ||
     verb === "calibrate" ||
     verb === "gc"
   ) {
@@ -149,11 +182,16 @@ async function main(args: readonly string[]): Promise<number> {
     return exitCodes.refused;
   }
 
-  const heading =
-    verb === null
-      ? `ksor ${pkg.version} — the name is reserved; this is not a release.`
-      : `ksor ${verb}: designed but not implemented in ${pkg.version}.`;
-  process.stdout.write(`${heading}\n${notice}`);
+  // A bare `ksor` is a DISCOVERY moment — for a human and, more often, for an
+  // agent reading the tool before using it. It used to answer "the name is
+  // reserved; this is not a release" from a shipped package with nine working
+  // verbs (review 2026-08-20). Show the usage, and exit 0: being asked what you
+  // are is not an error.
+  if (verb === null) {
+    process.stdout.write(usage + notice);
+    return 0;
+  }
+  process.stdout.write(`ksor ${verb}: designed but not implemented in ${pkg.version}.\n${notice}`);
   return exitCodes.notImplemented;
 }
 

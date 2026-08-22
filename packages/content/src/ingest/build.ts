@@ -22,6 +22,7 @@ import { resolve, sep } from "node:path";
 import type pg from "pg";
 
 import { envFloat } from "../env.js";
+import { MIN_CONTENT_CHARS } from "../config.js";
 
 import { runIngest } from "../db.js";
 import type { ContentInstance } from "../instance.js";
@@ -55,6 +56,16 @@ const CHUNK_INSERT_PREFIX =
   " chunk_hash, heading_path, heading_path_text, anchor, labels, embedding_status)" +
   " VALUES ";
 const CHUNK_PARAMS = 10;
+/**
+ * Dense character count — whitespace removed, exactly as the serving
+ * predicate's `length(regexp_replace(c.content, '\s', '', 'g'))` computes it.
+ * Written here rather than approximated so the ingest report and the SQL admit
+ * the same chunks.
+ */
+function denseLength(content: string): number {
+  return content.replace(/\s/g, "").length;
+}
+
 /** 500 rows × 10 params stays far under Postgres's 65535 bind-parameter cap. */
 const CHUNK_ROWS_PER_STATEMENT = 500;
 
@@ -64,6 +75,24 @@ export interface BuildStats {
   readonly chunks: number;
   readonly carried: number;
   readonly pending: number;
+  /**
+   * How much of what we just stored NO SEARCH WILL EVER RETURN.
+   *
+   * The serving predicate admits a chunk only when it is `prose` and has at
+   * least MIN_CONTENT_CHARS of dense text (`lib/search.ts`'s SERVABLE), and
+   * `classify()` decides `prose` vs `nav` by SHAPE since decision 22 — link
+   * lines dominating, or too little text left to answer anything.
+   *
+   * Counted and reported because it was previously silent: under the older
+   * length-only rule a real handbook measured 10 of 16 chunks unsearchable and
+   * one whole document findable by `read` and `outline` but never by `search`,
+   * with the ingest line reporting a cheerful "16 chunks; embedded 16" (issue
+   * #55). The rule is fixed and the report stays: an adopter should not have to
+   * run SQL to learn which pages can only be reached by name.
+   */
+  readonly unsearchable: number;
+  /** Sources with NO searchable chunk at all — findable by slug, never by search. */
+  readonly unsearchableSources: readonly string[];
 }
 
 /**
@@ -96,8 +125,10 @@ export async function buildStructure(
   for (const n of topological(manifest.nodes)) {
     const res = await client.query(
       "INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug," +
-        " title, summary, keywords, position, permalink)" +
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING node_id",
+        " title, summary, keywords, position, permalink," +
+        " corpus_id, visibility, doc_status, owner, provenance, superseded_by)" +
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11," +
+        " $12, $13, $14, $15, $16, $17) RETURNING node_id",
       [
         tenantId,
         generation,
@@ -110,6 +141,15 @@ export async function buildStructure(
         n.keywords.length > 0 ? [...n.keywords] : null,
         n.position,
         n.permalink, // confirmed site route or NULL — never a guessed link
+        // Governance the document declared about itself (schema 2.2). Carried
+        // onto the record so the serving door can enforce what previously only
+        // the site's build-time staging could.
+        manifest.corpus_id,
+        n.governance.visibility,
+        n.governance.docStatus,
+        n.governance.owner,
+        n.governance.provenance === null ? null : JSON.stringify(n.governance.provenance),
+        n.governance.supersededBy,
       ],
     );
     nodeIds.set(n.stable_id, String(res.rows[0].node_id));
@@ -119,6 +159,8 @@ export async function buildStructure(
   const treeRoot = resolve(opts.treeRoot);
   let nSources = 0;
   let nChunks = 0;
+  let nUnsearchable = 0;
+  const unsearchableSources: string[] = [];
   const chunkRows: unknown[][] = [];
   for (const f of manifest.files) {
     // The manifest's file paths are UNTRUSTED input to the kernel (the oracle's
@@ -164,6 +206,7 @@ export async function buildStructure(
       ],
     );
     nSources += 1;
+    let sourceServable = 0;
     for (const chunk of chunkText(body)) {
       chunkRows.push([
         tenantId,
@@ -178,7 +221,15 @@ export async function buildStructure(
         JSON.stringify({ source_type: chunk.sourceType }),
       ]);
       nChunks += 1;
+      // Exactly the serving predicate's admission test, computed here so the
+      // report cannot drift from what search will actually do.
+      if (chunk.sourceType === "prose" && denseLength(chunk.content) >= MIN_CONTENT_CHARS) {
+        sourceServable += 1;
+      } else {
+        nUnsearchable += 1;
+      }
     }
+    if (sourceServable === 0 && nChunks > 0) unsearchableSources.push(sid);
   }
 
   // All sources are inserted per-row ABOVE, so the chunk→source FK holds;
@@ -237,6 +288,8 @@ export async function buildStructure(
     chunks: nChunks,
     carried,
     pending: health.pending,
+    unsearchable: nUnsearchable,
+    unsearchableSources,
   };
 }
 
@@ -312,6 +365,10 @@ export interface BuildReport {
   readonly ready: boolean;
   readonly centroids: number;
   readonly flipped: boolean;
+  /** Chunks stored but excluded from every retrieval arm — see BuildStats. */
+  readonly unsearchable: number;
+  /** Sources with NO searchable chunk: readable by slug, never found by search. */
+  readonly unsearchableSources: readonly string[];
   /**
    * Why the generation is NOT serving: the not-ready line or the flip-guard
    * refusal. null when it flipped, or when the flip was deliberately withheld
@@ -349,9 +406,19 @@ async function activeGenerationOf(
 
 /**
  * Do two generations hold the same corpus? Compared on the SET of
- * (stable_id, content_hash) pairs — identity plus content — so a moved
- * document, an edited body, an added or removed file all count as different,
- * while a rebuild of identical bytes does not.
+ * (stable_id, content_hash, title, position, governance) tuples — identity,
+ * content, AND everything the document declares about itself — so a moved
+ * document, an edited body, an added or removed file, a retitle, a reorder or a
+ * governance change all count as different, while a rebuild of identical bytes
+ * does not.
+ *
+ * The governance columns are in this key because they were the exact hole:
+ * hashing the frontmatter-STRIPPED body meant a retitle, a reorder, or a
+ * `status: draft` -> `approved` promotion changed no compared byte, so ingest
+ * reported "unchanged", published nothing, and exited 0 (review 2026-08-20).
+ * A `visibility:` change is a security control; deferring one silently until
+ * some unrelated document's body happens to change is not a thing a system of
+ * record may do.
  */
 async function sameCorpus(
   c: pg.PoolClient,
@@ -361,7 +428,9 @@ async function sameCorpus(
 ): Promise<boolean> {
   const r = await c.query(
     `WITH pair AS (
-       SELECT s.generation, n.stable_id, s.content_hash
+       SELECT s.generation, n.stable_id, s.content_hash,
+              n.title, n.position,
+              n.visibility, n.doc_status, n.owner, n.provenance, n.superseded_by
          FROM sources s JOIN content_nodes n
            ON n.tenant_id = s.tenant_id AND n.generation = s.generation AND n.node_id = s.node_id
         WHERE s.tenant_id = $1 AND s.generation IN ($2, $3)
@@ -371,7 +440,18 @@ async function sameCorpus(
         AND NOT EXISTS (
               SELECT 1 FROM pair x WHERE x.generation = $2
                AND NOT EXISTS (SELECT 1 FROM pair y WHERE y.generation = $3
-                                AND y.stable_id = x.stable_id AND y.content_hash = x.content_hash)
+                                AND y.stable_id = x.stable_id
+                                AND y.content_hash = x.content_hash
+                                AND y.title = x.title
+                                AND y.position = x.position
+                                -- NULL-safe: a governance key going from absent
+                                -- to set (or back) must count as a change, and
+                                -- plain = would evaluate NULL and match nothing.
+                                AND y.visibility IS NOT DISTINCT FROM x.visibility
+                                AND y.doc_status IS NOT DISTINCT FROM x.doc_status
+                                AND y.owner IS NOT DISTINCT FROM x.owner
+                                AND y.provenance IS NOT DISTINCT FROM x.provenance
+                                AND y.superseded_by IS NOT DISTINCT FROM x.superseded_by)
             ) AS same`,
     [tenantId, a, b],
   );
@@ -394,6 +474,69 @@ async function sameCommit(
   if (r.rows.length === 0) return false;
   const stored: unknown = r.rows[0]?.source_commit ?? null;
   return String(stored ?? "") === String(sourceCommit ?? "");
+}
+
+/**
+ * May this generation be ACTIVATED? Returns the refusal, or null.
+ *
+ * Extracted so there is exactly ONE answer to that question. It used to live
+ * inside `buildGeneration`'s flip branch, which made it unreachable the moment
+ * a caller flipped separately — and `ksor ingest --flip` does, deliberately: the
+ * governance gate has to run against the new generation BEFORE it becomes the
+ * active one. That change silently retired this guard on the CLI path, so a
+ * record that lost 80% of its documents published without a word, while the
+ * library test that covers the guard stayed green because it drives
+ * `buildGeneration` directly (found live 2026-08-21, auditing 0.0.10).
+ *
+ * A pre-flip check that only one of two flip paths performs is not a guard.
+ */
+export async function flipRefusal(
+  client: pg.PoolClient,
+  options: {
+    readonly tenantId: string;
+    readonly corpusId: string;
+    readonly newGeneration: number;
+    readonly force: boolean;
+    readonly log: (line: string) => void;
+  },
+): Promise<string | null> {
+  const { log } = options;
+  const delta = await flipDelta(client, {
+    tenantId: options.tenantId,
+    corpusId: options.corpusId,
+    newGeneration: options.newGeneration,
+  });
+  const added = addedSlugs(delta);
+  const removed = removedSlugs(delta);
+  log(
+    `pre-flip delta vs gen ${delta.priorGeneration}: ` +
+      `${delta.priorSlugs.size} -> ${delta.newSlugs.size} nodes (+${added.length} / -${removed.length})`,
+  );
+  if (removed.length > 0) log(`  removed: ${JSON.stringify(removed.slice(0, 20))}`);
+  if (added.length > 0) log(`  added:   ${JSON.stringify(added.slice(0, 20))}`);
+  // oracle env names: SOR_MAX_SHRINK / SOR_ALLOW_SHRINK. KSOR_MAX_SHRINK is a
+  // FRACTION in [0,1]. A value above 1 — "15" meant as a percentage — would
+  // silently DISABLE this catastrophic-drop guard (shrinkFraction is always
+  // <= 1, so a threshold > 1 never fires), flipping a build that lost every
+  // node straight to production. Reject it and keep the safe default rather
+  // than un-guard the flip (review 2026-08-19).
+  const configuredShrink = envFloat("KSOR_MAX_SHRINK", 0.15, 0.0);
+  const maxShrink = configuredShrink <= 1 ? configuredShrink : 0.15;
+  if (configuredShrink > 1) {
+    log(
+      `KSOR_MAX_SHRINK=${configuredShrink} is not a fraction in [0,1]; using ${maxShrink} ` +
+        `(did you mean ${configuredShrink / 100}?)`,
+    );
+  }
+  const allowed = options.force || process.env["KSOR_ALLOW_SHRINK"] === "1";
+  if (!shrinkUnsafe(delta.priorSlugs.size, delta.newSlugs.size, maxShrink) || allowed) return null;
+  const fraction = shrinkFraction(delta.priorSlugs.size, delta.newSlugs.size);
+  return (
+    `REFUSING FLIP: corpus shrank ${pct(fraction)} vs gen ${delta.priorGeneration} ` +
+    `(> KSOR_MAX_SHRINK=${pct(maxShrink)}); ${removed.length} node(s) vanished. ` +
+    `Generation ${options.newGeneration} is READY but NOT served — the old generation keeps serving. ` +
+    "If the drop is intended, re-run with KSOR_ALLOW_SHRINK=1; otherwise fix the corpus and re-ingest."
+  );
 }
 
 /** Thrown inside the build transaction to roll it back when nothing changed. */
@@ -482,6 +625,8 @@ export async function buildGeneration(
         ready: true,
         centroids: 0,
         flipped: false,
+        unsearchable: 0,
+        unsearchableSources: [],
         refusal: null,
         health: { ok: true, reasons: [] } as unknown as GenerationHealth,
         unchanged: true,
@@ -554,48 +699,14 @@ export async function buildGeneration(
       };
     }
     if (!options.flip) return { ready, centroids, health, flipped: false, refusal: null };
-    const delta = await flipDelta(c, {
+    const refusal = await flipRefusal(c, {
       tenantId: tenant,
       corpusId: instance.corpusId,
       newGeneration: generation,
+      force: options.force === true,
+      log,
     });
-    const added = addedSlugs(delta);
-    const removed = removedSlugs(delta);
-    log(
-      `pre-flip delta vs gen ${delta.priorGeneration}: ` +
-        `${delta.priorSlugs.size} -> ${delta.newSlugs.size} nodes (+${added.length} / -${removed.length})`,
-    );
-    if (removed.length > 0) log(`  removed: ${JSON.stringify(removed.slice(0, 20))}`);
-    if (added.length > 0) log(`  added:   ${JSON.stringify(added.slice(0, 20))}`);
-    // oracle env names: SOR_MAX_SHRINK / SOR_ALLOW_SHRINK. KSOR_MAX_SHRINK is a
-    // FRACTION in [0,1]. A value above 1 — "15" meant as a percentage — would
-    // silently DISABLE this catastrophic-drop guard (shrinkFraction is always
-    // <= 1, so a threshold > 1 never fires), flipping a build that lost every
-    // node straight to production. Reject it and keep the safe default rather
-    // than un-guard the flip (review 2026-08-19).
-    const configuredShrink = envFloat("KSOR_MAX_SHRINK", 0.15, 0.0);
-    const maxShrink = configuredShrink <= 1 ? configuredShrink : 0.15;
-    if (configuredShrink > 1) {
-      log(
-        `KSOR_MAX_SHRINK=${configuredShrink} is not a fraction in [0,1]; using ${maxShrink} ` +
-          `(did you mean ${configuredShrink / 100}?)`,
-      );
-    }
-    const allowed = options.force === true || process.env["KSOR_ALLOW_SHRINK"] === "1";
-    if (shrinkUnsafe(delta.priorSlugs.size, delta.newSlugs.size, maxShrink) && !allowed) {
-      const fraction = shrinkFraction(delta.priorSlugs.size, delta.newSlugs.size);
-      return {
-        ready,
-        centroids,
-        health,
-        flipped: false,
-        refusal:
-          `REFUSING FLIP: corpus shrank ${pct(fraction)} vs gen ${delta.priorGeneration} ` +
-          `(> KSOR_MAX_SHRINK=${pct(maxShrink)}); ${removed.length} node(s) vanished. ` +
-          `Generation ${generation} is READY but NOT served — the old generation keeps serving. ` +
-          "If the drop is intended, re-run with KSOR_ALLOW_SHRINK=1; otherwise fix the corpus and re-ingest.",
-      };
-    }
+    if (refusal !== null) return { ready, centroids, health, flipped: false, refusal };
     await flip(c, { tenantId: tenant, corpusId: instance.corpusId, toGeneration: generation });
     log(`FLIPPED active generation -> ${generation}`);
     return { ready, centroids, health, flipped: true, refusal: null };
@@ -613,6 +724,8 @@ export async function buildGeneration(
     ready: fin.ready,
     centroids: fin.centroids,
     flipped: fin.flipped,
+    unsearchable: stats.unsearchable,
+    unsearchableSources: stats.unsearchableSources,
     refusal: fin.refusal,
     health: fin.health,
     unchanged: false,

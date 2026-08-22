@@ -1,6 +1,7 @@
 ---
 title: "Rule 20: The Table Saw"
 position: 1
+order: 1
 ---
 
 # Rule 20: The Table Saw

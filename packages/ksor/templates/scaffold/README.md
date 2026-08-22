@@ -31,31 +31,52 @@ part of `pnpm dev`. The ordered path is:
 
 ```sh
 cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
-pnpm serve             # schema → grant → ingest → serve
+pnpm provision         # once: apply the schema, authorize ingest
+pnpm refresh           # ingest the record, collect retired generations
+pnpm serve             # the MCP server
 ```
 
 `ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
 is required for a local run: serve refuses to boot unauthenticated on purpose,
 so a server is never open by accident.
 
-Add one block to `instance.md` first — `database: { dsn_env: KSOR_DB_URL }`,
-the NAME of the variable, never the DSN. That is the whole required config:
+Uncomment the `database:` block already in `instance.md` — it names the
+VARIABLE holding your DSN, never the DSN itself. That is the whole required
+config:
 `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
 `retrieval:` out starts you with the abstention gate off and honest about it
 (turn it on afterwards with `ksor calibrate`, once the record is serving).
 
-`pnpm serve` is the only command this rung needs — first run, after editing
-`knowledge/`, or just to bring the server back. A rerun on an unchanged record
+`pnpm provision` runs once — it applies the schema (or migrates it forward) and
+authorizes ingest, the two privileged acts that should not happen on every
+boot. After that: `pnpm refresh` publishes what you have edited, and `pnpm serve`
+runs the server. They are separate because publishing is an act, not a side
+effect of starting a process. A rerun on an unchanged record
 costs nothing: no new generation, no embedding, no rows. Edit a document and
 the next run picks up exactly that change. `AGENTS.md` → "Serving to agents" is the
-full runbook; your coding agent reads it first. `pnpm serve` binds loopback
-with auth off for local use; a public bind fails closed unless auth is
-configured. Any other operation is `pnpm exec ksor <verb>`.
+full runbook; your coding agent reads it first. `pnpm serve` refuses to boot
+unauthenticated: a local run declares `KSOR_AUTH_DISABLED=1` (already in
+`.env.example`) and binds loopback, so a server is never left open by accident;
+a public bind needs a configured SSO door instead. Any other operation is
+`pnpm exec ksor <verb>`.
 
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you
 (`intake-interview`), convert your source material (`add-sources`), and keep
 the record well-formed (`format-checker`, also `pnpm check`).
+
+### A note on the lockfile
+
+The committed `pnpm-lock.yaml` covers the site. It cannot cover
+`@panaversity/ksor` itself, because the version pinned in `package.json` is
+stamped by the CLI that scaffolded this project and could not be resolved before
+that happened. So your FIRST `pnpm install` writes it — run it before you push,
+and commit the result.
+
+The deploy config already accounts for this (`vercel.json` installs with
+`--no-frozen-lockfile`), and the shipped `validate.yml` runs no install. If you
+add CI of your own, note that pnpm turns on `--frozen-lockfile` automatically
+whenever `CI` is set.
 
 ## The files, explained
 
@@ -76,7 +97,7 @@ different coding agent's way of finding the same working contract.
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
 | `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in. |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the two surface commands — `pnpm dev` (the site) and `pnpm serve` (the agent surface: schema → grant → ingest → serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
+| `package.json`                   | the surface commands — `pnpm dev` (the site) and `pnpm provision` / `pnpm refresh` / `pnpm serve` (the agent surface: set up once, publish, then serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
 
@@ -100,6 +121,22 @@ and anything that can serve files can serve it.
   outside it), build with `pnpm build`, serve `system/site/out/`. If the
   build image's pnpm predates the `packageManager` pin, set the
   `ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
+**Once `instance.md` declares a `database:`, the BUILD needs the DSN too.**
+`pnpm build` first runs `pnpm export-denylist`, which asks the record's
+database what has been withdrawn (`ksor takedown --export`) and writes
+`.ksor-denylist.json` for the site to read. Without it the build stops:
+
+```
+KSOR_DB_URL is unset, and instance.md declares a database
+  why: a takedown lives in that database. Without it this build cannot tell
+  'nothing is denied' from 'nobody asked'
+```
+
+That is deliberate — a site built without asking would publish a document you
+withdrew. Give the build environment the same `KSOR_DB_URL` your server uses
+(read access is enough), or keep the record database-free, where the export
+writes "nothing denied" and exits 0.
+
 - **GitHub Pages, nginx, S3, anything static** — run `pnpm build` and
   upload `system/site/out/`. Hosted under a sub-path (like
   `user.github.io/repo`)? Build with `KSOR_BASE_PATH=/repo pnpm build`.

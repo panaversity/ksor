@@ -1,5 +1,5 @@
 /**
- * The Gemini transport — the ONE place `@google/genai` is imported (converted
+ * The Gemini transport — the ONE place the vendor is spoken to (converted
  * from the oracle's sor_content/lib/providers/gemini.py; decision 6).
  * Identity (model, dim, task labels) is CONSTRUCTOR-INJECTED — this module
  * never imports config, so the same adapter serves any Gemini embedding
@@ -19,16 +19,17 @@
  *   clock. (The oracle's one divergence — a sync query-intent embed keeping
  *   the batch clock, an eval-harness case — has no TS call site.)
  * - The oracle's "has been closed" stale-client RuntimeError predicate is a
- *   Python-SDK failure mode with no @google/genai JS equivalent; `reset()`
+ *   Python-SDK failure mode with no JS equivalent; `reset()`
  *   keeps its drop-never-close contract regardless.
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { geminiRestEmbedClient, geminiRestTextClient } from "./gemini-rest.js";
 import type { EmbeddingProvider, Intent, TextGenerator } from "../embedding.js";
 
 // The genai client SLICE the adapter touches, typed structurally so tests
 // mock the client object (never the network) and the SDK stays wrapped at
-// this one boundary. `GoogleGenAI` satisfies these by construction.
+// this one boundary. `gemini-rest.ts` implements them directly (issue #54);
+// the SDK satisfied them by construction before that.
 export interface GeminiEmbedClient {
   models: {
     embedContent(params: {
@@ -141,7 +142,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
     this.documentTimeoutMs = Math.trunc(opts.documentTimeoutS * 1000);
     this.queryTimeoutMs = Math.trunc(opts.queryTimeoutS * 1000);
     this.clientFactory =
-      opts.clientFactory ?? ((): GeminiEmbedClient => new GoogleGenAI({ apiKey: opts.apiKey }));
+      opts.clientFactory ?? ((): GeminiEmbedClient => geminiRestEmbedClient(opts.apiKey));
   }
 
   get recipe(): string {
@@ -208,7 +209,7 @@ export class GeminiTextGenerator implements TextGenerator {
   constructor(opts: GeminiTextGeneratorOptions) {
     this.model = opts.model ?? "gemini-2.5-flash";
     this.clientFactory =
-      opts.clientFactory ?? ((): GeminiTextClient => new GoogleGenAI({ apiKey: opts.apiKey }));
+      opts.clientFactory ?? ((): GeminiTextClient => geminiRestTextClient(opts.apiKey));
   }
 
   private getClient(): GeminiTextClient {

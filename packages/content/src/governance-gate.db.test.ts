@@ -1,0 +1,304 @@
+/**
+ * The two states the site refuses to BUILD in, which the door used to SERVE in.
+ *
+ * Both were reachable through ordinary operator actions and neither showed as
+ * an error anywhere: the schema gate passed, /ready was green, and the boot
+ * line reported the audience model as enforced while restricted documents went
+ * out in full (round-5 review of #43).
+ */
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { contentPool, runIngest } from "./db.js";
+import { assertGovernanceServable, GovernanceGateError } from "./governance-gate.js";
+import { grantIngest } from "./grant.js";
+import { applySchema } from "./schema.js";
+import type { ContentInstance } from "./instance.js";
+import type pg from "pg";
+
+const adminDsn = process.env["KSOR_DB_URL"] ?? "";
+const DB = "ksor_governance_gate";
+const TENANT = "gate-corp";
+
+const instanceWith = (audiences: string[]): ContentInstance =>
+  ({
+    name: TENANT,
+    corpusId: TENANT,
+    tenantId: TENANT,
+    dsnEnv: "KSOR_DB_URL",
+    abstain: { vectorFloor: null, keywordFloor: null },
+    textSearchConfig: "english",
+    maximumResponseCharacters: 120_000,
+    instructions: "",
+    audiences,
+    defaultVisibility: audiences.length > 0 ? "public" : null,
+    embeddingProvider: "fake",
+    embeddingModel: "fake-embed-001",
+    embeddingDim: 1536,
+  }) as ContentInstance;
+
+describe.runIf(adminDsn !== "")("the governance boot gate (db)", () => {
+  let pool: pg.Pool;
+  let admin: pg.Pool;
+
+  /** Put one generation in place, with control over what the record remembers. */
+  const seed = async (opts: {
+    generation: number;
+    schemaVersion: string | null;
+    visibility: string | null;
+  }): Promise<void> => {
+    await runIngest(pool, TENANT, async (client) => {
+      await client.query(
+        "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1, $2, $3) " +
+          "ON CONFLICT (tenant_id, corpus_id) DO UPDATE SET active_generation = $3",
+        [TENANT, TENANT, opts.generation],
+      );
+      await client.query(
+        "INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit," +
+          " instance_bundle_sha256, schema_version) VALUES ($1, $2, $3, 'active', 'seed', 'seed', $4) " +
+          "ON CONFLICT (tenant_id, corpus_id, generation) DO UPDATE SET schema_version = $4",
+        [TENANT, TENANT, opts.generation, opts.schemaVersion],
+      );
+      await client.query(
+        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, visibility)" +
+          " VALUES ($1, $1, $2, $3, $4, 'Doc', 'document', 0, $5)",
+        [
+          TENANT,
+          opts.generation,
+          `knowledge/doc-${opts.generation}.md`,
+          `doc-${opts.generation}`,
+          opts.visibility,
+        ],
+      );
+    });
+  };
+
+  beforeAll(async () => {
+    const { Pool } = (await import("pg")).default;
+    admin = new Pool({ connectionString: adminDsn });
+    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
+    await admin.query(`CREATE DATABASE ${DB}`);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB}`;
+    pool = contentPool(url.toString(), 4);
+    await applySchema(pool, 1536);
+    await grantIngest(pool, TENANT);
+  }, 180_000);
+
+  afterAll(async () => {
+    await pool?.end().catch(() => undefined);
+    await admin?.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
+    await admin?.end().catch(() => undefined);
+  });
+
+  it("REFUSES a generation built before governance reached the node row", async () => {
+    // The upgrade path: 2.1 -> 2.2 added `visibility` and could not backfill
+    // it, so every carried-forward node has NULL — which the predicate reads
+    // as default_visibility, the widest tier.
+    await seed({ generation: 1, schemaVersion: null, visibility: null });
+    await expect(
+      assertGovernanceServable(pool, instanceWith(["public", "internal"])),
+    ).rejects.toThrow(GovernanceGateError);
+    await expect(
+      assertGovernanceServable(pool, instanceWith(["public", "internal"])),
+    ).rejects.toThrow(/ksor ingest/);
+  });
+
+  it("REFUSES a schema_version older than the governance columns", async () => {
+    await seed({ generation: 2, schemaVersion: "2.1", visibility: null });
+    await expect(
+      assertGovernanceServable(pool, instanceWith(["public", "internal"])),
+    ).rejects.toThrow(/older than 2\.2/);
+  });
+
+  it("ACCEPTS a generation built at or after the governance columns", async () => {
+    await seed({ generation: 3, schemaVersion: "2.4", visibility: "public" });
+    await expect(
+      assertGovernanceServable(pool, instanceWith(["public", "internal"])),
+    ).resolves.toBeUndefined();
+  });
+
+  it("REFUSES a document declaring visibility: when the record declares no model", async () => {
+    // The site refuses to BUILD here by name (ksor-visibility-without-audiences);
+    // the door served it in full to everyone.
+    await seed({ generation: 4, schemaVersion: "2.4", visibility: "internal" });
+    await expect(assertGovernanceServable(pool, instanceWith([]))).rejects.toThrow(
+      /declare visibility:, but instance\.md declares no audiences/,
+    );
+  });
+
+  it("ACCEPTS the level-0 shape: no model, and no document claims one", async () => {
+    await seed({ generation: 5, schemaVersion: "2.4", visibility: null });
+    await expect(assertGovernanceServable(pool, instanceWith([]))).resolves.toBeUndefined();
+  });
+
+  it("a refused ingest must not have MOVED the active pointer", () => {
+    // Ordering, asserted on the source because it is an ordering: the command
+    // builds with `flip: false`, runs the gate, and only then flips. Checking
+    // AFTER a build that already flipped reported the problem and published
+    // anyway — a command exiting 1 with the record's active pointer moved,
+    // which is exactly what the shrink guard does NOT do (it refuses inside
+    // the build and leaves the old generation serving). Found live against a
+    // Neon database, 2026-08-21.
+    const src = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "commands.ts"),
+      "utf8",
+    );
+    const ingest = src.slice(src.indexOf("buildGeneration(pool, instance, {"));
+    const build = ingest.indexOf("flip: false,");
+    const gate = ingest.indexOf("assertGovernanceServable(pool, instance, report.generation)");
+    const doFlip = ingest.indexOf("flip(client, {");
+    expect(build, "the build must not flip").toBeGreaterThan(-1);
+    expect(gate, "the gate must run").toBeGreaterThan(-1);
+    expect(doFlip, "the command must flip itself").toBeGreaterThan(-1);
+    expect(gate, "gate runs after the build").toBeGreaterThan(build);
+    expect(doFlip, "and the flip runs after the gate").toBeGreaterThan(gate);
+  });
+
+  it("ACCEPTS a record with no active generation — that is a new project", async () => {
+    await runIngest(pool, TENANT, (client) =>
+      client.query("UPDATE corpora SET active_generation = 0 WHERE tenant_id = $1", [TENANT]),
+    );
+    await expect(
+      assertGovernanceServable(pool, instanceWith(["public", "internal"])),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe.runIf(adminDsn === "")("the governance boot gate (db) — gated", () => {
+  it("skips without KSOR_DB_URL", () => {
+    expect(adminDsn).toBe("");
+  });
+});
+
+/**
+ * The third state: a takedown that has stopped applying.
+ *
+ * `takedown_denylist` records a `stable_id`, and the serving seam matches those
+ * rows against nodes in the SERVING generation. A row whose id no longer exists
+ * denies nothing — silently, on both surfaces. Reproduced before this gate
+ * existed: deny a section, add an `index.md` so the adapter derives a different
+ * id, re-ingest, flip, and search / read / outline / the site all serve it again
+ * (issue #85).
+ *
+ * The likelier route is plainer still: the default stable_id is path-derived, so
+ * an ordinary rename or move of a denied FILE breaks a `scope=node` match the
+ * same way. No attacker is involved — an editorial act plus a re-ingest does it.
+ *
+ * Decision 14 calls the denylist "identity, immune to reorganization, an
+ * auditable frozen list". Nothing made that true; this does, by refusing rather
+ * than by guessing which node the operator meant.
+ */
+describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () => {
+  let pool: pg.Pool;
+  let admin: pg.Pool;
+  const DB2 = "ksor_gate_takedown";
+  const T = "gatetd";
+
+  const instance = (): ContentInstance =>
+    ({
+      name: T,
+      corpusId: T,
+      tenantId: T,
+      dsnEnv: "KSOR_DB_URL",
+      abstain: { vectorFloor: null, keywordFloor: null },
+      textSearchConfig: "english",
+      maximumResponseCharacters: 120_000,
+      instructions: "",
+      audiences: [],
+      defaultVisibility: null,
+      embeddingProvider: "fake",
+      embeddingModel: "fake-embed-001",
+      embeddingDim: 1536,
+    }) as ContentInstance;
+
+  const putGeneration = async (generation: number, stableId: string): Promise<void> => {
+    await runIngest(pool, T, async (client) => {
+      await client.query(
+        "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1,$1,$2) " +
+          "ON CONFLICT (tenant_id, corpus_id) DO UPDATE SET active_generation = $2",
+        [T, generation],
+      );
+      await client.query(
+        "INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit," +
+          " instance_bundle_sha256, schema_version) VALUES ($1,$1,$2,'active','seed','seed','2.4') " +
+          "ON CONFLICT (tenant_id, corpus_id, generation) DO UPDATE SET schema_version = '2.4'",
+        [T, generation],
+      );
+      await client.query(
+        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position)" +
+          " VALUES ($1,$1,$2,$3,'doc','Doc','document',0)",
+        [T, generation, stableId],
+      );
+    });
+  };
+
+  beforeAll(async () => {
+    const { Pool } = (await import("pg")).default;
+    admin = new Pool({ connectionString: adminDsn });
+    await admin.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin.query(`CREATE DATABASE ${DB2}`);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB2}`;
+    pool = contentPool(url.toString(), 4);
+    await applySchema(pool, 1536);
+    await grantIngest(pool, T);
+  }, 180_000);
+
+  afterAll(async () => {
+    await pool?.end().catch(() => undefined);
+    await admin?.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
+    await admin?.end().catch(() => undefined);
+  });
+
+  it("serves happily while the denial still matches something", async () => {
+    await putGeneration(1, "knowledge/legal/notice.md");
+    await runIngest(pool, T, async (client) => {
+      await client.query(
+        "INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason)" +
+          " VALUES ($1,$1,'knowledge/legal/notice.md','node','court order')",
+        [T],
+      );
+    });
+    await expect(assertGovernanceServable(pool, instance())).resolves.toBeUndefined();
+  }, 60_000);
+
+  it("REFUSES once the denied document has been renamed out from under the row", async () => {
+    // The same editorial act an operator performs without thinking: the file
+    // moved, so its path-derived id moved, so the denial matches nothing.
+    await putGeneration(2, "knowledge/legal/notice-2024.md");
+    await expect(assertGovernanceServable(pool, instance())).rejects.toBeInstanceOf(
+      GovernanceGateError,
+    );
+    await expect(assertGovernanceServable(pool, instance())).rejects.toThrow(
+      /knowledge\/legal\/notice\.md/,
+    );
+  }, 60_000);
+
+  it("names the remedy, both halves of it", async () => {
+    // Re-point or revoke — an explicit act either way, never a guess about which
+    // node the operator meant (decision 21: a governance act names its actor).
+    await expect(assertGovernanceServable(pool, instance())).rejects.toThrow(/ksor takedown/);
+    await expect(assertGovernanceServable(pool, instance())).rejects.toThrow(/--revoke/);
+  }, 60_000);
+
+  it("refuses the GENERATION BEING BUILT, so ingest stops before the flip", async () => {
+    // The same function the door calls at boot, asked about the generation ingest
+    // just built — so the act that creates the state refuses at the moment it
+    // happens, rather than leaving a green publish and a door that serves it.
+    await expect(assertGovernanceServable(pool, instance(), 2)).rejects.toBeInstanceOf(
+      GovernanceGateError,
+    );
+  }, 60_000);
+
+  it("goes quiet again once the row is revoked", async () => {
+    await runIngest(pool, T, async (client) => {
+      await client.query("DELETE FROM takedown_denylist WHERE tenant_id = $1", [T]);
+    });
+    await expect(assertGovernanceServable(pool, instance())).resolves.toBeUndefined();
+  }, 60_000);
+});

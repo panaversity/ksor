@@ -34,51 +34,56 @@ function build(root: TreeDir, onSkip?: (line: string) => void): PlainTreeResult 
 }
 
 describe("ordering", () => {
-  it("honors frontmatter position over name order", () => {
+  // The rule itself, and its full decision table, live in lib/order-rule.ts and
+  // lib/order-conformance.ts — asserted there against BOTH surfaces. These are
+  // the adapter's own edges: the governed key it reads, and the shapes only a
+  // real tree has.
+  //
+  // These tests used to assert `position:` / `sidebar_position:`, the
+  // predecessor's Docusaurus keys. No compliant record may declare either — the
+  // format checker closes the frontmatter key set and `order` is the ordering
+  // key in it — so the adapter was reading keys that never appear and ignoring
+  // the one that does (found live 2026-08-21).
+
+  it("honors the governed `order:` key over name order", () => {
     const root = dir(
       "docs",
-      file("a.md", "---\nposition: 2\n---\n# A\n"),
-      file("b.md", "---\nposition: 1\n---\n# B\n"),
+      file("a.md", "---\norder: 2\n---\n# A\n"),
+      file("b.md", "---\norder: 1\n---\n# B\n"),
     );
     const m = build(root).manifest;
     expect(m.nodes.map((n) => n.slug)).toEqual(["b", "a"]);
     expect(m.nodes.map((n) => n.position)).toEqual([1, 2]);
   });
 
-  it("ignores a boolean position — bool never parses as position 1", () => {
+  it("does NOT read the predecessor's position keys", () => {
+    // Reading them would be worse than ignoring them: the site never has, so a
+    // record that declared one would be ordered differently on the two surfaces
+    // — and the checker would refuse the document anyway.
     const root = dir(
       "docs",
-      file("a.md", "---\nposition: true\n---\n# A\n"),
-      file("b.md", "---\nposition: 1\n---\n# B\n"),
+      file("a.md", "---\nposition: 2\n---\n# A\n"),
+      file("b.md", "---\nsidebar_position: 1\n---\n# B\n"),
     );
-    const docs = build(root).manifest.nodes.filter((n) => n.kind === "document");
-    expect(docs.map((n) => n.slug)).toEqual(["b", "a"]);
+    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["a", "b"]);
   });
 
-  it("truncates a float position like Python int() — 2.7 sorts as 2", () => {
+  it("orders sections by their index file's `order:`", () => {
     const root = dir(
       "docs",
-      file("late.md", "---\nposition: 3\n---\n"),
-      file("mid.md", "---\nposition: 2.7\n---\n"),
-      file("early.md", "---\nposition: 1\n---\n"),
-    );
-    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["early", "mid", "late"]);
-  });
-
-  it("accepts sidebar_position and orders sections by their index file's position", () => {
-    const root = dir(
-      "docs",
-      dir("zeta", file("index.md", "---\nsidebar_position: 1\ntitle: Zeta\n---\n"), file("z.md")),
-      dir("alpha", file("index.md", "---\nsidebar_position: 2\ntitle: Alpha\n---\n"), file("a.md")),
+      dir("zeta", file("index.md", "---\norder: 1\ntitle: Zeta\n---\n"), file("z.md")),
+      dir("alpha", file("index.md", "---\norder: 2\ntitle: Alpha\n---\n"), file("a.md")),
     );
     const sections = build(root).manifest.nodes.filter((n) => n.kind === "section");
     expect(sections.map((n) => n.slug)).toEqual(["zeta", "alpha"]);
     expect(sections.map((n) => n.position)).toEqual([1, 2]);
   });
 
-  it("falls back to case-insensitive name order without positions", () => {
+  it("falls back to name order, case PRESERVED, without an order", () => {
+    // Case-preserving because the site compares routes and does not fold case;
+    // `B` (66) therefore precedes `a` (97). One bytewise truth, both surfaces.
     const root = dir("docs", file("Bravo.md"), file("alpha.md"), file("charlie.md"));
-    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["alpha", "bravo", "charlie"]);
+    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["bravo", "alpha", "charlie"]);
   });
 });
 
@@ -151,7 +156,7 @@ describe("identity", () => {
   });
 
   it("path fallback strips only the last suffix; .mdx files keep their path in files[]", () => {
-    const root = dir("docs", file("b.mdx", "---\nposition: 1\n---\n"), file("a.b.md"));
+    const root = dir("docs", file("b.mdx", "---\norder: 1\n---\n"), file("a.b.md"));
     const { manifest } = build(root);
     expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["docs/b", "docs/a.b"]);
     expect(manifest.files.map((f) => f.path)).toEqual(["docs/b.mdx", "docs/a.b.md"]);
@@ -294,7 +299,129 @@ describe("frontmatterMeta", () => {
 
   it("poisons the WHOLE meta on YAML PyYAML would refuse", () => {
     expect(frontmatterMeta("---\ntitle: Rule 10: Machine Badges\nposition: 3\n---\n")).toEqual({});
-    expect(frontmatterMeta("---\ntitle: >\n  folded\n---\n")).toEqual({});
     expect(frontmatterMeta("---\nnot a mapping line\n---\n")).toEqual({});
+    // A block scalar is NOT in this list: PyYAML parses it, so the document is
+    // valid and only the key is beyond this reader (#78).
+    expect(frontmatterMeta("---\ntitle: >\n  folded\n---\n")).toEqual({ title: null });
+  });
+});
+
+/**
+ * Issue #78 — a value this reader does not model is not an invalid document.
+ *
+ * `scalarValue` refused anything opening with `[ { | > & * !` and the caller
+ * treated the refusal as poison, emptying the whole meta. So one YAML list
+ * alongside the title took the title with it, and four documents in a real book
+ * were served under filename-derived names — "The System of Context: Connecting
+ * the Records to Real Work" stored as "System Of Context".
+ *
+ * The reader is documented as PyYAML-compatible, and PyYAML parses a flow
+ * sequence perfectly well. Only what PyYAML would REJECT may empty the meta.
+ */
+describe("valid YAML this reader does not model keeps the rest (#78)", () => {
+  const KEEPS = {
+    "a flow sequence": 'authors: ["Panaversity Team"]',
+    "a flow mapping": "slides: { height: 700 }",
+    "a block scalar": "summary: |",
+    "an anchor": "base: &defaults",
+  };
+  for (const [what, line] of Object.entries(KEEPS)) {
+    it(`${what} does not cost the document its title`, () => {
+      const meta = frontmatterMeta(
+        `---\ntitle: "Preface: The Right Side"\n${line}\norder: 3\n---\n\nbody\n`,
+      );
+      expect(meta["title"], `meta was emptied by ${what}: ${JSON.stringify(meta)}`).toBe(
+        "Preface: The Right Side",
+      );
+      expect(meta["order"], "and the governed ordering key went with it").toBe(3);
+    });
+  }
+
+  const POISONS = {
+    "an unquoted plain scalar containing ': '": "title: Preface: The Right Side",
+    "a key with a trailing colon in its value": "title: Preface:",
+  };
+  for (const [what, line] of Object.entries(POISONS)) {
+    it(`${what} still empties the meta — PyYAML raises there`, () => {
+      expect(frontmatterMeta(`---\n${line}\norder: 3\n---\n\nbody\n`)).toEqual({});
+    });
+  }
+
+  it("the real shape that lost four titles", () => {
+    const meta = frontmatterMeta(
+      '---\ntitle: "Preface: The Right Side of the Line"\n' +
+        'authors: ["Panaversity Team"]\ndate: "2026-07-04"\nsidebar_position: -9\n---\n\nbody\n',
+    );
+    expect(meta["title"]).toBe("Preface: The Right Side of the Line");
+    expect(meta["sidebar_position"], "so #74's warning can see it too").toBe(-9);
+  });
+});
+
+/**
+ * Issue #74 — an ordering key this record does not read must not be ignored in
+ * silence.
+ *
+ * Found by ingesting a real 81-document Docusaurus book: 73 files declared
+ * `sidebar_position`, ksor read only the governed `order:` key, ordering fell
+ * back to filename — alphabetical — and nothing in the output said why. That
+ * order is what `llms.txt`, the sidebar and the MCP `outline` all serve, so the
+ * book was served scrambled and the reader had no way to learn it.
+ *
+ * Ignoring the key is correct; the silence is the defect. This adapter already
+ * holds the principle for its other fallbacks: a skip is REPORTED, never silent.
+ */
+describe("a foreign ordering key is reported, not silently ignored (#74)", () => {
+  const withPos = (name: string, key: string, value: string): TreeEntry =>
+    file(name, `---\ntitle: T\n${key}: ${value}\n---\n\n# T\n\ntext\n`);
+
+  it("names the key, the count and the remedy", () => {
+    const lines: string[] = [];
+    build(
+      dir(
+        "root",
+        withPos("a.md", "sidebar_position", "3"),
+        withPos("b.md", "sidebar_position", "1"),
+        withPos("c.md", "sidebar_position", "2"),
+      ),
+      (l) => lines.push(l),
+    );
+    const said = lines.join("\n");
+    expect(said, `nothing was reported. Lines: ${JSON.stringify(lines)}`).toMatch(
+      /sidebar_position/,
+    );
+    expect(said, "the count must be there — 3 of 3 is a different problem from 3 of 300").toMatch(
+      /\b3\b/,
+    );
+    expect(said, "and the remedy: the governed key it should be renamed to").toMatch(/order:/);
+  });
+
+  it("says nothing when the document ALSO declares the governed key", () => {
+    // `order:` wins, so there is no fallback and nothing to warn about. A
+    // warning here would train the reader to ignore the channel.
+    const lines: string[] = [];
+    build(
+      dir(
+        "root",
+        file("a.md", `---\ntitle: T\norder: 1\nsidebar_position: 9\n---\n\n# T\n\ntext\n`),
+      ),
+      (l) => lines.push(l),
+    );
+    expect(lines.filter((l) => l.includes("sidebar_position"))).toEqual([]);
+  });
+
+  it("says nothing about a corpus that declares no foreign key at all", () => {
+    const lines: string[] = [];
+    build(dir("root", file("a.md"), file("b.md")), (l) => lines.push(l));
+    expect(lines.filter((l) => /ordering key/.test(l))).toEqual([]);
+  });
+
+  it("covers the other ecosystems' keys, not just Docusaurus's", () => {
+    const lines: string[] = [];
+    build(dir("root", withPos("a.md", "weight", "3"), withPos("b.md", "nav_order", "1")), (l) =>
+      lines.push(l),
+    );
+    const said = lines.join("\n");
+    expect(said).toMatch(/weight/);
+    expect(said).toMatch(/nav_order/);
   });
 });

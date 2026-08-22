@@ -23,6 +23,7 @@ import { vectorAbstains } from "./lib/abstain.js";
 import { keyRingFromEnv, mint, validate } from "./lib/snapshot.js";
 import { readDocument, search, type ServiceContext } from "./service.js";
 import type { ContentInstance } from "./instance.js";
+import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -146,7 +147,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       pool,
       TENANT,
       (c) => hybridSearch(c, scope, unit(0), "zebra compensation bands", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     expect(hits.length, JSON.stringify(hits.map((h) => h.slug))).toBeGreaterThan(0);
     expect(hits[0]?.slug, "vector+keyword agreement must rank zebra first").toBe("zebra");
@@ -163,7 +164,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       pool,
       TENANT,
       (c) => hybridSearch(c, scope, query, "quantum blockchain weather", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     const slugs = hits.map((h) => h.slug);
     expect(slugs, `draft leaked: ${slugs.join(",")}`).not.toContain("draft-doc");
@@ -181,7 +182,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       pool,
       "globex",
       (c) => hybridSearch(c, { ...scope, tenantId: "globex" }, unit(0), "zebra", 10),
-      VECTOR_TXN_GUCS,
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     expect(hits, "another tenant must see nothing").toEqual([]);
     expect(topCosine).toBeNull();
@@ -197,7 +198,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         pool,
         TENANT,
         (c) => hybridSearch(c, scope, unit(0), "zebra compensation bands", 10),
-        VECTOR_TXN_GUCS,
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
       );
       expect(
         hits.map((h) => h.slug),
@@ -223,8 +224,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       tenantId: TENANT,
       dsnEnv: "KSOR_DB_URL",
       abstain: { vectorFloor: 0.9, keywordFloor: null },
+      textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
+      audiences: [],
+      defaultVisibility: null,
       embeddingProvider: "fake",
       embeddingModel: "fake-embed-001",
       embeddingDim: DIM,
@@ -263,9 +267,15 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     }
 
     // Embed outage WITH a declared floor: the gate cannot be evaluated, so
-    // the only honest answer is to ABSTAIN — serving ungated keyword results
-    // would answer out-of-corpus questions during the outage (review finding
-    // #5, 2026-08-19; ts_rank_cd does not separate in- from out-of-corpus).
+    // nothing may be served past it — serving ungated keyword results would
+    // answer out-of-corpus questions during the outage (review finding #5,
+    // 2026-08-19; ts_rank_cd does not separate in- from out-of-corpus).
+    //
+    // But WITHHOLDING is not ABSTAINING. "The record does not cover this" and
+    // "I could not look" are different answers, and the tool description tells
+    // the agent to state the first as fact and not fall back — so reporting an
+    // outage as an abstention made the agent assert the record lacks something
+    // it contains, for the whole outage (round-6 review of #43).
     const down = async (): Promise<never> => {
       throw new Error("provider down");
     };
@@ -273,8 +283,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const outage = await search(degraded, "onboarding checklist", 5);
     expect(outage.ok, "declared floor + embed outage must fail closed").toBe(false);
     if (!outage.ok) {
-      expect(outage.reason).toBe("abstained");
-      expect(outage.degraded_reason).toBe("embed_unavailable_keyword_only");
+      expect(outage.reason, "an outage is not an abstention").toBe("unavailable");
+      expect(outage.abstained, "and must not claim the record was checked").toBe(false);
+      // Named for what actually happened: this branch runs NO keyword search,
+      // so the previous "keyword_only" described a search that never ran.
+      expect(outage.degraded_reason).toBe("embed_unavailable");
     }
 
     // Embed outage with NO declared floor (gate already off): the keyword
@@ -289,6 +302,35 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     if (kwServed.ok) {
       expect(kwServed.degraded_reason).toBe("embed_unavailable_keyword_only");
       expect(kwServed.hits[0]?.slug).toBe("yak");
+    }
+
+    // …and the case that was NOT covered, which is the common one. The test
+    // above picks a query the keyword arm can answer, so the degrade serves
+    // real hits. Ask the way a person actually asks and that arm returns
+    // NOTHING — `websearch_to_tsquery` ANDs its terms, so one word absent from
+    // the corpus empties the result (measured 12/12 on natural questions,
+    // 2026-08-21). The empty result then reached `keywordAbstains`, which
+    // abstains on no rows, and the envelope reported "abstained".
+    //
+    // So during any provider outage an UNCALIBRATED record — the default state
+    // of every fresh scaffold — told every caller it covered nothing, while the
+    // tool description instructs the agent to state that as fact and never fall
+    // back. The vector arm never ran; an empty result says nothing about
+    // coverage. Found live against published 0.0.12 with an invalid key.
+    const noKeywordMatch = await search(uncalibrated, "what does the flurbish protocol require", 5);
+    expect(
+      noKeywordMatch.ok,
+      "an outage with nothing to serve must not be a success envelope",
+    ).toBe(false);
+    if (!noKeywordMatch.ok) {
+      expect(
+        noKeywordMatch.reason,
+        `an outage is not an abstention, calibrated or not: ${JSON.stringify(noKeywordMatch)}`,
+      ).toBe("unavailable");
+      expect(
+        noKeywordMatch.abstained,
+        "and must never claim the record was checked and found wanting",
+      ).toBe(false);
     }
 
     // The §7 rows exist for every act above (admin read bypasses RLS).
@@ -337,8 +379,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       tenantId: TENANT,
       dsnEnv: "KSOR_DB_URL",
       abstain: { vectorFloor: 0.9, keywordFloor: null },
+      textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
+      audiences: [],
+      defaultVisibility: null,
       embeddingProvider: "fake",
       embeddingModel: "fake-embed-001",
       embeddingDim: DIM,
@@ -360,7 +405,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     ).toEqual({ generation: 2, reason: null });
 
     const read = await readDocument(ctx, "zebra", { snapshotToken: withdrawn.token });
-    expect(read.snapshot, "a withdrawn pin must say why it refreshed").toBe(
+    expect(read.snapshot_status, "a withdrawn pin must say why it refreshed").toBe(
       "refreshed (withdrawn)",
     );
     expect(read.provenance.generation, "served from the ACTIVE generation").toBe(1);
@@ -373,7 +418,10 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const active = await readDocument(ctx, "zebra", {
       snapshotToken: mint(ring, scope, 1).token,
     });
-    expect(active.snapshot, "an active pin is honored silently").toBeUndefined();
+    // Honoured pins are STATED, not silent: the field used to be absent on
+    // success, so a caller could not tell an honoured pin from a server that
+    // ignores the field entirely.
+    expect(active.snapshot_status, "an honoured pin says so").toBe("pinned");
     expect(active.provenance.generation).toBe(1);
   });
 

@@ -10,6 +10,7 @@ import type pg from "pg";
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_OUTLINE_LIMIT,
   DOCUMENT_CHUNKS_SQL,
   leafSlug,
   NODE_BY_SLUG_SQL,
@@ -307,14 +308,28 @@ describe("outline() against a fake client", () => {
     expect(log.values[0]?.[5]).toBe(200);
   });
 
-  it("clamps depth to ≥0 and limit into [1, 5000]", async () => {
+  it("clamps depth to ≥0 and limit into [1, MAX_OUTLINE_LIMIT + 2]", async () => {
     const log = { values: [] as unknown[][] };
     const client = fakeClient({ "walk AS": { rows: [], fields: OUTLINE_FIELDS } }, log);
     await outline(client, SCOPE, { depth: -3, limit: 999_999 });
     expect(log.values[0]?.[4]).toBe(0);
-    expect(log.values[0]?.[5]).toBe(5000);
+    expect(log.values[0]?.[5]).toBe(MAX_OUTLINE_LIMIT + 2);
     await outline(client, SCOPE, { limit: 0 });
     expect(log.values[1]?.[5]).toBe(1);
+  });
+
+  it("leaves room for the truncation probe at the caller's MAXIMUM", async () => {
+    // `outlineDocuments` asks for limit+1 to DETECT truncation. Clamping the
+    // ceiling to exactly MAX_OUTLINE_LIMIT swallowed that probe at the maximum,
+    // so `has_more` was permanently false precisely where a record is most
+    // likely to be cut (round-3 review of #43).
+    const log = { values: [] as unknown[][] };
+    const client = fakeClient({ "walk AS": { rows: [], fields: OUTLINE_FIELDS } }, log);
+    await outline(client, SCOPE, { limit: MAX_OUTLINE_LIMIT + 1 });
+    expect(
+      log.values[0]?.[5],
+      "the probe row must reach SQL, or truncation is undetectable at the max",
+    ).toBe(MAX_OUTLINE_LIMIT + 1);
   });
 });
 

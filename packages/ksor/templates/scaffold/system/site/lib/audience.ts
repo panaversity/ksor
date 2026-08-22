@@ -1,3 +1,4 @@
+import { decideVisible, type AudienceModel } from "./audience-rule";
 import { instanceFrontmatter } from "./shared";
 
 /**
@@ -15,12 +16,8 @@ import { instanceFrontmatter } from "./shared";
  * that declares no audiences has no model and publishes every document —
  * the behaviour of every instance written before this key existed.
  */
-export interface AudienceModel {
-  /** Least- to most-restricted, `public` first. */
-  readonly audiences: readonly string[];
-  /** The tier of a document that declares no `visibility:`. */
-  readonly defaultVisibility: string;
-}
+export type { AudienceModel };
+export { decideVisible };
 
 function unquote(raw: string): string {
   const trimmed = raw.trim();
@@ -157,14 +154,7 @@ export const buildAudience: string = resolveBuildAudience(audienceModel);
 
 /** Whether a document of this visibility belongs in THIS build. */
 export function visibleInBuild(visibility: string | null): boolean {
-  if (audienceModel === null) return true;
-  const value =
-    visibility === null || visibility === "" ? audienceModel.defaultVisibility : visibility;
-  const rank = audienceModel.audiences.indexOf(value);
-  // An undeclared visibility is refused, never published: a value no build
-  // understands is a typo, and a typo reads as a restriction.
-  if (rank === -1) return false;
-  return rank <= audienceModel.audiences.indexOf(buildAudience);
+  return decideVisible(audienceModel, buildAudience, visibility);
 }
 
 /**

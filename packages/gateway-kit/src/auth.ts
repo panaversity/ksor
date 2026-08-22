@@ -22,12 +22,24 @@ import { createHash } from "node:crypto";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from "jose";
 
 import { defaultWarn, type Env, type WarnLog } from "./env.js";
+import { resolveJwks, type JwksResolution } from "./jwks-discovery.js";
 
 export type AuthConfig = {
   /** The AS base; JWKS at `${ssoUrl}/api/auth/jwks`. */
   ssoUrl: string;
   /** This server's canonical URI (the RFC 8707 audience clients bind to). */
   resourceUrl: string;
+  /**
+   * The explicit `KSOR_JWKS_URL`, or null when the operator did not say.
+   *
+   * Null means DISCOVER — read `jwks_uri` from the AS's own metadata document
+   * (RFC 8414, then OpenID Discovery) rather than appending one vendor's path.
+   * When discovery is never run, the verifier falls back to one vendor's
+   * layout (`${ssoUrl}/api/auth/jwks`, Better Auth's) — a guess, which is why
+   * every other provider once failed the JWKS fetch as TRANSIENT with nothing
+   * naming the cause (review 2026-08-20, issue #26).
+   */
+  explicitJwksUrl: string | null;
   allowedAudiences: readonly string[];
   /**
    * Enforced ONLY when KSOR_SSO_ISSUER is explicitly set — never defaulted to
@@ -62,7 +74,20 @@ export type TokenClaims = {
 
 export type Verify = (token: string) => Promise<VerifiedIdentity>;
 
-export type AuthPublic = { mode: "public"; config: AuthConfig; verify: Verify };
+export type AuthPublic = {
+  mode: "public";
+  config: AuthConfig;
+  verify: Verify;
+  /**
+   * Where the signing keys actually come from, resolved ONCE and shared.
+   *
+   * Memoized so boot and the first verification agree and only one discovery
+   * happens. Boot awaits it to report the source — a fallback that is a guess
+   * has to say so THERE, because the alternative is what shipped: a clean boot
+   * and a 503 per request naming nothing (issue #26).
+   */
+  jwks: () => Promise<JwksResolution>;
+};
 export type AuthDisabled = { mode: "disabled" };
 export type Auth = AuthPublic | AuthDisabled;
 
@@ -119,7 +144,20 @@ export function audOk(aud: unknown, allowed: readonly string[]): boolean {
  * and every request gets a permanent 503 while /health reports auth: public.
  * Fail closed at boot instead (review 2026-08-19).
  */
-function assertHttpUrl(name: string, value: string): void {
+/**
+ * `fetched` marks a URL whose CONTENT is trusted — the SSO base and the JWKS
+ * URL, from which the bearer gate's signing keys are retrieved. Cleartext to a
+ * remote host is refused for those, because anyone on the path could serve
+ * their own keys.
+ *
+ * `KSOR_MCP_RESOURCE_URL` is NOT one: it is the resource IDENTIFIER the token's
+ * `aud` is compared against and the `resource` advertised in the challenge —
+ * a string that is compared, never fetched by this process. Refusing http://
+ * there blocked a legitimate deployment (a gateway behind a TLS-terminating
+ * proxy whose canonical resource id is the internal http:// URL) with a
+ * security argument that does not apply to it (round-3 review of #43).
+ */
+function assertHttpUrl(name: string, value: string, fetched: boolean): void {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -131,6 +169,22 @@ function assertHttpUrl(name: string, value: string): void {
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new AuthConfigError(`${name}=${JSON.stringify(value)} must be an http(s) URL.`);
+  }
+  // The JWKS fetched from this base is the ENTIRE trust root of the bearer
+  // gate: over cleartext, anyone on the path substitutes the signing keys and
+  // mints their own valid tokens. Loopback is exempt because it is a local dev
+  // door, not a network path (review 2026-08-20).
+  const loopback =
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "::1" ||
+    parsed.hostname === "[::1]";
+  if (fetched && parsed.protocol === "http:" && !loopback) {
+    throw new AuthConfigError(
+      `${name}=${JSON.stringify(value)} is cleartext http:// to a remote host. The JWKS ` +
+        "fetched from it is the whole trust root of the bearer gate — anyone on the path " +
+        "could serve their own keys. Use https://, or point at loopback for local dev.",
+    );
   }
 }
 
@@ -144,14 +198,27 @@ function configFromEnv(env: Env): AuthConfig | null {
   // Both are used to build a `new URL(...)` later (the JWKS fetch and the
   // resource-metadata document); validate them HERE so a malformed value
   // refuses to boot, never 503s per-request.
-  assertHttpUrl("KSOR_SSO_URL", ssoUrl);
-  assertHttpUrl("KSOR_MCP_RESOURCE_URL", resourceUrl);
+  assertHttpUrl("KSOR_SSO_URL", ssoUrl, true);
+  assertHttpUrl("KSOR_MCP_RESOURCE_URL", resourceUrl, false);
   const allowedAudiences = (env.KSOR_JWT_ALLOWED_AUDIENCES ?? "")
     .split(",")
     .map((a) => a.trim())
     .filter((a) => a !== "");
   const issuer = (env.KSOR_SSO_ISSUER ?? "").trim() || null;
-  return { ssoUrl, resourceUrl, allowedAudiences, issuer, jwksCacheTtlS: 3600 };
+  // Explicit when given; otherwise the vendor layout that used to be the only
+  // option, so an existing Better Auth deployment keeps working unchanged.
+  const explicit = (env.KSOR_JWKS_URL ?? "").trim();
+  // Validated at BOOT even though only `explicitJwksUrl` is carried forward:
+  // a malformed KSOR_JWKS_URL must refuse here, not at the first token.
+  assertHttpUrl("KSOR_JWKS_URL", explicit || `${ssoUrl}/api/auth/jwks`, true);
+  return {
+    ssoUrl,
+    resourceUrl,
+    explicitJwksUrl: explicit === "" ? null : explicit,
+    allowedAudiences,
+    issuer,
+    jwksCacheTtlS: 3600,
+  };
 }
 
 /**
@@ -187,7 +254,16 @@ export function buildAuth(env: Env = process.env, deps: VerifierDeps = {}): Auth
         "(fail-closed: an unset audience allowlist would accept any SSO-signed token).",
     );
   }
-  return { mode: "public", config, verify: createVerify(config, deps) };
+  // One memoized resolution, shared by the boot log and the verifier.
+  let resolution: Promise<JwksResolution> | null = null;
+  const jwks = (): Promise<JwksResolution> => {
+    resolution ??= resolveJwks({
+      ssoUrl: config.ssoUrl,
+      explicitJwksUrl: config.explicitJwksUrl ?? undefined,
+    });
+    return resolution;
+  };
+  return { mode: "public", config, verify: createVerify(config, deps, jwks), jwks };
 }
 
 const MAX_CACHE = 4096;
@@ -217,6 +293,29 @@ function isBadToken(err: unknown): boolean {
   );
 }
 
+/**
+ * The `iss` a token CLAIMS, read without verifying anything.
+ *
+ * Sound for exactly one purpose: REFUSING. A token that passes this check still
+ * has its signature verified in full, so an attacker gains nothing by lying here
+ * — the worst they achieve is being refused for a different reason. It must
+ * never be used to admit anything.
+ *
+ * Returns null when the payload is not readable JSON, which sends the token down
+ * the ordinary path rather than inventing a verdict about it.
+ */
+function claimedIssuer(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (payload === undefined || payload === "") return null;
+    const decoded: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const iss = (decoded as { iss?: unknown }).iss;
+    return typeof iss === "string" && iss !== "" ? iss : null;
+  } catch {
+    return null;
+  }
+}
+
 function describeError(err: unknown): string {
   return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 }
@@ -243,14 +342,20 @@ function prune<V>(cache: Map<string, V>, deadlineOf: (value: V) => number, now: 
   }
 }
 
-function joseVerifyJwt(config: AuthConfig): (token: string) => Promise<TokenClaims> {
+function joseVerifyJwt(
+  config: AuthConfig,
+  jwksOf: () => Promise<JwksResolution>,
+): (token: string) => Promise<TokenClaims> {
   // Lazy — no network at build time. jose caches the JWKS for jwksCacheTtl and
   // refetches on an unknown kid after its cooldown (key rotation).
   let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
   return async (token: string): Promise<TokenClaims> => {
-    jwks ??= createRemoteJWKSet(new URL(`${config.ssoUrl}/api/auth/jwks`), {
-      cacheMaxAge: config.jwksCacheTtlS * 1000,
-    });
+    if (jwks === null) {
+      const resolved = await jwksOf();
+      jwks = createRemoteJWKSet(new URL(resolved.url), {
+        cacheMaxAge: config.jwksCacheTtlS * 1000,
+      });
+    }
     const { payload } = await jwtVerify(token, jwks, {
       algorithms: ["RS256"],
       // aud is deliberately NOT verified here — the manual allowlist in
@@ -262,9 +367,13 @@ function joseVerifyJwt(config: AuthConfig): (token: string) => Promise<TokenClai
   };
 }
 
-function createVerify(config: AuthConfig, deps: VerifierDeps): Verify {
+function createVerify(
+  config: AuthConfig,
+  deps: VerifierDeps,
+  jwksOf: () => Promise<JwksResolution>,
+): Verify {
   const now = deps.now ?? ((): number => Date.now() / 1000);
-  const verifyJwt = deps.verifyJwt ?? joseVerifyJwt(config);
+  const verifyJwt = deps.verifyJwt ?? joseVerifyJwt(config, jwksOf);
   const rejected = new Map<string, number>();
   const accepted = new Map<string, { until: number; identity: VerifiedIdentity }>();
 
@@ -292,6 +401,25 @@ function createVerify(config: AuthConfig, deps: VerifierDeps): Verify {
 
     let claims: TokenClaims | null = null;
     if (token.split(".").length === 3) {
+      // The cheap decisive check FIRST. An unknown `kid` raises
+      // JWKSNoMatchingKey, which is classified transient below because the usual
+      // cause is key-rotation lag — but a token from ANOTHER issuer raises the
+      // same error, and answering 503 for a credential that can never work makes
+      // a client retry forever and a misconfiguration read as an outage
+      // (reproduced against a real Hydra door holding a real Keycloak token).
+      // Only when the operator has DECLARED the issuer is there ground to stand
+      // on; otherwise nothing here changes.
+      if (config.issuer !== null) {
+        const claimed = claimedIssuer(token);
+        if (claimed !== null && claimed !== config.issuer) {
+          reject(key);
+          throw new TokenVerifyError(
+            `token iss ${JSON.stringify(claimed)} is not this record's authorization server ` +
+              `${JSON.stringify(config.issuer)}`,
+            { transient: false },
+          );
+        }
+      }
       try {
         claims = await verifyJwt(token);
       } catch (err) {
@@ -315,7 +443,7 @@ function createVerify(config: AuthConfig, deps: VerifierDeps): Verify {
           cause: err,
         });
       }
-      if (config.allowedAudiences.length > 0 && !audOk(claims.aud, config.allowedAudiences)) {
+      if (!audOk(claims.aud, config.allowedAudiences)) {
         reject(key);
         throw new TokenVerifyError(
           `token aud ${JSON.stringify(claims.aud ?? null)} not in allowlist ` +

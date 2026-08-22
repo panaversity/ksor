@@ -166,7 +166,6 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         "zod",
         "pg",
         "@types/pg",
-        "@google/genai",
         "jose",
       ]),
     ],
@@ -176,7 +175,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     // .d.mts exposes pg.Pool/PoolClient in its public API, so an external TS
     // consumer resolves those types (decision 12, publish revision 2026-08-19).
     [`${P}ksor-postgres`, new Set(["pg", "@types/pg"])],
-    [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "@google/genai", `${P}ksor-postgres`])],
+    [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", `${P}ksor-postgres`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
     // The ONE published kernel package (decision 12, publish revision
     // 2026-08-19): platform/content/gateway-kit are BUNDLED in (workspace
@@ -195,7 +194,6 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         "zod",
         "pg",
         "@types/pg",
-        "@google/genai", // bundled content's embedding provider
         "jose", // bundled gateway-kit's JWT verification
       ]),
     ],

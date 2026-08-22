@@ -1,6 +1,7 @@
 ---
 title: "Rule 11: Guests and Minors"
 position: 2
+order: 2
 ---
 
 # Rule 11: Guests and Minors

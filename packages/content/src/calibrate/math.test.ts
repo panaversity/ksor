@@ -91,18 +91,98 @@ describe("paste_value refuses a one-sided distribution", () => {
 describe("report assembly and the printed recommendation block", () => {
   for (const c of fixture.report_cases) {
     it(c.name, () => {
-      const report = buildReport(c.detail, c.meta, c.target_precision);
+      // Fixed clock: the report records the DATE beside the number, and a
+      // measurement date that moves would make the fixture untestable.
+      const report = buildReport(
+        c.detail,
+        c.meta,
+        c.target_precision,
+        new Date("2026-08-21T00:00:00Z"),
+      );
       expect(report).toEqual(c.expected);
       expect(renderReport(report)).toBe(c.rendered);
     });
   }
 
-  it("the rendered block ends in the machine-checked paste line", () => {
-    for (const c of fixture.report_cases) {
+  it("a SEPARABLE measurement ends in the machine-checked paste line, with its date", () => {
+    for (const c of fixture.report_cases.filter((x) => x.expected.separable)) {
       const lastLine = c.rendered.trimEnd().split("\n").at(-1) ?? "";
       expect(lastLine, `case ${c.name}: ${lastLine}`).toMatch(
-        /^ {2}vector_floor: -?\d+\.\d{3} {3}# calibrated on generation (\d+|None), model .+\/d\d+, door: (synthesized|queries-file)$/,
+        /^ {2}vector_floor: -?\d+\.\d{3} {3}# calibrated \d{4}-\d{2}-\d{2} on generation (\d+|unknown \(no generation pinned\)), model .+\/d\d+, door: (synthesized|queries-file)$/,
       );
+    }
+  });
+
+  it("a NON-separable measurement hands out NO floor at all", () => {
+    // The intended operator is a coding agent; a paste-ready number under a
+    // "NOT separable" verdict is a floor known to leak, pasted.
+    const cases = fixture.report_cases.filter((x) => !x.expected.separable);
+    expect(cases.length, "the fixture covers the non-separable case").toBeGreaterThan(0);
+    for (const c of cases) {
+      expect(c.rendered, c.name).not.toMatch(/^ {2}vector_floor: -?\d/m);
+      expect(c.rendered, c.name).toContain("vector_floor: uncalibrated");
+      expect(c.rendered, c.name).toMatch(/NOT pasting a floor/);
+    }
+  });
+
+  it("the SYNTHESIZED door carries its caveat — it is the DEFAULT and the biased one", () => {
+    // Found live 2026-08-21: an agent calibrated a real record through the
+    // synthesized door, was told "separable" with a floor of 0.631, and then
+    // measured real questions the corpus answers scoring 0.530-0.606. Pasting
+    // that floor would have made the record refuse questions whose answers it
+    // had just returned. A synthesized query is written FROM the passage it is
+    // scored against, so in-corpus scores are systematically higher than a
+    // human's phrasing of the same question — and the door with the bias was
+    // the only one with no caveat printed.
+    const cases = fixture.report_cases.filter((x) => x.meta.door === "synthesized");
+    expect(cases.length, "the fixture covers the synthesized door").toBeGreaterThan(0);
+    for (const c of cases) {
+      expect(c.rendered, c.name).toContain("CAVEAT");
+      expect(c.rendered, c.name).toMatch(/written FROM the passages/);
+    }
+  });
+
+  it("says so whenever the OUT-OF-CORPUS probes came from the binary", () => {
+    // A shipped probe set cannot be scope-adjacent — adjacency depends on a
+    // corpus it has never seen — so a separability verdict resting on it is
+    // measuring the easy half. Measured on one record, changing ONLY the probe
+    // set: built-ins said "separable, margin 0.072" and recommended a floor;
+    // eight scope-adjacent near-misses said "NOT separable, margin -0.030", and
+    // that floor then answered six of the eight live, with citations.
+    const cases = fixture.report_cases.filter((c) => c.expected.ooc_source === "built-in");
+    expect(cases.length, "the fixture covers the built-in probe set").toBeGreaterThan(0);
+    for (const c of cases) {
+      expect(c.rendered, c.name).toContain("BUILT-IN set");
+      expect(c.rendered, "and names the way out").toContain("--ooc-file");
+    }
+    // On BOTH branches — the advice used to appear only after weak probes had
+    // already failed to bless a floor, which is when it is least needed.
+    const separable = cases.filter((c) => c.expected.separable);
+    expect(separable.length, "including a SEPARABLE case").toBeGreaterThan(0);
+    for (const c of separable) expect(c.rendered).toContain("OVER-estimate");
+  });
+
+  it("every report states the margin and the number of probes behind it", () => {
+    // paste_why names max-OOC and min-in-corpus; the SUBTRACTION is the number
+    // that decides, and a margin measured over six probes is not the same claim
+    // as the same margin over sixty. Both were on the report and neither was
+    // printed.
+    for (const c of fixture.report_cases) {
+      const line = c.rendered.split("\n").find((l) => l.startsWith("separation margin:"));
+      expect(line, `case ${c.name}`).toBeDefined();
+      expect(line, `case ${c.name}`).toContain(`${c.expected.in_corpus_queries} in-corpus`);
+      expect(line, `case ${c.name}`).toContain(`${c.expected.ooc_probes} out-of-corpus`);
+    }
+  });
+
+  it("the ALT line reports the precision it was MEASURED at, never a constant", () => {
+    // The oracle read a key its report never carried, so this line always said
+    // 0.95 whatever was measured — a report describing a different measurement
+    // than the one it performed.
+    for (const c of fixture.report_cases) {
+      if (c.expected.target_precision === null) continue;
+      const alt = c.rendered.split("\n").find((l) => l.startsWith("ALT ("));
+      expect(alt, `case ${c.name}`).toContain(`(${String(c.expected.target)}`);
     }
   });
 });

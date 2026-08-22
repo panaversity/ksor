@@ -1,6 +1,7 @@
 ---
 title: "Rule 30: Injuries"
 position: 1
+order: 1
 ---
 
 # Rule 30: Injuries

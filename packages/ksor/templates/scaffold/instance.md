@@ -4,6 +4,23 @@ name: KSOR-STAMP-NAME
 ksor:
   requires: ">=KSOR-STAMP-VERSION"
   scaffolded: "KSOR-STAMP-VERSION"
+# The served MCP rung needs ONE required block: the NAME of the environment
+# variable holding your Postgres DSN — never the DSN itself. Uncomment it, copy
+# .env.example to .env, then: `pnpm provision` once (schema + grant), then
+# `pnpm refresh` to PUBLISH the record, then `pnpm serve`. Serving does not
+# publish — that is deliberate, and skipping refresh serves nothing.
+# Nothing else here is required:
+# `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
+# `retrieval:` out starts you with the abstention gate off and honest about it
+# (turn it on afterwards with `ksor calibrate`, once the record is serving).
+# database:
+#   dsn_env: KSOR_DB_URL
+# Where agents reach this record's MCP surface, and the semver it publishes as.
+# Both go into /.well-known/mcp/server.json, the document an agent reads to
+# DISCOVER this record instead of being told the URL. Leave mcp_url out until
+# the server is actually published: an invented URL is worse than none.
+# mcp_url: https://records.example.com/mcp
+# version: 0.1.0
 ---
 
 # KSoR
@@ -37,3 +54,12 @@ it.
 Ask your coding agent to run the **intake interview** (it knows how — see
 `.agents/skills/intake-interview/`), answer its questions, and let it write
 this document with you.
+
+Until you do, this record describes KSoR rather than your organization — and
+it describes it everywhere, not just on the page. The first paragraph above is
+what `ksor serve` hands a connecting agent as its instructions, and what the
+registry document publishes as this record's one-line description. That is the
+cost of shipping a starter with something real in it instead of a placeholder:
+a scaffold nobody has run the interview on will tell an agent, accurately, that
+it is authoritative for what a Knowledge System of Record is. Replace it and
+both surfaces follow, because both read this one paragraph.
