@@ -12,7 +12,7 @@
  * actually opens what it says.
  */
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createPool, prewarmPool } from "./db.js";
 import type pg from "pg";
@@ -22,7 +22,7 @@ const DB = "ksor_idle_test";
 
 describe.runIf(adminDsn !== "")("idle connection policy (db)", () => {
   let admin: pg.Pool;
-  let dsn: string;
+  let dsn = "";
   const pools: pg.Pool[] = [];
 
   const track = (p: pg.Pool): pg.Pool => {
@@ -39,6 +39,34 @@ describe.runIf(adminDsn !== "")("idle connection policy (db)", () => {
     );
     return r.rows[0].n as number;
   };
+
+  /**
+   * Wait for Postgres's own count to reach `want`, then answer with what it
+   * actually reached — so a failure still prints the number seen.
+   *
+   * `pool.end()` resolves when the CLIENT socket closes; pg_stat_activity drops
+   * the row only once the server-side backend process exits, and those are not
+   * the same instant. Sampling the server once, immediately, raced that gap:
+   * this suite went red in CI on a branch that changed nothing but a document,
+   * because the previous test's three closing backends were still listed.
+   */
+  const backendsSettleTo = async (want: number, timeoutMs = 5_000): Promise<number> => {
+    const deadline = Date.now() + timeoutMs;
+    let seen = await backends();
+    while (seen !== want && Date.now() < deadline) {
+      await settle(50);
+      seen = await backends();
+    }
+    return seen;
+  };
+
+  // Each test states what a quiet database holds, so each must START from one.
+  // Without this the suite is order-coupled through the server, and the coupling
+  // is invisible until it fails somewhere unrelated.
+  beforeEach(async () => {
+    if (dsn === "") return;
+    expect(await backendsSettleTo(0), "a previous test's backends never drained").toBe(0);
+  });
 
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
