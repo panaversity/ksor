@@ -15,7 +15,7 @@ escalation path, a badge rule, 200-300 characters each. Three of four chunks
 were unsearchable, and:
 
 > **Q.** "how long does a buyer have to send something back"
-> **A.** the scaffold's placeholder page — against a record stating *thirty days*
+> **A.** the scaffold's placeholder page — against a record stating _thirty days_
 
 The answer was in the corpus, correctly ingested, readable by slug, and
 unreachable by search.
