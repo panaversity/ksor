@@ -1,6 +1,7 @@
 import { docs } from "collections/server";
 import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
+import { statusBadgesPlugin } from "fumadocs-core/source/plugins/status-badges";
 import type { Node, Root } from "fumadocs-core/page-tree";
 
 import {
@@ -11,13 +12,26 @@ import {
   resolveSuccessorUrl,
 } from "./governance";
 import { appName, showGovernance } from "./shared";
-import { withStatus } from "@/components/sidebar-status";
+import { renderCaveatBadge } from "@/components/sidebar-status";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
   baseUrl: "/docs",
   source: docs.toFumadocsSource(),
-  plugins: [lucideIconsPlugin()],
+  plugins: [
+    lucideIconsPlugin(),
+    // The shell's own status plugin, which reads `status` from a document's
+    // frontmatter and puts it on the tree node. This used to be a map of
+    // statuses by url and a second walk over the tree that rewrote each row's
+    // `name` — the plugin does the walk, so the record's own key reaches the
+    // sidebar without us restating it.
+    //
+    // `renderBadge` returns null for anything that is not a caveat, which is
+    // the one rule that is OURS: a reader already assumes a document in the
+    // record is current, so `approved` shows nothing and the marker stays rare
+    // enough to be noticed where it matters.
+    statusBadgesPlugin({ renderBadge: (status) => renderCaveatBadge(status) }),
+  ],
 });
 
 export type KnowledgePage = (typeof source)["$inferPage"];
@@ -86,31 +100,13 @@ function sortNodes(nodes: readonly Node[], orders: ReadonlyMap<string, number>):
 export function getSortedPageTree(): Root {
   const pages = source.getPages();
   const orders = new Map(pages.map((page) => [page.url, orderOf(page)] as const));
-  // A caveat status rides the row itself, so the reader sees it before the
-  // click rather than after (research/site-design.md F3).
-  const statuses = new Map(
-    pages.map((page) => {
-      const raw: unknown = (page.data as unknown as Record<string, unknown>)["status"];
-      return [
-        page.url,
-        caveatStatus(typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null),
-      ] as const;
-    }),
-  );
+  // The caveat status already rides the row: `statusBadgesPlugin` above put it
+  // there while the loader built the tree, so the reader sees it before the
+  // click rather than after (research/site-design.md F3). This function is
+  // left with the one thing the shell has no opinion about — the record's
+  // governed `order:`.
   const tree = source.getPageTree();
-  return { ...tree, children: labelNodes(sortNodes(tree.children, orders), statuses) };
-}
-
-/** Decorate each page row with its caveat status; folders keep their own name. */
-function labelNodes(nodes: readonly Node[], statuses: ReadonlyMap<string, string | null>): Node[] {
-  return nodes.map((node) => {
-    if (node.type === "folder") {
-      return { ...node, children: labelNodes(node.children, statuses) };
-    }
-    if (node.type !== "page") return node;
-    const status = statuses.get(node.url) ?? null;
-    return status === null ? node : { ...node, name: withStatus(node.name, status) };
-  });
+  return { ...tree, children: sortNodes(tree.children, orders) };
 }
 
 function collectUrls(nodes: readonly Node[], urls: string[]): void {

@@ -32,3 +32,12 @@ by waiting; the bump is a one-line change once they age out.
 Also worth recording: `fumadocs-core` and `fumadocs-ui` both have a `17.0.0` on
 npm, published 2026-02-01 — BEFORE the 16.x line. The `latest` tag is 16.x. A
 higher version number is not a later release here, and nothing should chase it.
+
+**The sidebar's status marker is the shell's plugin now, not our own walk.**
+`statusBadgesPlugin` reads `status` from a document's frontmatter while the
+loader builds the page tree, so the scaffold stops carrying a map of statuses
+by url and a second recursive walk that rewrote each row. What stays ours is
+the rule the shell has no opinion about: only a CAVEAT is drawn, so `approved`
+renders nothing and the marker stays rare enough to be noticed. The tree nodes
+also gain a real `status` field rather than only a decorated name.
+
