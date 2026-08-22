@@ -171,8 +171,8 @@ describe.runIf(enabled).each(SHELLS)(
       // names interleave with a folder's, and a description — enough to tell
       // "renders the record" from "renders the example", and to pin the
       // canonical reading order both shells must share: ordered first
-      // (ascending; example.md ships with order 1), then plain name order
-      // with folders interleaved.
+      // (ascending; the starter record ships orders 1-3), then plain name
+      // order with folders interleaved.
       const knowledge = path.join(project, "knowledge");
       writeFileSync(
         path.join(knowledge, "beta.md"),
@@ -303,10 +303,14 @@ describe.runIf(enabled).each(SHELLS)(
         .filter((url): url is string => url !== undefined);
       expect(sequence, `llms.txt:\n${llms}`).toEqual([
         "/docs/beta",
-        "/docs/example",
+        "/docs/what-is-a-ksor",
         "/docs/hr",
         "/docs/hr/leave",
         "/docs/hr/pay",
+        "/docs/surfaces",
+        "/docs/surfaces/for-people",
+        "/docs/surfaces/for-agents",
+        "/docs/governance-ladder",
         "/docs/01-intro",
         "/docs/aaa",
         "/docs/empty-order",
@@ -354,10 +358,12 @@ describe.runIf(enabled).each(SHELLS)(
           await expect
             .poll(() => page.locator("body").textContent(), { timeout: 10_000 })
             .toContain("Built with KSoR");
-          await page.goto(`http://localhost:${port}/docs/example/`, { waitUntil: "networkidle" });
+          await page.goto(`http://localhost:${port}/docs/what-is-a-ksor/`, {
+            waitUntil: "networkidle",
+          });
           await expect
             .poll(() => page.locator("h1").first().textContent(), { timeout: 10_000 })
-            .toContain("Your first governed document");
+            .toContain("What a Knowledge System of Record is");
           // The SME walk's promise, pinned: an image beside a document
           // renders — actually decoded, not merely requested.
           await page.goto(`http://localhost:${port}/docs/hr/`, { waitUntil: "networkidle" });

@@ -15,6 +15,12 @@ The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
 record; the record never references the system.
 
+Every grouped key in `instance.md` (`ksor`, `site`, `database`, `embedding`,
+`retrieval`, `budgets`) is written as an indented block, never inline on one
+line: a group written as `site: { governance: false }` is not read as a group
+at all, so every setting inside it is silently dropped. `pnpm check` refuses
+that shape, and refuses a key repeated inside a group.
+
 `instance.md` carries a closed key set — `format`, `name`, `ksor`, `site`,
 the optional pair `audiences` + `default_visibility` (the record's reader
 audiences, ordered least- to most-restricted with `public` first, and the one
@@ -364,9 +370,37 @@ Details in README → Deploying.
   are required. `owner` and `provenance` (a list naming real sources) are
   strongly encouraged — they become required as this project climbs the
   governance ladder. `description`, `visibility` (below), `order` (sidebar
-  position), `effective` (the date the document takes effect) and `superseded`
-  (a legacy marker — prefer `status`) are available. No other keys; never
+  position), `effective` (the date the document takes effect — a real
+  `YYYY-MM-DD` date and nothing else, or **quote it** to publish it as text:
+  `effective: "Q1 2026"`. Unquoted, YAML turns `2026-06-31` into July 1st and
+  `2026-04-01 09:00 +05:00` into the day before, without a word, and the page
+  publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
+  are available. No other keys; never
   `id:` or `name:` — the path is the identity.
+- **The governance keys are rendered, so they are worth filling in.** Each
+  page shows its owner and effective date under the title, lists every
+  `provenance` entry separately at the foot, and — for a superseded document —
+  carries a notice above the title naming its successor and linking to it. A
+  key you leave off renders nothing at all: the site never invents a value, so
+  a missing owner reads as missing rather than as unowned.
+- **The agent surface carries them too.** `llms.txt` marks a document whose
+  status is a caveat and names the route that replaced a superseded one;
+  `llms-full.txt` puts the keys back as frontmatter above each document. An
+  agent reading the record therefore sees what a reader sees — a withdrawn
+  document is never handed over as plain prose.
+- **Don't want any of it on the published pages?** Set `governance: false`
+  under `site:` in `instance.md`. The record keeps every key — the agent
+  surface and your audit trail still read them, and `llms.txt`/`llms-full.txt`
+  keep publishing them — and the pages simply stay plain. One consequence worth
+  knowing: the home page shows the agent surface VERBATIM in its panel, so the
+  keys stay visible there even with this off. That panel's whole claim is that
+  it is the bytes an agent is served, and editing them to match a page setting
+  would make it lie. Remove the panel if you need the front page silent too. The supersession notice is the one thing it does not hide: a reader
+  handed a replaced document with no word of its successor has been misled.
+- **`status` is shown only when it is a caveat.** `draft`, `review` and
+  `superseded` appear as a small label; `approved` shows nothing, because a
+  reader already assumes a document in the record is current — so the label
+  stays rare enough to be noticed on the pages where it matters.
 - `visibility:` names the one audience a document belongs to — a single value
   from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
   (an approved document can be restricted, and a draft is not hidden). Leave
@@ -385,7 +419,14 @@ Details in README → Deploying.
   document and can clone, the answer is a second repository.**
 
 - A replaced document is marked `status: superseded` with `superseded_by:`
-  pointing at its successor — superseded documents are never deleted.
+  pointing at its successor — superseded documents are never deleted. The two
+  keys are one statement, so `pnpm check` refuses each without the other: a
+  successor pointer left on a document you have set back to `approved` would
+  publish a "Superseded" banner over a live document. The pointer must name a
+  markdown document (`./<successor>.md`), exactly as it is capitalised under
+  `knowledge/`, and it must lead somewhere: a document that supersedes itself,
+  or a pair that supersede each other, sends the reader in a circle and is
+  refused.
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
@@ -420,9 +461,16 @@ You own `system/site/` outright — these are the seams, cheapest first:
 - **Display title** — `instance.md`'s body `# H1` (the intake interview
   writes it). Headline, navbar, and browser title follow on restart.
 - **Accent color** — the one brand pair in `system/site/app/global.css`
-  (`--color-fd-primary`, light and dark); every accented element follows.
+  (`--primary` and `--primary-foreground`, light and dark); every accented
+  element follows, in the shell and in every shadcn component alike.
 - **Logo and favicon** — replace `system/site/app/icon.png`; the tab icon
   and the home-page mark are the same file.
+- **Components** — the site is a shadcn/ui project (`system/site/components.json`),
+  so `pnpm dlx shadcn@latest add <name>` writes a component into
+  `system/site/components/ui/` that you then own like everything else here.
+  Fumadocs reads the same tokens (its `shadcn` preset maps every `--color-fd-*`
+  onto the shadcn variable of the same role), so a registry component and the
+  documentation shell around it stay one palette.
 - **Anything deeper** — edit the site like the Next.js app it is; the only
   rule that survives customization is critical rule 1. The whole shell is
   replaceable behind a five-clause contract (a themed Docusaurus shell with

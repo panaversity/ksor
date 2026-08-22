@@ -1,19 +1,247 @@
-@import "tailwindcss";
-@import "fumadocs-ui/css/neutral.css";
-@import "fumadocs-ui/css/preset.css";
+/* shadcn/ui is the component system (`components.json`, `pnpm dlx shadcn@latest
+   add <name>`), and Fumadocs reads its colours: the `shadcn` preset maps every
+   `--color-fd-*` token onto the shadcn variable of the same role, so one
+   palette dresses the shell and anything added from the registry. `neutral`
+   stood here before and painted both — the page and the sidebar it sits
+   against — hsl(0 0% 96%) and 94.7%, 1.6% apart, which is no separation at
+   all; shadcn's neutral gives the page white and the rail its own surface.
 
-/* The KSoR default accent, drawn from the mark — the one brand value here.
-   Re-brand by changing this pair; every accented element follows. */
+   `shadcn init` also writes `@import "shadcn/tailwind.css"`, which is dropped
+   here: that import makes the shadcn CLI a runtime dependency of every
+   scaffolded project, and the CLI carries Babel, ts-morph, dotenvx and an MCP
+   SDK — 578 extra packages in the lockfile, measured, against 2 for the four
+   deps this file actually needs. `components.json` therefore names the classic
+   `new-york` style, whose components compile against plain Tailwind utilities
+   and the tokens below (verified by adding one). An adopter who wants the
+   preset styles adds the import and the dependency in their own repo. */
+@import "tailwindcss";
+@import "fumadocs-ui/css/shadcn.css";
+@import "fumadocs-ui/css/preset.css";
+@import "tw-animate-css";
+
+/* next-themes switches the theme by class, so `dark:` must follow the class
+   rather than the OS setting. Nothing here uses a `dark:` utility — the theme
+   is tokens — but a component added from the registry will. */
+@custom-variant dark (&:is(.dark *));
+
+/* ── Ink, paper, rule ────────────────────────────────────────────────────────
+   shadcn's neutral palette, retuned on two axes and otherwise left alone.
+
+   The ink carries a trace of blue (chroma .012 at hue 255) instead of being a
+   pure grey: it sits with the accent rather than beside it, and a record set in
+   cool ink reads as printed rather than as chrome. The rules are darker than
+   shadcn's default (0.9 against 0.922) because this design puts weight on
+   hairlines, and a rule you have to look for is not doing its job.
+
+   `--primary` and its foreground are the whole brand — re-brand by changing
+   that pair and every accented element follows, in the shell and in every
+   shadcn component alike, because Fumadocs reads `--primary` too. It is spent
+   ONLY on actions, links and the active state: a page where the accent is
+   everywhere has no accent. `--ksor-caution` (further down) is the only other
+   colour with a job, and its job is the opposite one. */
 :root {
-  --color-fd-primary: #1d4ed8;
-  --color-fd-primary-foreground: #ffffff;
-  --color-fd-ring: #1d4ed8;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.17 0.012 255);
+  --card: oklch(0.985 0.002 255);
+  --card-foreground: oklch(0.17 0.012 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.012 255);
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.972 0.002 255);
+  --muted-foreground: oklch(0.53 0.012 255);
+  --accent: oklch(0.965 0.004 255);
+  --accent-foreground: oklch(0.17 0.012 255);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.9 0.004 255);
+  --input: oklch(0.9 0.004 255);
+  --ring: #1d4ed8;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.985 0.002 255);
+  --sidebar-foreground: oklch(0.17 0.012 255);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.965 0.004 255);
+  --sidebar-accent-foreground: oklch(0.17 0.012 255);
+  --sidebar-border: oklch(0.9 0.004 255);
+  --sidebar-ring: #1d4ed8;
+
+  /* The cover: the surface the front door's band is printed on. It follows the
+     theme like everything else — in the light it is pale stock, a shade of the
+     brand rather than a shade of grey (hue 258, between the text's 255 and the
+     accent's 264). It was ink in both themes for one afternoon, which made the
+     light theme a dark page with a white foot. */
+  --ksor-cover: oklch(0.965 0.013 258);
+  --ksor-cover-foreground: oklch(0.2 0.03 258);
+  --ksor-cover-muted: oklch(0.5 0.022 258);
+  --ksor-cover-rule: oklch(0.885 0.016 258);
+  --ksor-cover-hover: oklch(0.935 0.018 258);
+  --ksor-cover-panel: oklch(1 0 0);
+  --ksor-cover-panel-rule: oklch(0.9 0.014 258);
 }
 
 .dark {
-  --color-fd-primary: #7fb0f9;
-  --color-fd-primary-foreground: #081226;
-  --color-fd-ring: #7fb0f9;
+  --background: oklch(0.155 0.012 255);
+  --foreground: oklch(0.965 0.004 255);
+  --card: oklch(0.195 0.012 255);
+  --card-foreground: oklch(0.965 0.004 255);
+  --popover: oklch(0.195 0.012 255);
+  --popover-foreground: oklch(0.965 0.004 255);
+  --primary: #7fb0f9;
+  --primary-foreground: #081226;
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.24 0.012 255);
+  --muted-foreground: oklch(0.7 0.014 255);
+  --accent: oklch(0.26 0.014 255);
+  --accent-foreground: oklch(0.965 0.004 255);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: #7fb0f9;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.185 0.012 255);
+  --sidebar-foreground: oklch(0.965 0.004 255);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.26 0.014 255);
+  --sidebar-accent-foreground: oklch(0.965 0.004 255);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: #7fb0f9;
+
+  /* In the dark the cover rises one step ABOVE the page (0.245 against the
+     background's 0.155) rather than inverting: a cover is the surface that
+     catches the light. Same object, same lighting, darker room. */
+  --ksor-cover: oklch(0.245 0.038 258);
+  --ksor-cover-foreground: oklch(0.97 0.006 258);
+  --ksor-cover-muted: oklch(0.72 0.022 258);
+  --ksor-cover-rule: oklch(0.34 0.03 258);
+  --ksor-cover-hover: oklch(0.3 0.035 258);
+  --ksor-cover-panel: oklch(0.285 0.036 258);
+  --ksor-cover-panel-rule: oklch(0.36 0.03 258);
+}
+
+/* The token → utility mapping shadcn components compile against, as
+   `shadcn init` writes it MINUS its two font lines: those pointed at a
+   `--font-sans` that only exists when a next/font face is loaded in the
+   layout, and this scaffold deliberately loads none (see app/layout.tsx —
+   a Google face is fetched at BUILD time, which costs the offline build and
+   byte-identical rebuilds). Tailwind's own system stack stands. */
+/* ── Three voices ────────────────────────────────────────────────────────────
+   The record speaks in a serif, the site speaks in a sans, and the machine
+   surface speaks in mono. Not decoration: each face marks WHO is talking, so a
+   reader can tell the record's own words (its title, its documents' titles)
+   from the site's furniture around them, and both from an address a machine
+   resolves.
+
+   System stacks only. A web font would be fetched at build time, which costs
+   the offline build and byte-identical rebuilds the scaffold pins — and the
+   browser smoke test asserts zero external requests. Georgia and its siblings
+   are on every machine this site is read on, and a serif that arrives instantly
+   beats a distinctive one that arrives late. */
+@theme {
+  --font-display: ui-serif, Georgia, "Times New Roman", Times, serif;
+}
+
+@theme inline {
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ── The left rail ───────────────────────────────────────────────────────────
+   The docs grid is `offset | sidebar | main | toc | offset`, and the sidebar
+   panel spans BOTH the offset and the sidebar column: its surface runs to the
+   window edge while its contents are pinned to the 268px column (`items-end`,
+   children `w-(--fd-sidebar-width)`). Each offset is half of whatever the
+   viewport has over `--fd-layout-width`, which the shell defaults to 97rem —
+   so on a wide display the offset is real: measured at a 1728px viewport it
+   was 88px, and the first nav item began 103px from the window edge with
+   nothing but sidebar-coloured space to its left. That reads as a panel
+   somebody forgot to align rather than as the window's rail.
+
+   `100%` leaves the grid definition untouched and takes both offsets to zero,
+   so the rail is flush and only the record's own padding stands before the
+   first link. The main column absorbs exactly what the offsets held, so the
+   prose does not move (measured at 1728px: the article starts at x=548 either
+   way). Below 97rem nothing changes — the offsets were already zero. Percent
+   rather than `100vw` on purpose: `vw` includes the scrollbar the stable
+   gutter below reserves, which would overflow the row by its width. The home
+   layout is its own shell and does not use this grid at all. */
+:root {
+  --fd-layout-width: 100%;
+}
+
+/* ── The reading measure ─────────────────────────────────────────────────────
+   The shell caps the article at 900px, which at the body's 16px puts 78
+   characters on a line (measured) — half again the 45–75 that reading research
+   and every typographic manual settle on, and the reason the page read as a
+   slab. 46rem holds the text to 672px, about 66 characters, and the article
+   still centres itself in the main column.
+
+   It is also half of what stops the column moving: the other half is holding
+   the table-of-contents column on every page (app/docs/[[...slug]]/page.tsx).
+   Sidebar and rail are both 268px, so main is centred in the viewport and this
+   measure is centred in main — the same place on a document with headings and
+   one without. `data-full` is the shell's own escape hatch for a page that
+   asked for the whole width; it keeps it. */
+#nd-page:not([data-full="true"]) {
+  max-width: 46rem;
 }
 
 html {
@@ -23,4 +251,319 @@ html {
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* The supersession notice's own colour. It used to wear --color-fd-primary,
+   which is also the link colour, the primary button and the focus ring — so
+   "stop trusting this document" was painted in exactly the blue that means
+   "go here". A caution needs a role of its own; this is the only place it is
+   used, and the word "Superseded" still carries the meaning without it
+   (GOV.UK's rule: never rely on colour alone). */
+/* The caution colour is a TOKEN, declared as a light/dark pair on the root
+   rather than inside the one class that first used it. Every surface that has
+   to say "the record withdrew this" now spends the same colour — the banner
+   over a superseded document, and the chip that marks it in the sidebar, the
+   listings, the front door and search. Declared in both themes deliberately:
+   a colour written only on `:root` leaks into dark, because `:root` and
+   `.dark` have equal specificity and whichever comes later wins. */
+:root {
+  --ksor-caution: #9c3f24;
+}
+
+.dark {
+  --ksor-caution: #e0906e;
+}
+
+.ksor-caution {
+  border-color: color-mix(in oklab, var(--ksor-caution) 32%, transparent);
+  border-left-color: var(--ksor-caution);
+  background-color: color-mix(in oklab, var(--ksor-caution) 8%, transparent);
+}
+
+.dark .ksor-caution {
+  background-color: color-mix(in oklab, var(--ksor-caution) 12%, transparent);
+}
+
+/* A withdrawn document's status chip, wherever one renders. A `draft` chip and
+   a `superseded` chip were pixel-identical — the same hairline border and the
+   same muted text — so the two statuses that mean the most different things
+   looked the same at the moment a reader picks between two documents. The
+   colour is additive, never the whole signal: the word "superseded" is beside
+   it in every one of these places (GOV.UK's rule — never rely on colour alone).
+   Unlayered, so it beats the Tailwind utility that sets the chip's border and
+   text colour; the banner class above has always worked this way. */
+.ksor-withdrawn {
+  border-color: color-mix(in oklab, var(--ksor-caution) 45%, transparent);
+  color: var(--ksor-caution);
+}
+
+/* A search result whose document carries a caveat status. Appended in CSS so
+   the row keeps the shell's own markdown rendering of the search highlights —
+   passing children to the item replaces that, and the <mark> tags leak into
+   the dialog as literal text. */
+[data-ksor-status]::after {
+  content: attr(data-ksor-status);
+  margin-inline-start: auto;
+  align-self: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* …and in search too, where a reader is choosing between results. The chip is
+   drawn by `content`, so the tone has to be set on the same pseudo-element. */
+[data-ksor-status="superseded"]::after {
+  border-color: color-mix(in oklab, var(--ksor-caution) 45%, transparent);
+  color: var(--ksor-caution);
+}
+
+/* ── The document's type ramp ────────────────────────────────────────────────
+   The shell sizes the title at 1.75em — 28px against 16px body, with normal
+   tracking. Measured against the description at 18px, that is four shades of
+   grey text rather than a document with structure: the title barely leads and
+   the description competes with it. The title takes the lead it should have,
+   the description steps back under it, and the body is left alone at 16/28,
+   which is right for long-form reading. Scoped to the shell's own page id, so
+   nothing depends on which order two arbitrary Tailwind sizes land in. */
+#nd-page > h1 {
+  font-family: var(--font-display);
+  font-size: 2.375rem;
+  font-weight: 600;
+  line-height: 1.1;
+  /* Serifs need less negative tracking than the sans did at this size — the
+     -0.021em that suited the old face closes the counters on this one. */
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+#nd-page > p:first-of-type {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* The section headings inside a document. The shell styles the title and
+   leaves the body's headings to its prose defaults — 30 / 24 / 20 / 16px for
+   h1-h4 in the SANS body face, and nothing at all for h5-h6, which the prose
+   plugin never defines and preflight resets to inherit (read out of the built
+   stylesheet, 2026-08-22). Two things were wrong with that.
+
+   Voice: a section heading is the RECORD speaking, exactly like the title
+   above it, so it belongs in the display serif. Left in sans, a single
+   document spoke in two voices and the change of voice meant nothing —
+   which is the one thing the three faces on this site exist to carry.
+
+   Scale: h4 came out at 16px/600 — the body size — and h5/h6 at 16px/400 with
+   NO margins, which is a paragraph. The ramp is 38 / 32 / 28 / 22 / 18 / 16 —
+   the page title, then h1 down to h6 — against a 16px body. The size step runs
+   out at h5, so below it the serif, the weight and the air above it are what
+   make a heading.
+
+   A body `# heading` should not exist — the frontmatter title IS the page's
+   h1 (scaffolded AGENTS.md) — but nothing enforces it and this repo's own
+   fixture corpus opens one (workbench/example-corpus/knowledge/about.md:9).
+   `#nd-page > h1` is a CHILD combinator, so it reached the page title only,
+   and a body h1 fell through both rules to 30px sans weight 800: the loudest
+   thing on the page, in the site's voice, for the record's own words.
+
+   Scoped INSIDE `.prose`, which is the container Fumadocs wraps the document's
+   own markdown in — the record's words, and nothing else. Scoped to the page
+   instead, this rule reached the site's own headings too and blew up
+   `Provenance`'s deliberately small mono "Sources" label into a 28px serif
+   heading (caught by measuring the rendered page, 2026-08-22): an id beats the
+   Tailwind utilities a component sets on itself, so the component lost an
+   argument it did not know it was having.
+
+   Specificity, not luck: `#nd-page .prose` (1,1,0) beats the prose rule's
+   single class (0,1,0), because that selector wraps its element in `:where()`,
+   which contributes nothing. */
+#nd-page .prose :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  text-wrap: balance;
+}
+
+/* Space above a heading, not below it: a heading belongs to the text it
+   introduces. The prose defaults set both in `em`, so raising the sizes above
+   would have scaled the gaps with them and left h2 floating on 56px of air. */
+#nd-page .prose h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+}
+
+#nd-page .prose h2 {
+  font-size: 1.75rem;
+  line-height: 1.25;
+  margin-top: 2.75rem;
+  margin-bottom: 0.875rem;
+}
+
+#nd-page .prose h3 {
+  font-size: 1.375rem;
+  line-height: 1.35;
+  margin-top: 2rem;
+  margin-bottom: 0.625rem;
+}
+
+/* The floor of the ramp. The size step is spent here, so weight and air do
+   the work: at 16px/400 with no margins at all, a fifth-level heading was
+   byte-identical to the paragraph under it and glued to the one above. */
+#nd-page .prose :is(h5, h6) {
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  margin-top: 1.5rem;
+  margin-bottom: 0.375rem;
+}
+
+#nd-page .prose h4 {
+  font-size: 1.125rem;
+  line-height: 1.45;
+  /* No negative tracking this close to the body size — it only closes the
+     counters without buying any apparent tightness. */
+  letter-spacing: 0;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── The document's furniture ────────────────────────────────────────────────
+   Everything under the headings: links, emphasis, quotes, tables, code. The
+   shell leaves nearly all of it at one weight of one ink, which is why a page
+   of real documentation read as a wall of black (owner, 2026-08-22). Measured
+   before touching anything: a link inside a paragraph rendered lab(4.41) at
+   weight 500 — the SAME colour and weight as the `<strong>` beside it, told
+   apart only by an underline. A reader cannot see what is clickable.
+
+   Every rule below is scoped to `.prose`, the container the record's own
+   markdown renders into, so the site's own furniture keeps its styling. */
+
+/* A link is what the accent is FOR. Only in running text: a heading carries an
+   anchor link around its own text, and colouring those turns every heading
+   blue — which is the same mistake in the other direction. */
+#nd-page .prose :is(p, li, td, th, blockquote) a {
+  color: var(--color-fd-primary);
+  text-decoration-color: color-mix(in oklab, var(--color-fd-primary) 30%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+}
+
+#nd-page .prose :is(p, li, td, th, blockquote) a:hover {
+  text-decoration-color: var(--color-fd-primary);
+}
+
+/* Emphasis is weight, not colour. The prose default sets 500 against a 400
+   body, which at 16px is not a difference a reader notices. */
+#nd-page .prose strong {
+  font-weight: 650;
+}
+
+/* A table is a register: its head is a column label, so it speaks in the mono
+   voice every other label on this site uses, and the rows are separated by
+   hairlines rather than by nothing. The prose default left `tbody tr` with a
+   0px bottom border — the cells simply floated. */
+#nd-page .prose thead th {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fd-muted-foreground);
+}
+
+#nd-page .prose tbody tr {
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+#nd-page .prose tbody tr:last-child {
+  border-bottom: 0;
+}
+
+/* A quotation is an aside, so it steps back rather than shouting in full ink.
+   Italic at 16px in a system sans is a default, not a choice — and it is the
+   least readable setting of the three things a blockquote could be. */
+#nd-page .prose blockquote {
+  font-style: normal;
+  color: var(--color-fd-muted-foreground);
+}
+
+/* Inline code is the record's machine vocabulary — a frontmatter key, a path,
+   a command — and it was set in the same ink as the prose around it, so the
+   grey chip carried the whole distinction (owner, 2026-08-22).
+
+   It takes a colour of its own rather than one already spoken for. The accent
+   belongs to links and actions, and inline code is neither — tinting it blue
+   would make every key look clickable, which is the defect one rule up in
+   reverse. `--ksor-caution` is the other coloured thing here and it means "the
+   record withdrew this". So: a third token, a deep teal, far enough from the
+   accent's hue to be told apart at 13px and cool enough to sit in a palette
+   built on blue ink. A pair, like every colour on this site. */
+:root {
+  --ksor-code: #0f6f6a;
+}
+
+.dark {
+  --ksor-code: #6fd8c8;
+}
+
+#nd-page .prose :not(pre) > code {
+  color: var(--ksor-code);
+  background: color-mix(in oklab, var(--ksor-code) 7%, var(--color-fd-muted));
+  border-color: color-mix(in oklab, var(--ksor-code) 22%, transparent);
+}
+
+/* A code block has to look like a block. Fumadocs paints its surface with
+   `bg-fd-card`, and `--card` in this palette is all but the page colour — the
+   measured difference was under 2% lightness, so a fenced block read as loose
+   monospace text with a faint outline. `--muted` is the token that means
+   "a surface ON the page", and it is a pair, so this holds in both themes. */
+#nd-page .prose figure.shiki {
+  background: var(--color-fd-muted);
+}
+
+/* Re-assert the shell's own reset, which the ramp above broke. The prose
+   plugin zeroes the first block's top margin, but writes that rule as
+   `.prose :where(> :first-child)`, and `:where()` contributes nothing to
+   specificity — so every heading rule above beat it, and a document whose body
+   OPENED with a heading started 44px lower than one that opened with a
+   sentence (measured, 2026-08-22). The top of a document must not move with
+   the author's choice of first block. This selector is (1,2,0) against the
+   heading rules' (1,1,1), so it takes the argument back. */
+#nd-page .prose > :first-child {
+  margin-top: 0;
+}
+
+/* ── The page pager ──────────────────────────────────────────────────────────
+   Fumadocs lays the neighbours out as a grid that becomes two columns when both
+   exist. With only one — the first or last document of the record — it stays a
+   single full-width column, so a lone "next" stretched the whole row with its
+   text jammed against the right edge and read as a broken card. Hold it to half
+   the row, on the side it points to: the next card is the one the shell marks
+   `text-end`. Full width on a narrow screen, where one column is correct. */
+@media (min-width: 48rem) {
+  #nd-page > [class*="@container"]:has(> a:only-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #nd-page > [class*="@container"] > a:only-child[class*="text-end"] {
+    grid-column: 2;
+  }
+}
+
+/* …and it sits at the foot of the page whatever the document's length. The
+   article is a flex column stretched to the viewport, so on a short document
+   the neighbours used to land wherever the text stopped — 265px above the
+   bottom edge on `/docs/policies`, measured — which reads as content, not as
+   the end of the page. `margin-top: auto` gives the free space to the gap
+   above them instead. It is inert once the document is taller than the
+   viewport: with no free space the auto margin is zero, so a long document
+   keeps the shell's own 16px gap (verified both ways at 863px of viewport). */
+#nd-page > [class*="@container"]:last-child {
+  margin-top: auto;
 }

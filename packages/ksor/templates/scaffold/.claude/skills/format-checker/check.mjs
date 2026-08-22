@@ -115,6 +115,7 @@ function parseFrontmatter(text) {
   const malformedQuote = new Map();
   const malformed = [];
   const duplicates = [];
+  const truncated = [];
   const tightColons = [];
   const tabIndents = [];
   let current = null;
@@ -157,6 +158,12 @@ function parseFrontmatter(text) {
     }
     const nested = /^[ \t]+([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(line);
     if (nested && current !== null) {
+      // Same hazard as the top-level duplicate above, one level down: this Map
+      // keeps the LAST write while the surfaces read the FIRST occurrence, so
+      // the check validates one value and the build publishes the other
+      // (found 2026-08-20: `governance: nope` then `governance: false` passed
+      // the check and crashed the build).
+      if (children.get(current).has(nested[1])) duplicates.push(`${current}.${nested[1]}`);
       children.get(current).set(nested[1], unquote(nested[2]));
       continue;
     }
@@ -168,7 +175,16 @@ function parseFrontmatter(text) {
       // entry, and reading it as one refuses the documents instead of the
       // list (found live 2026-08-18: `- public # the default` made every
       // public document's visibility undeclared).
-      const value = /^["']/.test(item[1]) ? item[1] : item[1].replace(/\s+#.*$/, "");
+      const quotedItem = /^["']/.test(item[1]);
+      const value = quotedItem ? item[1] : item[1].replace(/\s+#.*$/, "");
+      // A `#` is a comment to YAML and an invoice or issue number to a person.
+      // In `provenance` — free text naming a real source — the truncation is
+      // silent data loss: `- Invoice #4471 from Acme Ltd` publishes as
+      // "Invoice" (found 2026-08-20). NOT flagged for `audiences`, where a
+      // trailing comment is an intended and documented use.
+      if (!quotedItem && current === "provenance" && value !== item[1]) {
+        truncated.push({ key: current, raw: item[1].trim(), kept: value.trim() });
+      }
       lists.get(current).push(unquote(value));
       continue;
     }
@@ -180,7 +196,19 @@ function parseFrontmatter(text) {
       malformed.push(line.trim());
       continue;
     }
-    if (/^[ \t]*-([ \t]|$)/.test(line) || /^[ \t]+\S/.test(line)) continue;
+    if (/^[ \t]*-([ \t]|$)/.test(line)) continue;
+    // A whole-line comment is YAML, not a wrapped value — an author annotating
+    // their own frontmatter ("# add the signed PDF once it lands") is doing
+    // nothing wrong, and refusing it turned the adopter's shipped CI red on a
+    // record both surfaces read perfectly (found 2026-08-21).
+    if (/^[ \t]*#/.test(line)) continue;
+    // An indented line that is neither a nested key nor a list item is a value
+    // WRAPPED onto a second line. YAML folds it back into the value above;
+    // this parser used to skip it, so every rule here inspected a string that
+    // was not what the surfaces publish — `effective: 2026-04-01` continued by
+    // `  00:00:00 +05:00` passed the date rule and shipped the day before
+    // (found 2026-08-20). A value the checker cannot see is a value it cannot
+    // govern.
     malformed.push(line.trim());
   }
   return {
@@ -190,6 +218,7 @@ function parseFrontmatter(text) {
     quoted,
     malformedQuote,
     duplicates,
+    truncated,
     malformed,
     tightColons,
     tabIndents,
@@ -472,9 +501,16 @@ if (!existsSync(knowledgeDir)) {
 
   // frontmatter + links per document
   const visibilityByPath = new Map();
+  const documentPaths = new Set();
   const crossings = [];
   for (const p of mdFiles) {
     const rel = path.relative(root, p);
+    // Every markdown file under knowledge/ IS a document of the record, whether
+    // or not its own frontmatter parses. Counting it only after a clean parse
+    // made a correct `superseded_by` be reported as a capitalisation mistake
+    // whenever its successor was the document still being written (round 3) —
+    // two problems for one cause, and the second one false.
+    documentPaths.add(p);
     const text = readFileSync(p, "utf8");
     const fm = parseFrontmatter(text);
     if (fm === null) {
@@ -490,7 +526,7 @@ if (!existsSync(knowledgeDir)) {
       problem(
         rel,
         `unclosed or malformed frontmatter — this is not a frontmatter line: "${fm.malformed[0]}"`,
-        "an unclosed block swallows the body: the checker reads prose as governance, and the site renders a document with no title",
+        "an unclosed block swallows the body, and a value wrapped onto a second line is folded back by YAML but invisible here — either way this check inspects something the site does not publish",
         "close the block with --- on its own line; every line inside it is `key: value` or a `- list item` — no prose, no comments",
       );
     } else {
@@ -618,9 +654,28 @@ if (!existsSync(knowledgeDir)) {
           "add superseded_by: ./<successor>.md",
         );
       }
-      // A successor that names a path must be a document that exists: the
-      // pointer is the whole value of marking something superseded.
-      if (successor && (/^\.{1,2}\//.test(successor) || successor.toLowerCase().endsWith(".md"))) {
+      if (successor && status !== "superseded") {
+        problem(
+          rel,
+          `superseded_by on a document that is status: ${status || "(none)"}`,
+          "the two keys are one statement — a successor pointer says this document was replaced, so a record that keeps the pointer while calling the document current contradicts itself, and the site publishes a Superseded notice over a live document",
+          "set status: superseded, or remove superseded_by if this document is still current",
+        );
+      }
+      // superseded_by must be a document pointer, and EVERY successor is
+      // validated. This was gated behind a shape test until 2026-08-20, so a
+      // value matching neither shape (`hr/refunds-2026`) skipped existence,
+      // escape-the-record AND the cross-audience rule — and then the site
+      // published the raw pointer, naming a document a lower tier must not know
+      // exists.
+      if (successor && !successor.split("#")[0].toLowerCase().endsWith(".md")) {
+        problem(
+          rel,
+          `superseded_by is not a document pointer: ${successor}`,
+          "unless it names a markdown document this check cannot tell whether the successor exists, stays inside the record, or is readable by this document's audience — and the site publishes the raw text of it",
+          "write it as a relative path to the successor, e.g. superseded_by: ./<successor>.md",
+        );
+      } else if (successor) {
         const resolved = path.resolve(path.dirname(p), successor.split("#")[0]);
         if (!resolved.startsWith(knowledgeDir + path.sep)) {
           problem(
@@ -629,7 +684,7 @@ if (!existsSync(knowledgeDir)) {
             "the successor is what readers are sent to instead — outside knowledge/ it is not a governed document",
             "point superseded_by at a document inside knowledge/",
           );
-        } else if (!existsSync(resolved)) {
+        } else if (!existsSync(resolved) || !lstatSync(resolved).isFile()) {
           problem(
             rel,
             `superseded_by points at a document that does not exist: ${successor}`,
@@ -638,6 +693,76 @@ if (!existsSync(knowledgeDir)) {
           );
         } else {
           crossings.push({ kind: "superseded_by", rel, from: p, to: resolved, target: successor });
+        }
+      }
+      for (const cut of fm.truncated) {
+        problem(
+          rel,
+          `a ${cut.key} entry is cut short at a #: ${cut.raw}`,
+          `YAML ends an unquoted value at " #", so the record stores only "${cut.kept}" and that is what the page publishes as the source — the rest is lost without a word`,
+          `quote it to keep the whole thing: - "${cut.raw.replace(/"/g, "'")}"`,
+        );
+      }
+      // Every governed key except `provenance` is ONE value. Written as a
+      // block sequence or a nested map it parses to an array or an object, and
+      // the page — which asks for text — renders nothing at all: the record
+      // declares the fact and the surface silently omits it (found 2026-08-21
+      // with `effective:` followed by `  - 2026-04-01`). `visibility` has its
+      // own list rule with a better message, so it is left to it.
+      for (const scalarKey of [
+        "title",
+        "description",
+        "status",
+        "owner",
+        "effective",
+        "superseded",
+        "superseded_by",
+        "order",
+      ]) {
+        const asList = (fm.lists.get(scalarKey) ?? []).length > 0;
+        const asMap = (fm.children.get(scalarKey)?.size ?? 0) > 0;
+        if (asList || asMap) {
+          problem(
+            rel,
+            `${scalarKey} is written as ${asList ? "a list" : "a nested block"}, not a value`,
+            "the surfaces read this key as one piece of text; as a list or a map it reaches them as neither, so the page publishes nothing where the record declares something",
+            `put the value on the key's own line: ${scalarKey}: <value>`,
+          );
+        }
+      }
+      // `effective` is the DAY a document takes effect. Written unquoted with a
+      // time, YAML makes it a timestamp, and normalizing that to a UTC day
+      // prints the day before the record's for any positive offset (found
+      // 2026-08-20: `2026-04-01 00:00:00 +05:00` rendered 2026-03-31).
+      // `effective` is the DAY a document takes effect, and the page publishes
+      // it as fact inside <time datetime>. Unquoted it must be a calendar-valid
+      // YYYY-MM-DD and nothing else, because every other shape YAML accepts
+      // here publishes something the record does not say: `2026-06-31` rolls
+      // silently to July 1st (js-yaml's date path is `Date.UTC(y, m, d)` with
+      // no validation), a value carrying a time reads back in a timezone and
+      // can land a day early, and a bare `2026` types as a number that never
+      // reaches the page at all. Three rounds of narrower rules each leaked a
+      // different one of those, so the rule is now the whole contract: a plain
+      // date, or QUOTED text that is published verbatim and never parsed.
+      const effective = fm.keys.get("effective");
+      if (effective !== undefined && effective !== "" && !fm.quoted.has("effective")) {
+        const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(effective);
+        let calendarValid = false;
+        if (iso !== null) {
+          const [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+          const probe = new Date(Date.UTC(year, month - 1, day));
+          calendarValid =
+            probe.getUTCFullYear() === year &&
+            probe.getUTCMonth() === month - 1 &&
+            probe.getUTCDate() === day;
+        }
+        if (!calendarValid) {
+          problem(
+            rel,
+            `effective is not a calendar date: ${effective}`,
+            "the page publishes this as the day the document takes effect, in a <time> element a machine reads as fact — YAML rolls an impossible date to the next month without a word, reads a value carrying a time in a timezone, and types a bare year as a number that never reaches the page",
+            `write a real date (effective: 2026-04-01), or quote it to publish it as text (effective: "${effective.replace(/"/g, "'")}")`,
+          );
         }
       }
       // visibility: one audience per document, from the set instance.md declares.
@@ -681,6 +806,58 @@ if (!existsSync(knowledgeDir)) {
     for (const target of linkTargets(stripCode(text))) {
       const to = checkLinkTarget(rel, p, target);
       if (to !== null) crossings.push({ kind: "link", rel, from: p, to, target });
+    }
+  }
+
+  for (const { kind, rel, to, target } of crossings) {
+    if (kind !== "superseded_by" || documentPaths.has(to)) continue;
+    problem(
+      rel,
+      `superseded_by does not name a document in the record: ${target}`,
+      "it resolves to a file the record does not govern — on a case-insensitive filesystem a mis-typed capitalisation resolves happily here and then misses every rule keyed by the real path, the cross-audience check included",
+      "match the successor's path exactly as it appears under knowledge/ (ascii lowercase)",
+    );
+  }
+
+  // A supersession must lead somewhere. A document that supersedes ITSELF, or a
+  // pair that supersede each other, published a notice telling the reader this
+  // page is replaced — by a link back to a page saying the same thing. The
+  // reader is sent in a circle and never reaches a current document (found
+  // 2026-08-20).
+  {
+    const successorOf = new Map();
+    for (const { kind, from, to } of crossings) {
+      if (kind === "superseded_by" && !successorOf.has(from)) successorOf.set(from, to);
+    }
+    const walked = new Set();
+    for (const start of successorOf.keys()) {
+      if (walked.has(start)) continue;
+      // An ORDERED path, not a set: the documents visited before the loop
+      // closes are not part of the cycle, and reporting them made the check
+      // blame a document whose pointer was correct while printing an edge the
+      // record does not contain (found 2026-08-20 — a → b → c → b was reported
+      // as "a → b → c → a").
+      const trail = [start];
+      const onTrail = new Set([start]);
+      let cursor = successorOf.get(start);
+      while (cursor !== undefined && !onTrail.has(cursor)) {
+        onTrail.add(cursor);
+        trail.push(cursor);
+        cursor = successorOf.get(cursor);
+      }
+      for (const node of trail) walked.add(node);
+      if (cursor === undefined) continue; // the chain ends at a current document
+      // The cycle is the trail from the document the walk returned to.
+      const cycle = trail.slice(trail.indexOf(cursor));
+      const names = cycle.map((file) => path.relative(root, file));
+      problem(
+        names[0],
+        cycle.length === 1
+          ? "superseded_by points at this document itself"
+          : `supersession cycle: ${names.join(" → ")} → ${names[0]}`,
+        "a supersession sends the reader to the successor that replaced this one — a pointer that comes back here sends them in a circle and never reaches a current document",
+        "point superseded_by at the document that actually replaces this one, or set status back if nothing does",
+      );
     }
   }
 
@@ -750,7 +927,7 @@ const INSTANCE_KEYS = new Set([
   "budgets",
 ]);
 const INSTANCE_KSOR_KEYS = new Set(["requires", "scaffolded"]);
-const INSTANCE_SITE_KEYS = new Set(["url"]);
+const INSTANCE_SITE_KEYS = new Set(["url", "governance"]);
 // Nested field names mirror the kernel's instance schema; the kernel validates
 // their values (this checker stays dependency-free and cannot import it).
 const INSTANCE_DATABASE_KEYS = new Set(["dsn_env", "tenant_id"]);
@@ -778,7 +955,7 @@ if (!existsSync(instanceMd)) {
     problem(
       "instance.md",
       `unclosed or malformed frontmatter — this is not a frontmatter line: "${fm.malformed[0]}"`,
-      "an unclosed block swallows the identity prose and turns it into unreadable configuration",
+      "an unclosed block swallows the identity prose and turns it into unreadable configuration; a value wrapped onto a second line is folded back by YAML but invisible here, so this check governs a string the surfaces never see",
       "close the block with --- on its own line; every line inside it is `key: value` — the identity prose belongs below it",
     );
   } else {
@@ -920,6 +1097,31 @@ if (!existsSync(instanceMd)) {
         "add audiences: (ordered least- to most-restricted, public first), or remove default_visibility:",
       );
     }
+    // A group written as a flow mapping (`site: { governance: false }`) lands
+    // as a scalar with NO children, so every nested rule below — the closed key
+    // set included — silently skips it: the owner's setting is dropped without
+    // a word (found 2026-08-20). The groups are block mappings, always.
+    for (const parent of ["ksor", "site", "database", "embedding", "retrieval", "budgets"]) {
+      // A trailing ` #` comment is part of this checker's own grammar — it is
+      // stripped for values and for list items, and `audiences: # who may read`
+      // passes on the same file. Reading the raw value called `site: # notes` an
+      // inline mapping and refused a well-formed record, with a why that was
+      // factually false: the surfaces read that file perfectly (found
+      // 2026-08-20).
+      const rawGroup = fm.keys.get(parent);
+      const inline =
+        rawGroup === undefined || rawGroup.trim().startsWith("#")
+          ? ""
+          : rawGroup.replace(/\s+#.*$/, "").trim();
+      if (inline !== "") {
+        problem(
+          "instance.md",
+          `${parent}: has an inline value: ${inline}`,
+          "a group written on one line is not read as a group — every key inside it is skipped by this check AND by the surfaces, so the settings the owner wrote are silently dropped",
+          `write it as an indented block:\n      ${parent}:\n        <key>: <value>`,
+        );
+      }
+    }
     for (const [parent, allowed] of [
       ["ksor", INSTANCE_KSOR_KEYS],
       ["site", INSTANCE_SITE_KEYS],
@@ -929,6 +1131,27 @@ if (!existsSync(instanceMd)) {
       ["budgets", INSTANCE_BUDGETS_KEYS],
     ]) {
       for (const key of fm.children.get(parent)?.keys() ?? []) {
+        // site.governance is a switch, so its VALUE is checked here: a typo
+        // that silently defaulted would publish the governance the owner asked
+        // to hide, or hide what they asked to publish.
+        if (parent === "site" && key === "governance") {
+          const raw = (fm.children.get("site")?.get("governance") ?? "").trim();
+          const value = (/^["']/.test(raw) ? raw : raw.replace(/\s+#.*$/, ""))
+            .trim()
+            .replace(/^(['"])(.*)\1$/, "$2")
+            // Case-folded: js-yaml reads `False` as false, and the site's own
+            // reader lowercases before comparing. A checker stricter than both
+            // surfaces is the very divergence this rule exists to stop.
+            .toLowerCase();
+          if (value !== "true" && value !== "false") {
+            problem(
+              "instance.md",
+              `site.governance is "${value}" — it must be true or false`,
+              "it decides whether pages show the owner, effective date and sources each document declares; a value nobody can read is a setting the owner believes is in effect",
+              'write "governance: false" to keep pages plain, or remove the key (the default shows them)',
+            );
+          }
+        }
         if (!allowed.has(key)) {
           problem(
             "instance.md",

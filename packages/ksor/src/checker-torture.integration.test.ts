@@ -197,7 +197,7 @@ describe("scaffolded format-checker — torture", () => {
   });
 
   it("resolves angle-bracketed destinations without their brackets", () => {
-    const benign = probe({ "knowledge/angle-ok.md": doc("[a](<./example.md>)") });
+    const benign = probe({ "knowledge/angle-ok.md": doc("[a](<./what-is-a-ksor.md>)") });
     expect(benign.status, benign.output).toBe(0);
 
     const broken = probe({ "knowledge/angle-bad.md": doc("[a](<./missing.md>)") });
@@ -341,6 +341,348 @@ describe("scaffolded format-checker — torture", () => {
     expect(result.output).toContain('frontmatter quoting is malformed: title: "a" and "b"');
     expect(result.output).toContain("frontmatter quoting is malformed: title: 'unclosed");
     expect(result.output).toContain("frontmatter value needs quoting: title: - foo");
+  });
+
+  // The governance-rendering slice put these frontmatter keys on the PAGE, so
+  // a shape the checker waved through stopped being cosmetic and started
+  // publishing wrong or leaked text. Every case below was reproduced against
+  // the real checker before the rule existed (2026-08-20).
+  describe("governance keys the site now publishes", () => {
+    const instanceWith = (block: string): string =>
+      readFileSync(path.join(project, "instance.md"), "utf8").replace(
+        "\nksor:\n",
+        `\n${block}\nksor:\n`,
+      );
+
+    it("refuses a group written as a flow mapping, which parses as a scalar with no children", () => {
+      // `site: { governance: false }` passed the check AND was ignored by the
+      // site — the owner's setting dropped in silence, and the closed key set
+      // voided for every nested group at the same time.
+      const flow = probe({ "instance.md": instanceWith("site: { governance: false }") });
+      expect(flow.status, flow.output).toBe(1);
+      expect(flow.output).toContain("site: has an inline value");
+
+      const misspelledInside = probe({
+        "instance.md": instanceWith('database: { dsn_evn: "KSOR_DB_URL" }'),
+      });
+      expect(misspelledInside.status, misspelledInside.output).toBe(1);
+    });
+
+    it("accepts a YAML comment on a group key — the site's own reader allows it", () => {
+      // `governanceVisible()` matches /^site:[ \t]*(?:#.*)?$/ explicitly, and
+      // `audiences: # …` already passed here. Refusing it made the checker
+      // stricter than the surface it protects, and told the owner their
+      // settings were being dropped when they were not.
+      const commented = probe({
+        "instance.md": instanceWith("site: # publication settings\n  governance: false"),
+      });
+      expect(commented.status, commented.output).toBe(0);
+    });
+
+    it("accepts the capitalised booleans YAML and the site both accept", () => {
+      for (const value of ["False", "TRUE", "True"]) {
+        const result = probe({ "instance.md": instanceWith(`site:\n  governance: ${value}`) });
+        expect(result.status, `${value} → ${result.output}`).toBe(0);
+      }
+      // …and still refuses a value neither parser can read.
+      const nonsense = probe({ "instance.md": instanceWith("site:\n  governance: banana") });
+      expect(nonsense.status, nonsense.output).toBe(1);
+    });
+
+    it("refuses a duplicated NESTED key: the map kept the last, the site reads the first", () => {
+      const dup = probe({
+        "instance.md": instanceWith("site:\n  governance: true\n  governance: false"),
+      });
+      expect(dup.status, dup.output).toBe(1);
+      expect(dup.output).toContain("duplicate frontmatter key: site.governance");
+    });
+
+    it("accepts a block-style governance switch — the shape an owner is told to write", () => {
+      const ok = probe({ "instance.md": instanceWith("site:\n  governance: false") });
+      expect(ok.status, ok.output).toBe(0);
+    });
+
+    // `effective` is published inside <time datetime> as fact. Three rounds of
+    // narrower rules each leaked a different way for the page to say a day the
+    // record never wrote, so the contract is now: a calendar-valid YYYY-MM-DD
+    // unquoted, or quoted text published verbatim.
+    it("refuses every unquoted shape YAML would republish as a different day", () => {
+      const cases: readonly [string, string][] = [
+        // js-yaml's date path is Date.UTC(y, m, d) with NO validation, so an
+        // impossible date rolls into the next month silently.
+        ["2026-06-31", "rolls to July 1st"],
+        ["2026-13-01", "rolls a year forward"],
+        ["2026-02-29", "2026 is not a leap year"],
+        // carries a time → read back in a timezone, can land a day early
+        ["2026-04-01 00:00:00 +05:00", "timestamp with an offset"],
+        ["2026-4-1 00:00:00 +05:00", "one-digit month and day"],
+        ["2026-04-01t00:00:00+05:00", "lowercase t separator"],
+        // types as a NUMBER and used to vanish from the page entirely
+        ["2026", "a bare year"],
+        // free text YAML leaves alone, but which is not a date either
+        ["2026-04-01 for new customers", "trailing prose"],
+      ];
+      for (const [value, why] of cases) {
+        const result = probe({
+          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${value}\n---\n\nBody.\n`,
+        });
+        expect(result.status, `${value} (${why}) → ${result.output}`).toBe(1);
+        expect(result.output).toContain("effective is not a calendar date");
+      }
+    });
+
+    it("refuses a one-value key written as a list or a nested block", () => {
+      // Both passed the check and then rendered NOTHING: the record declared an
+      // effective date and the page silently omitted it (round 4).
+      const asList = probe({
+        "knowledge/le.md":
+          "---\ntitle: LE\nstatus: approved\neffective:\n  - 2026-04-01\n---\n\nBody.\n",
+      });
+      expect(asList.status, asList.output).toBe(1);
+      expect(asList.output).toContain("effective is written as a list");
+
+      const asMap = probe({
+        "knowledge/me.md":
+          "---\ntitle: ME\nstatus: approved\nowner:\n  team: Finance\n---\n\nBody.\n",
+      });
+      expect(asMap.status, asMap.output).toBe(1);
+      expect(asMap.output).toContain("owner is written as a nested block");
+
+      // provenance IS a list, and must stay one.
+      const list = probe({
+        "knowledge/pe.md":
+          "---\ntitle: PE\nstatus: approved\nprovenance:\n  - Board minute 2026-02-11\n---\n\nBody.\n",
+      });
+      expect(list.status, list.output).toBe(0);
+    });
+
+    it("accepts a real date, and any text the author QUOTES", () => {
+      // Quoted is the escape hatch: it is published verbatim and never parsed
+      // as a date, so "Q1 2026" and a legal-sounding phrase both work.
+      const real = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01\n---\n\nBody.\n",
+      });
+      expect(real.status, real.output).toBe(0);
+      for (const quoted of ['"Q1 2026"', '"2026-04-01 for new customers"', '"2026-06-31"']) {
+        const result = probe({
+          "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: ${quoted}\n---\n\nBody.\n`,
+        });
+        expect(result.status, `${quoted} → ${result.output}`).toBe(0);
+      }
+    });
+
+    it("prints a remedy that is itself valid — following it must produce a green check", () => {
+      // The previous rule's remedy sliced 10 characters off the value, so for
+      // `2026-4-1 00:00:00 +05:00` it advised writing `2026-4-1 0` — garbage
+      // that the checker then accepted (round 3).
+      const refused = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-4-1 00:00:00 +05:00\n---\n\nBody.\n",
+      });
+      expect(refused.status).toBe(1);
+      const quotedRemedy = /effective: "([^"]*)"/.exec(refused.output)?.[1];
+      expect(quotedRemedy, refused.output).toBeDefined();
+      const following = probe({
+        "knowledge/tz.md": `---\ntitle: TZ\nstatus: approved\neffective: "${quotedRemedy}"\n---\n\nBody.\n`,
+      });
+      expect(following.status, `following the remedy → ${following.output}`).toBe(0);
+    });
+
+    it("accepts a comment line an author writes inside their own frontmatter", () => {
+      // YAML allows it, both surfaces read the record perfectly, and the rule
+      // that refused it was meant for WRAPPED VALUES — it caught annotations
+      // instead and turned the adopter's CI red (round 4).
+      const annotated = probe({
+        "knowledge/note.md":
+          "---\ntitle: Note\nstatus: approved\nprovenance:\n  - Board minute 2026-02-11\n" +
+          "  # add the signed PDF once it lands\n---\n\nBody.\n",
+      });
+      expect(annotated.status, annotated.output).toBe(0);
+
+      const topLevelComment = probe({
+        "knowledge/note.md":
+          "---\n# the two sources this rests on\ntitle: Note\nstatus: approved\n---\n\nBody.\n",
+      });
+      expect(topLevelComment.status, topLevelComment.output).toBe(0);
+    });
+
+    it("refuses a value wrapped onto a second line, which YAML folds back", () => {
+      // The parser skipped indented continuations, so every rule inspected a
+      // string that was not the published value: this exact document passed
+      // the date rule and then shipped 2026-03-31 (round 3).
+      const wrapped = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective: 2026-04-01\n  00:00:00 +05:00\n---\n\nBody.\n",
+      });
+      expect(wrapped.status, wrapped.output).toBe(1);
+
+      const nextLine = probe({
+        "knowledge/tz.md":
+          "---\ntitle: TZ\nstatus: approved\neffective:\n  2026-04-01 00:00:00 +05:00\n---\n\nBody.\n",
+      });
+      expect(nextLine.status, nextLine.output).toBe(1);
+    });
+
+    it("names a source that YAML would cut short at a #", () => {
+      // `- Invoice #4471 from Acme Ltd` publishes as "Invoice": a citation is
+      // supposed to point at exactly one source, and most of this one is gone.
+      const cut = probe({
+        "knowledge/inv.md":
+          "---\ntitle: Inv\nstatus: approved\nprovenance:\n  - Invoice #4471 from Acme Ltd\n---\n\nBody.\n",
+      });
+      expect(cut.status, cut.output).toBe(1);
+      expect(cut.output).toContain("cut short at a #");
+
+      // Quoted keeps the whole thing.
+      const quoted = probe({
+        "knowledge/inv.md":
+          '---\ntitle: Inv\nstatus: approved\nprovenance:\n  - "Invoice #4471 from Acme Ltd"\n---\n\nBody.\n',
+      });
+      expect(quoted.status, quoted.output).toBe(0);
+    });
+
+    it("validates EVERY superseded_by, not only ones shaped like a path", () => {
+      // `legal/terms` matched neither shape test, so it skipped existence, the
+      // escape-the-record rule AND the cross-audience leak rule — and the
+      // notice then published the raw pointer.
+      const shapeless = probe({
+        "knowledge/gone.md":
+          "---\ntitle: Gone\nstatus: superseded\nsuperseded_by: legal/terms\n---\n\nBody.\n",
+      });
+      expect(shapeless.status, shapeless.output).toBe(1);
+      expect(shapeless.output).toContain("superseded_by is not a document pointer");
+    });
+
+    it("refuses a superseded_by that names a directory", () => {
+      const dir = probe({
+        "knowledge/folder/child.md": "---\ntitle: Child\nstatus: approved\n---\n\nBody.\n",
+        "knowledge/gone.md":
+          "---\ntitle: Gone\nstatus: superseded\nsuperseded_by: ./folder/\n---\n\nBody.\n",
+      });
+      expect(dir.status, dir.output).toBe(1);
+    });
+
+    it("refuses a successor pointer on a document the record calls current", () => {
+      // Otherwise the site publishes an unmissable "Superseded" banner over a
+      // live document — the natural state after an author edits status back
+      // and forgets the pointer.
+      const stale = probe({
+        "knowledge/live.md":
+          "---\ntitle: Live\nstatus: approved\nsuperseded_by: ./what-is-a-ksor.md\n---\n\nStill current.\n",
+      });
+      expect(stale.status, stale.output).toBe(1);
+      expect(stale.output).toContain("superseded_by on a document that is status: approved");
+    });
+
+    it("catches a successor pointer whose capitalisation does not match the record", () => {
+      // The rule this pins was previously guarded only by a NEGATIVE assertion,
+      // so deleting it outright left the whole suite green (round 4).
+      //
+      // It is inherently filesystem-dependent: on a case-INSENSITIVE volume
+      // (macOS default) `./TERMS.md` resolves to a real file the record does
+      // not govern, which is the leak this rule exists to catch. On a
+      // case-sensitive volume the earlier does-not-exist rule fires first, and
+      // the message differs — so the probe is explicit about which it is
+      // rather than asserting a message that only holds on one platform.
+      const caseInsensitive = (() => {
+        const probeDir = path.join(project, "knowledge");
+        const lower = path.join(probeDir, "case-probe.md");
+        writeFileSync(lower, "---\ntitle: P\nstatus: draft\n---\n\nx\n");
+        const seen = existsSync(path.join(probeDir, "CASE-PROBE.md"));
+        rmSync(lower, { force: true });
+        return seen;
+      })();
+
+      const result = probe({
+        "knowledge/successor-doc.md": "---\ntitle: S\nstatus: approved\n---\n\nNew.\n",
+        "knowledge/replaced-doc.md":
+          "---\ntitle: R\nstatus: superseded\nsuperseded_by: ./SUCCESSOR-DOC.md\n---\n\nOld.\n",
+      });
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain("./SUCCESSOR-DOC.md");
+      if (caseInsensitive) {
+        // The rule under test: the file resolves, but not to a document of the
+        // record, so every rule keyed by the real path would have missed it.
+        expect(result.output).toContain("does not name a document in the record");
+      }
+    });
+
+    it("does not blame a correct pointer when the SUCCESSOR is the broken one", () => {
+      // The successor exists but has not been given frontmatter yet — the
+      // ordinary state mid-edit. That is one problem, against the successor.
+      // It used to raise a second, false one against the pointer, telling the
+      // author to check capitalisation that was already right.
+      const result = probe({
+        "knowledge/new-policy.md": "# New policy\n\nStill being written.\n",
+        "knowledge/old-policy.md":
+          "---\ntitle: Old\nstatus: superseded\nsuperseded_by: ./new-policy.md\n---\n\nBody.\n",
+      });
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).not.toContain("does not name a document in the record");
+    });
+
+    it("refuses a supersession that leads back to itself", () => {
+      const itself = probe({
+        "knowledge/self.md":
+          "---\ntitle: Self\nstatus: superseded\nsuperseded_by: ./self.md\n---\n\nBody.\n",
+      });
+      expect(itself.status, itself.output).toBe(1);
+      expect(itself.output).toContain("points at this document itself");
+
+      const cycle = probe({
+        "knowledge/cyc-a.md":
+          "---\ntitle: A\nstatus: superseded\nsuperseded_by: ./cyc-b.md\n---\n\nBody.\n",
+        "knowledge/cyc-b.md":
+          "---\ntitle: B\nstatus: superseded\nsuperseded_by: ./cyc-a.md\n---\n\nBody.\n",
+      });
+      expect(cycle.status, cycle.output).toBe(1);
+      expect(cycle.output).toContain("supersession cycle");
+    });
+
+    it("names the documents actually in the cycle, and no edge the record lacks", () => {
+      // a → b → c → b. The cycle is b ⇄ c; `a` merely leads into it and its own
+      // pointer is correct. The first version reported "a → b → c → a" against
+      // a — blaming the innocent document and inventing the closing edge.
+      const result = probe({
+        "knowledge/lead-a.md":
+          "---\ntitle: A\nstatus: superseded\nsuperseded_by: ./cyc-b.md\n---\n\nBody.\n",
+        "knowledge/cyc-b.md":
+          "---\ntitle: B\nstatus: superseded\nsuperseded_by: ./cyc-c.md\n---\n\nBody.\n",
+        "knowledge/cyc-c.md":
+          "---\ntitle: C\nstatus: superseded\nsuperseded_by: ./cyc-b.md\n---\n\nBody.\n",
+      });
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain(
+        "supersession cycle: knowledge/cyc-b.md → knowledge/cyc-c.md → knowledge/cyc-b.md",
+      );
+      // The edge c → a does not exist and must not be printed, and the innocent
+      // document must not be the one blamed.
+      expect(result.output).not.toContain("knowledge/lead-a.md → ");
+      expect(result.output).not.toMatch(/→ knowledge\/lead-a\.md/);
+    });
+
+    it("accepts a supersession CHAIN, which ends at a current document", () => {
+      // a → b → c is not a cycle: the reader arrives somewhere real.
+      const chain = probe({
+        "knowledge/ch-a.md":
+          "---\ntitle: A\nstatus: superseded\nsuperseded_by: ./ch-b.md\n---\n\nBody.\n",
+        "knowledge/ch-b.md":
+          "---\ntitle: B\nstatus: superseded\nsuperseded_by: ./ch-c.md\n---\n\nBody.\n",
+        "knowledge/ch-c.md": "---\ntitle: C\nstatus: approved\n---\n\nCurrent.\n",
+      });
+      expect(chain.status, chain.output).toBe(0);
+    });
+
+    it("still accepts a fully governed document — the rules must not fight the record", () => {
+      const good = probe({
+        "knowledge/successor.md": "---\ntitle: Successor\nstatus: approved\n---\n\nNew.\n",
+        "knowledge/replaced.md":
+          "---\ntitle: Replaced\nstatus: superseded\nowner: Finance\neffective: 2026-04-01\n" +
+          "provenance:\n  - Board minutes 2026-03-11\nsuperseded_by: ./successor.md\n---\n\nOld.\n",
+      });
+      expect(good.status, good.output).toBe(0);
+    });
   });
 
   it("keeps checking links after a stray unpaired backtick", () => {
@@ -553,15 +895,25 @@ describe("scaffolded format-checker — torture", () => {
 
     const good = probe({
       "knowledge/replaced.md": doc(
-        "Replaced by the example.",
-        "title: Replaced\nstatus: superseded\nsuperseded_by: ./example.md",
+        "Replaced by a document the starter record ships.",
+        "title: Replaced\nstatus: superseded\nsuperseded_by: ./what-is-a-ksor.md",
       ),
     });
     expect(good.status, good.output).toBe(0);
   });
 
   it("refuses an empty record", () => {
-    const result = probe({ "knowledge/example.md": null });
+    // Every seeded document, DISCOVERED rather than listed. The starter record
+    // grows and shrinks; a hardcoded filename made this probe pass with five
+    // documents still on disk the day the seed stopped being one file
+    // (found live 2026-08-22) — it asserted an empty record while reading a
+    // full one.
+    const seeded = Object.fromEntries(
+      readdirSync(path.join(project, "knowledge"), { recursive: true, encoding: "utf8" })
+        .filter((rel) => rel.endsWith(".md"))
+        .map((rel) => [path.posix.join("knowledge", rel.split(path.sep).join("/")), null]),
+    );
+    const result = probe(seeded);
     expect(result.status, result.output).toBe(1);
     expect(result.output, "checker output").toContain("the record has no documents");
   });

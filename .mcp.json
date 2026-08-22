@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
+    },
+    "fumadocs": {
+      "command": "npx",
+      "args": ["-y", "fumadocs-mcp@1.0.0"]
+    }
+  }
+}

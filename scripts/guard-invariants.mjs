@@ -319,9 +319,83 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 9 — the scaffold ships each skill twice, byte-identical, under
+// .agents/skills and .claude/skills. The scaffold's own checker refuses a
+// divergence, so editing one copy here emits a project that fails its first
+// `pnpm check` — and the only signal is an integration suite minutes later
+// (hit twice while landing site-governance, 2026-08-20).
+{
+  const scaffold = path.join(repoRoot, "packages", "ksor", "templates", "scaffold");
+  const agents = path.join(scaffold, ".agents", "skills");
+  const claude = path.join(scaffold, ".claude", "skills");
+  if (existsSync(agents) && existsSync(claude)) {
+    const walkFiles = (dir, base = dir) =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walkFiles(path.join(dir, e.name), base)
+          : [path.relative(base, path.join(dir, e.name))],
+      );
+    // BOTH directions: walking only .agents let a .claude-only file pass here
+    // and then fail the emitted project's own `pnpm check`, which compares the
+    // two trees (found 2026-08-20).
+    for (const rel of walkFiles(claude)) {
+      if (!existsSync(path.join(agents, rel))) {
+        violate(
+          9,
+          `packages/ksor/templates/scaffold/.claude/skills/${rel} has no .agents/skills twin`,
+          "the scaffold ships both copies byte-identical; a file in only one of them emits a project whose own checker fails",
+          `add the same file under .agents/skills/${rel}, or delete the .claude copy`,
+        );
+      }
+    }
+    for (const rel of walkFiles(agents)) {
+      const twin = path.join(claude, rel);
+      if (!existsSync(twin)) {
+        violate(
+          9,
+          `.claude/skills/${rel} is missing its .agents/skills twin`,
+          "the scaffold ships both copies byte-identical; a missing one emits a project whose own checker fails",
+          `copy packages/ksor/templates/scaffold/.agents/skills/${rel} to the .claude/skills path`,
+        );
+      } else if (!readFileSync(path.join(agents, rel)).equals(readFileSync(twin))) {
+        violate(
+          9,
+          `packages/ksor/templates/scaffold/.claude/skills/${rel} differs from the .agents copy`,
+          "two diverging copies means agents follow different rules by tool, and the emitted project fails its own pnpm check",
+          `copy .agents/skills/${rel} over .claude/skills/${rel}`,
+        );
+      }
+    }
+  }
+}
+
+// Rule 10 — the repository root is not a scaffolded project. `knowledge/`,
+// `governance/` and `instance.md` are what `ksor init` emits into an ADOPTER's
+// repo; this repository's own corpus is the fixture under `workbench/`. The
+// rule was prose in AGENTS.md that nothing enforced until a checker probe was
+// committed at the root by accident (38f6ee8, removed in 750ddca) — and a root
+// instance.md is not merely untidy: `findAncestorProject` walks up from the
+// cwd, so it makes `ksor init` refuse `error: nested` anywhere inside the
+// checkout.
+{
+  for (const entry of ["instance.md", "knowledge", "governance"]) {
+    if (existsSync(path.join(repoRoot, entry))) {
+      violate(
+        10,
+        `${entry} exists at the repository root`,
+        "it belongs to a project ksor init emits, not to the framework that emits them" +
+          (entry === "instance.md"
+            ? " — and a root instance.md makes every `ksor init` inside this checkout refuse with error: nested, because init walks its ancestors looking for exactly this file"
+            : ""),
+        `remove ./${entry} (the repository's own fixture corpus lives at workbench/example-corpus/)`,
+      );
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error(`guard: ${violations.length} invariant violation(s):\n`);
   for (const v of violations) console.error(`  ${v}\n`);
   process.exit(1);
 }
-console.log("guard: ok (8 rules)");
+console.log("guard: ok (10 rules)");

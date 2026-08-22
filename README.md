@@ -617,7 +617,12 @@ A scaffolded project looks like:
 my-ksor/
 │
 ├── knowledge/            ← the record: governed CommonMark, the product
-│   └── example.md         (one document; subdirectories organize it as it grows)
+│   ├── what-is-a-ksor.md      ← the starter record ksor init seeds,
+│   ├── governance-ladder.md      yours to delete as your own arrives
+│   └── surfaces/
+│       ├── index.md
+│       ├── for-people.md
+│       └── for-agents.md
 │
 ├── system/
 │   └── site/             ← the reference site (Next.js + Fumadocs)

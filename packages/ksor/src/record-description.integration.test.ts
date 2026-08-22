@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +33,20 @@ const SHARED = path.resolve(
   "shared.ts",
 );
 
+// `shared.ts` reads `site.governance` through this, so the child needs it
+// beside the copy. It imports nothing itself, which is what keeps this to two
+// files rather than a graph.
+const GOVERNANCE = path.resolve(
+  here,
+  "..",
+  "templates",
+  "scaffold",
+  "system",
+  "site",
+  "lib",
+  "governance.ts",
+);
+
 const dirs: string[] = [];
 afterAll(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -42,11 +56,21 @@ function describeRecord(instanceMd: string): string {
   const dir = mkdtempSync(path.join(tmpdir(), "ksor-desc-"));
   dirs.push(dir);
   writeFileSync(path.join(dir, "instance.md"), instanceMd, "utf8");
-  // The module is COPIED beside the fixture so the child can import it by a
+  // The modules are COPIED beside the fixture so the child can import them by a
   // literal specifier: the boundary suite reads import targets out of this
   // file's text, and a computed one would hide the edge from it. `shared.ts`
-  // imports only node builtins, so a copy behaves identically.
-  copyFileSync(SHARED, path.join(dir, "shared.ts"));
+  // imports node builtins and `./governance`, which imports nothing — so the
+  // pair behaves identically to the pair in a scaffold.
+  // One rewrite on the way in: the scaffold writes `from "./governance"`,
+  // which TypeScript and the bundler resolve by extension and plain Node ESM
+  // does not. The specifier is the only thing changed, so what runs here is the
+  // same code the site runs.
+  writeFileSync(
+    path.join(dir, "shared.ts"),
+    readFileSync(SHARED, "utf8").replace('from "./governance"', 'from "./governance.ts"'),
+    "utf8",
+  );
+  copyFileSync(GOVERNANCE, path.join(dir, "governance.ts"));
   const script = `
     const { recordDescription } = await import("./shared.ts");
     console.log(recordDescription());

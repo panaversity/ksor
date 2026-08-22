@@ -23,29 +23,37 @@ ksor:
 # version: 0.1.0
 ---
 
-# Knowledge System of Record
+# KSoR
 
-The heading above is this record's **display title** — the human name every
-page leads with. The intake interview replaces it with the real one
-("Acme Operations Handbook"); the machine identity stays `KSOR-STAMP-NAME`
-in the frontmatter, and that is what agents and citations use.
+This record is authoritative for what a Knowledge System of Record is, how a
+project climbs the governance ladder, and which surfaces the same governed
+knowledge is published through. It does not cover the CLI's release history or
+the internals of the retrieval kernel.
 
-This Knowledge System of Record is authoritative for — _fill this in; it is
-the single most important sentence in the project._
+Write and govern the knowledge once; every surface here derives from it. When a
+slide deck, a wiki page or a model's memory disagrees with this record, this
+record wins.
 
-Everything below this frontmatter is the identity of this instance: what the
-corpus covers, who it serves, and how strictly it should decline questions it
-does not cover. This prose IS the agent surface's system prompt — `ksor serve`
-wires it into the MCP server's instructions — so write it for a reader who must
-act on it.
+## This is a starter, and it is yours to replace
+
+Everything above describes KSoR itself. It ships filled in so that a fresh
+project has a real governed corpus on the first `pnpm dev` — statuses, owners,
+provenance, a folder and a draft — instead of an empty shelf and a placeholder.
+The documents live in `knowledge/`; delete them as your own knowledge arrives.
+
+Be deliberate about replacing it, because a starter that describes the wrong
+thing describes it _everywhere_. Two lines here are read by every surface:
+
+- **The heading** is the display title — the human name every page leads with.
+  The machine identity stays `KSOR-STAMP-NAME` in the frontmatter, and that is
+  what citations and `llms.txt` use.
+- **The first paragraph** is this record's scope. The site publishes it, and
+  `ksor serve` hands it to a connecting agent as the MCP server's instructions.
+  A record published with this paragraph unchanged will tell an agent — quite
+  accurately, and quite uselessly for you — that it is authoritative for what a
+  Knowledge System of Record is.
 
 Ask your coding agent to run the **intake interview** (it knows how — see
 `.agents/skills/intake-interview/`), answer its questions, and let it write
-this document with you.
-
-Until you do, `ksor serve` says so — at boot, and to every agent that connects:
-the MCP surface replaces this template with a plain statement that the record's
-scope is unstated, rather than passing authoring guidance to a runtime agent as
-if it were instructions. Nothing breaks, and the record still answers with
-citations; it just cannot tell an agent what it is authoritative FOR, which is
-the one thing that makes an answer worth trusting.
+this document with you. Replace those two lines and every surface follows,
+because every surface reads them from here.
