@@ -26,6 +26,28 @@ g AS (
         (SELECT active_generation FROM corpora
           WHERE tenant_id = $1 AND corpus_id = $2)
     ) AS gen
+),
+-- The generation the record is on RIGHT NOW, which decides governance even when
+-- content is served from a pinned one.
+--
+-- A snapshot pin exists so a citation keeps resolving to the same bytes. It used
+-- to decide the audience question too, by evaluating visibility on the pinned
+-- row — so a document restricted after the token was issued kept reading in full
+-- for the token's life, while outline, search and an unpinned read all
+-- refused it in the same second. servableGenerations could not catch it: a
+-- flip sets rollback_generation to the generation just superseded, so a pre-flip
+-- pin IS the rollback pointer and is servable by design (issue #87).
+--
+-- Pins yield. A citation may stop resolving within the token's life, which is
+-- what "the record changed" should look like — the alternative is a window in
+-- which a withdrawal is not a withdrawal, and decision 19 says a surface that
+-- refuses must refuse everywhere, which includes its own fourth route.
+--
+-- When nothing is pinned this is the SAME generation as g, so the join is an
+-- identity and no unpinned read changes behaviour.
+live AS (
+    SELECT active_generation AS gen FROM corpora
+     WHERE tenant_id = $1 AND corpus_id = $2
 )`;
 
 // Takedown denial is SCOPED (decision 14): per-node by default, whole subtree
@@ -60,7 +82,12 @@ SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalin
 FROM tree n
 JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
                        AND self.generation = n.generation
-WHERE n.slug = $4 AND ${DENY} AND ${audienceAllowed("self")}
+-- INNER join, so a document the record no longer contains cannot be
+-- resurrected by a pin either: no live row, no read.
+JOIN live ON TRUE
+JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
+                      AND now.stable_id = self.stable_id
+WHERE n.slug = $4 AND ${DENY} AND ${audienceAllowed("now")}
 ORDER BY n.path`;
 
 export const ALIAS_SQL: string = `
@@ -79,8 +106,11 @@ export const NODE_BY_STABLE_ID_SQL: string = `
 WITH RECURSIVE ${GEN}, ${DENIED_CTE}
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
 FROM content_nodes n JOIN g ON n.generation = g.gen
+JOIN live ON TRUE
+JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
+                      AND now.stable_id = n.stable_id
 WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}
-  AND ${AUDIENCE_ALLOWED}`;
+  AND ${audienceAllowed("now")}`;
 
 export const DOCUMENT_CHUNKS_SQL: string = `
 WITH ${GEN}
