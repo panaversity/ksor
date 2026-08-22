@@ -38,3 +38,10 @@ rewrites the identity as its first job.
 
 The record is still the adopter's outright (decision 4) — these are documents
 to delete as real knowledge arrives, not framework files to work around.
+
+The seeded documents are sectioned rather than flat — `##` down to `####`,
+never an `# h1`, because the frontmatter title is already the page heading.
+A record of headingless documents would leave both the document heading ramp
+and the "On this page" table of contents unexercised on exactly the pages an
+adopter reads first.
+

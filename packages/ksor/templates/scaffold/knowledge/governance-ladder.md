@@ -6,8 +6,31 @@ owner: Product
 order: 3
 ---
 
-Governance here is a ladder, not a gate. A record with titles and statuses works
-on day one; owners, provenance, effective dates and calibrated abstention are
-rungs a project climbs when its domain demands them.
+Governance here is a ladder, not a gate. Demanding the top rung of a project on
+the bottom one is a bug, not rigour.
 
-Demanding the top rung of a level-0 project is a bug, not rigour.
+## Where every record starts
+
+A document needs a title and a status. That is the whole requirement, and a
+record of such documents is already publishable, searchable and citable.
+
+## The rungs above it
+
+Each rung is worth climbing when the domain asks for it, and not before.
+
+### Owners and sources
+
+An owner names who stands behind a document. Provenance names where its claims
+came from, one entry per source.
+
+### Effective dates and supersession
+
+An effective date says when a document began to apply. A replaced document is
+marked and points at its successor rather than being deleted, so the history
+stays readable.
+
+### A measured floor for abstention
+
+The served rung answers questions from the record and declines the ones it does
+not cover. The threshold for declining is measured against this corpus, never
+copied from another one, and it is recorded beside the number with its date.

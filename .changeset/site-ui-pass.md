@@ -143,4 +143,3 @@ value that carries the weight. The "Markdown" link stopped wearing the
 bordered badge that means "a status the record declares": it is the one
 ACTION on a row of FACTS, so it takes the accent, which on this site means a
 link. The gap between facts matches the register's.
-
