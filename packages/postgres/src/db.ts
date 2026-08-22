@@ -46,10 +46,10 @@ export class ConnectTimeoutError extends Error {
  * a thundering herd aimed at the component already drowning.
  */
 export class PoolTimeoutError extends Error {
-  constructor(detail = "the configured checkout bound") {
+  constructor() {
     super(
-      `pool checkout timed out (${detail}) — the pool is saturated; ` +
-        "shedding this request is the recovery path, retrying it is not",
+      "pool checkout timed out (the configured checkout bound) — the pool is " +
+        "saturated; shedding this request is the recovery path, retrying it is not",
     );
     this.name = "PoolTimeoutError";
   }

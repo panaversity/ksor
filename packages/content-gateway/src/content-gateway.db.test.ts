@@ -1,7 +1,8 @@
 /**
  * The gateway acceptance — the product, driven the way a user's agent
- * drives it: a REAL MCP client spawning the BUILT gateway binary over
- * stdio (run `pnpm build` first; the suite spawns dist/cli.mjs), against a
+ * drives it: a REAL MCP client spawning the BUILT gateway binary and
+ * talking to it over HTTP (run `pnpm build` first; the suite spawns
+ * dist/cli.mjs), against a
  * live Postgres corpus embedded by the fake provider, with an abstention
  * floor the suite CALIBRATES itself (midpoint of the in/out-of-corpus
  * separation — the paste-value method in miniature). Includes the question

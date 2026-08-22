@@ -15,10 +15,8 @@ import {
   outlineDocuments,
   readDocument,
   search,
-  EmptyQueryError,
   MAX_OUTLINE_LIMIT,
   MAX_SEARCH_K,
-  UnknownSlug,
   type ServiceContext,
 } from "@panaversity/ksor-content";
 
@@ -306,7 +304,7 @@ export function buildServer(ctx: ServiceContext, version: string): McpServer {
           structuredContent: result as unknown as Record<string, unknown>,
         };
       } catch (error) {
-        if (error instanceof EmptyQueryError || error instanceof Error) {
+        if (error instanceof Error) {
           // Authored guidance flows to the wire; driver internals were
           // already sanitized by the service layer.
           return {
@@ -457,7 +455,6 @@ function toolError(error: unknown): {
   content: [{ type: "text"; text: string }];
   isError: true;
 } {
-  const message =
-    error instanceof UnknownSlug || error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
   return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
 }
