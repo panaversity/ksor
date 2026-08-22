@@ -11,14 +11,13 @@ import { getSortedPages } from "@/lib/source";
  *
  * It has four jobs and no fifth (research/site-design.md §4): say what the
  * record is authoritative for, name the identity citations carry, open the
- * record, and point at the doors agents read. Every string on it comes from
- * `instance.md` or from a document's own frontmatter — the site never contains
- * authored content (scaffolded AGENTS.md, critical rule 1).
+ * record, and point at the surfaces agents read — the last through the
+ * illustration rather than a list of addresses. Every string comes from
+ * `instance.md`; the site never contains authored content (scaffolded
+ * AGENTS.md, critical rule 1).
  *
- * A landing page standing on its own: no sidebar, no document chrome. The
- * design lives in components/home-cover — this file's job is to hand it the
- * record, including the bytes the build publishes, so the page can show the
- * record rather than describe it.
+ * One full screen, standing alone: no sidebar, no document chrome. The design
+ * lives in components/home-cover; this file's job is to hand it the record.
  */
 export default function HomePage(): ReactElement {
   // The first document in sidebar order — never a hardcoded path, so deleting
@@ -55,15 +54,14 @@ export default function HomePage(): ReactElement {
         documents={pages.length}
         firstUrl={first.url}
         firstTitle={first.data.title}
+        // Signed from inside the cover, so the front door is one screen rather
+        // than a band with a strip of page beneath it.
+        foot={
+          <p className="mx-auto w-full max-w-6xl px-6 font-mono text-xs tracking-wider text-[var(--ksor-cover-muted)] uppercase">
+            <FooterMark />
+          </p>
+        }
       />
-
-      {/* A foot, not a section: the cover carries the page, and this only has
-          to sign it. */}
-      <footer className="mx-auto w-full max-w-6xl px-6 py-8">
-        <p className="font-mono text-xs tracking-wider text-fd-muted-foreground uppercase">
-          <FooterMark />
-        </p>
-      </footer>
     </main>
   );
 }

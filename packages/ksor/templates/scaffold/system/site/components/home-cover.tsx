@@ -19,6 +19,7 @@ import { RecordArtwork } from "@/components/record-artwork";
  * one that reads bytes — and it is the only place this page spends boldness.
  */
 export function HomeCover({
+  foot,
   mark,
   name,
   title,
@@ -34,9 +35,15 @@ export function HomeCover({
   documents: number;
   firstUrl: string;
   firstTitle: string;
+  /** Signed from inside the cover, so the front door is one screen. */
+  foot?: ReactElement;
 }): ReactElement {
+  // The cover fills the window under the navbar (measured at 56px, the shell's
+  // `h-14`): a front door is the whole view, not a band with the page's
+  // background showing beneath it. `dvh` rather than `vh`, so a phone's
+  // collapsing browser chrome does not leave a gap at the bottom.
   return (
-    <section className="relative flex min-h-[72vh] items-center bg-[var(--ksor-cover)] text-[var(--ksor-cover-foreground)]">
+    <section className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col justify-center bg-[var(--ksor-cover)] text-[var(--ksor-cover-foreground)]">
       {/* A ruled ground — the ledger's own lines, not a texture. */}
       <div
         aria-hidden
@@ -117,6 +124,7 @@ export function HomeCover({
           <RecordArtwork />
         </div>
       </div>
+      {foot === undefined ? null : <div className="relative mt-auto pt-16">{foot}</div>}
     </section>
   );
 }
