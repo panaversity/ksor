@@ -40,19 +40,19 @@ almost no vocabulary with the question (2026-08-21):
   query shape this product exists to serve; the keyword arm earns its place on
   exact-term lookup, not on questions.
 
-**Most of a realistic corpus never reaches search** (issue #55). Sections
-shorter than the navigation threshold are stored and readable but excluded from
-the search index. Walked on 0.0.14 with four documents — three of them ordinary
-short policy statements (a refund window, an escalation path, a badge rule),
-each 200-300 characters — and **three of the four chunks were classified
-unsearchable**, leaving the scaffold's own placeholder as the only document
-`search` could return. Asked "how long does a buyer have to send something
-back", against a record that states thirty days, the door returned the
-placeholder: the answer was in the corpus, correctly ingested, and unreachable.
-`ksor ingest` reports this honestly since 0.0.13 ("FOUND ONLY BY NAME"), which
-is how it was caught — but honest is not fixed, and short documents are what
-institutional knowledge is largely made of. The threshold's direction is
-undecided: it needs measuring against both corpus shapes before it moves.
+**Short documents reach search again** (issue #55, fixed 2026-08-22). Sections
+were classified navigation by LENGTH — anything under 250 code points — and
+navigation is excluded from every retrieval arm. Walked on 0.0.14 with three
+ordinary short policy statements: three of four chunks unsearchable, and a
+question the record plainly answered was served the scaffold's placeholder
+instead. Navigation is now decided by SHAPE (link-dominated, or too little text
+left to answer anything), which is what the word always meant. Measured on the
+handbook gold with real Gemini embeddings: short substantive facts **0/9 → 9/9
+at rank 1**, the long-prose control held at **4/4**, and the link-list negative
+was returned **0** times — correctness, not permissiveness. The recorded line
+lives in `packages/content/src/evals/baseline.ts` and the harness prints every
+run against it. Adopters get it by re-running `ksor ingest`; unchanged content
+is not re-embedded.
 
 **The vector index is NOT being used** (issue #59). `idx_chunks_hnsw` is built
 and maintained, and the query `ksor serve` sends plans a sequential scan plus a

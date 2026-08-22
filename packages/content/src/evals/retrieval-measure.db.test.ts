@@ -37,6 +37,7 @@ import { embedQueryVlit } from "../lib/query-embed.js";
 import { keyRingFromEnv } from "../lib/snapshot.js";
 import { applySchema } from "../schema.js";
 import { search } from "../service.js";
+import { RETRIEVAL_BASELINE } from "./baseline.js";
 import { HANDBOOK_GOLD, HANDBOOK_OOC, NAV_NEGATIVE_SLUG, type GoldKind } from "./handbook-gold.js";
 import type { ContentInstance } from "../instance.js";
 import type { ServiceContext } from "../service.js";
@@ -168,6 +169,23 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
       lines.push("  UNREACHABLE at k=10:");
       for (const m of missed) lines.push(`    ${m}`);
     }
+    // Against the recorded line, so a change arrives as a DELTA rather than as
+    // a fresh number with nothing to compare it to.
+    const b = RETRIEVAL_BASELINE;
+    const delta = (now: number, was: number): string =>
+      now === was ? "=" : now > was ? `+${now - was}` : `${now - was}`;
+    lines.push(
+      "",
+      `  vs baseline ${b.measuredAt} (${b.embedding}):`,
+      `    short-substantive @1  ${at(byKind("short-substantive"), 1)}/${b.shortSubstantiveTotal}` +
+        `   baseline ${b.shortSubstantiveAt1}   ${delta(at(byKind("short-substantive"), 1), b.shortSubstantiveAt1)}`,
+      `    long-prose        @1  ${at(byKind("long-prose"), 1)}/${b.longProseTotal}` +
+        `   baseline ${b.longProseAt1}   ${delta(at(byKind("long-prose"), 1), b.longProseAt1)}`,
+      `    nav negative          ${scored.filter((s) => s.hitNav).length}` +
+        `      baseline ${b.navNegativeHits}   ${delta(scored.filter((s) => s.hitNav).length, b.navNegativeHits)}`,
+      `  baseline note: ${b.note}`,
+    );
+
     console.log(lines.join("\n"));
 
     // The ONE gating assertion: the measurement must still be able to tell a
@@ -190,17 +208,52 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
     ).toBe(prose.length);
   });
 
-  it("characterizes TODAY: short substantive facts are NOT reachable (issue #55)", () => {
-    // This assertion is expected to FLIP when the classifier is fixed. That is
-    // its purpose — the change arrives as a reviewed diff with numbers, not as
-    // a silent shift in what the record can answer.
+  it("short substantive facts are reachable — the #55 fix, held", () => {
+    // This assertion USED to read "NOT reachable", pinning the defect: all nine
+    // of these questions returned nothing, against a corpus that answers every
+    // one of them. It flipped when `classify()` started deciding navigation by
+    // shape instead of by length, which is what it was written to do — the
+    // change arrived as a reviewed diff with numbers rather than as a silent
+    // shift in what the record can answer.
     const short = scored.filter((s) => s.kind === "short-substantive");
-    const unreachable = short.filter((s) => s.rank === null).length;
+    const unreachable = short.filter((s) => s.rank === null);
     expect(
-      unreachable,
-      `if this is no longer all of them, the classifier changed — update the characterization ` +
-        `and record the measurement: ${JSON.stringify(short.map((s) => [s.q, s.rank]))}`,
-    ).toBe(short.length);
+      unreachable.map((s) => s.q),
+      "a short substantive fact stopped being reachable — #55 is regressing",
+    ).toEqual([]);
+  });
+
+  it("the nav negative is never the answer — correct, not merely permissive", () => {
+    // The guard that separates a fixed classifier from a broken one. Admitting
+    // everything would make every recall number above look better and make the
+    // product worse: the index page is a list of links and must never be what a
+    // content question retrieves.
+    const leaked = scored.filter((s) => s.hitNav);
+    expect(
+      leaked.map((s) => s.q),
+      "the link-list index page was returned as an answer to a content question",
+    ).toEqual([]);
+  });
+
+  it("does not fall below the recorded baseline", () => {
+    // Floors may RISE — record the rise in baseline.ts when they do. They may
+    // not fall silently: a retrieval change that costs reach is a decision, and
+    // this is where it has to be taken rather than noticed later.
+    const at1 = (kind: GoldKind): number =>
+      scored.filter((s) => s.kind === kind && s.rank !== null && s.rank <= 1).length;
+    expect(
+      at1("short-substantive"),
+      `short-substantive success@1 fell below the ${RETRIEVAL_BASELINE.measuredAt} baseline`,
+    ).toBeGreaterThanOrEqual(RETRIEVAL_BASELINE.shortSubstantiveAt1);
+    expect(
+      at1("long-prose"),
+      `the long-prose control fell below the ${RETRIEVAL_BASELINE.measuredAt} baseline`,
+    ).toBeGreaterThanOrEqual(RETRIEVAL_BASELINE.longProseAt1);
+    // The ceiling, which is what keeps "better recall" honest.
+    expect(
+      scored.filter((s) => s.hitNav).length,
+      "more gold questions returned the link-list page than the baseline allows",
+    ).toBeLessThanOrEqual(RETRIEVAL_BASELINE.navNegativeHits);
   });
 
   it("skips without KSOR_DB_URL and GEMINI_API_KEY", () => {

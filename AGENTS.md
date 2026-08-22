@@ -546,6 +546,46 @@ gateway` package, serve-by-spawn) is superseded._
     the tool can VERIFY rather than read — a bearer token's subject qualifies,
     an environment variable never will.
 
+22. **Navigation is a SHAPE, not a length** (2026-08-22, issue #55 — the first
+    DELIBERATE divergence from the converted oracle). `classify()` labelled any
+    segment under 250 code points `nav`, and the serving predicate admits only
+    `prose`, so a record could be fully ingested and unable to answer questions
+    it plainly contained. On the curriculum corpus the oracle was tuned against
+    the proxy holds — a short segment there really is a link list. On a handbook
+    it inverts, because a handbook's most valuable statements are its shortest.
+    Walked live on 0.0.14: three ordinary policy statements, three of four
+    chunks unsearchable, and "how long does a buyer have to send something back"
+    answered with the scaffold's placeholder against a record stating thirty
+    days.
+
+    A segment is now `nav` when link lines are most of it, or when what remains
+    after them is under `MIN_CONTENT_CHARS` — the SAME floor the serving
+    predicate applies, so this never labels `prose` something search would
+    refuse anyway. Length is not consulted: a 180-character link list is nav and
+    a 51-character fact is prose, which is the ordering length got backwards.
+
+    Measured on the handbook gold, real Gemini embeddings, paired: short
+    substantive facts **0/9 → 9/9 at rank 1**, the long-prose control held at
+    **4/4**, and the link-list negative was returned **0** times — so the gain
+    is correctness rather than permissiveness, which is the distinction the gold
+    was built to make. Recorded in `evals/baseline.ts`; the harness prints
+    current against it and the floors may not fall silently.
+
+    `CHUNK_POLICY` moves v5 → v6 because it is persisted provenance and the
+    behaviour it labels changed. The oracle fixture is NOT regenerated — it
+    stays the record that the port was faithful — and the divergence is asserted
+    as a property instead: sourceType may differ only `nav` → `prose`, only
+    where the whole section carries real prose, and everything else stays
+    byte-identical. That corpus cannot settle the question either way; it
+    contains no markdown links at all, which is asserted so the next reader does
+    not mistake its 61 `nav` labels for evidence about navigation.
+
+    Adopters get it by re-running `ksor ingest`: chunks are re-classified on
+    every build, and carry-forward sets only the embedding fields
+    (`ingest/generation.ts:174`), so unchanged content is not re-embedded.
+    Reversed only by a measurement showing the shape rule admitting navigation
+    the length rule kept out.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

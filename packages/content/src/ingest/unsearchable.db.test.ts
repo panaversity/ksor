@@ -1,16 +1,19 @@
 /**
  * Ingest must SAY how much of the record no search will return.
  *
- * A chunk shorter than the navigation threshold is stored, embedded and
- * readable — and excluded from every retrieval arm by the serving predicate.
- * The rule exists to keep link lists and breadcrumbs out of search, and it is
- * length-only, so a short SUBSTANTIVE paragraph is caught by it too.
+ * A chunk classified `nav` is stored, embedded and readable — and excluded from
+ * every retrieval arm by the serving predicate. So a record can be fully
+ * ingested and still unable to answer questions it plainly contains, and the
+ * only honest thing to do is SAY SO at ingest.
  *
- * Measured on a realistic operations handbook: 10 of 16 chunks unsearchable and
- * one document that `read` and `outline` return but `search` can never find,
- * while ingest reported a cheerful "16 chunks; embedded 16" (issue #55). The
- * threshold is not settled here — that needs a gold-set measurement — but the
- * silence is, because the silence is what let it reach a release.
+ * The rule that decides `nav` has since changed (issue #55: navigation is a
+ * shape, not a length), which is why the fixture below is a LINK LIST rather
+ * than the short policy statement it used to be. That statement is now
+ * searchable — it is a fact, and facts are what a handbook is made of — so it
+ * can no longer stand in for something search cannot reach. The report it
+ * exercises is unchanged and still needed: navigation is real, and an adopter
+ * should not have to run SQL to discover which of their pages is only
+ * findable by name.
  */
 
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -30,8 +33,26 @@ import type pg from "pg";
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_unsearchable";
 
-/** A complete policy statement, and far too short to be searchable. */
-const SHORT = `---
+/** Navigation: a page of links, which no search should ever return. */
+const NAV = `---
+title: Handbook
+status: approved
+---
+
+# Handbook
+
+- [Probation](probation.md)
+- [Notice periods](notice-periods.md)
+- [Expense limits](expense-limits.md)
+- [Travel](travel.md)
+`;
+
+/**
+ * A complete policy statement — 51 characters, and the whole answer to "how
+ * long is probation". Searchable since #55; here as the control that proves
+ * the report counts navigation rather than shortness.
+ */
+const SHORT_FACT = `---
 title: Probation
 status: approved
 ---
@@ -73,7 +94,8 @@ describe.runIf(adminDsn !== "")("ingest reports what search cannot reach (db)", 
     work = await mkdtemp(join(tmpdir(), "ksor-unsrch-"));
     const k = join(work, "knowledge");
     await mkdir(k, { recursive: true });
-    await writeFile(join(k, "probation.md"), SHORT, "utf8");
+    await writeFile(join(k, "index.md"), NAV, "utf8");
+    await writeFile(join(k, "probation.md"), SHORT_FACT, "utf8");
     await writeFile(join(k, "expenses.md"), LONG, "utf8");
   }, 300_000);
 
@@ -110,14 +132,20 @@ describe.runIf(adminDsn !== "")("ingest reports what search cannot reach (db)", 
       },
     );
 
-    expect(report.unsearchable, "the short document's chunk is not retrievable").toBeGreaterThan(0);
+    expect(report.unsearchable, "the link list's chunk is not retrievable").toBeGreaterThan(0);
     expect(
-      report.unsearchableSources.some((s) => s.includes("probation")),
+      report.unsearchableSources.some((s) => s.includes("index")),
       `a document with NO searchable chunk must be named: ${JSON.stringify(report.unsearchableSources)}`,
     ).toBe(true);
     expect(
       report.unsearchableSources.some((s) => s.includes("expenses")),
       "the long document IS searchable and must not be named",
+    ).toBe(false);
+    // The #55 control: shortness alone no longer costs a document its place in
+    // search. If this ever flips back, the classifier regressed to length.
+    expect(
+      report.unsearchableSources.some((s) => s.includes("probation")),
+      `a 51-character FACT must stay searchable: ${JSON.stringify(report.unsearchableSources)}`,
     ).toBe(false);
   });
 

@@ -25,7 +25,7 @@ export const EMBED_TASK_QUERY = "RETRIEVAL_QUERY";
 export const EMBED_RECIPE: string = `${EMBED_MODEL}/d${EMBED_DIM}/${EMBED_TASK_DOCUMENT}`;
 export const RRF_K = 60;
 /** bump ⇒ provenance (v5: CommonMark fences). All char limits count CODE POINTS (Python len parity). */
-export const CHUNK_POLICY = "heading-aware-1500-content-only-v5";
+export const CHUNK_POLICY = "heading-aware-1500-content-only-v6";
 export const MAX_CHARS = 1500;
 export const NAV_MAX_CHARS = 250;
 /** < Gemini's 2048-token embed input. */

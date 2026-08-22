@@ -45,7 +45,7 @@ export {
   HARD_MAX_CHARS,
   MIN_CONTENT_CHARS,
 } from "../config.js";
-import { MAX_CHARS, NAV_MAX_CHARS, HARD_MAX_CHARS } from "../config.js";
+import { MAX_CHARS, NAV_MAX_CHARS, HARD_MAX_CHARS, MIN_CONTENT_CHARS } from "../config.js";
 
 // --- Python text semantics, reproduced exactly ------------------------------
 
@@ -431,6 +431,50 @@ function teachingBody(content: string): string {
   );
 }
 
+/**
+ * A line that is navigation rather than prose: strip its list marker and what
+ * remains is nothing but links.
+ *
+ * Deliberately narrow. A line with prose AROUND a link ("Claim within thirty
+ * days; see the [expenses page](x) to file.") is prose, because the sentence is
+ * the content and the link is incidental.
+ */
+const NAV_LINE =
+  /^(?:[-*+]\s+|\d+[.)]\s+)?(?:\[[^\]]*\]\([^)]*\)|<https?:\/\/[^>]*>|https?:\/\/\S+)(?:[\s,;·|>—–-]*(?:\[[^\]]*\]\([^)]*\)|<https?:\/\/[^>]*>|https?:\/\/\S+))*[\s.,;:]*$/;
+
+/**
+ * Is this segment NAVIGATION — a thing that points at content rather than
+ * being content?
+ *
+ * The oracle answered this with length: under NAV_MAX_CHARS (250) meant nav.
+ * On the curriculum corpus it was tuned against, that proxy holds — a short
+ * segment there really is a link list. On a handbook it inverts, because a
+ * handbook's most valuable statements are its shortest ("Six months, with a
+ * written review at three and six"), and `nav` is excluded from search. Issue
+ * #55, walked live on 0.0.14: three of four chunks in an ordinary policy
+ * record were unsearchable, and a question the record plainly answered was
+ * served the scaffold's placeholder instead.
+ *
+ * So the question is asked about SHAPE, which is what "navigation" always
+ * meant. A segment is nav when link lines are most of it, or when what is left
+ * after them is too little to answer anything (MIN_CONTENT_CHARS — the same
+ * floor the serving predicate applies, so this never labels `prose` something
+ * search would refuse to return anyway).
+ *
+ * Length is no longer consulted. A 180-character link list is nav and a
+ * 51-character fact is prose, which is the ordering length got backwards.
+ */
+export function isNavShaped(content: string): boolean {
+  const lines = pySplitLines(teachingBody(content), false)
+    .map((ln) => pyStrip(ln))
+    .filter((ln) => ln !== "");
+  if (lines.length === 0) return true;
+  const navLines = lines.filter((ln) => NAV_LINE.test(ln));
+  if (navLines.length * 2 > lines.length) return true;
+  const prose = lines.filter((ln) => !NAV_LINE.test(ln)).join(" ");
+  return cpLen(prose) < MIN_CONTENT_CHARS;
+}
+
 export function classify(content: string, headingPath: readonly string[]): SourceType {
   if (JSX_ASSESS.test(content)) return "assessment";
   const leaf = headingPath.length > 0 ? headingPath[headingPath.length - 1]! : "";
@@ -441,7 +485,7 @@ export function classify(content: string, headingPath: readonly string[]): Sourc
   ) {
     return "embed";
   }
-  if (cpLen(teachingBody(content)) < NAV_MAX_CHARS) return "nav";
+  if (isNavShaped(content)) return "nav";
   return "prose";
 }
 
@@ -590,7 +634,7 @@ export function chunkText(text: string, maxChars: number = MAX_CHARS): Chunk[] {
       }
       continue;
     }
-    const segIsNav = cpLen(teachingBody(seg.text)) < NAV_MAX_CHARS;
+    const segIsNav = isNavShaped(seg.text);
     const segMarker = segmentMarkerType(seg.text);
     for (const piece of subsplit(seg.text, maxChars)) {
       let sourceType: SourceType;
