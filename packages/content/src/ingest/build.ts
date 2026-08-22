@@ -79,17 +79,16 @@ export interface BuildStats {
    * How much of what we just stored NO SEARCH WILL EVER RETURN.
    *
    * The serving predicate admits a chunk only when it is `prose` and has at
-   * least MIN_CONTENT_CHARS of dense text (`lib/search.ts`'s SERVABLE). A
-   * chunk shorter than NAV_MAX_CHARS is classified `nav` — the rule exists to
-   * keep link lists and breadcrumbs out of retrieval, and it is length-only,
-   * so a short SUBSTANTIVE paragraph is caught by it too.
+   * least MIN_CONTENT_CHARS of dense text (`lib/search.ts`'s SERVABLE), and
+   * `classify()` decides `prose` vs `nav` by SHAPE since decision 22 — link
+   * lines dominating, or too little text left to answer anything.
    *
-   * Counted and reported because it was previously silent: a real handbook
-   * measured 10 of 16 chunks unsearchable and one whole document findable by
-   * `read` and `outline` but never by `search`, with the ingest line reporting
-   * a cheerful "16 chunks; embedded 16" (issue #55). Whatever the right
-   * threshold turns out to be, an adopter should not have to run SQL to
-   * discover that most of their record cannot be found.
+   * Counted and reported because it was previously silent: under the older
+   * length-only rule a real handbook measured 10 of 16 chunks unsearchable and
+   * one whole document findable by `read` and `outline` but never by `search`,
+   * with the ingest line reporting a cheerful "16 chunks; embedded 16" (issue
+   * #55). The rule is fixed and the report stays: an adopter should not have to
+   * run SQL to learn which pages can only be reached by name.
    */
   readonly unsearchable: number;
   /** Sources with NO searchable chunk at all — findable by slug, never by search. */

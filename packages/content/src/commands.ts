@@ -553,23 +553,21 @@ async function ingestCommand(args: string[]): Promise<number> {
     `ingest: generation ${report.generation} — ${report.nodes} nodes, ${report.chunks} chunks; ` +
       `embedded ${report.embedded}, carried ${report.carried}, failed ${report.failed}\n`,
   );
-  // SAY what will not be found. A chunk shorter than the navigation threshold is
-  // stored, embedded and readable — and excluded from every retrieval arm. The
-  // rule is there to keep link lists out of search and it is length-only, so
-  // short SUBSTANTIVE paragraphs are caught by it too: a real handbook measured
-  // 10 of 16 chunks unsearchable and one whole document that `read` and
-  // `outline` return but `search` can never find, while this line reported a
-  // cheerful "16 chunks; embedded 16" (issue #55).
+  // SAY what will not be found. A chunk classified as navigation is stored,
+  // embedded and readable — and excluded from every retrieval arm. Since
+  // decision 22 that classification is a SHAPE (link-dominated, or too little
+  // text left to answer anything) rather than a length, so what lands here is
+  // usually an index page and no longer, as it once was, most of a handbook.
   //
-  // Not a refusal — a short record can be perfectly healthy, and the threshold
-  // is not yet decided. But "honest absence, never silent weakness" applies to
-  // the act of publishing as much as to answering, and an adopter should not
-  // need SQL to learn that most of their record cannot be found.
+  // Not a refusal — a record made largely of link pages can be perfectly
+  // healthy. But "honest absence, never silent weakness" applies to publishing
+  // as much as to answering, and an adopter should not need SQL to learn which
+  // of their pages can only be reached by name.
   if (report.unsearchable > 0) {
     const pct = Math.round((report.unsearchable / Math.max(report.chunks, 1)) * 100);
     process.stdout.write(
-      `  not searchable: ${report.unsearchable} of ${report.chunks} chunk(s) (${pct}%) are shorter ` +
-        `than the navigation threshold — stored and readable, but no search returns them\n`,
+      `  not searchable: ${report.unsearchable} of ${report.chunks} chunk(s) (${pct}%) read as ` +
+        `navigation rather than content — stored and readable, but no search returns them\n`,
     );
     if (report.unsearchableSources.length > 0) {
       const named = report.unsearchableSources.slice(0, 10).join(", ");
@@ -577,7 +575,8 @@ async function ingestCommand(args: string[]): Promise<number> {
         report.unsearchableSources.length - Math.min(10, report.unsearchableSources.length);
       process.stdout.write(
         `  FOUND ONLY BY NAME: ${named}${more > 0 ? `, and ${more} more` : ""} — ` +
-          "no searchable chunk at all; lengthen these sections or read them by slug\n",
+          "no searchable chunk at all — a page of links reads as navigation; give it " +
+          "prose of its own, or reach it by slug\n",
       );
     }
   }

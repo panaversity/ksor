@@ -4,19 +4,26 @@
  * The predecessor's gold (`sor-evals/gold/`, converted under decision 6) is
  * entirely curriculum: `python-crash-course`, `harness-engineering-crash-course`,
  * `foundations-everyone`. It is good gold and it cannot answer the question
- * issue #55 asks, because the classifier under test was TUNED on that corpus:
- * measuring the navigation threshold against curriculum gold would confirm 250,
- * since in a curriculum a sub-250-character segment genuinely is navigation.
+ * issue #55 asks, because the classifier under test had been TUNED on that
+ * corpus: measuring a length threshold against curriculum gold would have
+ * confirmed 250, since in a curriculum a sub-250-character segment genuinely is
+ * navigation.
  *
  * A handbook is the other shape. Its highest-value content is short and
  * declarative — "Probation: six months, with a written review at three and six"
- * — which the length-only rule cannot distinguish from a link list.
+ * — which a length-only rule cannot distinguish from a link list.
+ *
+ * It answered the question it was written for (decision 22, 2026-08-22):
+ * navigation is now decided by shape, and these categories are what proved the
+ * new rule correct rather than merely permissive — 0/9 to 9/9 on the first,
+ * 4/4 held on the second, 0 leaks on the third. It stays the standing guard
+ * against a regression, and `baseline.ts` records the line it holds.
  *
  * So the fixture carries THREE categories on purpose, and the gold names which
  * each question is for:
  *
- *   short-substantive  a complete fact under the threshold — WRONGLY excluded
- *   long-prose         over the threshold — the control, currently reachable
+ *   short-substantive  a complete fact, briefly stated — was WRONGLY excluded
+ *   long-prose         the control, reachable before and after
  *   nav                a genuine link list — RIGHTLY excluded
  *
  * A permissive classifier scores well on the first two and fails the third. A
