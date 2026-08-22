@@ -479,14 +479,13 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const agentFile = (name: string): string =>
       readFileSync(path.join(project, "system", "site", "out", name), "utf8");
 
-    // The front page publishes the record's OWN bytes, not a description of
-    // them: the hero panel renders the same index llms.txt serves, governance
-    // suffix and all. Asserted against a line only that builder produces, so a
-    // hand-written imitation of it on the page would fail here.
-    const indexLine = agentFile("llms.txt")
-      .split("\n")
-      .find((line) => line.includes("(/docs/refund-policy)")) as string;
-    expect(homeHtml, "the hero shows the index an agent is served").toContain(indexLine.trim());
+    // The front page is identity and one action now — the bytes panel that
+    // used to carry the record's index came off with the addresses (owner,
+    // 2026-08-22), because the illustration says the same thing the panel said.
+    // What the home page must still carry is asserted above: the record's slug,
+    // its authority sentence, and no framework marketing. The index itself is
+    // asserted against the built llms.txt just below, where it always mattered
+    // more.
 
     // ONE document's block, never "from this heading to the end of the file":
     // the loose form swallows every document after it, so an assertion that a

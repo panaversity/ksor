@@ -1,20 +1,8 @@
-"use client";
-
 import Link from "next/link";
 import Image, { type StaticImageData } from "next/image";
-import { useState, type ReactElement } from "react";
-import { useSearchContext } from "fumadocs-ui/contexts/search";
+import type { ReactElement } from "react";
 
 import { RecordArtwork } from "@/components/record-artwork";
-
-/** One tab of the panel: a file the build actually publishes. */
-export interface RecordArtifact {
-  readonly label: string;
-  readonly href: string;
-  readonly text: string;
-  /** True when `text` is the head of a longer file. */
-  readonly truncated: boolean;
-}
 
 /**
  * The cover of the record, and the record opening.
@@ -38,7 +26,6 @@ export function HomeCover({
   documents,
   firstUrl,
   firstTitle,
-  artifacts,
 }: {
   mark: StaticImageData;
   name: string;
@@ -47,23 +34,9 @@ export function HomeCover({
   documents: number;
   firstUrl: string;
   firstTitle: string;
-  artifacts: readonly RecordArtifact[];
 }): ReactElement {
-  const [tab, setTab] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const search = useSearchContext();
-  const shown = artifacts[tab] ?? artifacts[0];
-
-  const copy = (): void => {
-    if (shown === undefined) return;
-    void navigator.clipboard.writeText(shown.text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
   return (
-    <section className="relative bg-[var(--ksor-cover)] text-[var(--ksor-cover-foreground)]">
+    <section className="relative flex min-h-[72vh] items-center bg-[var(--ksor-cover)] text-[var(--ksor-cover-foreground)]">
       {/* A ruled ground — the ledger's own lines, not a texture. */}
       <div
         aria-hidden
@@ -126,21 +99,6 @@ export function HomeCover({
               </span>
             </Link>
 
-            {/* The second way in. A record is as often searched as browsed, and
-              the navbar's field is 1100px away from the eye at this moment. */}
-            {search.enabled ? (
-              <button
-                type="button"
-                onClick={() => search.setOpenSearch(true)}
-                className="inline-flex items-center gap-2.5 rounded-md border border-[var(--ksor-cover-rule)] px-5 py-3.5 text-sm text-[var(--ksor-cover-foreground)] transition-colors hover:bg-[var(--ksor-cover-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-              >
-                Search the record
-                <kbd className="rounded border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 font-mono text-[0.6875rem] text-[var(--ksor-cover-muted)]">
-                  ⌘K
-                </kbd>
-              </button>
-            ) : null}
-
             {/* Where the button lands, said once and quietly. Uppercase made a
               document's title shout; it is the record's word, not a label. */}
             <span className="ms-1 font-mono text-xs text-[var(--ksor-cover-muted)]">
@@ -158,61 +116,6 @@ export function HomeCover({
         <div className="flex justify-center lg:justify-end lg:self-center">
           <RecordArtwork />
         </div>
-      </div>
-
-      {/* The panel slides out from under the cover. */}
-      <div className="relative mx-auto -mb-24 w-full max-w-6xl px-6">
-        <figure className="overflow-hidden rounded-xl border border-[var(--ksor-cover-panel-rule)] bg-[var(--ksor-cover-panel)] shadow-[0_18px_50px_-24px_rgba(0,0,0,0.35)]">
-          <figcaption className="flex items-center gap-1 border-b border-[var(--ksor-cover-panel-rule)] px-2.5 py-2">
-            {artifacts.map((artifact, index) => (
-              <button
-                key={artifact.label}
-                type="button"
-                onClick={() => setTab(index)}
-                aria-pressed={index === tab}
-                className={
-                  "rounded px-2.5 py-1 font-mono text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring " +
-                  (index === tab
-                    ? "bg-fd-accent text-[var(--ksor-cover-foreground)]"
-                    : "text-[var(--ksor-cover-muted)] hover:text-[var(--ksor-cover-foreground)]")
-                }
-              >
-                {artifact.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={copy}
-              className="ms-auto rounded px-2.5 py-1 font-mono text-xs text-[var(--ksor-cover-muted)] transition-colors hover:text-[var(--ksor-cover-foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-            >
-              {copied ? "copied" : "copy"}
-            </button>
-          </figcaption>
-
-          {shown === undefined ? null : (
-            <pre
-              className="max-h-64 overflow-hidden px-5 py-4 font-mono text-[0.78125rem]/relaxed whitespace-pre-wrap text-[var(--ksor-cover-muted)]"
-              style={{
-                maskImage: "linear-gradient(to bottom, black calc(100% - 3rem), transparent)",
-              }}
-            >
-              {shown.text}
-            </pre>
-          )}
-
-          {/* Says what the panel is, without becoming a link: the addresses
-              came off this page (owner, 2026-08-22). The doors are still
-              published — `/llms.txt` sits where every agent looks for it, and
-              every document page advertises its markdown twin — they are just
-              not furniture on the front door. */}
-          {shown === undefined ? null : (
-            <p className="border-t border-[var(--ksor-cover-panel-rule)] px-5 py-2.5 font-mono text-[0.6875rem] tracking-wider text-[var(--ksor-cover-muted)] uppercase">
-              {shown.truncated
-                ? "the first lines of what an agent is served"
-                : "what an agent is served"}
-            </p>
-          )}
-        </figure>
       </div>
     </section>
   );
