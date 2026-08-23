@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { textHash } from "./identity";
+
 /**
  * The shape of a `<doc>.flashcards.yaml` deck.
  *
@@ -44,16 +46,5 @@ export type Card = z.infer<typeof CardSchema>;
  * and rewording it should not throw away a learner's history with the card.
  */
 export function cardHash(card: Card): string {
-  // NUL as the separator, written as an escape rather than embedded: a raw
-  // NUL in the source makes git treat this file as binary. It has to be a
-  // separator of some kind — without one, front "ab"/back "c" hashes the same
-  // as front "a"/back "bc" — and NUL is the one character authored card text
-  // cannot contain.
-  const text = `${card.front}\u0000${card.back}`;
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0");
+  return textHash([card.front, card.back]);
 }

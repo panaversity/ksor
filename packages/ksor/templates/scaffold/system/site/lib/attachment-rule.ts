@@ -21,6 +21,7 @@ export const ATTACHMENT_SUFFIXES = [
   { suffix: ".summary.md", kind: "summary" },
   { suffix: ".summary.mdx", kind: "summary" },
   { suffix: ".flashcards.yaml", kind: "deck" },
+  { suffix: ".quiz.yaml", kind: "quiz" },
 ] as const;
 
 export type AttachmentKind = (typeof ATTACHMENT_SUFFIXES)[number]["kind"];
@@ -37,6 +38,8 @@ export const ATTACHMENT_NEAR_MISSES = [
   { suffix: ".flashcards.yml", want: ".flashcards.yaml" },
   { suffix: ".flashcards.json", want: ".flashcards.yaml" },
   { suffix: ".summary.markdown", want: ".summary.md" },
+  { suffix: ".quiz.yml", want: ".quiz.yaml" },
+  { suffix: ".quiz.json", want: ".quiz.yaml" },
 ] as const;
 
 /**
@@ -102,6 +105,7 @@ export function nearMissOf(
 export const ATTACHMENT_CASES = [
   { name: "returns.summary.md", kind: "summary", parent: "returns.md" },
   { name: "returns.flashcards.yaml", kind: "deck", parent: "returns.md" },
+  { name: "returns.quiz.yaml", kind: "quiz", parent: "returns.md" },
   { name: "index.summary.md", kind: "summary", parent: "index.md" },
   // A stem containing dots keeps every one of them: the parent is the same
   // name with the attachment suffix removed, never "up to the first dot".
@@ -110,15 +114,18 @@ export const ATTACHMENT_CASES = [
   { name: "returns.md", kind: null, parent: null },
   { name: "summary.md", kind: null, parent: null },
   { name: "flashcards.yaml", kind: null, parent: null },
+  { name: "quiz.yaml", kind: null, parent: null },
   { name: "my-summary.md", kind: null, parent: null },
   // A dotfile with no stem attaches to nothing — refused as an attachment so
   // it is refused as an unexpected file instead, which is the honest error.
   { name: ".summary.md", kind: null, parent: null },
   { name: ".flashcards.yaml", kind: null, parent: null },
+  { name: ".quiz.yaml", kind: null, parent: null },
   // Case matters: the record already refuses two names differing only in case,
   // so an uppercase suffix is a different file, not the same rule.
   { name: "returns.SUMMARY.md", kind: null, parent: null },
   // Not attachments — near misses, which get their own refusal.
   { name: "returns.flashcards.yml", kind: null, parent: null },
   { name: "returns.flashcards.json", kind: null, parent: null },
+  { name: "returns.quiz.yml", kind: null, parent: null },
 ] as const;

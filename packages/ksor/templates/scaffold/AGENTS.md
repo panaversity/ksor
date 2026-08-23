@@ -506,11 +506,12 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   refused.
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
-- **Study attachments.** A document may carry two optional companions named
-  after it, in the same folder: `<doc>.summary.md` (a short précis) and
-  `<doc>.flashcards.yaml` (a recall deck). The summary appears as a second tab
-  beside the document's own words; the deck appears at the END of that
-  document's page. Both appear nowhere else in the site.
+- **Study attachments.** A document may carry three optional companions named
+  after it, in the same folder: `<doc>.summary.md` (a short précis),
+  `<doc>.flashcards.yaml` (a recall deck) and `<doc>.quiz.yaml` (a
+  multiple-choice check). The summary appears as a second tab beside the
+  document's own words; the deck and the quiz appear at the END of that
+  document's page. None of them appears anywhere else in the site.
 
   An attachment is **part of its document**, not a document. It has no URL of
   its own, no sidebar row, no line in `llms.txt`, and no identity an agent can
@@ -548,6 +549,51 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   2.5x each time. It is not FSRS and makes no retention guarantee. Progress is
   kept in the reader's own browser, so it is per-person and per-device, and it
   is not part of the record.
+
+  A **quiz** is the same idea with an answer to choose. Each question carries
+  two to six options, `answer` as the zero-based index of the correct one, a
+  required `explanation`, and an optional `source` naming where in the document
+  the answer lives:
+
+  ```yaml
+  quiz:
+    title: Expense approvals
+    questionsPerRound: 10 # optional; the default
+  questions:
+    - question: Who approves a purchase above the threshold?
+      options:
+        - A second approver, independent of the requester
+        - The requester's own manager, in every case
+        - The finance team, after the purchase completes
+      answer: 0
+      explanation: Why that is right, and why the others are not.
+      source: Approvals — thresholds
+  ```
+
+  The reader sees whether they were right **immediately**, then the
+  explanation — a quiz here teaches through the mistake, and it does not
+  certify anybody, so there is no pass mark. Answers stay in the reader's
+  browser and are sent nowhere. A bank larger than `questionsPerRound` is drawn
+  from at random and offers another round; a smaller one is simply asked in
+  full.
+
+  **`pnpm check` and `pnpm build` both refuse a quiz a reader could pass
+  without reading**, and this is worth knowing before you write one, because
+  it is easy to trip by accident:
+
+  | Refusal                    | Means                                                 |
+  | -------------------------- | ----------------------------------------------------- |
+  | `ksor-quiz-answer-bias`    | more than 60% of answers sit at one option position   |
+  | `ksor-quiz-length-bias`    | picking the longest (or shortest) option usually wins |
+  | `ksor-quiz-answer-run`     | four or more questions in a row share an answer       |
+  | `ksor-quiz-contradiction`  | an explanation calls the marked answer wrong          |
+  | `ksor-quiz-duplicate-stem` | two questions open with the same 60 characters        |
+
+  So: move the correct answer around, and keep the options close in length.
+  The ratio rules do not apply below five questions, where spreading answers
+  would mean the checker choosing them for you. These checks come from the
+  predecessor, where the same mistakes shipped and were found by readers — one
+  quiz had every correct answer in the same position across 451 questions.
 
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.

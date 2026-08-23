@@ -393,9 +393,47 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 11 — no source file carries a raw NUL byte. Git treats a file with one
+// as BINARY: it stops showing diffs for it, which means the change nobody can
+// review is the change nobody reviews. The rule exists because this is easy to
+// do by accident — a NUL is invisible in every editor and every terminal, and
+// it landed twice while writing the shared text hash, once in the constant
+// itself and once in a test literal where it silently made two different
+// inputs equal and the assertion pass for the wrong reason. Where a NUL is
+// genuinely wanted, write it as the escape \u0000 (see lib/text-hash.ts).
+{
+  const walkAll = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.name === "node_modules" || e.name === "dist" || e.name === ".source"
+        ? []
+        : e.isDirectory()
+          ? walkAll(path.join(dir, e.name))
+          : e.isFile()
+            ? [path.join(dir, e.name)]
+            : [],
+    );
+  const roots = ["packages", "scripts", "workbench"];
+  for (const root of roots) {
+    const dir = path.join(repoRoot, root);
+    if (!existsSync(dir)) continue;
+    for (const file of walkAll(dir)) {
+      if (!/[.](ts|tsx|mjs|js|json|md|ya?ml|css)$/.test(file)) continue;
+      const bytes = readFileSync(file);
+      const at = bytes.indexOf(0);
+      if (at === -1) continue;
+      violate(
+        11,
+        `${path.relative(repoRoot, file)} contains a raw NUL byte at offset ${at}`,
+        "git treats a file containing one as binary and stops producing reviewable diffs for it",
+        "write it as the escape \\u0000 instead, as lib/text-hash.ts does",
+      );
+    }
+  }
+}
+
 if (violations.length > 0) {
   console.error(`guard: ${violations.length} invariant violation(s):\n`);
   for (const v of violations) console.error(`  ${v}\n`);
   process.exit(1);
 }
-console.log("guard: ok (10 rules)");
+console.log("guard: ok (11 rules)");
