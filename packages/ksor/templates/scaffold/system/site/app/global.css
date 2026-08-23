@@ -277,15 +277,14 @@ html > body[data-scroll-locked] {
 /* A tool's own colour, across the whole block.
 
    When a document gives one instruction per tool, the tab is the moment a
-   reader picks theirs — so the choice is worth being unmistakable, and a
-   tool's own brand colour is the fastest thing to recognise. The colour is not
-   confined to the tab: the strip and the panel around it take a wash of it
-   too, so the whole block says which tool you are looking at even once the
-   tabs have scrolled past.
+   reader picks theirs, so the choice is worth being unmistakable. The colour
+   is not confined to the tab: the strip and the panel take a wash of it too,
+   in two different strengths, so the block says which tool you are reading at
+   any scroll position and the strip still reads as a distinct band.
 
-   Each tool declares ONE value and the shared rules below do the rest, so
-   adding a tool is a line rather than a set. `:has()` puts the active tab's
-   colour on the container, which is what lets the panel follow the tab.
+   Each tool declares ONE value and shared rules do the rest, so adding a tool
+   is a line rather than a set. `:has()` lifts the active tab's colour onto the
+   container, which is what lets the panel follow the tab.
 
    Keyed on `data-tab-value`, which `components/mdx.tsx` puts on the trigger.
    Radix also encodes the value in its generated id, but that is a private
@@ -304,36 +303,66 @@ html > body[data-scroll-locked] {
   --ksor-tool: #6366f1;
 }
 
-/* Everything below is shared, and applies only where a tool was recognised. */
-.prose [data-orientation]:has([data-tab-value][data-state="active"]) {
-  background-color: color-mix(in oklab, var(--ksor-tool) 9%, transparent);
-  border-color: color-mix(in oklab, var(--ksor-tool) 32%, transparent);
+/* A decorative mark per tool. Purely visual — the label beside it is the
+   accessible name — so it is CSS content rather than markup an author would
+   have to write. */
+.prose [role="tab"][data-tab-value="Claude Code"]::before {
+  content: "\2726";
 }
 
+.prose [role="tab"][data-tab-value="OpenCode"]::before {
+  content: "</>";
+  font-size: 0.85em;
+  letter-spacing: -0.05em;
+}
+
+/* Everything below is shared, and applies only where a tool was recognised. */
+.prose [data-orientation]:has([data-tab-value][data-state="active"]) {
+  background-color: color-mix(in oklab, var(--ksor-tool) 7%, transparent);
+  border-color: color-mix(in oklab, var(--ksor-tool) 28%, transparent);
+  overflow: hidden;
+}
+
+/* The strip is a BAND: stronger than the panel, full width, and the tabs sit
+   inside it rather than floating above it. */
 .prose [data-orientation]:has([data-tab-value][data-state="active"]) > [role="tablist"] {
-  background-color: color-mix(in oklab, var(--ksor-tool) 13%, transparent);
-  border-bottom: 1px solid color-mix(in oklab, var(--ksor-tool) 22%, transparent);
+  background-color: color-mix(in oklab, var(--ksor-tool) 20%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--ksor-tool) 26%, transparent);
+  padding: 0.5rem;
+  gap: 0.25rem;
+}
+
+.prose [role="tab"][data-tab-value] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Big enough to be a target and to read as a block rather than a word. */
+  padding: 0.7rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 0.25rem;
 }
 
 .prose [role="tab"][data-tab-value][data-state="active"] {
   background-color: var(--ksor-tool);
   color: #fff;
-  border-radius: 0.375rem;
 }
 
 .prose [role="tab"][data-tab-value][data-state="inactive"]:hover {
   background-color: color-mix(in oklab, var(--ksor-tool) 14%, transparent);
-  border-radius: 0.375rem;
 }
 
-/* The code keeps its own surface so it stays readable on the wash — a tinted
-   page with tinted code on it is one colour with words in it. */
+/* The code sits INSET on the wash, with its own surface, so the panel reads as
+   a frame around it. A tinted block on a tinted panel is one colour with words
+   in it, and the code is the part somebody actually has to read. */
 .prose [data-orientation]:has([data-tab-value][data-state="active"]) figure {
+  margin: 1.25rem;
   background-color: var(--card);
+  border-color: color-mix(in oklab, var(--ksor-tool) 18%, transparent);
 }
 
 .dark .prose [data-orientation]:has([data-tab-value][data-state="active"]) figure {
-  background-color: color-mix(in oklab, var(--muted) 92%, #000);
+  background-color: color-mix(in oklab, var(--muted) 88%, #000);
 }
 
 /* The slide STAGE.
