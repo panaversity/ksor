@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Copy, FileText } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, FileText } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -64,8 +64,14 @@ export function DocumentActions({ href }: { readonly href: string }): ReactEleme
           size="sm"
           className="h-auto gap-1.5 px-2 py-1 font-mono text-[0.6875rem] tracking-[0.14em] text-fd-muted-foreground uppercase hover:text-fd-foreground"
         >
-          <FileText aria-hidden className="size-3.5" />
-          Markdown
+          {/* "Export", not "Markdown": the word appeared three times in one
+            small control, and naming the FORMAT locks the trigger to it — a
+            later Download or Cite would make it wrong. Not "Source", which
+            collides with the provenance block below. Not "Share", which in a
+            record where `visibility:` decides who may read a document is the
+            wrong verb entirely. */}
+          <Download aria-hidden className="size-3.5" />
+          Export
           <ChevronDown aria-hidden className="size-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
