@@ -86,6 +86,7 @@ export function RecordViews({
   const only = views.length === 1;
 
   const [active, setActive] = useState<ViewId>("document");
+  const activeMinutes = views.find((view) => view.id === active)?.minutes;
   const tabRefs = useRef(new Map<ViewId, HTMLButtonElement>());
   const base = useId();
   const tabId = (id: ViewId): string => `${base}-tab-${id}`;
@@ -153,7 +154,7 @@ export function RecordViews({
     return (
       <div className="ksor-views">
         {documentMinutes === undefined ? null : (
-          <p className="mb-6 flex items-center gap-2 border-b border-fd-border pb-2.5 text-sm text-fd-muted-foreground">
+          <p className="mb-6 flex items-center justify-end gap-2 border-b border-fd-border pb-2.5 text-sm text-fd-muted-foreground">
             <Clock aria-hidden className="size-3.5 shrink-0" />
             <span>{documentMinutes} min read</span>
           </p>
@@ -165,54 +166,61 @@ export function RecordViews({
 
   return (
     <div className="ksor-views">
-      <div
-        role="tablist"
-        aria-label="Views of this document"
-        // A rule under the strip rather than a boxed tab group: the record's
-        // furniture is hairlines (see the governance block and the TOC rail),
-        // and a heavier container here would make the study aids look more
-        // important than the document they describe.
-        className="mb-6 flex gap-1 border-b border-fd-border"
-      >
-        {views.map((view, index) => {
-          const selected = view.id === active;
-          return (
-            <button
-              key={view.id}
-              ref={(node) => {
-                if (node) tabRefs.current.set(view.id, node);
-              }}
-              type="button"
-              role="tab"
-              id={tabId(view.id)}
-              aria-selected={selected}
-              aria-controls={panelId(view.id)}
-              // Roving tabIndex: one stop for the whole strip, arrows move
-              // within it. Every tab being a tab stop is the common mistake and
-              // makes a keyboard reader walk the chrome before the prose.
-              tabIndex={selected ? 0 : -1}
-              onClick={() => select(view.id)}
-              onKeyDown={(event) => onKeyDown(event, index)}
-              className={[
-                "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 font-mono text-xs tracking-wide transition-colors",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary",
-                selected
-                  ? "border-fd-primary text-fd-foreground"
-                  : "border-transparent text-fd-muted-foreground hover:text-fd-foreground",
-              ].join(" ")}
-            >
-              {view.icon}
-              {view.label}
-              {/* The minutes sit ON the tabs because that is where they answer
-                a question the reader is actually asking: the summary is worth
-                a tab only if it is meaningfully shorter, and two numbers side
-                by side say so without a word of copy. */}
-              {view.minutes === undefined ? null : (
-                <span className="text-fd-muted-foreground/70">{view.minutes} min</span>
-              )}
-            </button>
-          );
-        })}
+      {/* The rule spans the whole strip, and the clock sits at its far end.
+        ONE clock rather than a number on every tab: the reader is on one view
+        at a time, and the time they care about is the time for the view they
+        are looking at. The rule is on this wrapper rather than the tablist so
+        it runs the full width beneath both. */}
+      <div className="mb-6 flex items-center justify-between gap-4 border-b border-fd-border">
+        <div role="tablist" aria-label="Views of this document" className="flex gap-1">
+          {views.map((view, index) => {
+            const selected = view.id === active;
+            return (
+              <button
+                key={view.id}
+                ref={(node) => {
+                  if (node) tabRefs.current.set(view.id, node);
+                }}
+                type="button"
+                role="tab"
+                id={tabId(view.id)}
+                aria-selected={selected}
+                aria-controls={panelId(view.id)}
+                // The visible minutes belong to the SELECTED view only, so each
+                // tab carries its own in its accessible name — otherwise a
+                // screen-reader user could not compare them without switching.
+                {...(view.minutes === undefined
+                  ? {}
+                  : {
+                      "aria-label": `${view.label}, ${view.minutes} minute${view.minutes === 1 ? "" : "s"} to read`,
+                    })}
+                // Roving tabIndex: one stop for the whole strip, arrows move
+                // within it. Every tab being a tab stop is the common mistake and
+                // makes a keyboard reader walk the chrome before the prose.
+                tabIndex={selected ? 0 : -1}
+                onClick={() => select(view.id)}
+                onKeyDown={(event) => onKeyDown(event, index)}
+                className={[
+                  "-mb-px flex items-center gap-2 border-b-2 px-3 py-2 font-mono text-xs tracking-wide transition-colors",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary",
+                  selected
+                    ? "border-fd-primary text-fd-foreground"
+                    : "border-transparent text-fd-muted-foreground hover:text-fd-foreground",
+                ].join(" ")}
+              >
+                {view.icon}
+                {view.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeMinutes === undefined ? null : (
+          <span className="flex shrink-0 items-center gap-2 pb-2 text-sm text-fd-muted-foreground">
+            <Clock aria-hidden className="size-3.5 shrink-0" />
+            <span>{activeMinutes} min read</span>
+          </span>
+        )}
       </div>
 
       {views.map((view) => (

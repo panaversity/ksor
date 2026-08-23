@@ -105,6 +105,12 @@ Each is separately observable on the built output:
   also survives `site.governance: false`, which removes the facts row
   wholesale.
 
+  ONE clock, at the far end of that strip, showing the time for the view the
+  reader is ON — it changes when they change tab. Not a number per tab: the
+  reader is looking at one view at a time. Each tab still carries its own
+  figure in its accessible name, so a screen-reader user can compare them
+  without switching.
+
   Counted at BUILD time so the figure is in the shipped HTML — a reader with a
   failed bundle, a crawler and an agent all get it. Fenced code and frontmatter
   are excluded: a short page with a long code block is not a twenty-minute
