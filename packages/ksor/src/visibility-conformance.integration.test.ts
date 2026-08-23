@@ -76,12 +76,25 @@ function assetHits(root: string): string[] {
 interface Shell {
   readonly shellName: string;
   readonly swap: ((project: string) => void) | null;
+  /**
+   * Whether this shell RENDERS study attachments, as opposed to merely
+   * excluding them. The surface contract requires every shell to keep an
+   * attachment off the route table; rendering one as a summary tab and a deck
+   * is the reference shell's own design, not a clause of the contract. The
+   * distinction decides which positive control this suite is entitled to: on a
+   * shell that renders them, "published at its own tier" proves the leak sweep
+   * is not passing over a broken feature; on a shell that does not, the same
+   * assertion is simply false, and the sweep leans on the parent document's
+   * control instead.
+   */
+  readonly rendersAttachments: boolean;
 }
 
 const SHELLS: readonly Shell[] = [
-  { shellName: "fumadocs", swap: null },
+  { shellName: "fumadocs", swap: null, rendersAttachments: true },
   {
     shellName: "docusaurus",
+    rendersAttachments: false,
     swap: (project) => {
       // The swap recipe, as in shell-conformance (filtered copy).
       const GENERATED = new Set([
@@ -149,7 +162,7 @@ function filesContaining(root: string, probe: string | Buffer): string[] {
 
 describe.runIf(enabled).each(SHELLS)(
   "visibility conformance — $shellName shell",
-  ({ shellName, swap }) => {
+  ({ shellName, swap, rendersAttachments }) => {
     let work: string;
     let project: string;
     let outDir: string;
@@ -356,14 +369,29 @@ describe.runIf(enabled).each(SHELLS)(
       // passes for the wrong reason: an attachment that is published NOWHERE,
       // at any tier, would satisfy every "did not leak" assertion in this file
       // while the feature was simply broken (research/visibility.md §8).
-      expect(
-        filesContaining(outDir, SUMMARY_BODY).length,
-        "control: a restricted document's summary IS published at its own tier",
-      ).toBeGreaterThan(0);
-      expect(
-        filesContaining(outDir, DECK_BODY).length,
-        "control: a restricted document's deck IS published at its own tier",
-      ).toBeGreaterThan(0);
+      // Which control is the true one depends on the shell — see
+      // `rendersAttachments`. Both are asserted rather than one being skipped,
+      // so a shell that starts or stops rendering attachments fails here and
+      // has to say so in the table.
+      if (rendersAttachments) {
+        expect(
+          filesContaining(outDir, SUMMARY_BODY).length,
+          "control: a restricted document's summary IS published at its own tier",
+        ).toBeGreaterThan(0);
+        expect(
+          filesContaining(outDir, DECK_BODY).length,
+          "control: a restricted document's deck IS published at its own tier",
+        ).toBeGreaterThan(0);
+      } else {
+        expect(
+          filesContaining(outDir, SUMMARY_BODY),
+          "this shell excludes attachments without rendering them, so a summary is published at NO tier",
+        ).toEqual([]);
+        expect(
+          filesContaining(outDir, DECK_BODY),
+          "this shell excludes attachments without rendering them, so a deck is published at NO tier",
+        ).toEqual([]);
+      }
       // Rebuild public WITHOUT wiping: the shell's own output handling is
       // what must not leave restricted bytes behind.
       mustPass(build(undefined, { keepOut: true }), "public rebuild over restricted output");
