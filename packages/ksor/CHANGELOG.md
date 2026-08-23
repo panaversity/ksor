@@ -1,5 +1,49 @@
 # @panaversity/ksor
 
+## 0.0.28
+
+### Patch Changes
+
+- 24ec8c3: Each document page now says how long it takes to read.
+
+  The figure is counted when the site is built, from the document's own markdown,
+  so it is in the shipped HTML — a reader whose bundle failed, a crawler and an
+  agent parsing the page all get it. Fenced code and frontmatter are left out of
+  the count, so a short page carrying a long example is not reported as a
+  twenty-minute read.
+
+  Nothing to author: it is derived from the words already there. Where a document
+  has a summary, both tabs carry their own figure, so a reader can see what the
+  summary saves them before opening it.
+
+- 6abcf1f: Summaries and flashcard decks, as governed attachments of a document.
+
+  A document in `knowledge/` may now carry two companions named after it —
+  `<doc>.summary.md` and `<doc>.flashcards.yaml`. The summary joins the record's
+  own words as a second tab; the deck renders at the end of the page, with spaced
+  review kept in the reader's browser and Shuffle / Guide / Download beneath it.
+  `ksor init` ships one of each so a fresh project shows the shape rather than
+  describing it.
+
+  An attachment is **part of its document, not a document**. It gets no URL, no
+  sidebar row, no `llms.txt` line, no markdown twin, no search entry — and no
+  stable id, so an agent can never cite it as a source in its own right. It takes
+  its `visibility:` and its takedown from its parent: restrict or withdraw the
+  document and its summary and deck go with it. An attachment declaring
+  frontmatter, or one whose document is missing, is refused by `pnpm check` and by
+  `pnpm build`.
+
+  **If your record already has `.summary.md` files and you serve over MCP, read
+  this.** They were previously ingested as ordinary documents, each with its own
+  id and its own governance defaults. They no longer are. After upgrading, run
+  `pnpm refresh`; if a takedown names one of those ids, `ksor serve` will refuse
+  to boot until the denial is pointed at the parent document or retired
+  deliberately. That refusal is the fix working — those rows governed a node that
+  should never have existed.
+
+  Review scheduling is a two-grade SM-2 variant (`ksor-sm2-v1`). It is not FSRS
+  and claims no retention target.
+
 ## 0.0.27
 
 ### Patch Changes
