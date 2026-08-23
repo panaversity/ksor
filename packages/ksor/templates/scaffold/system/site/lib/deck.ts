@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { textHash } from "./text-hash";
+import { textHash } from "./identity";
 
 /**
  * The shape of a `<doc>.flashcards.yaml` deck.

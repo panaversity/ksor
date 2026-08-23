@@ -11,8 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { questionHash } from "../templates/scaffold/system/site/lib/quiz-identity.js";
-import { textHash } from "../templates/scaffold/system/site/lib/text-hash.js";
+import { questionHash, textHash } from "../templates/scaffold/system/site/lib/identity.js";
 
 /** [front, back] → what the pre-extraction `cardHash` returned. */
 const PRE_EXTRACTION = [

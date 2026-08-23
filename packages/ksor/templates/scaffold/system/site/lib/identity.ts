@@ -1,5 +1,5 @@
 /**
- * A stable identity for a piece of authored text.
+ * Identity for authored text: the hash, and what a question hashes.
  *
  * FNV-1a, 32-bit, hand-rolled — the site has no crypto import at build time and
  * this has to produce the same value in the browser, where the saved progress
@@ -10,7 +10,12 @@
  * copies of a hash is the kind of duplication that stays identical right up
  * until someone fixes a separator in one of them.
  *
- * A LEAF: no imports, and unit-tested as one.
+ * A LEAF, and it has to stay one. This repo can only unit-test a scaffold
+ * module with no relative imports: `tsc` under node16 resolution demands a
+ * `.js` specifier, and Next's bundler in the scaffold cannot resolve that back
+ * to a `.ts` file — so a scaffold module that imports a sibling either fails
+ * the typecheck or fails the site build. `questionHash` therefore lives here
+ * beside the hash it calls rather than in a file of its own.
  */
 
 /**
@@ -31,4 +36,20 @@ export function textHash(parts: readonly string[]): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, "0");
+}
+
+/**
+ * A question's identity: a hash of the text the reader actually sees.
+ *
+ * The stem AND the options, deliberately including their ORDER — reordering
+ * changes which index is correct, so a saved answer would otherwise be
+ * re-scored against a different question and silently become right or wrong.
+ * `explanation` and `source` are excluded: they teach ABOUT the question
+ * rather than being it, so improving an explanation costs the reader nothing.
+ */
+export function questionHash(question: {
+  readonly question: string;
+  readonly options: readonly string[];
+}): string {
+  return textHash([question.question, ...question.options]);
 }

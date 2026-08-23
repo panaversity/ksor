@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { QUIZ_AUDIT_SLUGS, auditQuiz, type QuizFinding } from "./quiz-audit.js";
+import { QUIZ_AUDIT_SLUGS, auditQuiz, type QuizFinding } from "./quiz-audit";
 
 /**
  * The shape of a `<doc>.quiz.yaml`.

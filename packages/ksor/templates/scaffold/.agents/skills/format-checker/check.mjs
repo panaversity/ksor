@@ -41,7 +41,7 @@ const ASSET_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".web
 // rules below. This mirrors packages/content/src/lib/attachment-rule.ts, which
 // this dependency-free file cannot import; ATTACHMENT_CASES there is the table
 // both are held to.
-const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
+const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml", ".quiz.yaml"];
 // One character off a real attachment, refused BY NAME: `.yml` reaches the
 // site bundler's `Unknown file type` throw, which names the path and nothing
 // about the rule.
@@ -49,6 +49,8 @@ const ATTACHMENT_NEAR_MISSES = [
   [".flashcards.yml", ".flashcards.yaml"],
   [".flashcards.json", ".flashcards.yaml"],
   [".summary.markdown", ".summary.md"],
+  [".quiz.yml", ".quiz.yaml"],
+  [".quiz.json", ".quiz.yaml"],
 ];
 
 /** The attachment suffix this name carries, or null. A dotfile has no stem. */

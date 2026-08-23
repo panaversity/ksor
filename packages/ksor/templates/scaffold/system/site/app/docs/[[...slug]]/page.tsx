@@ -17,8 +17,9 @@ import { showGovernance } from "@/lib/shared";
 import { RecordToc, TocItems } from "@/components/record-toc";
 import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
+import { Quiz } from "@/components/quiz";
 import { StudyAids } from "@/components/study-aids";
-import { deckFor, summaryFor } from "@/lib/attachments";
+import { deckFor, quizFor, summaryFor } from "@/lib/attachments";
 import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -32,6 +33,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const summary = summaryFor(page.path);
   const Summary = summary?.body ?? null;
   const deck = deckFor(page.path);
+  const quiz = quizFor(page.path);
   // Counted at BUILD time from the document's own markdown, so the figure is in
   // the shipped HTML for a reader with a failed bundle, a crawler and an agent
   // alike. The predecessor measured the rendered DOM after paint, which put it
@@ -157,7 +159,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           region, so the quiz that will sit beside the deck is a child here and
           not a new argument about where it goes. Renders nothing at all when
           the document has no study aids. */}
-        <StudyAids>{deck === null ? null : <Flashcards deck={deck} />}</StudyAids>
+        {/* Recall first, then the check on it — and each renders only if the
+            document carries one, so a page with just a quiz shows just a quiz. */}
+        <StudyAids>
+          {deck === null ? null : <Flashcards deck={deck} />}
+          {quiz === null ? null : <Quiz quiz={quiz} />}
+        </StudyAids>
         {/* A folder's index page lists what the folder holds. Without it the
           page ended at its own sentence and the documents below it were
           reachable only from the sidebar (research/site-design.md F5). Empty

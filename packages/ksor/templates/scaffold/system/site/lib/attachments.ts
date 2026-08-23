@@ -5,7 +5,7 @@ import { cardHash, type Card, type Deck } from "./deck";
 import { newCard, type CardSchedule } from "./srs";
 import { type Question, type Quiz } from "./quiz";
 import { DEFAULT_QUESTIONS_PER_ROUND } from "./quiz-round";
-import { questionHash } from "./quiz-identity";
+import { questionHash } from "./identity";
 
 /**
  * Finding a document's study attachments.
