@@ -14,6 +14,23 @@ embedding cost on every cold start and would need write credentials at runtime.
 So **a first deploy with no ingest serves an empty record.** It is not broken;
 nothing was ever published to it.
 
+## Before the first command
+
+Ingest reads your markdown, sends each new chunk to an embedding provider, and
+writes the result to Postgres. So four things must be true, and none of them is
+created for you.
+
+|                      | what                                                                                                          | how                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **The corpus**       | `knowledge/` at your repo root — CommonMark `.md`, one document per file, `title` and `status` in frontmatter | `pnpm check` validates it and explains any violation                                           |
+| **The database**     | Postgres with **pgvector** — `CREATE EXTENSION vector;`                                                       | any managed host; the DDL below needs a role that can create tables                            |
+| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                   | [aistudio.google.com](https://aistudio.google.com/apikey); the free tier covers a first corpus |
+| **The DSN**          | `KSOR_DB_URL`, named by `instance.md`'s `database.dsn_env`                                                    | uncomment the `database:` block in `instance.md` first                                         |
+
+Both variables go in `.env` beside `instance.md` — `ksor` reads it automatically,
+and `.env` is gitignored. Every command below is run **from your repository
+root**, where `instance.md` and `package.json` live.
+
 ## The order, once
 
 ```sh
@@ -29,8 +46,14 @@ existing grant says "already granted".
 Then, after every change to `knowledge/`:
 
 ```sh
-pnpm refresh
+pnpm refresh   # publishes to the agent surface
+pnpm build     # rebuilds the website from the same corpus
 ```
+
+**Both surfaces, every time.** `refresh` publishes a generation the MCP door
+serves immediately; the website is a static build and only changes when you
+rebuild and redeploy it. Ingest alone leaves the human surface showing the old
+content, which reads as a half-failed ingest and is not one.
 
 ## What a generation is
 
@@ -38,8 +61,14 @@ Each ingest builds a **fresh generation** — invisible until activated — and
 carries every unchanged embedding forward from the last complete one, matched by
 content hash. Only changed or previously-failed chunks are re-embedded.
 
-`--flip` swaps the active pointer. The previous generation stays as a rollback
-target; `ksor gc` reaps the ones nothing points at any more.
+`--flip` swaps the active pointer, and the previous generation stays as a
+rollback target.
+
+**`gc` will not take it.** It never collects the active generation, the rollback
+generation, or any generation a live snapshot token could still pin, and it
+always leaves at least two complete generations standing. That is why `pnpm
+refresh` can safely run `ingest` and `gc` back to back — the routine command
+does not eat the safety net it just created.
 
 Three consequences worth knowing:
 
@@ -55,6 +84,31 @@ Three consequences worth knowing:
 A flip that would drop more than `KSOR_MAX_SHRINK` of the record (default
 `0.15`, i.e. 15%) **refuses**. When a large deletion is intended, say so:
 `KSOR_ALLOW_SHRINK=1`.
+
+## Did it work?
+
+The failure this page opens with — a healthy door serving an empty record — is
+invisible unless you look. Three checks, cheapest first:
+
+```sh
+# 1. the door knows which corpus it serves, and its embedding space is intact
+curl -s http://127.0.0.1:8080/health
+
+# 2. something is actually published — ask for the record's structure
+curl -s -X POST http://127.0.0.1:8080/mcp \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-protocol-version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"outline","arguments":{}}}'
+```
+
+An empty `nodes` array means nothing was published — the ingest did not run, or
+ran without `--flip`. Then search for a phrase you know is in the record and
+check the hits carry `provenance.stable_id` and `generation`.
+
+**`provenance.stable_id` is also how you name a document to `takedown`.** For
+most documents it is `knowledge/<path-without-.md>`; a search result is the
+reliable way to read one off rather than guessing.
 
 ## Where ingest runs — not on the host
 
@@ -88,22 +142,14 @@ carries forward everything that was already embedded, including from a
 generation that was still `building` when it died, so a resumed run pays only
 for what the first one had not reached.
 
-## Endpoints, poolers, and what actually matters
+## Endpoints and poolers
 
 If your provider offers both a **pooled** and a **direct** endpoint (Neon's
-`-pooler` host, or anything on port 6432), ksor detects which one you gave it
-and says so in the boot report. That line is **informational**: it classifies,
-it never transforms. The hazard it descends from — a transaction pooler and
-server-side prepared statements — cannot arise here, because node-postgres does
-not auto-prepare.
-
-For the record: the 6,963-chunk ingest above ran through a **pooled** endpoint
-without incident, and the same DSN serves. Use whichever your provider gives
-you, and reach for the direct endpoint only if you actually hit pooler
-connection limits under a parallel ingest — not pre-emptively.
-
-`KSOR_DB_POOLED_ENDPOINT=1` forces the classification when your host name does
-not announce itself.
+`-pooler` host, or port 6432), use whichever it gives you. ksor detects which and
+says so at boot, but the line is informational — it classifies, it never
+transforms, and the hazard it descends from cannot arise here. The 6,963-chunk
+ingest measured above ran through a pooled endpoint without incident. Reach for
+the direct endpoint only if you actually hit pooler connection limits.
 
 ## Turning the abstention gate on
 
@@ -115,8 +161,8 @@ measure until the corpus is in there.
 pnpm exec ksor calibrate --instance instance.md
 ```
 
-It prints a recommended `vector_floor`. Paste it in with the date you measured
-it, and restart:
+It prints a recommended `vector_floor`. Paste it into **`instance.md`** with the
+date you measured it, then restart `ksor serve` — the floor is read at boot:
 
 ```yaml
 retrieval:
