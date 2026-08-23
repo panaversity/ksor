@@ -123,7 +123,14 @@ describe("published tarball", () => {
     const staged = path.join(workDir(), "pkg");
     cpSync(pkgDir, staged, {
       recursive: true,
-      filter: (src) => path.basename(src) !== "node_modules",
+      // Also skip the init suite's fake installs. They are created and removed
+      // INSIDE packages/ksor while vitest runs files in parallel, so a copy that
+      // walks into one mid-teardown fails ENOENT — the residual half of the
+      // 2026-08-18 flake, seen again 2026-08-23.
+      filter: (src) => {
+        const base = path.basename(src);
+        return base !== "node_modules" && !base.startsWith("ksor-fakeinstall-");
+      },
     });
     const probe = path.join(staged, "templates", "scaffold", "system", "site", "probe.tsbuildinfo");
     writeFileSync(probe, "transient\n");
