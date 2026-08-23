@@ -49,6 +49,42 @@ lag — so the door answers `503`, the client retries a credential that can neve
 work, and a misconfiguration reads as an outage. With the issuer declared, that
 same token is refused `401` before any key is fetched.
 
+## Will your provider work? Three questions, before you start
+
+Answer these before creating anything. A provider that fails any one of them
+cannot be used, and you will not discover that until you are several screens
+into its console.
+
+**1. Does it issue RS256 JWTs, not opaque tokens?**
+The door verifies signatures itself (`algorithms: ["RS256"]`) and makes **no
+introspection call** — there is no code path that asks your provider whether a
+token is good. An opaque token it cannot read is a token it must refuse.
+
+**2. Does it publish a metadata document?**
+Keys are DISCOVERED, in this order: `KSOR_JWKS_URL` if you set it, then RFC 8414
+(`/.well-known/oauth-authorization-server`), then OpenID Discovery
+(`/.well-known/openid-configuration`). Any standards-compliant authorization
+server advertises `jwks_uri` in one of those. If yours publishes neither, you
+must supply `KSOR_JWKS_URL` yourself and hope it is stable.
+
+**3. Can it mint a token audienced at YOUR identifier?**
+Either through RFC 8707 (`resource=https://your-host/mcp` on the authorization
+request) or a vendor parameter (`audience=` on Auth0, an audience mapper on
+Keycloak). A provider that only ever issues tokens audienced at its own userinfo
+endpoint cannot express "this token is for that record", and audience binding is
+the whole point of the resource-server posture.
+
+### A provider that fails these
+
+Products built for **user sessions in your own app** frequently do. Their
+machine-to-machine tokens are minted and verified by calling _their_ backend —
+opaque by default, no OAuth token endpoint taking a custom audience, no metadata
+document. That is a coherent design; it is simply a different one, and adapting
+it means writing the verification layer ksor already is.
+
+The three recipes below all pass. If yours does too, they will read as the same
+recipe with different button names — because underneath they are.
+
 ## Recipe: Keycloak
 
 Run it:

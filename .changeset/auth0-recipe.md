@@ -17,3 +17,11 @@ inside an `Edit` panel, not the toggle the table appears to offer.
 Also records what Auth0 gets right: it honours RFC 8707, so an MCP client sending
 `resource=<your mcp url>` receives a token audienced there with no vendor
 parameter and no mapper.
+
+Also answers the question that comes BEFORE any recipe and that the page never
+addressed: **will your provider work at all?** Three checks — does it issue
+RS256 JWTs rather than opaque tokens (the door verifies signatures itself and
+makes no introspection call), does it publish RFC 8414 or OIDC metadata so the
+keys can be discovered, and can it mint a token audienced at your identifier.
+A provider failing any one of them cannot be used, and today that is discovered
+several screens into a vendor console rather than in the first minute.
