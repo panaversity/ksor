@@ -163,6 +163,13 @@ try {
     `GEMINI_API_KEY=${process.env["GEMINI_API_KEY"] ?? ""}`,
     "-e",
     "KSOR_AUTH_DISABLED=1",
+    // A container sets $PORT, so the door binds 0.0.0.0 — a PUBLIC bind, where
+    // KSOR_AUTH_DISABLED alone is deliberately not enough ("the loopback-dev
+    // flag, not a licence to serve the corpus to the internet with no auth").
+    // This walk accepts that risk explicitly, exactly as a public deployment
+    // must. The refusal is the posture working: it is what this job first hit.
+    "-e",
+    "KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1",
     "-e",
     "KSOR_SNAPSHOT_KEYS=k1=0123456789abcdef0123456789abcdef",
     IMAGE,
