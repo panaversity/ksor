@@ -44,6 +44,11 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./gateway": {
+      "types": "./dist/gateway.d.mts",
+      "import": "./dist/gateway.mjs",
+      "default": "./dist/gateway.mjs"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

@@ -311,6 +311,52 @@ signing keys, an unknown key id answers **503**, not 401 — the token may well 
 good and the door's key set merely stale, so a client should retry rather than
 send the user back through a login.
 
+## Shaping the agent surface — `system/gateways/content.ts`
+
+That file decides what tools agents see. It is yours, and it is **deletable** —
+without it the door serves the same three tools it always has.
+
+Edit it because an agent pays for this surface out of its context window. Every
+tool's name and description sits there for the whole session; every answer
+spends more. Measured on an 81-document record:
+
+|                                  |                                |
+| -------------------------------- | ------------------------------ |
+| all three tool definitions       | ~2,800 tokens, always resident |
+| one `search` at `k=10` (default) | ~3,500 tokens per call         |
+| one `search` at `k=5`            | ~2,000 tokens per call         |
+
+So two edits pay for themselves:
+
+- **Drop a tool your agents never call.** Omitting `outline()` and `read()`
+  gives back ~1,550 tokens for the whole session.
+- **Set `k`.** It is the lever on reply size. (`budgets.maximum_response_characters`
+  is not — at ~1,400 characters a hit it cannot bind before the 50-hit ceiling.)
+
+And one that decides whether you get called at all:
+
+- **`covers`** — what this record answers, and what it does not. It is how an
+  agent with several records attached picks yours. Name the subject AND the
+  boundary; the second half prevents more wrong calls than the first.
+
+```ts
+contentTools.search({
+  name: "search_handbook",
+  covers: "Leave, benefits, conduct, expenses. Not product docs, not customer data.",
+  k: 5,
+});
+```
+
+What you cannot change is deliberate: the shape of a result, the provenance on
+it, and the paragraphs telling an agent how to read an abstention or that corpus
+text is untrusted. `covers` is added **above** those, never instead of them — a
+record that could delete them would stop abstaining without anything going red.
+
+A broken file refuses at boot with a slug (`ksor-gateway-no-tools`,
+`ksor-gateway-duplicate-tool`, `ksor-gateway-bad-tool-name`,
+`ksor-gateway-bad-k`, `ksor-gateway-unloadable`) rather than quietly serving a
+surface you did not ask for.
+
 ## Withdrawing a document — `ksor takedown`
 
 A takedown is the one governance act that must reach EVERY surface at once.

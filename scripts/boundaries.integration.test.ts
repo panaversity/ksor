@@ -124,10 +124,19 @@ describe("package boundaries", () => {
     ).toEqual([]);
   });
 
+  // The ONE file whose dynamic import is the feature rather than a hidden edge:
+  // it loads the ADOPTER's gateway file from their repository, at a path only
+  // known at runtime. That target is user code outside this workspace, so it
+  // cannot be an undeclared internal dependency — which is the only thing this
+  // rule exists to catch. Enrolled by name, never by pattern, so a second
+  // computed import anywhere still fails.
+  const RUNTIME_IMPORT_BY_DESIGN = new Set(["packages/content-gateway/src/gateway-load.ts"]);
+
   it("nothing hides the graph behind a dynamic import", () => {
     const violations = files
       .filter((file) => /\bimport\s*\(\s*[^'")\s]/.test(file.text))
-      .map((file) => file.rel);
+      .map((file) => file.rel)
+      .filter((rel) => !RUNTIME_IMPORT_BY_DESIGN.has(rel));
     expect(
       violations,
       `non-literal dynamic import in: ${violations.join(", ")} — a computed import target hides the dependency graph from this suite; use a static import or a string literal`,

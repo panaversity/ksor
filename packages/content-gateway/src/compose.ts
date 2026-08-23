@@ -39,8 +39,13 @@ import {
 
 import { bootHeader, bootLine } from "./boot-report.js";
 
+import { loadGateway } from "./gateway-load.js";
+import type { ResolvedGateway } from "./gateway-config.js";
+
 export interface Composition {
   readonly ctx: ServiceContext;
+  /** The record's own tool surface; today's defaults when it ships no file. */
+  readonly gateway: ResolvedGateway;
   readonly instance: ContentInstance;
   readonly pool: pg.Pool;
   /** null when checked-clean; a reason string when skipped (rides /health). */
@@ -258,5 +263,9 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // and the door had nothing to filter on — review 2026-08-20).
     audience,
   };
-  return { ctx, instance, pool, spaceSkipReason, version, verifyBoot };
+  // Resolved at boot, before the door opens: a bad gateway file must refuse
+  // loudly rather than serve a surface nobody asked for.
+  const gateway = await loadGateway(instancePath);
+
+  return { ctx, instance, pool, spaceSkipReason, version, verifyBoot, gateway };
 }

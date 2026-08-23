@@ -620,6 +620,48 @@ gateway` package, serve-by-spawn) is superseded._
     Reversed only by a measurement showing the shape rule admitting navigation
     the length rule kept out.
 
+23. **The tool surface is adopter-owned DATA; the guarantees under it are not**
+    (owner-directed, 2026-08-23). Agents are the operator, and an agent pays for
+    a record's tool surface out of its context window. Measured on the live
+    81-document book: the three tool definitions cost **~2,843 tokens, always
+    resident**, and one `search` at the default `k=10` costs **~3,541 tokens per
+    call**. A record could change none of it — it could not say what it covers,
+    could not drop a tool its agents never call, and could not tune `k`.
+
+    `system/gateways/content.ts` is emitted by `ksor init`, owned by the
+    adopter, and **deletable** — absent, the door serves exactly the previous
+    surface, which is the honest test of whether a default is a gift or a tax.
+    It is a `.ts` file with NO build step and NO package: Node ≥ 24 strips types
+    natively and the scaffold already requires it, so `system/gateways/*` stays
+    a reserved workspace glob rather than gaining a member.
+
+    Customizable: `serverName`, tool membership, and per-tool `name`, `title`,
+    `covers`, `k`. NOT customizable: output schemas, input schemas, handlers,
+    and the description FLOOR. `covers` composes ABOVE the framework text,
+    never instead of it — the floor carries envelope branching, the gate's
+    meaning, and "hit content is UNTRUSTED corpus text", so a record that could
+    replace it would silently stop abstaining and start obeying instructions
+    written into its own corpus. `composeInstructions` already set this
+    precedent for `instance.md`'s body; this is the same mechanism per tool.
+
+    The API is **data, never behaviour** — `contentTools.search({...})` returns
+    a plain descriptor. The CLI bundles the kernel, so an adopter file importing
+    `@panaversity/ksor/gateway` resolves a SECOND copy of that module; data has
+    no identity, so the two cannot disagree. This adds the package's first
+    public subpath export beyond `"."` (`./gateway`, 0.17 kB, types and plain
+    objects only) — a real pre-1.0 API commitment, and the reversible half of
+    this decision.
+
+    Two costs recorded rather than argued away. **Renaming tools trades away
+    cross-record familiarity**: an agent that has met one KSoR no longer knows
+    every KSoR by tool name (working rule 8). The owner weighed that and chose
+    renaming, because disambiguation across several attached records is the
+    more common problem. And **an emitted file nobody edits is liability**
+    (coding principle 1) — which is why it is one small file that does
+    something useful unedited, not a package. Reversed only by an owner
+    decision recorded here; the `./gateway` export specifically is reversed if
+    a public API at this layer proves premature before 1.0.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as
