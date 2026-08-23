@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isAttachment } from "../templates/scaffold/system/site/lib/attachment-rule.js";
 import { buildScaffold } from "./e2e-build.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 
@@ -106,10 +107,13 @@ function docSlug(file: string): string {
 /**
  * Study attachments belong to a document and are not documents themselves, so
  * clause 2 must not demand a route for one. They get their own clause below.
+ *
+ * IMPORTED, not copied. This file kept its own suffix list until the quiz
+ * landed and the list was not updated with it — which meant `attachmentFiles`
+ * silently stopped collecting quizzes, so the clause asserting that an
+ * attachment gets no route was not testing them at all. A stale copy in a TEST
+ * is worse than one in shipped code: it fails open, green.
  */
-const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
-const isAttachment = (base: string): boolean =>
-  ATTACHMENT_SUFFIXES.some((s) => base.length > s.length && base.endsWith(s));
 
 function knowledgeFiles(dir: string, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
