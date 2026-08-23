@@ -3,6 +3,7 @@ import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
 import { z } from "zod";
 import { DeckSchema } from "./lib/deck";
 import { QuizSchema } from "./lib/quiz";
+import { SlidesSchema } from "./lib/slides";
 import { TeachingSchema } from "./lib/teaching";
 import { knowledgeSourceDir } from "./lib/stage-knowledge";
 
@@ -114,6 +115,14 @@ export const teachings = defineCollections({
   dir: knowledgeSourceDir(),
   files: ["**/*.teaching.yaml"],
   schema: TeachingSchema,
+});
+
+/** The presentation that teaches a document — see components/slides.tsx. */
+export const slides = defineCollections({
+  type: "meta",
+  dir: knowledgeSourceDir(),
+  files: ["**/*.slides.yaml"],
+  schema: SlidesSchema,
 });
 
 export default defineConfig({

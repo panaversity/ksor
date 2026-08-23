@@ -69,6 +69,7 @@ const ATTACHMENT_SUFFIXES = [
   ".flashcards.yaml",
   ".quiz.yaml",
   ".teaching.yaml",
+  ".slides.yaml",
 ];
 
 function isAttachment(base: string): boolean {

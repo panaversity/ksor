@@ -18,9 +18,10 @@ import { RecordToc, TocItems } from "@/components/record-toc";
 import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
 import { Quiz } from "@/components/quiz";
+import { Slides } from "@/components/slides";
 import { TeachingGuide } from "@/components/teaching-guide";
 import { StudyAids } from "@/components/study-aids";
-import { deckFor, quizFor, summaryFor, teachingFor } from "@/lib/attachments";
+import { deckFor, quizFor, slidesFor, summaryFor, teachingFor } from "@/lib/attachments";
 import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -36,6 +37,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const deck = deckFor(page.path);
   const quiz = quizFor(page.path);
   const teaching = teachingFor(page.path);
+  const presentation = slidesFor(page.path);
   // Counted at BUILD time from the document's own markdown, so the figure is in
   // the shipped HTML for a reader with a failed bundle, a crawler and an agent
   // alike. The predecessor measured the rendered DOM after paint, which put it
@@ -169,6 +171,9 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         {/* Recall first, then the check on it — and each renders only if the
             document carries one, so a page with just a quiz shows just a quiz. */}
         <StudyAids>
+          {/* Slides first: a deck gives the shape of the document, and the
+              recall aids come after it. */}
+          {presentation === null ? null : <Slides slides={presentation} />}
           {deck === null ? null : <Flashcards deck={deck} />}
           {quiz === null ? null : <Quiz quiz={quiz} />}
         </StudyAids>

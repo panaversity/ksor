@@ -111,3 +111,26 @@ describe("a teaching guide is an attachment, on the same rule as the rest", () =
     });
   });
 });
+
+describe("a slide deck is an attachment, on the same rule as the rest", () => {
+  it("recognises .slides.yaml", () => {
+    expect(attachmentKindOf("returns.slides.yaml")).toBe("slides");
+    expect(isAttachment("returns.slides.yaml")).toBe(true);
+    expect(parentDocumentOf("returns.slides.yaml")).toBe("returns.md");
+  });
+
+  it("a dotfile with no stem attaches to nothing", () => {
+    expect(attachmentKindOf(".slides.yaml")).toBeNull();
+  });
+
+  it("a document merely named slides.yaml is not one", () => {
+    expect(attachmentKindOf("slides.yaml")).toBeNull();
+  });
+
+  it(".slides.yml is a NAMED near miss", () => {
+    expect(nearMissOf("returns.slides.yml")).toEqual({
+      is: ".slides.yml",
+      want: ".slides.yaml",
+    });
+  });
+});

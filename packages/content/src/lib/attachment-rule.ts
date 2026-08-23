@@ -23,6 +23,7 @@ export const ATTACHMENT_SUFFIXES = [
   { suffix: ".flashcards.yaml", kind: "deck" },
   { suffix: ".quiz.yaml", kind: "quiz" },
   { suffix: ".teaching.yaml", kind: "teaching" },
+  { suffix: ".slides.yaml", kind: "slides" },
 ] as const;
 
 export type AttachmentKind = (typeof ATTACHMENT_SUFFIXES)[number]["kind"];
@@ -43,6 +44,8 @@ export const ATTACHMENT_NEAR_MISSES = [
   { suffix: ".quiz.json", want: ".quiz.yaml" },
   { suffix: ".teaching.yml", want: ".teaching.yaml" },
   { suffix: ".teaching.json", want: ".teaching.yaml" },
+  { suffix: ".slides.yml", want: ".slides.yaml" },
+  { suffix: ".slides.json", want: ".slides.yaml" },
 ] as const;
 
 /**
@@ -110,6 +113,7 @@ export const ATTACHMENT_CASES = [
   { name: "returns.flashcards.yaml", kind: "deck", parent: "returns.md" },
   { name: "returns.quiz.yaml", kind: "quiz", parent: "returns.md" },
   { name: "returns.teaching.yaml", kind: "teaching", parent: "returns.md" },
+  { name: "returns.slides.yaml", kind: "slides", parent: "returns.md" },
   { name: "index.summary.md", kind: "summary", parent: "index.md" },
   // A stem containing dots keeps every one of them: the parent is the same
   // name with the attachment suffix removed, never "up to the first dot".
@@ -120,6 +124,7 @@ export const ATTACHMENT_CASES = [
   { name: "flashcards.yaml", kind: null, parent: null },
   { name: "quiz.yaml", kind: null, parent: null },
   { name: "teaching.yaml", kind: null, parent: null },
+  { name: "slides.yaml", kind: null, parent: null },
   { name: "my-summary.md", kind: null, parent: null },
   // A dotfile with no stem attaches to nothing — refused as an attachment so
   // it is refused as an unexpected file instead, which is the honest error.
@@ -127,6 +132,7 @@ export const ATTACHMENT_CASES = [
   { name: ".flashcards.yaml", kind: null, parent: null },
   { name: ".quiz.yaml", kind: null, parent: null },
   { name: ".teaching.yaml", kind: null, parent: null },
+  { name: ".slides.yaml", kind: null, parent: null },
   // Case matters: the record already refuses two names differing only in case,
   // so an uppercase suffix is a different file, not the same rule.
   { name: "returns.SUMMARY.md", kind: null, parent: null },
@@ -135,4 +141,5 @@ export const ATTACHMENT_CASES = [
   { name: "returns.flashcards.json", kind: null, parent: null },
   { name: "returns.quiz.yml", kind: null, parent: null },
   { name: "returns.teaching.yml", kind: null, parent: null },
+  { name: "returns.slides.yml", kind: null, parent: null },
 ] as const;

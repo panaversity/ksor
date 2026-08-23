@@ -47,6 +47,7 @@ const ATTACHMENT_SUFFIXES = [
   ".flashcards.yaml",
   ".quiz.yaml",
   ".teaching.yaml",
+  ".slides.yaml",
 ];
 // One character off a real attachment, refused BY NAME: `.yml` reaches the
 // site bundler's `Unknown file type` throw, which names the path and nothing
@@ -59,6 +60,8 @@ const ATTACHMENT_NEAR_MISSES = [
   [".quiz.json", ".quiz.yaml"],
   [".teaching.yml", ".teaching.yaml"],
   [".teaching.json", ".teaching.yaml"],
+  [".slides.yml", ".slides.yaml"],
+  [".slides.json", ".slides.yaml"],
 ];
 
 /** The attachment suffix this name carries, or null. A dotfile has no stem. */

@@ -1,9 +1,11 @@
-import { decks, quizzes, summaries, teachings } from "collections/server";
+import { decks, quizzes, slides, summaries, teachings } from "collections/server";
 
 import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
 import { cardHash, type Card, type Deck } from "./deck";
 import { newCard, type CardSchedule } from "./srs";
 import { type Question, type Quiz } from "./quiz";
+import { type Slides } from "./slides";
+import { embedUrlFor, providerOf } from "./slides-embed";
 import { type Teaching } from "./teaching";
 import { hasTeachingContent } from "./teaching-shape";
 import { DEFAULT_QUESTIONS_PER_ROUND } from "./quiz-round";
@@ -140,12 +142,46 @@ export function teachingFor(documentPath: string): TeachingEntry | null {
   return { ...parsed, path: parsed.info.path };
 }
 
+export interface SlidesEntry {
+  readonly title: string;
+  readonly url: string;
+  readonly description?: string;
+  /** Explicit `provider:`, when the author named one. */
+  readonly provider?: string;
+  /** Derived from the host when they did not — never guessed beyond the table. */
+  readonly derivedProvider?: string;
+  /** The framable url: the author's `embed:`, or one derived from `url`. */
+  readonly embed?: string;
+  readonly path: string;
+}
+
+/** The presentation for a document, or null. */
+export function slidesFor(documentPath: string): SlidesEntry | null {
+  const wanted = attachmentPath(documentPath, ".slides.yaml");
+  const hit = slides.find((entry) => entry.info.path === wanted);
+  if (hit === undefined) return null;
+  const parsed = hit as unknown as Slides & { readonly info: { readonly path: string } };
+  const d = parsed.slides;
+  return {
+    title: d.title,
+    url: d.url,
+    description: d.description,
+    provider: d.provider,
+    derivedProvider: providerOf(d.url) ?? undefined,
+    // An author's explicit embed wins; otherwise derive one, and a provider we
+    // do not know simply renders as a link.
+    embed: d.embed ?? embedUrlFor(d.url) ?? undefined,
+    path: parsed.info.path,
+  };
+}
+
 /** True when a document has ANY attachment — the presence gate for the UI. */
 export function hasAttachments(documentPath: string): boolean {
   return (
     summaryFor(documentPath) !== null ||
     deckFor(documentPath) !== null ||
-    quizFor(documentPath) !== null
+    quizFor(documentPath) !== null ||
+    slidesFor(documentPath) !== null
   );
 }
 
