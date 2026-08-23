@@ -53,13 +53,29 @@ function toOrder(raw: string | null): number {
   return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
 }
 
+/**
+ * Study attachments — `x.summary.md`, `x.flashcards.yaml` — belong to `x.md`
+ * and are NOT documents. Mirrored from the attachment rule the reference shell
+ * and the kernel share; a shell that published one would give it a route, a
+ * sidebar row and an llms.txt line the other shell refuses it, which is the
+ * cross-surface divergence the conformance suite exists to catch.
+ *
+ * Rendering attachments is a shell FEATURE this shell does not have. Refusing
+ * to publish them as documents is a CONTRACT CLAUSE, and that is this.
+ */
+const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
+
+function isAttachment(base: string): boolean {
+  return ATTACHMENT_SUFFIXES.some((s) => base.length > s.length && base.endsWith(s));
+}
+
 function walk(dir: string, prefix: string): string[] {
   return fs
     .readdirSync(dir, { withFileTypes: true })
     .flatMap((entry) =>
       entry.isDirectory()
         ? walk(path.join(dir, entry.name), `${prefix}${entry.name}/`)
-        : entry.name.endsWith(".md")
+        : entry.name.endsWith(".md") && !isAttachment(entry.name)
           ? [`${prefix}${entry.name}`]
           : [],
     );
