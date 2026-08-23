@@ -60,6 +60,43 @@ unauthenticated: a local run declares `KSOR_AUTH_DISABLED=1` (already in
 a public bind needs a configured SSO door instead. Any other operation is
 `pnpm exec ksor <verb>`.
 
+### Test the agent surface with an actual agent
+
+The MCP door is meant to be read by agents, so check it with one rather than
+with `curl`. With `pnpm serve` running, write `.mcp.json` at the repo root:
+
+```json
+{
+  "mcpServers": {
+    "test-record": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+Open a new session of your coding agent, confirm it lists the server, then ask
+it three questions **in this order** — the order is the test:
+
+1. Something the record covers, **phrased in words the document never uses**.
+   Retrieval is semantic, so this should still find it, and every answer should
+   arrive with a citation.
+2. Something **adjacent but not covered** — your record's own subject area, a
+   question it genuinely does not answer. It should decline.
+3. Something far outside the record. It should decline, and must not answer
+   from its own knowledge.
+
+Question 2 is the one that matters. Anything can answer questions it has the
+text for; refusing a plausible near-miss is the property that makes a system of
+record worth trusting, and it is the one that breaks quietly.
+
+**On a fresh record, 2 and 3 will not refuse — and that is honest, not broken.**
+The abstention gate is off until you measure a floor for this corpus, which the
+server says out loud at boot (`abstain OFF`) and in every search envelope
+(`gate: "off"`). Run `pnpm exec ksor calibrate --instance instance.md` first if
+you want to test refusal. Delete `.mcp.json`, or keep it — it holds no secret.
+
 Then talk to your coding agent — `AGENTS.md` carries the working rules, and
 the agent kit in `.agents/skills/` knows how to interview you
 (`intake-interview`), convert your source material (`add-sources`), and keep
