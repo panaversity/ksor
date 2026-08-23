@@ -187,11 +187,17 @@ export function GovernanceMeta({
         // (that means "a status the record declares") nor the accent at rest —
         // the page had gone blue enough that the accent had stopped meaning
         // anything (owner, 2026-08-22).
-        // Inline after the facts, NOT right-aligned: `ms-auto` parked it at the
-        // far edge of a 900px row, 498px from the nearest thing on a document
-        // with two facts, where it read as belonging to nothing (measured in
-        // Chromium, 2026-08-21).
-        <DocumentActions href={markdownUrl} />
+        // RIGHT-ALIGNED (owner, and a reversal). The 2026-08-21 finding stands
+        // on its own terms: `ms-auto` once parked this 498px from the nearest
+        // thing on a two-fact document, where it read as belonging to nothing.
+        // What changed is the column beside it — the reading time now sits at
+        // the right end of the strip directly below, so the far edge is no
+        // longer empty space but a line the eye already follows. The two form
+        // a right-hand column of things you DO, against a left-hand row of
+        // things the record DECLARES.
+        <span className="ms-auto">
+          <DocumentActions href={markdownUrl} />
+        </span>
       )}
     </dl>
   );
