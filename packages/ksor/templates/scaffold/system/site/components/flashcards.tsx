@@ -390,23 +390,41 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
             ) : null}
           </div>
 
-          <div className="mx-auto mt-6 flex max-w-2xl items-center gap-4">
-            <div
-              role="progressbar"
-              aria-valuenow={position + 1}
-              aria-valuemin={1}
-              aria-valuemax={total}
-              aria-label="Cards reviewed"
-              className="h-1.5 flex-1 overflow-hidden rounded-full bg-fd-border"
-            >
-              <div
-                className="h-full rounded-full bg-fd-primary transition-[width] duration-300 motion-reduce:transition-none"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="shrink-0 font-mono text-xs text-fd-muted-foreground">
-              {position + 1} / {total} cards
-            </span>
+          {/* One tick per card, because that is what the deck IS — a countable
+            set you are working through, not a percentage. Past a point the
+            ticks stop being countable and a bar says the same thing better. */}
+          <div
+            role="progressbar"
+            aria-valuenow={position + 1}
+            aria-valuemin={1}
+            aria-valuemax={total}
+            aria-label={`Card ${position + 1} of ${total}`}
+            className="mx-auto mt-7 flex max-w-2xl gap-1"
+          >
+            {total <= 24 ? (
+              deck.cards
+                .slice(0, total)
+                .map((_, i) => (
+                  <span
+                    key={i}
+                    className={[
+                      "h-0.5 flex-1 rounded-full transition-colors",
+                      i < position
+                        ? "bg-fd-primary/40"
+                        : i === position
+                          ? "bg-fd-primary"
+                          : "bg-fd-border",
+                    ].join(" ")}
+                  />
+                ))
+            ) : (
+              <span className="h-0.5 w-full overflow-hidden rounded-full bg-fd-border">
+                <span
+                  className="block h-full rounded-full bg-fd-primary transition-[width] duration-300 motion-reduce:transition-none"
+                  style={{ width: `${progress}%` }}
+                />
+              </span>
+            )}
           </div>
         </>
       )}
@@ -548,7 +566,7 @@ function StepButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="relative my-auto flex h-16 w-11 shrink-0 items-center justify-center rounded-lg border border-fd-border text-fd-muted-foreground transition-colors hover:border-fd-primary/40 hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary disabled:pointer-events-none disabled:opacity-30"
+      className="relative my-auto flex size-11 shrink-0 items-center justify-center rounded-full text-fd-muted-foreground transition-colors hover:bg-fd-muted hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary disabled:pointer-events-none disabled:opacity-25"
     >
       {children}
     </button>
