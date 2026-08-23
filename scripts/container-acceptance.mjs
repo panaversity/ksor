@@ -165,10 +165,38 @@ try {
   if (overlay.replace(INSERT, "") !== emitted) fail("the overlay changed more than one line");
   writeFileSync(path.join(project, "Dockerfile.citest"), overlay);
 
+  // The emitted .dockerignore DENIES everything not explicitly allowed, which
+  // correctly excludes the local tarball this walk injects. Allow it for the
+  // test build only — appended to the scaffold's copy in a temp directory, so
+  // the shipped file is untouched and `init.integration.test.ts` still asserts
+  // the real one. If this line ever fails to help, the deny-all changed shape.
+  const ignorePath = path.join(project, ".dockerignore");
+  writeFileSync(
+    ignorePath,
+    `${readFileSync(ignorePath, "utf8")}\n# CI only: the locally packed build under test.\n!ksor-local.tgz\n`,
+  );
+
   run("docker", ["build", "-f", "Dockerfile.citest", "-t", IMAGE, "."], {
     cwd: project,
     stdio: "inherit",
   });
+
+  // An image the registry refuses is a failure that arrives from the HOST, long
+  // after the change that caused it — a build output or a backup directory in
+  // the project root riding in through a permissive .dockerignore (found live:
+  // PAYLOAD_TOO_LARGE). The allow-list is what bounds this; the number is a
+  // tripwire on the allow-list, not a performance target.
+  const sizeBytes = Number(
+    run("docker", ["image", "inspect", IMAGE, "--format", "{{.Size}}"]).trim(),
+  );
+  const sizeMb = Math.round(sizeBytes / 1_000_000);
+  console.log(`image: ${sizeMb} MB`);
+  if (sizeMb > 400) {
+    fail(
+      `the image is ${sizeMb} MB. Something in the project root is riding in — ` +
+        "check .dockerignore still denies everything it does not explicitly allow",
+    );
+  }
 
   // 6. Boot it. --network host so the container reaches the Postgres service
   //    the same way the ingest above did.

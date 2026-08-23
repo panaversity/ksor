@@ -631,23 +631,33 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
   // are governance properties, not build hygiene: a corpus copied in suggests
   // the container reads it (it reads Postgres), and a baked .env publishes the
   // DSN to anyone who can pull the image.
-  it("excludes secrets, the corpus, and the site from the image", () => {
+  it("ships a deny-all image manifest that admits only what the door needs", () => {
     const dir = workDir();
     runInit(["my-sor"], dir);
     const ignore = readFileSync(path.join(dir, "my-sor", ".dockerignore"), "utf8");
-    const lines = ignore.split("\n").map((l) => l.trim());
+    // Directives only — the file is mostly comments explaining each choice.
+    const lines = ignore
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "" && !l.startsWith("#"));
 
-    expect(lines).toContain(".env");
-    expect(lines).toContain("knowledge/");
-    // The SITE, not all of system/: system/gateways/ carries the door's own
-    // registration and must reach the image. Excluding it shipped a container
-    // that served the default tool surface while the repo said otherwise.
-    expect(lines).toContain("system/site/");
-    expect(lines).not.toContain("system/");
-    expect(lines).toContain("node_modules/");
-    // The example is documentation, not a secret, and the .env* rule would
-    // otherwise take it — the same carve-out .gitignore makes.
-    expect(lines).toContain("!.env.example");
+    // DENY-ALL, then allow. An exclude-list can only exclude what someone
+    // thought of; a build output or a backup directory in the project root then
+    // rides into the image and the failure surfaces as a registry rejecting the
+    // push (found live). The allow-list bounds it regardless of what is lying
+    // around.
+    expect(lines[0]).toBe("*");
+    expect(lines).toContain("!package.json");
+    expect(lines).toContain("!instance.md");
+    // The door's own registration must reach the image, or the container serves
+    // the default surface while the repository says otherwise.
+    expect(lines).toContain("!system");
+    expect(lines).toContain("system/*");
+    expect(lines).toContain("!system/gateways");
+    // And the things that must NOT: nothing re-admits them.
+    for (const never of ["!.env", "!knowledge", "!system/site", "!node_modules"]) {
+      expect(lines, `${never} must never be allowed back in`).not.toContain(never);
+    }
   });
 
   it("CLAUDE.md is a one-line pointer file, never a symlink", () => {
