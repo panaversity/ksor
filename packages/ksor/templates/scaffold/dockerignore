@@ -11,8 +11,11 @@
 # suggest the container reads it. It does not.
 knowledge/
 
-# The website. It is the OTHER surface, built and hosted separately.
-system/
+# The website — the OTHER surface, built and hosted separately. NOT all of
+# system/: system/gateways/ holds this door's own registration, and excluding
+# it made the container silently serve the default tool surface while the
+# repository said otherwise (found live).
+system/site/
 
 # Build and tooling noise.
 node_modules/

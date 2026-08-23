@@ -639,7 +639,11 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
 
     expect(lines).toContain(".env");
     expect(lines).toContain("knowledge/");
-    expect(lines).toContain("system/");
+    // The SITE, not all of system/: system/gateways/ carries the door's own
+    // registration and must reach the image. Excluding it shipped a container
+    // that served the default tool surface while the repo said otherwise.
+    expect(lines).toContain("system/site/");
+    expect(lines).not.toContain("system/");
     expect(lines).toContain("node_modules/");
     // The example is documentation, not a secret, and the .env* rule would
     // otherwise take it — the same carve-out .gitignore makes.

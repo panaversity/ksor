@@ -22,10 +22,12 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
-# The record's identity and configuration. The CORPUS is deliberately absent:
-# the door serves from Postgres, and knowledge/ belongs to the build that
-# published it — see .dockerignore.
-COPY instance.md ./
+# The record's identity, configuration, and its MCP registration
+# (system/gateways/). What is deliberately ABSENT is decided in .dockerignore —
+# the corpus, the website and every secret — rather than by listing files here:
+# naming them one at a time is how the door came to ship without the very file
+# that shapes its tool surface (found live).
+COPY . ./
 
 # Most container hosts inject PORT; 80 is a sane default when nothing does.
 ENV PORT=80
