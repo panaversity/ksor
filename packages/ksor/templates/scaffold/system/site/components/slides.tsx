@@ -38,20 +38,30 @@ export function Slides({ slides }: { slides: SlidesEntry }): ReactElement {
 
   return (
     <section aria-label="Teaching aid" className="not-prose mt-8 mb-12">
-      {/* Its OWN heading, deliberately quieter than StudyAidHeader's. This
-          sits directly under the document title, where a full serif heading
-          with an accent bar would read as a second title and compete with the
-          record's own words. A mono eyebrow says what the block is; the deck's
-          name sits beneath it at body scale. */}
-      <header className="mb-5 border-b border-fd-border pb-3">
-        <p className="font-mono text-xs tracking-wide text-fd-muted-foreground uppercase">
+      {/* A section heading, in the record's own language for one.
+
+          An earlier version dropped the accent bar and greyed the label, on
+          the theory that anything stronger would compete with the document
+          title directly above. That went too far: with no marker and no colour
+          the block read as loose text rather than as a section (owner, seen
+          live). The fix is the established marker at a smaller SIZE, not a
+          weaker one — the label carries the accent so it reads as a marker,
+          and the title sits one step below the document's. */}
+      <header className="mb-6">
+        <p className="font-mono text-xs font-medium tracking-[0.12em] text-fd-primary uppercase">
           Teaching aid
         </p>
-        <h2 className="mt-1.5 font-(family-name:--font-display) text-lg font-semibold tracking-tight text-fd-foreground">
+        <h2 className="mt-2 font-(family-name:--font-display) text-2xl font-semibold tracking-tight text-fd-foreground">
           {slides.title}
         </h2>
+        {/* The record's own marker for "a new region starts here": a short
+            accent bar riding a full-width hairline. Every study-aid header
+            uses it, so a reader has met it before. */}
+        <div className="mt-3 h-px w-full bg-fd-border">
+          <div className="h-[3px] w-24 -translate-y-px bg-fd-primary" />
+        </div>
         {slides.description === undefined ? null : (
-          <p className="mt-1 text-sm text-fd-muted-foreground">{slides.description}</p>
+          <p className="mt-4 text-sm text-fd-muted-foreground">{slides.description}</p>
         )}
       </header>
 
