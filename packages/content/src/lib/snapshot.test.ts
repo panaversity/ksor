@@ -66,3 +66,82 @@ describe("snapshot tokens", () => {
     expect(validate(keyRingFromEnv(undefined), token, scope, NOW).reason).toBe("invalid");
   });
 });
+
+/**
+ * Replica behaviour — the case issue #33 listed as "documented, untested", and
+ * that a real deployment then found the hard way.
+ *
+ * A generation pin is what keeps a multi-call conversation on ONE version of the
+ * record: `search` answers from generation N and hands back a token, `read`
+ * honours it. Unset `KSOR_SNAPSHOT_KEYS` mints a per-process key — which the
+ * module's own comment calls "honest for a single replica". A container is not a
+ * single replica. Every cold start mints a fresh key, so a token issued by one
+ * instance is unverifiable by the next.
+ *
+ * It fails SOFT (`read` serves the active generation and says why), so nothing
+ * errors and nothing logs, and the only symptom is an agent reading a generation
+ * it did not search — observed live as roughly one read in three coming back
+ * unpinned. These tests make the mechanism visible rather than inferred.
+ */
+describe("snapshot tokens across replicas", () => {
+  const SCOPE = { corpusId: "book", tenantId: "t1", instanceDigest: "digest-1" };
+
+  it("an ephemeral ring cannot verify ANOTHER process's token", () => {
+    // Two processes, each with no KSOR_SNAPSHOT_KEYS: two different keys.
+    const replicaA = keyRingFromEnv(undefined);
+    const replicaB = keyRingFromEnv(undefined);
+    expect(replicaA.active).toBe("ephemeral");
+    expect(replicaB.active).toBe("ephemeral");
+
+    const issued = mint(replicaA, SCOPE, 3);
+    // Same key id, different secret — so this is NOT "unknown_key". The id
+    // matches and the signature does not, which is exactly why the failure is
+    // invisible until you read the verdict.
+    expect(validate(replicaB, issued.token, SCOPE)).toEqual({
+      generation: null,
+      reason: "invalid",
+    });
+    // The instance that minted it is fine, which is why a single-process dev run
+    // never sees this.
+    expect(validate(replicaA, issued.token, SCOPE).generation).toBe(3);
+  });
+
+  it("a SHARED ring verifies across every replica", () => {
+    const shared = "k1=a-secret-shared-by-every-replica";
+    const replicaA = keyRingFromEnv(shared);
+    const replicaB = keyRingFromEnv(shared);
+    expect(replicaA.active).toBe("k1");
+
+    const issued = mint(replicaA, SCOPE, 3);
+    expect(validate(replicaB, issued.token, SCOPE)).toEqual({ generation: 3, reason: null });
+  });
+
+  it("rotation keeps outstanding pins valid while the old key is still listed", () => {
+    const before = keyRingFromEnv("k1=old-secret");
+    const issued = mint(before, SCOPE, 7);
+
+    // Rotate: new key first (active), old key retained to finish out its tokens.
+    const during = keyRingFromEnv("k2=new-secret,k1=old-secret");
+    expect(during.active).toBe("k2");
+    expect(validate(during, issued.token, SCOPE)).toEqual({ generation: 7, reason: null });
+
+    // Drop the old key and the outstanding pin dies — the cost that makes
+    // rotation something you do deliberately, not on a schedule.
+    const after = keyRingFromEnv("k2=new-secret");
+    expect(validate(after, issued.token, SCOPE)).toEqual({
+      generation: null,
+      reason: "unknown_key",
+    });
+  });
+
+  it("a token from another DEPLOYMENT is refused even with the same key", () => {
+    // The reason a shared secret is per-deployment: two records that happened to
+    // share a key must still not honour each other's pins.
+    const ring = keyRingFromEnv("k1=same-secret-everywhere");
+    const issued = mint(ring, SCOPE, 3);
+    expect(validate(ring, issued.token, { ...SCOPE, instanceDigest: "digest-2" })).toEqual({
+      generation: null,
+      reason: "foreign_deployment",
+    });
+  });
+});
