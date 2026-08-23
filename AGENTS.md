@@ -620,6 +620,62 @@ gateway` package, serve-by-spawn) is superseded._
     Reversed only by a measurement showing the shape rule admitting navigation
     the length rule kept out.
 
+23. **Study attachments are part of their parent, and the collection is where
+    that is enforced** (2026-08-23, porting the predecessor's summaries and
+    flashcards under decision 6). A document may carry `<doc>.summary.md` and
+    `<doc>.flashcards.yaml`. An attachment has no route, no sidebar row, no
+    `llms.txt` line, no markdown twin, no search entry, no stable id and no MCP
+    node; it inherits its parent's tier and its parent's takedown entirely.
+
+    **One exclusion, not six.** The route table, the sidebar, `llms.txt`,
+    `llms-full.txt`, `/md/`, the search index and the caveat map all read
+    `source`, and `source` is built from ONE collection — so `files:
+["**/*.md", "**/*.mdx", "!**/*.summary.md", "!**/*.summary.mdx"]` on that
+    collection is the whole of "an attachment is not a document". Subtracting
+    per surface is the failure mode `research/visibility.md` §4–§5 names, and
+    pruning the page tree is not even sufficient: `getSortedPages()`
+    deliberately re-adds what the tree dropped and the search index never reads
+    the tree. The existing `meta` collection is pinned to `meta.{json,yaml}` in
+    the same change — verified against the real record, its default glob
+    (`**/*.{yaml,json}`) swallows every deck.
+
+    **The site-only scope was breached by exactly one predicate, deliberately.**
+    `isDoc` (`packages/content/src/ingest/adapters/plain-tree.ts`) is a bare
+    suffix test, so `x.summary.md` ALREADY ingested as a node with
+    `stable_id: knowledge/x.summary` — one cause wearing four costumes: the
+    door served a summary the site hides; served an internal parent's summary
+    at the record default tier; served a taken-down parent's summary undenied
+    (per-node denial matches a different id, and the subtree walk goes through
+    `parent_id`, which is the enclosing SECTION, not the sibling document); and
+    served an orphan the site refuses. Leaving ingest alone was not the
+    conservative option, it was shipping the leak — critical rule 1.
+
+    **Refusals, not defaults.** An attachment with no parent is refused
+    (`ksor-attachment-orphan`), and an attachment declaring frontmatter is
+    refused as a CLASS (`ksor-attachment-frontmatter`) rather than by
+    allow-listing keys — one rule closes `visibility:` widening, `sor_id:`
+    takedown escape and `status:`/`owner:` claiming governance a non-node
+    cannot carry. Both live in the build as well as in `pnpm check`, because
+    staging never depends on the checker having run.
+
+    **Two predecessor mechanisms were NOT carried, both defects.** Its spaced
+    repetition is write-only — `useFSRS` computes a due queue its deck never
+    reads, rendering `deck.cards` in authored order, so the scheduling
+    influenced nothing a learner saw. And its deck-version reset does not
+    exist: it logs, while the toast it raises says progress "was reset due to a
+    deck update" and fires only from the `JSON.parse` catch, i.e. storage
+    corruption. Here the queue drives the session, and a card is identified by
+    a hash of its own text so an edited card resets alone and the notice is
+    true.
+
+    **The scheduler names itself honestly.** `ksor-sm2-v1`, a two-grade SM-2
+    variant, persisted with the state. Not FSRS (`ts-fsrs` was weighed at
+    684 KB and zero transitive deps, and declined by the owner), no retention
+    target claimed, and what it gives up is recorded beside the code.
+    Contract: `specs/ksor/study-attachments/spec.md`. Reversed per-clause with
+    evidence; the no-independent-id clause is not reversible without an owner
+    decision, because it IS the governance guarantee.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

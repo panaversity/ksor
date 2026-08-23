@@ -296,6 +296,38 @@ either stops being true.
 
 ## Released since 0.0.7
 
+- **Study attachments — summaries and flashcard decks** (decision 23,
+  `specs/ksor/study-attachments/spec.md`, unreleased on this branch). A
+  document may carry `<doc>.summary.md` and `<doc>.flashcards.yaml` beside it.
+  They render as extra tabs on that document's page — the record's own words, a
+  summary, and a recall deck with spaced review kept in the reader's browser —
+  and `ksor init` ships one of each on the seed document. Presence-driven:
+  a document with neither gets no tab strip at all (verified live: a page
+  without attachments renders zero `role="tab"` elements).
+
+  An attachment is part of its document, not a document. Verified on the
+  shipped bytes of a scaffold built from the packed CLI: **no route, no `/md/`
+  twin, no `llms.txt` or `llms-full.txt` line, no search-index entry**, and the
+  parent's own `/md/` and both llms files are **byte-identical** (sha-256) with
+  and without attachments present. Governance inherits: with the parent set to
+  `visibility: internal`, a public build contains the summary and deck text in
+  **0** files against a positive control of 26. `ksor ingest` creates no node
+  for either, so neither is independently citable — previously `isDoc` accepted
+  `x.summary.md` and gave it its own `stable_id`, which is the one cause behind
+  four cross-surface leaks (decision 23).
+
+  Refusals carry remedies and fire in both `pnpm check` and `pnpm build`:
+  `ksor-attachment-orphan` (an attachment whose document is missing) and
+  `ksor-attachment-frontmatter` (an attachment declaring any frontmatter — the
+  rule that closes `visibility:` widening, `sor_id:` takedown escape, and
+  claimed governance a non-node cannot carry). `.yml` is refused by name.
+
+  Scheduling is `ksor-sm2-v1`, a two-grade SM-2 variant — **not FSRS**, no
+  retention target claimed, with what it gives up recorded beside the code. Its
+  transition table is asserted for every state x rating pair against a frozen
+  clock, and the ladder it produces is measured in the suite: 10 min, 2 d, 5 d,
+  13 d, 33 d.
+
 - **The content kernel and the MCP gateway** (decision 11, in progress on
   the kernel-conversion branch): four workspace packages — postgres (Postgres access
   discipline: pooling, scoped transactions, retry classification), content (schema + ingest + hybrid retrieval
