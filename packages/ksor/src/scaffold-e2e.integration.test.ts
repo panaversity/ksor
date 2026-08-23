@@ -3,9 +3,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
   appendFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -247,6 +249,82 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
   // those keys and threw them away. Asserted on the SHIPPED BYTES of a static
   // export, not on a component in isolation: the failure this prevents is a
   // superseded document served looking exactly like an approved one.
+  /**
+   * The negative half of study attachments, on shipped bytes.
+   *
+   * Everything here was verified by hand while building the feature; it lives
+   * in the suite because "an attachment is not a document" is one glob away
+   * from silently becoming false, and every surface it protects derives from
+   * that one collection.
+   */
+  it("publishes a summary and a deck on their document's page, and NOWHERE else", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const knowledge = path.join(project, "knowledge");
+
+    // Byte-identity is the sharpest form of "the parent is untouched": capture
+    // the markdown twin and both agent surfaces BEFORE the attachments exist.
+    const parent = path.join(knowledge, "attach-host.md");
+    writeFileSync(parent, "---\ntitle: Attach host\nstatus: approved\n---\n\nHost body text.\n");
+    expect(buildScaffold(project).status, "baseline build").toBe(0);
+    const before = {
+      md: readFileSync(path.join(outDir, "md", "attach-host.md"), "utf8"),
+      llms: readFileSync(path.join(outDir, "llms.txt"), "utf8"),
+      llmsFull: readFileSync(path.join(outDir, "llms-full.txt"), "utf8"),
+    };
+
+    const SUMMARY_MARK = "zzsummarymarkerzz";
+    const CARD_MARK = "zzcardmarkerzz";
+    writeFileSync(path.join(knowledge, "attach-host.summary.md"), `A precis ${SUMMARY_MARK}.\n`);
+    writeFileSync(
+      path.join(knowledge, "attach-host.flashcards.yaml"),
+      `deck:\n  title: Host deck\ncards:\n  - front: Q ${CARD_MARK}?\n    back: A ${CARD_MARK}.\n`,
+    );
+    expect(buildScaffold(project).status, "build with attachments").toBe(0);
+
+    // The parent's own bytes did not move.
+    expect(readFileSync(path.join(outDir, "md", "attach-host.md"), "utf8")).toBe(before.md);
+    expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).toBe(before.llms);
+    expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).toBe(before.llmsFull);
+
+    // No route, no markdown twin.
+    expect(existsSync(path.join(outDir, "docs", "attach-host.summary"))).toBe(false);
+    expect(existsSync(path.join(outDir, "md", "attach-host.summary.md"))).toBe(false);
+
+    // Present on the parent's page — and in the SERVER HTML, not behind a click.
+    const page = readFileSync(path.join(outDir, "docs", "attach-host", "index.html"), "utf8");
+    expect(page, "the summary is not in the parent's server-rendered HTML").toContain(SUMMARY_MARK);
+    expect(page, "the deck is not in the parent's server-rendered HTML").toContain(CARD_MARK);
+
+    // And nowhere else in the whole export. A file-by-file sweep, so a new
+    // surface added later cannot quietly start carrying them.
+    const carriers: string[] = [];
+    const sweep = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          sweep(full);
+          continue;
+        }
+        const text = readFileSync(full, "utf8");
+        if (text.includes(SUMMARY_MARK) || text.includes(CARD_MARK)) {
+          carriers.push(path.relative(outDir, full));
+        }
+      }
+    };
+    sweep(outDir);
+    expect(
+      carriers.length,
+      `attachment text must appear only on its document's own page — found in: ${carriers.join(", ")}`,
+    ).toBeGreaterThan(0);
+    for (const file of carriers) {
+      expect(file.startsWith(path.join("docs", "attach-host")), `leaked into ${file}`).toBe(true);
+    }
+
+    rmSync(parent);
+    rmSync(path.join(knowledge, "attach-host.summary.md"));
+    rmSync(path.join(knowledge, "attach-host.flashcards.yaml"));
+  });
+
   it("renders each document's declared governance, and infers nothing", () => {
     const doc = (name: string, frontmatter: string, body: string): void =>
       writeFileSync(

@@ -15,6 +15,9 @@ import {
 import { predecessorsOf, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
 import { showGovernance } from "@/lib/shared";
 import { RecordToc, TocItems } from "@/components/record-toc";
+import { RecordViews } from "@/components/record-views";
+import { Flashcards } from "@/components/flashcards";
+import { deckFor, summaryFor } from "@/lib/attachments";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
@@ -22,6 +25,11 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  // Attachments of THIS document, found by suffix on its own path. Null is the
+  // ordinary case, not an error.
+  const summary = summaryFor(page.path);
+  const Summary = summary?.body ?? null;
+  const deck = deckFor(page.path);
   // What the record says about this document. The page renders it; it never
   // supplies it — an undeclared key shows nothing (specs/ksor/site-governance).
   const governance = readGovernance(page.data, page.path);
@@ -112,13 +120,28 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           describes (measured, 2026-08-21). Short documents now end where their
           text ends. */}
         <DocsBody style={{ flexGrow: 0 }}>
-          <MDX
-            components={getMDXComponents({
-              // relative links between documents in knowledge/ resolve to
-              // their rendered pages
-              a: createRelativeLink(source, page),
-            })}
-          />
+          {/* The document's study attachments, if it has any. Both panels are
+            built HERE, on the server, and handed to the client tab strip as
+            props — so the summary is in the shipped HTML whether or not the
+            bundle runs. Presence-driven: with neither attachment RecordViews
+            renders the body alone and no tab strip exists (specs/ksor/
+            study-attachments C3). */}
+          <RecordViews
+            summary={
+              Summary === null ? null : (
+                <Summary components={getMDXComponents({ a: createRelativeLink(source, page) })} />
+              )
+            }
+            recall={deck === null ? null : <Flashcards deck={deck} />}
+          >
+            <MDX
+              components={getMDXComponents({
+                // relative links between documents in knowledge/ resolve to
+                // their rendered pages
+                a: createRelativeLink(source, page),
+              })}
+            />
+          </RecordViews>
         </DocsBody>
         {/* A folder's index page lists what the folder holds. Without it the
           page ended at its own sentence and the documents below it were
