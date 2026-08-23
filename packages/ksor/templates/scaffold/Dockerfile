@@ -22,12 +22,16 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
-# The record's identity, configuration, and its MCP registration
-# (system/gateways/). What is deliberately ABSENT is decided in .dockerignore —
-# the corpus, the website and every secret — rather than by listing files here:
-# naming them one at a time is how the door came to ship without the very file
-# that shapes its tool surface (found live).
-COPY . ./
+# The record's identity and configuration, and this door's own MCP registration.
+#
+# NAMED, not `COPY . ./`. A .dockerignore is not honoured by every builder —
+# Vercel's is not, and `COPY . ./` there swept in node_modules and the built
+# site, producing a registry push rejected as PAYLOAD_TOO_LARGE (found live).
+# Naming what enters the image is the only form that is portable across build
+# hosts. The risk of naming things is forgetting one; that is covered by a test
+# which boots the built image and asserts it serves the tools this file names.
+COPY instance.md ./
+COPY system/gateways/ ./system/gateways/
 
 # Most container hosts inject PORT; 80 is a sane default when nothing does.
 ENV PORT=80
