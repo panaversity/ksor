@@ -15,6 +15,12 @@
  * answers. These are floors against the shipped bug, not a distribution target
  * — see MIN_BANK_FOR_RATIOS.
  *
+ * Verified against the predecessor's real data before shipping (2026-08-23):
+ * run over the 18 parsed questions of its `11-chapter-quiz.md`, this reports
+ * 67% of answers at option C and 78% pick-longest — both real, both shipped,
+ * and both the exact class its README says students found rather than the
+ * project. A rule that fires only on fixtures would not have earned this.
+ *
  * A LEAF: no imports, so the site's build and the record's checker can both
  * hold this rule without either taking the other's dependencies.
  */
@@ -224,11 +230,18 @@ function clean(count: number): readonly AuditQuestion[] {
  * than each being internally consistent with itself — the shape decision 18
  * exists to enforce.
  */
-export const QUIZ_AUDIT_CASES = [
+/** One row of the decision table: a quiz, and every slug it must produce. */
+export interface QuizAuditCase {
+  readonly name: string;
+  readonly quiz: AuditQuiz;
+  readonly expect: readonly string[];
+}
+
+export const QUIZ_AUDIT_CASES: readonly QuizAuditCase[] = [
   {
     name: "a balanced bank is clean",
     quiz: { quiz: { title: "Clean" }, questions: clean(8) },
-    expect: [] as readonly string[],
+    expect: [],
   },
   {
     name: "every answer at A",
@@ -280,7 +293,7 @@ export const QUIZ_AUDIT_CASES = [
           : q,
       ),
     },
-    expect: [] as readonly string[],
+    expect: [],
   },
   {
     name: "two questions open identically",
@@ -290,4 +303,4 @@ export const QUIZ_AUDIT_CASES = [
     },
     expect: ["ksor-quiz-duplicate-stem"],
   },
-] as const;
+];
