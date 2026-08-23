@@ -307,40 +307,45 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               <ChevronLeft className="size-5" />
             </StepButton>
 
-            <button
-              type="button"
-              onClick={() => setRevealed((r) => !r)}
-              aria-expanded={revealed}
-              aria-label={revealed ? "Hide the answer" : "Reveal the answer"}
-              className="relative flex min-h-[24rem] w-full max-w-2xl flex-col rounded-xl border border-fd-border bg-fd-muted px-8 pb-14 pt-12 text-center transition-colors hover:border-fd-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
-            >
-              <span className="absolute left-4 top-4 font-mono text-[10px] tracking-wider text-fd-muted-foreground">
-                {revealed ? "ANSWER" : "QUESTION"}
-              </span>
-
-              {/* The text is centred in the card's OWN height, with the hint
-                pinned to the bottom — not laid out in sequence with it. Sharing
-                one flex flow put the question a third of the way down and left
-                a hole beneath it, because `mt-auto` on the hint pushes
-                everything above it off centre. */}
-              <span className="flex flex-1 flex-col items-center justify-center">
-                {/* The card's text in the record's own voice — the serif that
-                  marks the record speaking, the same face document titles use. */}
-                <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
-                  {revealed ? card.back : card.front}
-                </span>
-
-                {!revealed && card.why !== undefined ? (
-                  <span className="mt-5 block max-w-md text-sm italic text-fd-muted-foreground">
-                    {card.why}
+            {/* The flip is a real rotation about the card's vertical axis, so
+              the two faces are ONE object rather than two panels swapping. Both
+              are in the DOM the whole time — which is what keeps the answer in
+              the shipped HTML for an agent and for a failed bundle — and the
+              hidden one is taken out of the accessibility tree rather than left
+              for a screen reader to read out of turn. */}
+            <div className="relative w-full max-w-2xl" style={{ perspective: "1600px" }}>
+              <button
+                type="button"
+                onClick={() => setRevealed((r) => !r)}
+                aria-expanded={revealed}
+                aria-label={revealed ? "Hide the answer" : "Reveal the answer"}
+                // The focus ring is drawn on the FACES, not here: an outline on
+                // a preserve-3d element rotates with it and renders as a
+                // sheared rectangle mid-flip.
+                className="group relative block w-full outline-none transition-transform duration-500 ease-out motion-reduce:duration-0"
+                style={{
+                  transformStyle: "preserve-3d",
+                  transform: revealed ? "rotateY(180deg)" : "rotateY(0deg)",
+                }}
+              >
+                <CardFace hidden={revealed} label="QUESTION" hint="Click to flip">
+                  <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
+                    {card.front}
                   </span>
-                ) : null}
-              </span>
+                  {card.why === undefined ? null : (
+                    <span className="mt-5 block max-w-md text-sm italic text-fd-muted-foreground">
+                      {card.why}
+                    </span>
+                  )}
+                </CardFace>
 
-              <span className="absolute inset-x-0 bottom-5 text-sm text-fd-muted-foreground">
-                {revealed ? "Click to flip back" : "Click to flip"}
-              </span>
-            </button>
+                <CardFace back hidden={!revealed} label="ANSWER" hint="Click to flip back">
+                  <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
+                    {card.back}
+                  </span>
+                </CardFace>
+              </button>
+            </div>
 
             <StepButton onClick={() => move(1)} disabled={index >= total - 1} label="Next card">
               <ChevronRight className="size-5" />
@@ -422,6 +427,55 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * One side of the card.
+ *
+ * The front sits in flow and therefore SETS the height; the back is absolutely
+ * positioned over it, pre-rotated so it reads the right way round once the card
+ * turns. Both hide their own backface, so only the side facing the reader is
+ * ever painted.
+ */
+function CardFace({
+  back = false,
+  hidden,
+  label,
+  hint,
+  children,
+}: {
+  readonly back?: boolean;
+  readonly hidden: boolean;
+  readonly label: string;
+  readonly hint: string;
+  readonly children: React.ReactNode;
+}): ReactElement {
+  return (
+    <span
+      aria-hidden={hidden}
+      className={[
+        "flex min-h-[24rem] flex-col rounded-xl border border-fd-border px-8 pb-14 pt-12 text-center",
+        // A face, not a flat fill: the gradient lifts the top of the card a
+        // shade above its foot, which is what stops a 24rem panel reading as a
+        // grey box.
+        "bg-gradient-to-b from-fd-muted to-fd-background",
+        "transition-colors group-hover:border-fd-primary/40",
+        "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
+        back ? "absolute inset-0" : "relative",
+      ].join(" ")}
+      style={{
+        backfaceVisibility: "hidden",
+        WebkitBackfaceVisibility: "hidden",
+        ...(back ? { transform: "rotateY(180deg)" } : {}),
+      }}
+    >
+      <span className="absolute left-4 top-4 font-mono text-[10px] tracking-wider text-fd-muted-foreground">
+        {label}
+      </span>
+      <span className="flex flex-1 flex-col items-center justify-center">{children}</span>
+      <span className="absolute inset-x-0 bottom-5 text-sm text-fd-muted-foreground">{hint}</span>
+    </span>
   );
 }
 
