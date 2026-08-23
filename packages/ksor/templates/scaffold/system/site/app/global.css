@@ -274,6 +274,47 @@ html > body[data-scroll-locked] {
   --ksor-caution: #e0906e;
 }
 
+/* A tool's own colour on its own tab.
+
+   When a document gives one instruction per tool, the tab is the moment a
+   reader picks their tool — so it is worth being unmistakable, and a tool's
+   own brand colour is the fastest thing to recognise. The active tab takes the
+   tool's colour as a solid fill; everything else on the strip stays quiet.
+
+   Keyed on `data-tab-value`, which `components/mdx.tsx` puts on the trigger.
+   Radix also encodes the value in its generated id, but that is a private
+   format and keying on it would drop the branding silently if it changed.
+
+   THIS BLOCK IS YOURS. The list below is the tools this scaffold happened to
+   know about; a tab value that matches nothing renders in the site's own
+   accent, which is the correct default. Add your own, or delete the block —
+   nothing else depends on it.
+
+   Values are the vendors' own (Anthropic #DA7756, OpenCode #6366F1). */
+.prose [role="tab"][data-tab-value="Claude Code"][data-state="active"] {
+  background-color: #da7756;
+  color: #fff;
+}
+
+.prose [role="tab"][data-tab-value="Claude Code"][data-state="inactive"]:hover {
+  background-color: color-mix(in oklab, #da7756 12%, transparent);
+}
+
+.prose [role="tab"][data-tab-value="OpenCode"][data-state="active"] {
+  background-color: #6366f1;
+  color: #fff;
+}
+
+.prose [role="tab"][data-tab-value="OpenCode"][data-state="inactive"]:hover {
+  background-color: color-mix(in oklab, #6366f1 12%, transparent);
+}
+
+/* Shared shape for any branded tab, so adding a tool is one colour pair and
+   not a fresh set of geometry. */
+.prose [role="tab"][data-tab-value][data-state="active"] {
+  border-radius: 0.375rem;
+}
+
 /* The slide STAGE.
 
    A slide is a projected surface, and reading as one at a glance is most of
