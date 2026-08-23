@@ -165,6 +165,17 @@ try {
   if (overlay.replace(INSERT, "") !== emitted) fail("the overlay changed more than one line");
   writeFileSync(path.join(project, "Dockerfile.citest"), overlay);
 
+  // The emitted .dockerignore DENIES everything not explicitly allowed, which
+  // correctly excludes the local tarball this walk injects. Allow it for the
+  // test build only — appended to the scaffold's copy in a temp directory, so
+  // the shipped file is untouched and `init.integration.test.ts` still asserts
+  // the real one. If this line ever fails to help, the deny-all changed shape.
+  const ignorePath = path.join(project, ".dockerignore");
+  writeFileSync(
+    ignorePath,
+    `${readFileSync(ignorePath, "utf8")}\n# CI only: the locally packed build under test.\n!ksor-local.tgz\n`,
+  );
+
   run("docker", ["build", "-f", "Dockerfile.citest", "-t", IMAGE, "."], {
     cwd: project,
     stdio: "inherit",
