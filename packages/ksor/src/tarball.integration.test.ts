@@ -50,6 +50,12 @@ const REQUIRED_IN_TARBALL = [
   // The container artifacts. Shipping these is what makes the served rung
   // deployable anywhere rather than only where we happened to test.
   "templates/scaffold/Dockerfile",
+  // The adopter's registration file, and the subpath it imports. Both are
+  // shipped surfaces with no other pin: a build that stopped emitting either
+  // would break every adopter at install time with every test still green.
+  "templates/scaffold/system/gateways/content.ts",
+  "dist/gateway.mjs",
+  "dist/gateway.d.mts",
   // Not ".gitignore"/".dockerignore": npm pack drops leading-dot names from
   // the tarball, so these templates ship bare and init renames them on emit.
   "templates/scaffold/gitignore",
