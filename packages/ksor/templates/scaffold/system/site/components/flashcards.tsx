@@ -1,6 +1,15 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Info,
+  RotateCcw,
+  Shuffle,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import { StudyAidHeader } from "@/components/study-aids";
@@ -104,6 +113,8 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
   const [revealed, setRevealed] = useState(false);
   const [now, setNow] = useState(0);
   const [reviewAll, setReviewAll] = useState(false);
+  const [shuffled, setShuffled] = useState<readonly string[] | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -139,16 +150,18 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
   }, [hydrated, schedules, deck.path]);
 
   /** What this session walks: due first, never-seen ahead of overdue. */
-  const queue = useMemo(
-    () =>
+  const queue = useMemo(() => {
+    const base =
       !hydrated || reviewAll
         ? deck.cards
-        : dueOrder(deck.cards, (c) => schedules[c.hash] ?? newCard(c.hash, now), now),
+        : dueOrder(deck.cards, (c) => schedules[c.hash] ?? newCard(c.hash, now), now);
+    if (shuffled === null) return base;
+    const order = new Map(shuffled.map((hash, i) => [hash, i] as const));
+    return [...base].sort((a, b) => (order.get(a.hash) ?? 0) - (order.get(b.hash) ?? 0));
     // `schedules` is deliberately absent: re-ordering the queue under the
     // reader's hand as they grade would move the next card mid-session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hydrated, reviewAll, deck.cards, now],
-  );
+  }, [hydrated, reviewAll, shuffled, deck.cards, now]);
 
   const card: DeckCard | undefined = queue[index];
   const done = hydrated && index >= queue.length;
@@ -185,6 +198,38 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
     setNow(Date.now());
     setReviewAll(true);
   }, []);
+
+  const doShuffle = useCallback(() => {
+    const hashes = deck.cards.map((c) => c.hash);
+    for (let i = hashes.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const a = hashes[i] as string;
+      hashes[i] = hashes[j] as string;
+      hashes[j] = a;
+    }
+    setShuffled(hashes);
+    setIndex(0);
+    setRevealed(false);
+    setReviewAll(true);
+  }, [deck.cards]);
+
+  /**
+   * The deck as tab-separated front/back — the shape Anki and most other
+   * spaced-repetition tools import. Built in the browser from the deck already
+   * on the page: a second copy on disk would be a second thing to keep in step
+   * with the record.
+   */
+  const doDownload = useCallback(() => {
+    const tsv = deck.cards
+      .map((c) => `${c.front.replaceAll("\t", " ")}\t${c.back.replaceAll("\t", " ")}`)
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([tsv], { type: "text/tab-separated-values" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${deck.path.replace(/\.flashcards\.yaml$/, "").replaceAll("/", "-")}.tsv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [deck]);
 
   useEffect(() => {
     const node = containerRef.current;
@@ -337,7 +382,54 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
           </div>
         </>
       )}
+
+      <div className="mt-8 border-t border-fd-border pt-5">
+        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+          <FooterAction onClick={doShuffle} icon={<Shuffle className="size-3.5" />}>
+            Shuffle
+          </FooterAction>
+          <FooterAction
+            onClick={() => setGuideOpen((g) => !g)}
+            active={guideOpen}
+            expanded={guideOpen}
+            icon={<Info className="size-3.5" />}
+          >
+            Guide
+          </FooterAction>
+          <FooterAction onClick={doDownload} icon={<Download className="size-3.5" />}>
+            Download
+          </FooterAction>
+        </div>
+
+        {guideOpen ? (
+          <div className="mx-auto mt-5 max-w-2xl rounded-lg border border-fd-border bg-fd-muted px-5 py-4 text-sm leading-relaxed text-fd-muted-foreground">
+            <p>
+              Click the card, or press <Key>space</Key>, to flip it. Then say whether you recalled
+              it: <Key>1</Key> for missed, <Key>2</Key> for got it. <Key>&larr;</Key> and{" "}
+              <Key>&rarr;</Key> step between cards without grading.
+            </p>
+            <p className="mt-3">
+              Cards you miss come back within about a minute; cards you know return at growing
+              intervals, so a deck gets shorter as you learn it. The schedule is a simple interval
+              ladder — it is not FSRS and makes no retention guarantee. Progress is kept in this
+              browser only, so it belongs to you and to this device, and is not part of the record.
+            </p>
+            <p className="mt-3">
+              <strong className="font-medium text-fd-foreground">Download</strong> gives you the
+              deck as tab-separated front/back, the shape Anki and most other tools import.
+            </p>
+          </div>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function Key({ children }: { readonly children: React.ReactNode }): ReactElement {
+  return (
+    <kbd className="mx-0.5 rounded border border-fd-border bg-fd-background px-1.5 py-0.5 font-mono text-[11px] text-fd-foreground">
+      {children}
+    </kbd>
   );
 }
 
@@ -393,6 +485,38 @@ function GradeButton({
     >
       {children}
       <kbd className="ml-1 font-mono text-[10px] opacity-60">{hint}</kbd>
+    </button>
+  );
+}
+
+function FooterAction({
+  onClick,
+  icon,
+  active = false,
+  expanded,
+  children,
+}: {
+  readonly onClick: () => void;
+  readonly icon: ReactElement;
+  readonly active?: boolean;
+  readonly expanded?: boolean | undefined;
+  readonly children: React.ReactNode;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      {...(expanded === undefined ? {} : { "aria-expanded": expanded })}
+      className={[
+        "flex items-center gap-2 border-b-2 pb-1 text-sm transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary",
+        active
+          ? "border-fd-primary text-fd-primary"
+          : "border-transparent text-fd-muted-foreground hover:text-fd-foreground",
+      ].join(" ")}
+    >
+      {icon}
+      {children}
     </button>
   );
 }
