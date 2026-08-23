@@ -233,12 +233,35 @@ try {
   });
   const structured = outline.result?.structuredContent;
   if (!structured) fail(`outline returned nothing: ${JSON.stringify(outline).slice(0, 400)}`);
-  const rendered = JSON.stringify(structured);
-  if (!rendered.includes("knowledge/")) {
-    fail(`the outline carries no record: ${rendered.slice(0, 400)}`);
+  const nodes = structured.nodes ?? [];
+  if (nodes.length === 0) {
+    fail(`the outline carries no record: ${JSON.stringify(structured).slice(0, 400)}`);
   }
-  console.log("outline: ok —", rendered.length, "bytes of governed record");
+  console.log(`outline: ${nodes.length} nodes, first "${nodes[0].title}"`);
 
+  // The guarantee, not merely a reply: a search must come back CITED. Provenance
+  // is what separates this from any other retrieval server, so it is what the
+  // container walk asserts — a stable_id and the generation that authorized it.
+  const search = await mcp({
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "search", arguments: { query: "what is a knowledge system of record", k: 3 } },
+  });
+  const found = search.result?.structuredContent;
+  if (!found) fail(`search returned nothing: ${JSON.stringify(search).slice(0, 400)}`);
+  const hits = found.hits ?? [];
+  if (hits.length === 0) fail(`search found nothing: ${JSON.stringify(found).slice(0, 400)}`);
+  for (const hit of hits) {
+    const provenance = hit.provenance ?? {};
+    if (!provenance.stable_id || provenance.generation === undefined) {
+      fail(`a hit came back UNCITED: ${JSON.stringify(hit).slice(0, 300)}`);
+    }
+  }
+  console.log(
+    `search: ${hits.length} cited hits, gate=${found.gate}, ` +
+      `first ${hits[0].provenance.stable_id} gen=${hits[0].provenance.generation}`,
+  );
   // 8. And the claim the whole job exists for.
   const body = emitted
     .split("\n")
