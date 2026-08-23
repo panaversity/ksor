@@ -31,13 +31,13 @@ Postgres store (with pgvector) and an embedding provider key, so it is not
 part of `pnpm dev`. The ordered path is:
 
 ```sh
-cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
+cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH=disabled-local
 pnpm provision         # once: apply the schema, authorize ingest
 pnpm refresh           # ingest the record, collect retired generations
 pnpm serve             # the MCP server
 ```
 
-`ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH_DISABLED=1`
+`ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH=disabled-local`
 is required for a local run: serve refuses to boot unauthenticated on purpose,
 so a server is never open by accident.
 
@@ -56,7 +56,7 @@ effect of starting a process. A rerun on an unchanged record
 costs nothing: no new generation, no embedding, no rows. Edit a document and
 the next run picks up exactly that change. `AGENTS.md` → "Serving to agents" is the
 full runbook; your coding agent reads it first. `pnpm serve` refuses to boot
-unauthenticated: a local run declares `KSOR_AUTH_DISABLED=1` (already in
+unauthenticated: a local run declares `KSOR_AUTH=disabled-local` (already in
 `.env.example`) and binds loopback, so a server is never left open by accident;
 a public bind needs a configured SSO door instead. Any other operation is
 `pnpm exec ksor <verb>`.

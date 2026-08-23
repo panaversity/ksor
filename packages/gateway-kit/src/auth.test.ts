@@ -70,14 +70,41 @@ describe("buildAuth postures (the smoke-test list)", () => {
     );
   });
 
-  it("runs unauthenticated ONLY with the explicit opt-out", () => {
-    expect(buildAuth({ KSOR_AUTH_DISABLED: "1" })).toEqual({ mode: "disabled" });
+  it("runs unauthenticated ONLY with an explicit posture", () => {
+    expect(buildAuth({ KSOR_AUTH: "disabled-local" })).toEqual({
+      mode: "disabled",
+      publicAllowed: false,
+    });
+    expect(buildAuth({ KSOR_AUTH: "disabled-public" })).toEqual({
+      mode: "disabled",
+      publicAllowed: true,
+    });
   });
 
-  it("the explicit opt-out beats SSO config, and warns", () => {
+  // The whole reason for one variable instead of two booleans: the VALUE says
+  // which posture, so no combination of flags can express a state nobody meant.
+  it("refuses a posture it does not recognise, rather than guessing", () => {
+    for (const value of ["1", "true", "disabled", "public", "yes"]) {
+      expect(() => buildAuth({ KSOR_AUTH: value }), value).toThrowError(AuthConfigError);
+      expect(() => buildAuth({ KSOR_AUTH: value }), value).toThrowError(/is not a posture/);
+    }
+  });
+
+  // An operator following an old runbook gets told what replaced it — not
+  // "auth is not configured", which is true and tells them nothing.
+  it("names the retired variables instead of ignoring them", () => {
+    for (const retired of ["KSOR_AUTH_DISABLED", "KSOR_ALLOW_PUBLIC_UNAUTHENTICATED"]) {
+      expect(() => buildAuth({ [retired]: "1" }), retired).toThrowError(
+        /have been replaced by one variable, KSOR_AUTH/,
+      );
+    }
+  });
+
+  it("an explicit posture beats SSO config, and warns", () => {
     const warn = vi.fn();
-    expect(buildAuth({ ...SSO_ENV, KSOR_AUTH_DISABLED: "1" }, { warn })).toEqual({
+    expect(buildAuth({ ...SSO_ENV, KSOR_AUTH: "disabled-local" }, { warn })).toEqual({
       mode: "disabled",
+      publicAllowed: false,
     });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("UNAUTHENTICATED"));
   });

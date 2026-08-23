@@ -10,7 +10,7 @@
  * The bind decides the posture: unset PORT/host → loopback (127.0.0.1),
  * the dev door, DNS-rebind-protected and safe with auth off; a public bind
  * is a deliberate act that fails closed unless auth is configured or
- * KSOR_AUTH_DISABLED=1 is set explicitly.
+ * KSOR_AUTH=disabled-local is set explicitly.
  *
  * Env contract (each `KSOR_*` name descends from an oracle `SOR_*` var):
  *   KSOR_INSTANCE                path to instance.md (default ./instance.md)
@@ -19,7 +19,7 @@
  *   KSOR_SNAPSHOT_KEYS           kid=secret[,...]; unset = ephemeral key
  *   KSOR_MCP_HOST / KSOR_MCP_PORT  bind (loopback unless PORT — deliberate)
  *   KSOR_SSO_URL + KSOR_MCP_RESOURCE_URL + KSOR_JWT_ALLOWED_AUDIENCES  public door
- *   KSOR_AUTH_DISABLED=1         the deliberate unauthenticated opt-out
+ *   KSOR_AUTH=disabled-local         the deliberate unauthenticated opt-out
  *
  * Exit codes follow the ksor CLI contract: refusal 1, environment 3 —
  * always a remedied message, never a stack trace.

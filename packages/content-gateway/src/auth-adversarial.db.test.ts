@@ -200,7 +200,7 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
         KSOR_SSO_URL: as.issuer,
         KSOR_MCP_RESOURCE_URL: resource,
         KSOR_JWT_ALLOWED_AUDIENCES: resource,
-        KSOR_AUTH_DISABLED: "",
+        KSOR_AUTH: "",
       },
     });
     let booted = "";

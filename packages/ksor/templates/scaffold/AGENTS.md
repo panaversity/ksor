@@ -96,7 +96,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    - `KSOR_DB_URL` — the Postgres store named by `instance.md`'s `dsn_env`. It
      needs the pgvector extension: `CREATE EXTENSION vector;`
    - `GEMINI_API_KEY` — the embedding provider key.
-   - `KSOR_AUTH_DISABLED=1` — **required for a local run.** `ksor serve`
+   - `KSOR_AUTH=disabled-local` — **required for a local run.** `ksor serve`
      refuses to boot unauthenticated without it, deliberately, so a server is
      never left open by accident. It binds loopback, where auth off is the
      intended dev shape. A PUBLIC deployment configures the SSO door instead —
@@ -228,11 +228,11 @@ abandoned ones.
 ### Serving safely (fail-closed posture)
 
 `pnpm serve` **refuses to boot unauthenticated** — there is no auth-off
-default. A local run says so deliberately with `KSOR_AUTH_DISABLED=1` and binds
+default. A local run says so deliberately with `KSOR_AUTH=disabled-local` and binds
 loopback, which is the intended dev shape. A **public**
 bind refuses to boot unless auth is configured (`KSOR_SSO_URL` +
 `KSOR_MCP_RESOURCE_URL` + `KSOR_JWT_ALLOWED_AUDIENCES`, making it an OAuth
-Resource Server) OR you deliberately set `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`.
+Resource Server) OR you deliberately set `KSOR_AUTH=disabled-public`.
 Never let a dropped auth variable silently ship an open door. On a non-loopback
 bind, set `KSOR_ALLOWED_HOSTS` / `KSOR_ALLOWED_ORIGINS`; on more than one
 replica, set a shared `KSOR_SNAPSHOT_KEYS` (unset ⇒ a per-process key, so a
@@ -240,7 +240,7 @@ search token minted by one replica fails on another).
 
 Three things worth being deliberate about:
 
-- **`KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` serves your whole record to anyone
+- **`KSOR_AUTH=disabled-public` serves your whole record to anyone
   who can reach the port.** It exists for deployments fronted by your own
   gateway or network policy. If nothing else is in front, do not set it.
 - **Set `KSOR_SSO_ISSUER` when your SSO stamps a stable `iss`.** Audience is
@@ -261,7 +261,7 @@ Once the SSO door is configured (the three variables above), the server is an
 OAuth **Resource Server**, which means a client is not told the authorization
 server — it discovers it. Nothing here needs configuring beyond those variables;
 this is what your agents will experience, and what to check when one cannot
-connect. With `KSOR_AUTH_DISABLED=1` — the local default `.env.example` ships —
+connect. With `KSOR_AUTH=disabled-local` — the local default `.env.example` ships —
 none of it applies: there is no challenge and the metadata document answers 404,
 because there is no authorization server to point at.
 

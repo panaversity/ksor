@@ -201,7 +201,7 @@ Answer ONLY from this record. Abstention is a correct answer.
     // The one transport: stateless Streamable HTTP, on a loopback bind with
     // auth off (the dev posture). A real MCP client drives it.
     port = 30000 + Math.floor(Math.random() * 20000);
-    server = await bootHttp({ KSOR_MCP_PORT: String(port), KSOR_AUTH_DISABLED: "1" });
+    server = await bootHttp({ KSOR_MCP_PORT: String(port), KSOR_AUTH: "disabled-local" });
     client = new Client({ name: "ksor-acceptance", version: "0.0.0" });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
@@ -331,7 +331,7 @@ Answer ONLY from this record. Abstention is a correct answer.
     const capPort = 30000 + Math.floor(Math.random() * 20000);
     const capped = await bootHttp({
       KSOR_MCP_PORT: String(capPort),
-      KSOR_AUTH_DISABLED: "1",
+      KSOR_AUTH: "disabled-local",
       KSOR_MAX_INFLIGHT: "1",
     });
     try {
@@ -445,7 +445,7 @@ Answer ONLY from this record. Abstention is a correct answer.
         KSOR_INSTANCE: instancePath,
         KSOR_TEST_DSN: dbUrl,
         KSOR_MCP_PORT: String(port2),
-        KSOR_AUTH_DISABLED: "1",
+        KSOR_AUTH: "disabled-local",
       },
     });
     try {
@@ -777,7 +777,7 @@ Answer ONLY from this record. Abstention is a correct answer.
       KSOR_MCP_HOST: "0.0.0.0",
       KSOR_MCP_PORT: String(badPort),
     } as Record<string, string>;
-    delete env["KSOR_AUTH_DISABLED"];
+    delete env["KSOR_AUTH"];
     delete env["PORT"];
     const refused = spawn(process.execPath, [CLI], { env });
     const refusal = await new Promise<{ code: number | null; stderr: string }>((resolve) => {
@@ -817,7 +817,7 @@ Answer ONLY from this record.
       ...process.env,
       KSOR_INSTANCE: geminiInstance,
       KSOR_TEST_DSN: dbUrl,
-      KSOR_AUTH_DISABLED: "1",
+      KSOR_AUTH: "disabled-local",
     } as Record<string, string>;
     delete env["GEMINI_API_KEY"];
     delete env["PORT"];

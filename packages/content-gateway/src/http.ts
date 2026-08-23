@@ -40,6 +40,7 @@ import { runProbe, withProbeDeadline } from "@panaversity/ksor-content";
 import {
   abstainPosture,
   authPosture,
+  snapshotPosture,
   bootLine,
   UNDESCRIBED_RECORD,
   withoutSdkResponseModeWarning,
@@ -168,16 +169,12 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // on its own, permit an UNAUTHENTICATED PUBLIC bind — decision 7's "a
   // public bind fails closed unless explicitly flagged". A public bind with
   // auth off needs a SECOND deliberate acknowledgement (review, 2026-08-19).
-  if (
-    auth.mode === "disabled" &&
-    !loopback &&
-    process.env["KSOR_ALLOW_PUBLIC_UNAUTHENTICATED"] !== "1"
-  ) {
+  if (auth.mode === "disabled" && !loopback && !auth.publicAllowed) {
     throw new AuthConfigError(
-      `refusing an UNAUTHENTICATED PUBLIC bind (${bind.host}) — KSOR_AUTH_DISABLED is the ` +
-        "loopback-dev flag, not a licence to serve the corpus to the internet with no auth. " +
+      `refusing an UNAUTHENTICATED PUBLIC bind (${bind.host}) — KSOR_AUTH=disabled-local is the ` +
+        "loopback dev posture, not a licence to serve the corpus to the internet with no auth. " +
         "Configure the SSO door (KSOR_SSO_URL + KSOR_MCP_RESOURCE_URL + KSOR_JWT_ALLOWED_AUDIENCES), " +
-        "bind loopback, or set KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1 to accept the risk deliberately.",
+        "bind loopback, or set KSOR_AUTH=disabled-public to accept the risk deliberately.",
     );
   }
   const security = resolveSecurity(bind);
@@ -588,11 +585,14 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       authPosture(
         auth.mode,
         bind.host,
-        process.env["KSOR_ALLOW_PUBLIC_UNAUTHENTICATED"] === "1" && !loopback,
+        auth.mode === "disabled" && auth.publicAllowed && !loopback,
       ),
     ),
   );
   for (const line of keyLines) console.error(line);
+  // Only when the assumption behind the default has stopped holding.
+  const snapshot = snapshotPosture(ctx.ring.active, loopback);
+  if (snapshot !== null) console.error(bootLine("snapshot", snapshot));
   console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
   console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));
 

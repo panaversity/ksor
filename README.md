@@ -567,7 +567,7 @@ Then fill in the environment and bring it up — three steps, deliberately
 separate:
 
 ```bash
-cp .env.example .env   # KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH_DISABLED=1
+cp .env.example .env   # KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH=disabled-local
 
 pnpm provision         # ONCE: apply the schema, authorize this tenant to ingest
 pnpm refresh           # PUBLISH: ingest knowledge/ into a generation, collect old ones
@@ -592,10 +592,10 @@ and `read` over stateless Streamable HTTP, with cited passages, snapshot
 generation-pinning, and honest abstention. `serve` reads `./instance.md` and
 runs the MCP server in-process — the climbed rung, so it needs a Postgres store
 (pgvector) and an embedding provider key. It **refuses to boot
-unauthenticated** — a local run declares `KSOR_AUTH_DISABLED=1` (which
+unauthenticated** — a local run declares `KSOR_AUTH=disabled-local` (which
 `.env.example` already carries) and binds loopback, where auth off is the
 intended development shape. A public bind needs a configured SSO door instead,
-or an explicit `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`.
+or an explicit `KSOR_AUTH=disabled-public`.
 
 `pnpm serve` is the only command this rung needs: run it the first time, after
 editing `knowledge/`, or to bring the server back. Every step reports the state
