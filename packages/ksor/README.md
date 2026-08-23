@@ -32,6 +32,30 @@ scaffold is deterministic and offline, and every refusal explains itself.
 > and the released version number are authoritative for the exact released
 > functionality.
 
+### Study attachments
+
+A document may carry companions named after it, and the site renders each on
+that document's page and nowhere else:
+
+| File                    | What it is                                             |
+| ----------------------- | ------------------------------------------------------ |
+| `<doc>.summary.md`      | a précis, shown as a second tab beside the document     |
+| `<doc>.slides.yaml`     | a presentation, at the top of the page                  |
+| `<doc>.flashcards.yaml` | a recall deck, at the end                               |
+| `<doc>.quiz.yaml`       | a multiple-choice check, at the end                     |
+
+Ask your coding agent — `make slides for knowledge/expenses/approvals.md` —
+and the `make-slides` skill writes the deck from the document, checks every
+claim and number back against it, and reports what it left out because the
+document did not support it.
+
+An attachment is **part of its document**: no URL, no sidebar row, no
+`llms.txt` line, and no id an agent can cite. It takes its `visibility:` and
+any takedown from its parent, so restricting the document restricts them all.
+A quiz whose answers are guessable is refused by the build, and because ingest
+creates no node for an attachment, a quiz's answer key can never reach the
+agent surface at all.
+
 Full concept, design goals, and project status:
 **<https://github.com/panaversity/ksor>**
 

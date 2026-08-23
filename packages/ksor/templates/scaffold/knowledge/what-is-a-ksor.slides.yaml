@@ -1,0 +1,65 @@
+# The presentation that teaches what-is-a-ksor.md.
+#
+# These slides live IN the record: reviewed in a pull request, versioned with
+# the document, withdrawn when it is withdrawn, and rendered by the site — so
+# there is no third party, no dead link, and nothing to keep in step by hand.
+# Your coding agent writes them from the document; `.agents/skills/make-slides/`
+# is the procedure.
+#
+# A slide may only say what the document says. A deck is a way of presenting
+# the record, never a second source.
+slides:
+  title: Introducing the record
+  description: The 15-minute version, for a room.
+deck:
+  # The opening slide does NOT repeat the page title. It sits directly under
+  # it, so restating it wastes the one slide everyone actually looks at.
+  - heading: Which copy should an agent trust?
+    lead: That question is what this record exists to answer, and nothing in an ordinary assistant can.
+    note: Open with the question, not the definition. The definition lands after they feel the problem.
+
+  - heading: The problem it solves
+    bullets:
+      - Knowledge is scattered across wikis, decks, PDFs, prompts and memory
+      - No authoritative answer to the question an agent has to ask
+      - Which of these copies should I trust?
+    note: Ask the room where their real answer lives today. Wait for the disagreement — it always comes.
+
+  - heading: When two copies disagree, one wins
+    bullets:
+      - A traditional system of record settles the state of a business
+      - The ledger is authoritative; the spreadsheet is not
+      - Recency is not authority — a fresh edit to an ungoverned copy is still ungoverned
+    note: This is the whole idea. If they take one slide away, it is this one.
+
+  - heading: AI never had one
+    bullets:
+      - An assistant answers from everything it has ever read
+      - Nothing in that separates a checked claim from an unchecked one
+      - Which is exactly why it cannot tell you which of its sentences were verified
+    note: Not a criticism of the models. It is a missing layer, and that layer is what we are building.
+
+  - heading: What this record settles
+    bullets:
+      - Which policies apply, and which thresholds are approved
+      - What a term means inside this organization
+      - What to do when the answer is not known
+    note: Point at the third one. It is the one people do not expect.
+
+  - heading: Abstention is a feature
+    lead: '"Not in this corpus" is a correct answer — never an error, and never a licence to fall back on model knowledge.'
+    note: A record that answers everything has stopped being a record of anything in particular.
+
+  - heading: One source, two surfaces
+    bullets:
+      - The website is for people
+      - The MCP server is for agents
+      - Both render the same build — they can never disagree
+    note: Open llms.txt beside the page here. Seeing one source render twice lands better than describing it.
+
+  - heading: Where the edges are
+    bullets:
+      - Provenance proves who said what, and when
+      - It does not prove the source was right — that is a separate judgment
+      - Governance is a ladder, not a gate; level 0 works on day one
+    note: Say the second bullet out loud. Overselling provenance is how these systems lose trust.

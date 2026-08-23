@@ -758,6 +758,29 @@ gateway` package, serve-by-spawn) is superseded._
     which would be governance overreaching into content. Reversed by a
     measurement showing the floors refusing honest quizzes._
 
+    _Revision 2026-08-24: a FOURTH and FIFTH kind — `<doc>.teaching.yaml` was
+    built and then REMOVED (the owner's "teaching aid" meant the slide deck,
+    not a pedagogy panel; it is recorded here because the removal is the
+    decision, not an accident), and `<doc>.slides.yaml` ships. Again the
+    suffix list changed and the guarantee did not, which is now three
+    consecutive kinds added without a new pattern.
+
+    What IS new is that a presentation has two possible sources, and the
+    default is the one the record OWNS: `deck:` carries the slides and the site
+    renders them. An embedded deck cannot be governed at all — it is not
+    reviewed in the pull request, not versioned with its document, not
+    withdrawn when the document is withdrawn, and it can rot to a dead link
+    with nothing going red. So the linked mode exists for an adopter whose deck
+    already lives elsewhere, and `ksor-slides-two-sources` refuses a file
+    declaring both, because two presentations with nothing saying which governs
+    is precisely the disagreement this product exists to settle.
+
+    The linked frame is CLICK-TO-LOAD rather than always-on, which the
+    zero-external-requests browser assertion forced and which is better than
+    what it replaced: the site keeps working offline and behind a firewall, and
+    a reader who only wanted the policy never announces that to a slide host.
+    Contract: `specs/ksor/slides/spec.md`. Reversed per-clause with evidence._
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

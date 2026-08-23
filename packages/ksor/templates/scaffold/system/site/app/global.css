@@ -274,6 +274,51 @@ html > body[data-scroll-locked] {
   --ksor-caution: #e0906e;
 }
 
+/* The slide STAGE.
+
+   A slide is a projected surface, and reading as one at a glance is most of
+   what makes a deck legible on a page full of prose. The first version painted
+   it `--muted` and it read as an empty placeholder rather than as a slide —
+   pale grey on a pale page, with nothing saying "this is a different medium".
+
+   So the stage is dark in BOTH themes, deliberately. That is not a palette
+   inconsistency: the page is a document and the stage is a projection, and the
+   whole job of this block is to look like the second thing while sitting
+   inside the first. Its ink is warm-neutral rather than pure white, which is
+   what stops a dark panel from glaring on a light page.
+
+   Light and dark differ only in how far the stage sits from its surround. */
+:root {
+  --ksor-stage: oklch(0.21 0.018 258);
+  --ksor-stage-ink: oklch(0.96 0.005 90);
+  --ksor-stage-dim: oklch(0.74 0.012 258);
+  --ksor-stage-rule: oklch(0.32 0.02 258);
+}
+
+/* In dark the stage must RISE off the page, not sink into it. A stage darker
+   than its surround measured L 4.4 against the page's 3.3 — near-identical,
+   so the slide lost its edges entirely and read as text floating on the page
+   (found live). On a dark ground, elevation reads as lighter. */
+.dark {
+  --ksor-stage: oklch(0.26 0.019 258);
+  --ksor-stage-ink: oklch(0.96 0.005 90);
+  --ksor-stage-dim: oklch(0.76 0.012 258);
+  --ksor-stage-rule: oklch(0.38 0.02 258);
+}
+
+.ksor-stage {
+  background-color: var(--ksor-stage);
+  color: var(--ksor-stage-ink);
+}
+
+.ksor-stage-dim {
+  color: var(--ksor-stage-dim);
+}
+
+.ksor-stage-rule {
+  background-color: var(--ksor-stage-rule);
+}
+
 /* Right and wrong, for the quiz — the ONE place this record spends green and
    red, and it earns them: a reader checking an answer is asking a true/false
    question, and the accent cannot say "this is correct" while also saying

@@ -296,6 +296,35 @@ either stops being true.
 
 ## Released since 0.0.7
 
+- **Presentations** (`specs/ksor/slides/spec.md`, unreleased on this branch).
+  `<doc>.slides.yaml` is the FIFTH attachment, on the same rule again — the
+  suffix list changed and the guarantee did not. It renders at the TOP of the
+  document's page, before the prose, because a deck is the shape of the thing
+  and gives the detail somewhere to land.
+
+  Two modes, and the DEFAULT is the one the record owns: `deck:` carries the
+  slides themselves and the site renders them. That is what makes the workflow
+  complete — `.agents/skills/make-slides/` reads a document and writes the deck
+  end to end, with no browser, no third party and no human step in the middle.
+  It is also the only mode where the deck is governed: reviewed in the same
+  pull request as its document, versioned with it, withdrawn with it, and
+  incapable of rotting into a dead link.
+
+  `slides.url:` embeds a deck hosted elsewhere, for an adopter who already has
+  one. Its frame is CLICK-TO-LOAD, because the browser suite asserts zero
+  external requests on a built page and that guarantee is worth more than the
+  autoplay — verified: an owned deck ships no `<iframe>` at all, and a linked
+  one ships none until a reader asks. Declaring both modes is refused
+  (`ksor-slides-two-sources`): two presentations with nothing to say which one
+  governs is the disagreement this product exists to settle.
+
+  Every slide is in the SERVER-rendered html, so a reader without JavaScript,
+  a crawler and an agent parsing the page all get the whole deck; only
+  navigation is client-side. Presenter notes render outside the stage, so they
+  are not projected in fullscreen. No seed deck ships: every other attachment
+  seeds content we authored, and a slides attachment pointing outside the repo
+  could only seed a third party's deck or a dead link.
+
 - **Quizzes** (`specs/ksor/quiz/spec.md`, unreleased on this branch). A
   document may carry `<doc>.quiz.yaml` as a THIRD attachment, on the same rule
   as the summary and the deck — so no route, no `llms.txt` line, no stable id,

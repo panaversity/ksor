@@ -23,6 +23,29 @@ versions that bundle corepack. The first `pnpm install` also fetches the
 `ksor` tool (pinned in `package.json`) and writes it into your lockfile —
 commit the updated lockfile.
 
+### Presenting a document
+
+Ask your coding agent for slides and it writes them, from the document, into
+the record:
+
+```
+make slides for knowledge/expenses/approvals.md
+```
+
+The `make-slides` skill reads the document whole, writes the deck into
+`knowledge/expenses/approvals.slides.yaml`, checks every claim and every
+number back against the document, and tells you what it left out because the
+document did not support it — which is usually how you find out a document has
+a gap. The deck then renders at the top of that document's page: click through
+it inline, or **Present** for fullscreen. Presenter notes stay off the screen.
+
+The slides live in the record, so they are reviewed in the same pull request
+as the document, versioned with it, and withdrawn when it is withdrawn. There
+is no third party and no link to rot. If you already keep a deck in Google
+Slides, Canva or SlideShare you can point at it instead — `slides.url:` rather
+than `deck:` — and the page will offer it as a link with a frame the reader
+loads on click, so nothing is requested from the host until somebody asks.
+
 ### Serving to agents
 
 The record's other surface is an MCP server for AI agents — the same
@@ -128,7 +151,7 @@ different coding agent's way of finding the same working contract.
 | `instance.md`                    | what this record is authoritative for; its `name:` is the identity every surface publishes (read at server/build start — restart `pnpm dev` after renaming). This prose IS the agent surface's system prompt — `ksor serve` wires it into the MCP server's instructions. |
 | `AGENTS.md`                      | the working contract every coding agent reads first — the rules for writing knowledge here.                                                                                                                                      |
 | `CLAUDE.md`                      | one line, pointing at `AGENTS.md`. Claude Code looks for this filename, not that one.                                                                                                                                            |
-| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `format-checker` (the rules, as a program).                                                        |
+| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `make-slides` (generate a presentation from a document and attach it), `format-checker` (the rules, as a program).                                                        |
 | `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                                                                             |
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                                                 |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |

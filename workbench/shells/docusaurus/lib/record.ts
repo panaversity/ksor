@@ -63,7 +63,13 @@ function toOrder(raw: string | null): number {
  * Rendering attachments is a shell FEATURE this shell does not have. Refusing
  * to publish them as documents is a CONTRACT CLAUSE, and that is this.
  */
-const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml", ".quiz.yaml"];
+const ATTACHMENT_SUFFIXES = [
+  ".summary.md",
+  ".summary.mdx",
+  ".flashcards.yaml",
+  ".quiz.yaml",
+  ".slides.yaml",
+];
 
 function isAttachment(base: string): boolean {
   return ATTACHMENT_SUFFIXES.some((s) => base.length > s.length && base.endsWith(s));

@@ -18,8 +18,9 @@ import { RecordToc, TocItems } from "@/components/record-toc";
 import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
 import { Quiz } from "@/components/quiz";
+import { Slides } from "@/components/slides";
 import { StudyAids } from "@/components/study-aids";
-import { deckFor, quizFor, summaryFor } from "@/lib/attachments";
+import { deckFor, quizFor, slidesFor, summaryFor } from "@/lib/attachments";
 import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -34,6 +35,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const Summary = summary?.body ?? null;
   const deck = deckFor(page.path);
   const quiz = quizFor(page.path);
+  const presentation = slidesFor(page.path);
   // Counted at BUILD time from the document's own markdown, so the figure is in
   // the shipped HTML for a reader with a failed bundle, a crawler and an agent
   // alike. The predecessor measured the rendered DOM after paint, which put it
@@ -124,6 +126,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         {showGovernance ? (
           <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
         ) : null}
+        {/* BEFORE the document, not after it. The deck is the shape of the
+          thing — five minutes of slides gives the detail somewhere to land —
+          so it belongs where a reader meets it first, which is also where the
+          predecessor puts its own. The recall aids stay at the end, because
+          those are used AFTER reading. */}
+        {presentation === null ? null : <Slides slides={presentation} />}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to
           402px and pushed Sources and everything after it to the bottom of the
