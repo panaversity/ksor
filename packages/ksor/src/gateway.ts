@@ -1,22 +1,10 @@
 /**
  * The public gateway surface: `@panaversity/ksor/gateway`.
  *
- * This is what an adopter's `system/gateways/content.ts` imports. It is
- * deliberately DATA and types only — no handlers, no schemas, no runtime the
- * adopter could hold a reference to. The CLI bundles the kernel, so this module
- * is resolved a SECOND time inside the adopter's project; plain data has no
- * identity, so the two copies cannot disagree.
+ * The ONE import an adopter's `system/gateways/content.ts` needs. It carries
+ * `z` and `McpServer` too, so a registration file stays a FILE — no package,
+ * no build step, and no dependencies the scaffold would have to declare. See
+ * `gateway-api.ts` for why that re-export is deliberate rather than lazy.
  */
 
-export {
-  contentTools,
-  defineGateway,
-  GatewayConfigError,
-  type ContentToolKind,
-  type GatewayConfig,
-  type ResolvedGateway,
-  type ResolvedTool,
-  type SearchCustomization,
-  type ToolCustomization,
-  type ToolDescriptor,
-} from "@panaversity/ksor-content-gateway";
+export * from "@panaversity/ksor-content-gateway/gateway-api";

@@ -34,7 +34,7 @@ import {
   searchHandler,
   z,
   type ServiceContext,
-} from "@panaversity/ksor/gateway";
+} from "./gateway-api.js";
 
 export default function buildGateway(ctx: ServiceContext, version: string): McpServer {
   const server = new McpServer(

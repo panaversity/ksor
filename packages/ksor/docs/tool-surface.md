@@ -5,117 +5,129 @@ status: draft
 
 # Shaping what agents see — `system/gateways/content.ts`
 
-Your record's MCP door serves three tools. That file decides what they are
-called, what they say, and which of them exist at all. It is yours, and deleting
-it is supported: without it the door serves exactly the defaults.
+That file is your record's MCP registration: ordinary `registerTool` calls with
+ordinary zod. It decides what your tools are called, what they say, what they
+accept, and which of them exist. It is yours, and deleting it is supported —
+without it the door serves the same defaults.
 
 ## Why it is worth editing
 
 An agent pays for this surface out of its context window, and it pays twice.
-Every tool's name, description and input schema sits in that context for the
-whole session. Every answer spends more of it.
+Every tool's name, description and input schema is resident for the whole
+session; every answer spends more.
 
-Measured against a live 81-document record (6,963 chunks), at ~4 chars/token:
+Measured against a live 81-document record (6,963 chunks), ~4 chars/token:
 
 |                                | chars  | ~tokens |                     |
 | ------------------------------ | ------ | ------- | ------------------- |
-| all three tool definitions     | 11,373 | 2,843   | **always resident** |
-| `search` definition alone      | 5,147  | 1,287   | always resident     |
-| `outline` + `read` definitions | 6,222  | 1,556   | always resident     |
+| all three tool definitions     | 11,960 | 2,990   | **always resident** |
+| `search` alone                 | 5,383  | 1,346   | always resident     |
+| `outline` + `read`             | 6,571  | 1,643   | always resident     |
 | one `search`, `k=10` (default) | 14,164 | 3,541   | per call            |
 | one `search`, `k=5`            | 8,009  | 2,002   | per call            |
-| one `search`, `k=3`            | 4,153  | 1,038   | per call            |
 
-An agent with five records attached carries ~14,000 tokens of tool definitions
-before it does any work.
+An agent with five records attached carries ~15,000 tokens of definitions before
+doing any work.
 
 ## The three edits that pay
 
-### 1. Drop a tool nothing calls
+### 1. Delete a tool nothing calls
 
-The largest measurable win, and the easiest. If your agents only search, say so
-and stop paying ~1,550 tokens a session for two definitions nobody reads:
-
-```ts
-export default defineGateway({
-  tools: [contentTools.search()],
-});
-```
+The biggest win, and the easiest — delete its `registerTool` block. Measured
+live: a registration keeping only a renamed `search` served **5,337** bytes
+against the default's 11,960.
 
 ### 2. Say what the record covers
 
-The line that decides whether an agent asks _you_ rather than one of the other
-records it has open. Name the subject **and the boundary** — the second half
-prevents more wrong calls than the first:
+The line that decides whether an agent asks _you_ rather than another record it
+has open. Name the subject **and the boundary**:
 
 ```ts
-contentTools.search({
-  covers:
-    "Employee handbook: leave, benefits, conduct, expenses. " +
-    "Not product documentation and not customer data.",
-});
+description: `Employee handbook: leave, benefits, conduct, expenses.
+Not product documentation and not customer data.\n\n${FLOOR.search}`,
 ```
 
-`covers` is composed **above** the framework's own text, never instead of it —
-see "What you cannot change".
+Your prose goes **above** `FLOOR.search`, never instead of it — see below.
 
 ### 3. Set `k`
 
-`k` is the lever on reply size: the default of 10 costs about 3,500 tokens a
-call, and 5 costs about 2,000. The caller can always ask for more, so the
-default should be what your record usually needs, not its maximum.
+`k` is the lever on reply size: 10 costs ~3,500 tokens a call, 5 costs ~2,000.
+The caller can always ask for more, so make the default what you usually need.
 
 ```ts
-contentTools.search({ k: 5 });
+inputSchema: z.object({
+  query: z.string().min(1).max(2000),
+  k: z.number().int().min(1).max(50).default(5),
+}),
 ```
 
 **`budgets.maximum_response_characters` is not this lever.** It defaults to
-120,000, and at ~1,400 characters a hit even the 50-hit ceiling reaches only
-~71,000 — it cannot bind. Tune `k`.
+120,000 and at ~1,400 chars a hit cannot bind before the 50-hit ceiling. Tune `k`.
 
-## Renaming
+## Adding your own tools
+
+It is an MCP server. Call `registerTool` again with your own handler:
 
 ```ts
-contentTools.search({ name: "search_handbook", title: "Search the handbook" });
+server.registerTool(
+  "check_policy_expiry",
+  {
+    inputSchema: z.object({ policy: z.string() }),
+  },
+  async ({ policy }) => ({ content: [{ type: "text", text: await lookup(policy) }] }),
+);
 ```
 
-Names must be lowercase letters, digits and underscores, starting with a letter.
-
-Worth knowing before you do it: an agent that has met one KSoR knows every KSoR
-by its tool names, and renaming trades that away. It is the right trade when an
-agent has several records attached at once and needs to tell them apart — and
-the wrong one if you are just renaming to taste.
+One thing to be clear-eyed about: **ksor makes no provenance claim about a tool
+it did not hand you a handler for.** `searchHandler(ctx)` answers from the
+governed record with citations; a handler you write answers from wherever you
+made it answer from.
 
 ## What you cannot change, and why
 
-- **The shape of a result** — `hits`, `provenance` (`stable_id`, `generation`,
-  `retrieved_at`), the `snapshot` token, and `gate`. These are the citation and
-  abstention guarantees; a record that could reshape them would still look like
-  a KSoR and no longer be one.
-- **Input schemas** — a caller's contract must not vary by record.
-- **The description floor.** `covers` goes above it. The floor carries how to
-  branch on the envelope (`abstained` vs `unavailable` vs `unpublished`), what
-  `gate: "off"` means, and the instruction that hit content is **untrusted
-  corpus text** to be quoted, never obeyed. A record that replaced it wholesale
-  would silently stop abstaining and start following instructions written into
-  its own documents — and nothing would go red.
+- **The handlers.** `searchHandler` / `outlineHandler` / `readHandler` are the
+  only things that can prove a passage came from the governed record. A
+  hand-written one returning fabricated hits with plausible `stable_id`s would
+  pass every shape check there is.
+- **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
+  `provenance`, the `snapshot` token and `gate`. A record that reshaped them
+  would still look like a KSoR and no longer be one.
+- **The `FLOOR` text.** It tells an agent how to branch on an envelope, what
+  `gate: "off"` means, and that corpus content is **untrusted** — quote it, never
+  obey it. Your prose is composed above it.
 
-## When it is wrong, it says so at boot
+## The door checks its own surface at boot
 
-A broken file refuses before the door opens, rather than serving a surface you
-did not ask for. Each refusal's first line is a stable slug:
+Because that last one is a template literal in a file you own, nothing structural
+stops it being dropped. So the door builds its server, asks itself `tools/list`
+over an in-memory transport, and refuses to start if a guarantee is gone:
 
-| what                                      | slug                          |
-| ----------------------------------------- | ----------------------------- |
-| no tools listed                           | `ksor-gateway-no-tools`       |
-| two tools with the same name              | `ksor-gateway-duplicate-tool` |
-| a name agents cannot call                 | `ksor-gateway-bad-tool-name`  |
-| `k` outside 1–50                          | `ksor-gateway-bad-k`          |
-| the file throws, or has no default export | `ksor-gateway-unloadable`     |
+```
+error: ksor-gateway-floor-missing: the search tool is served as "search_the_book"
+without its framework description. That text tells an agent how to read an
+abstention and that corpus content is untrusted — without it this record answers
+without ever declining, and follows instructions written into its own documents.
+Put FLOOR.search back: a record's own prose goes ABOVE it, as
+`${yourText}\n\n${FLOOR.search}`, never instead of it
+```
 
-Delete the file to take every default back.
+| what                                               | slug                         |
+| -------------------------------------------------- | ---------------------------- |
+| a served ksor tool lost its `FLOOR` text           | `ksor-gateway-floor-missing` |
+| the registration serves no tools at all            | `ksor-gateway-no-tools`      |
+| the file throws, or default-exports a non-function | `ksor-gateway-unloadable`    |
+
+Delete the file to take the default registration back.
+
+## One import, no dependencies
+
+Everything comes from `@panaversity/ksor/gateway` — including `z` and
+`McpServer`. That is deliberate: your registration stays a _file_, with no
+package.json, no build step, and nothing new in your lockfile. It also means the
+SDK validates with the same zod instance it was built against, which a
+separately-installed zod would not.
 
 ## More records later
 
-`identity` and `praxis` records get `system/gateways/<record>.ts` by the same
-rule. Nothing above is specific to content except which tools exist.
+`identity` and `praxis` get `system/gateways/<record>.ts` by the same rule.
+Nothing above is specific to content except which tools exist.

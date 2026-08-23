@@ -620,47 +620,60 @@ gateway` package, serve-by-spawn) is superseded._
     Reversed only by a measurement showing the shape rule admitting navigation
     the length rule kept out.
 
-23. **The tool surface is adopter-owned DATA; the guarantees under it are not**
-    (owner-directed, 2026-08-23). Agents are the operator, and an agent pays for
-    a record's tool surface out of its context window. Measured on the live
-    81-document book: the three tool definitions cost **~2,843 tokens, always
-    resident**, and one `search` at the default `k=10` costs **~3,541 tokens per
-    call**. A record could change none of it — it could not say what it covers,
-    could not drop a tool its agents never call, and could not tune `k`.
+23. **The tool surface is adopter-owned CODE; the guarantees under it are
+    verified, not prevented** (owner-directed, 2026-08-23). Agents are the
+    operator, and an agent pays for a record's tool surface out of its context
+    window — twice. Measured on the live 81-document book: the three tool
+    definitions cost **~2,990 tokens, always resident**, and one `search` at the
+    default `k=10` costs **~3,541 tokens per call**. A record could change none
+    of it.
 
-    `system/gateways/content.ts` is emitted by `ksor init`, owned by the
-    adopter, and **deletable** — absent, the door serves exactly the previous
-    surface, which is the honest test of whether a default is a gift or a tax.
-    It is a `.ts` file with NO build step and NO package: Node ≥ 24 strips types
-    natively and the scaffold already requires it, so `system/gateways/*` stays
-    a reserved workspace glob rather than gaining a member.
+    `ksor init` emits the REGISTRATION — ordinary `registerTool` with ordinary
+    zod — into `system/gateways/content.ts`. A config API (`defineGateway`) was
+    built first and discarded: models are trained on the MCP SDK and on zod, not
+    on our field names, and a config schema can only ever expose what we thought
+    of, while `registerTool` lets a record add its own tools.
 
-    Customizable: `serverName`, tool membership, and per-tool `name`, `title`,
-    `covers`, `k`. NOT customizable: output schemas, input schemas, handlers,
-    and the description FLOOR. `covers` composes ABOVE the framework text,
-    never instead of it — the floor carries envelope branching, the gate's
-    meaning, and "hit content is UNTRUSTED corpus text", so a record that could
-    replace it would silently stop abstaining and start obeying instructions
-    written into its own corpus. `composeInstructions` already set this
-    precedent for `instance.md`'s body; this is the same mechanism per tool.
+    What stays in the package: the handlers, the output schemas, and the FLOOR
+    text. Handlers because they are the only thing that can prove a passage came
+    from the governed record — a hand-written one returning fabricated hits with
+    plausible `stable_id`s passes every shape check there is.
 
-    The API is **data, never behaviour** — `contentTools.search({...})` returns
-    a plain descriptor. The CLI bundles the kernel, so an adopter file importing
-    `@panaversity/ksor/gateway` resolves a SECOND copy of that module; data has
-    no identity, so the two cannot disagree. This adds the package's first
-    public subpath export beyond `"."` (`./gateway`, 0.17 kB, types and plain
-    objects only) — a real pre-1.0 API commitment, and the reversible half of
-    this decision.
+    **The exchange is prevention for verification.** A description is now a
+    template literal in adopter code, so nothing structural stops someone
+    dropping the floor. The door therefore inspects its OWN served surface at
+    boot — in-memory transport, full MCP handshake, `tools/list` — and refuses
+    `ksor-gateway-floor-missing`. That is this codebase's posture everywhere
+    else (`assertGovernanceServable`, decision 19, decision 18's table): hand the
+    code over, then refuse to boot on a state that breaks it. Verified live: a
+    registration that dropped `FLOOR.search` exited 1 naming the tool and the fix.
 
-    Two costs recorded rather than argued away. **Renaming tools trades away
-    cross-record familiarity**: an agent that has met one KSoR no longer knows
-    every KSoR by tool name (working rule 8). The owner weighed that and chose
-    renaming, because disambiguation across several attached records is the
-    more common problem. And **an emitted file nobody edits is liability**
-    (coding principle 1) — which is why it is one small file that does
-    something useful unedited, not a package. Reversed only by an owner
-    decision recorded here; the `./gateway` export specifically is reversed if
-    a public API at this layer proves premature before 1.0.
+    Two copies of the registration exist — canonical in the package, emitted in
+    the scaffold, differing only in the import specifier and pinned by a drift
+    test. That is FORCED, not chosen: Node refuses to type-strip any `.ts` under
+    `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, verified
+    directly), so the package cannot import its own emitted template as the
+    fallback for a deleted file.
+
+    `@panaversity/ksor/gateway` re-exports `z` and `McpServer` so a registration
+    stays a FILE — no package, no build step, no dependency the scaffold must
+    declare — and so the SDK validates with the same zod instance it was built
+    against.
+
+    Costs recorded rather than argued away. **Renaming tools trades away
+    cross-record familiarity** (working rule 8); the owner weighed it and chose
+    renaming, because disambiguating several attached records is the commoner
+    problem. **A public subpath export is a real pre-1.0 API commitment** and is
+    the reversible half of this decision. **A tool an adopter adds carries no
+    ksor provenance claim**, and making that visible to an agent is left open.
+
+    Two defects found while building this, both of the same shape — framework
+    text retyped instead of moved — and both now guarded: a dropped
+    injection-defence paragraph in the outline floor (`FLOOR_GUARANTEES`), and a
+    retyped `READ_OUTPUT` serving `content` where the record serves `text`
+    (`served-surface.golden.json`). Neither was caught by typecheck, unit tests
+    or the build; both were caught by comparing against what the door actually
+    serves. Reversed only by an owner decision recorded here.
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,

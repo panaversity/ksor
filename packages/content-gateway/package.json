@@ -22,6 +22,11 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./gateway-api": {
+      "types": "./dist/gateway-api.d.mts",
+      "import": "./dist/gateway-api.mjs",
+      "default": "./dist/gateway-api.mjs"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

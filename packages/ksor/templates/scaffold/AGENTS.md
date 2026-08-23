@@ -313,49 +313,45 @@ send the user back through a login.
 
 ## Shaping the agent surface — `system/gateways/content.ts`
 
-That file decides what tools agents see. It is yours, and it is **deletable** —
-without it the door serves the same three tools it always has.
+That file is this record's MCP registration — ordinary `registerTool` with
+ordinary zod. It is yours, and it is **deletable**: without it the door serves
+the same defaults.
 
-Edit it because an agent pays for this surface out of its context window. Every
-tool's name and description sits there for the whole session; every answer
-spends more. Measured on an 81-document record:
+Edit it because an agent pays for this surface out of its context window, twice.
+Measured on an 81-document record:
 
 |                                  |                                |
 | -------------------------------- | ------------------------------ |
-| all three tool definitions       | ~2,800 tokens, always resident |
-| one `search` at `k=10` (default) | ~3,500 tokens per call         |
-| one `search` at `k=5`            | ~2,000 tokens per call         |
+| all three tool definitions       | ~2,990 tokens, always resident |
+| one `search` at `k=10` (default) | ~3,541 tokens per call         |
+| one `search` at `k=5`            | ~2,002 tokens per call         |
 
-So two edits pay for themselves:
+Three edits pay for themselves:
 
-- **Drop a tool your agents never call.** Omitting `outline()` and `read()`
-  gives back ~1,550 tokens for the whole session.
-- **Set `k`.** It is the lever on reply size. (`budgets.maximum_response_characters`
-  is not — at ~1,400 characters a hit it cannot bind before the 50-hit ceiling.)
-
-And one that decides whether you get called at all:
-
-- **`covers`** — what this record answers, and what it does not. It is how an
-  agent with several records attached picks yours. Name the subject AND the
-  boundary; the second half prevents more wrong calls than the first.
+- **Delete a tool nothing calls.** Removing `outline` and `read` gives back
+  ~1,643 tokens for the whole session.
+- **Say what this record covers**, above `FLOOR.search`. It is how an agent with
+  several records attached picks yours; name the subject AND the boundary.
+- **Set `k`** in the input schema — it is the lever on reply size.
 
 ```ts
-contentTools.search({
-  name: "search_handbook",
-  covers: "Leave, benefits, conduct, expenses. Not product docs, not customer data.",
-  k: 5,
-});
+description: `Leave, benefits, conduct. Not product docs.\n\n${FLOOR.search}`,
+inputSchema: z.object({ query: z.string(), k: z.number().int().default(5) }),
 ```
 
-What you cannot change is deliberate: the shape of a result, the provenance on
-it, and the paragraphs telling an agent how to read an abstention or that corpus
-text is untrusted. `covers` is added **above** those, never instead of them — a
-record that could delete them would stop abstaining without anything going red.
+You can add your own tools with `registerTool` too — but be clear-eyed: ksor
+makes no provenance claim about a tool it did not hand you a handler for.
 
-A broken file refuses at boot with a slug (`ksor-gateway-no-tools`,
-`ksor-gateway-duplicate-tool`, `ksor-gateway-bad-tool-name`,
-`ksor-gateway-bad-k`, `ksor-gateway-unloadable`) rather than quietly serving a
-surface you did not ask for.
+What you cannot change is deliberate: the handlers, the output schemas, and the
+`FLOOR` text. Your prose goes ABOVE the floor, never instead of it — the floor
+tells an agent how to read an abstention and that corpus content is untrusted,
+and a record that dropped it would answer without ever declining.
+
+Because that is a template literal in a file you own, the door checks its own
+surface at boot and refuses to start if a guarantee is gone:
+`ksor-gateway-floor-missing`, `ksor-gateway-no-tools`,
+`ksor-gateway-unloadable`. Full detail:
+`node_modules/@panaversity/ksor/docs/tool-surface.md`.
 
 ## Withdrawing a document — `ksor takedown`
 
