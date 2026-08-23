@@ -33,7 +33,14 @@ import { applySchema } from "../schema.js";
 import { embedIntent } from "./embedding.js";
 import { buildShippedProvider } from "./providers/registry.js";
 import { findDocument, outline, type ReadScope } from "./read.js";
-import { hybridSearch, keywordSearch, topOneScore, type SearchScope } from "./search.js";
+import { WHOLE_RECORD_SCOPE } from "./audience.js";
+import {
+  hybridSearch,
+  keywordSearch,
+  topOneScore,
+  VECTOR_TXN_GUCS,
+  type SearchScope,
+} from "./search.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -216,7 +223,10 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
   const sweep = async (): Promise<Map<string, string>> => {
     const seen = new Map<string, string>();
     for (const shape of SHAPES) {
-      const value = await runRead(pool, TENANT, async (c) => shape.run(c));
+      const value = await runRead(pool, TENANT, async (c) => shape.run(c), {
+        ...VECTOR_TXN_GUCS,
+        ...WHOLE_RECORD_SCOPE,
+      });
       seen.set(shape.name, JSON.stringify(value ?? null));
     }
     return seen;
@@ -269,13 +279,19 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
   });
 
   it("the abstention gate stops scoring it, so coverage is not claimed on withdrawn text", async () => {
-    const score = await runRead(pool, TENANT, async (c) => topOneScore(c, sscope, queryVector));
+    const score = await runRead(pool, TENANT, async (c) => topOneScore(c, sscope, queryVector), {
+      ...VECTOR_TXN_GUCS,
+      ...WHOLE_RECORD_SCOPE,
+    });
     // Either nothing scores, or what scores is the survivor — never the
     // withdrawn document. This is the leak that carries no content and still
     // breaks the guarantee: "we cover that" is an answer about a document the
     // record refuses to show.
-    const top = await runRead(pool, TENANT, async (c) =>
-      hybridSearch(c, sscope, queryVector, SECRET_BODY, 5),
+    const top = await runRead(
+      pool,
+      TENANT,
+      async (c) => hybridSearch(c, sscope, queryVector, SECRET_BODY, 5),
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
     );
     expect(JSON.stringify(top)).not.toContain(MARKER);
     if (score !== null) expect(typeof score).toBe("number");
