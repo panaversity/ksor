@@ -4,7 +4,6 @@ import { ExternalLink, Presentation } from "lucide-react";
 import { useState, type ReactElement } from "react";
 
 import { DeckViewer } from "@/components/deck-viewer";
-import { StudyAidHeader } from "@/components/study-aids";
 import { Button } from "@/components/ui/button";
 import type { SlidesEntry } from "@/lib/attachments";
 
@@ -38,10 +37,25 @@ export function Slides({ slides }: { slides: SlidesEntry }): ReactElement {
   const provider = slides.provider ?? slides.derivedProvider;
 
   return (
-    <section aria-label="Presentation">
-      <StudyAidHeader title={slides.title} description={slides.description} />
+    <section aria-label="Teaching aid" className="not-prose mt-8 mb-12">
+      {/* Its OWN heading, deliberately quieter than StudyAidHeader's. This
+          sits directly under the document title, where a full serif heading
+          with an accent bar would read as a second title and compete with the
+          record's own words. A mono eyebrow says what the block is; the deck's
+          name sits beneath it at body scale. */}
+      <header className="mb-5 border-b border-fd-border pb-3">
+        <p className="font-mono text-xs tracking-wide text-fd-muted-foreground uppercase">
+          Teaching aid
+        </p>
+        <h2 className="mt-1.5 font-(family-name:--font-display) text-lg font-semibold tracking-tight text-fd-foreground">
+          {slides.title}
+        </h2>
+        {slides.description === undefined ? null : (
+          <p className="mt-1 text-sm text-fd-muted-foreground">{slides.description}</p>
+        )}
+      </header>
 
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <div className="flex flex-col gap-4">
         {/* A deck the record owns needs no link and no permission: it IS the
             presentation. The linked mode below is for an adopter who already
             has one somewhere else. */}

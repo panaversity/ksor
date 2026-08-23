@@ -12,9 +12,11 @@ slides:
   title: Introducing the record
   description: The 15-minute version, for a room.
 deck:
-  - heading: What a Knowledge System of Record is
-    lead: The authoritative, governed knowledge layer humans, agents and software operate from.
-    note: Start here only long enough to get to the next slide — the definition lands better after the problem.
+  # The opening slide does NOT repeat the page title. It sits directly under
+  # it, so restating it wastes the one slide everyone actually looks at.
+  - heading: Which copy should an agent trust?
+    lead: That question is what this record exists to answer, and nothing in an ordinary assistant can.
+    note: Open with the question, not the definition. The definition lands after they feel the problem.
 
   - heading: The problem it solves
     bullets:

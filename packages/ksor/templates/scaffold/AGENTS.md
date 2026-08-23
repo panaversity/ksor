@@ -506,12 +506,15 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   refused.
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
-- **Study attachments.** A document may carry three optional companions named
+- **Study attachments.** A document may carry four optional companions named
   after it, in the same folder: `<doc>.summary.md` (a short précis),
-  `<doc>.flashcards.yaml` (a recall deck) and `<doc>.quiz.yaml` (a
-  multiple-choice check). The summary appears as a second tab beside the
-  document's own words; the deck and the quiz appear at the END of that
-  document's page. None of them appears anywhere else in the site.
+  `<doc>.slides.yaml` (a presentation), `<doc>.flashcards.yaml` (a recall deck)
+  and `<doc>.quiz.yaml` (a multiple-choice check). The summary appears as a
+  second tab beside the document's own words; the presentation appears at the
+  TOP of the page, before the document, because a deck is the shape of the
+  thing and gives the detail somewhere to land; the deck and the quiz appear at
+  the END, because those are used after reading. None of them appears anywhere
+  else in the site.
 
   An attachment is **part of its document**, not a document. It has no URL of
   its own, no sidebar row, no line in `llms.txt`, and no identity an agent can
@@ -595,6 +598,41 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   predecessor, where the same mistakes shipped and were found by readers — one
   quiz had every correct answer in the same position across 451 questions.
 
+  A **presentation** is slides the record owns. Ask your coding agent for one
+  rather than writing it by hand — `make slides for knowledge/<path>.md` runs
+  the `make-slides` skill, which reads the document, writes the deck, checks
+  every claim back against it, and tells you what it left out:
+
+  ```yaml
+  slides:
+    title: Expense approvals
+    description: The 15-minute version, for a room.
+  deck:
+    - heading: When two copies disagree, one wins
+      bullets:
+        - Two approvers above the threshold, always
+        - The threshold is per invoice, including tax
+      note: Spoken, never shown. Pause here — people remember this one wrong.
+  ```
+
+  `heading` is required and should be a claim rather than a label; `lead` is
+  one sentence for a single-point slide; `bullets` caps at six because a slide
+  someone reads aloud is a slide nobody listens to; `note` is what the
+  presenter SAYS and never appears on the slide, including in fullscreen.
+
+  The slides render in the page — no third party, no request to anyone, and
+  every slide is in the shipped HTML, so a reader without JavaScript still gets
+  the whole deck. Because they live in the record they are reviewed in the same
+  pull request as the document, versioned with it, and withdrawn with it.
+
+  **A deck you keep elsewhere** can be pointed at instead — `slides.url:` and
+  no `deck:`. The embed url is derived for Google Slides, Canva and SlideShare;
+  anything else needs an explicit `embed:` or renders as a link. The url must
+  be `https` (a browser blocks a mixed-content frame silently), and the frame
+  loads on CLICK, so nothing is requested from the host until a reader asks.
+  Declaring both `deck:` and `slides.url:` is refused — two presentations with
+  nothing to say which one governs.
+
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.
 
@@ -617,6 +655,8 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   write `instance.md` together.
 - `.agents/skills/add-sources/` — turn source material (documents, pages,
   notes) into governed knowledge.
+- `.agents/skills/make-slides/` — generate a presentation from one document
+  and attach it, so it renders on that document's page.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.
 

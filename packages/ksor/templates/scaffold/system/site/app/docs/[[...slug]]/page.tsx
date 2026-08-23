@@ -126,6 +126,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         {showGovernance ? (
           <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
         ) : null}
+        {/* BEFORE the document, not after it. The deck is the shape of the
+          thing — five minutes of slides gives the detail somewhere to land —
+          so it belongs where a reader meets it first, which is also where the
+          predecessor puts its own. The recall aids stay at the end, because
+          those are used AFTER reading. */}
+        {presentation === null ? null : <Slides slides={presentation} />}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to
           402px and pushed Sources and everything after it to the bottom of the
@@ -164,9 +170,6 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         {/* Recall first, then the check on it — and each renders only if the
             document carries one, so a page with just a quiz shows just a quiz. */}
         <StudyAids>
-          {/* Slides first: a deck gives the shape of the document, and the
-              recall aids come after it. */}
-          {presentation === null ? null : <Slides slides={presentation} />}
           {deck === null ? null : <Flashcards deck={deck} />}
           {quiz === null ? null : <Quiz quiz={quiz} />}
         </StudyAids>
