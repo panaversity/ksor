@@ -95,13 +95,15 @@ Each is separately observable on the built output:
   `role="tabpanel"`, `aria-selected`, `aria-controls`, roving `tabIndex`, and
   Left/Right/Home/End keys.
 - `C19` The tab state is in the URL fragment, so a summary is linkable.
-- `C19a` Each document shows how long it takes to read, **under its
-  description** rather than on the facts row. That row is what the record
-  DECLARES — every entry an author wrote and a reviewer checked — and this is
-  derived from the document's own words and declared by nobody. It therefore
+- `C19a` Each document shows how long it takes to read, in the strip
+  IMMEDIATELY ABOVE THE BODY — on the tabs where a summary gives it tabs, alone
+  in that strip where it does not. Not on the facts row: that row is what the
+  record DECLARES, every entry an author wrote and a reviewer checked, and this
+  is derived and declared by nobody. Not above the facts row either, where a
+  lone line floated between two things it belonged to neither of. The strip is
+  about the reading you are ABOUT to do, which is what this is. It therefore
   also survives `site.governance: false`, which removes the facts row
-  wholesale: a record that publishes no governance still takes three minutes to
-  read.
+  wholesale.
 
   Counted at BUILD time so the figure is in the shipped HTML — a reader with a
   failed bundle, a crawler and an agent all get it. Fenced code and frontmatter

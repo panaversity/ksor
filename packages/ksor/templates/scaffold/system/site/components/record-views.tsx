@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, ListTree } from "lucide-react";
+import { Clock, FileText, ListTree } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -145,7 +145,23 @@ export function RecordViews({
     [select, views],
   );
 
-  if (only) return <>{children}</>;
+  // No summary, so no tabs — but the strip row still carries the reading time.
+  // It sits here rather than up with the title because this row is about the
+  // reading you are ABOUT to do, and a lone line above the facts row read as
+  // floating between two things it belonged to neither of.
+  if (only) {
+    return (
+      <div className="ksor-views">
+        {documentMinutes === undefined ? null : (
+          <p className="mb-6 flex items-center gap-2 border-b border-fd-border pb-2.5 text-sm text-fd-muted-foreground">
+            <Clock aria-hidden className="size-3.5 shrink-0" />
+            <span>{documentMinutes} min read</span>
+          </p>
+        )}
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="ksor-views">
@@ -192,7 +208,7 @@ export function RecordViews({
                 a tab only if it is meaningfully shorter, and two numbers side
                 by side say so without a word of copy. */}
               {view.minutes === undefined ? null : (
-                <span className="text-fd-muted-foreground/70">{view.minutes}m</span>
+                <span className="text-fd-muted-foreground/70">{view.minutes} min</span>
               )}
             </button>
           );
