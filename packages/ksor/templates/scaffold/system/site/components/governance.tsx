@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react";
+import { Clock, FileText } from "lucide-react";
 import Link from "next/link";
 
 import { CopyMarkdown } from "@/components/copy-markdown";
@@ -146,10 +146,17 @@ export function GovernanceMeta({
         </Fact>
       )}
       {readingMinutes === undefined ? null : (
-        // "About", because it is an estimate from a word count and saying so
-        // costs one word. A figure presented as exact invites the reader to
-        // notice it is not.
-        <Fact label="Read">{`about ${readingMinutes} min`}</Fact>
+        // A clock instead of a "READ" label: the icon says what the number is
+        // faster than a word does, and the other facts on this row are things
+        // the record DECLARES — a mono label beside them implied this was one
+        // too. "About", because it is an estimate from a word count, and a
+        // figure presented as exact invites the reader to notice it is not.
+        <span className="flex items-center gap-2" title={`About ${readingMinutes} minutes to read`}>
+          <Clock aria-hidden className="size-3.5 shrink-0 text-fd-muted-foreground" />
+          <span className="font-mono text-[0.8125rem] font-medium text-fd-foreground">
+            about {readingMinutes} min
+          </span>
+        </span>
       )}
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
       {replaces.length === 0 ? null : (
