@@ -9,11 +9,12 @@ status: draft
 posture, and it means the last step of a deployment is standing up an
 authorization server and pointing the door at it.
 
-This page is two worked recipes, both executed against real servers rather than
+This page is three worked recipes, all executed against real servers rather than
 written from their documentation, plus what an agent does to obtain a token. The
-mechanism is standard OAuth 2.0 — nothing here is specific to either product, and
-that is the point: two different implementations are shown because a single one
-proves nothing about neutrality.
+mechanism is standard OAuth 2.0 — nothing here is specific to any one product,
+and that is the point: three different implementations are shown because a
+single one proves nothing about neutrality. Two are self-hosted (one `docker
+run` each, no account); the third is a hosted provider with a free tier.
 
 ## What the door needs
 
@@ -139,6 +140,107 @@ export KSOR_SSO_ISSUER=http://127.0.0.1:4444
 Hydra publishes its keys at `/.well-known/jwks.json` rather than Keycloak's
 `/protocol/openid-connect/certs`. Nothing in ksor knows that; discovery reads it
 from the metadata document, which is why the door works against both unmodified.
+
+## Recipe: Auth0
+
+A hosted provider with a free tier, and the one whose vocabulary causes the most
+trouble — so this recipe is written around the confusions rather than around the
+happy path. Every step below is one that was got wrong first, on a real tenant.
+
+**Auth0's "API" is your ksor door. Auth0's "Application" is whoever calls it.**
+Nothing else in this recipe makes sense until that lands. You are not building
+an API; you are describing the one you already have so Auth0 can mint tokens
+aimed at it.
+
+### 1. Describe the door
+
+**Applications → APIs → Create API.** The **Identifier** you type becomes the
+audience — use your record's MCP URL. It is a name, not a fetch target; it never
+has to resolve.
+
+```
+Name:       my-record
+Identifier: https://your-host.example.com/mcp
+```
+
+Creating it also creates a machine-to-machine **test application** named
+`<API> (Test Application)`. That is your first caller — you do not need to make
+one.
+
+### 2. Point the door at the tenant
+
+```sh
+KSOR_SSO_URL=https://YOUR_TENANT.us.auth0.com
+KSOR_SSO_ISSUER=https://YOUR_TENANT.us.auth0.com/
+KSOR_MCP_RESOURCE_URL=https://your-host.example.com/mcp
+KSOR_JWT_ALLOWED_AUDIENCES=https://your-host.example.com/mcp
+```
+
+**Mind the trailing slash on the issuer.** Auth0's `iss` carries one and
+`KSOR_SSO_URL` does not; they are deliberately different strings. Copy `iss`
+out of a real token rather than typing it.
+
+**Delete any `KSOR_AUTH`.** Configuring the SSO door is what turns auth on;
+leaving a disabled posture set keeps it off no matter what else is configured.
+
+### 3. A scripted caller (machine-to-machine)
+
+The test application already works. Its credentials live under
+**Applications → Applications → `<API> (Test Application)` → Settings**.
+
+```sh
+curl -s -X POST https://YOUR_TENANT.us.auth0.com/oauth/token \
+  -H 'content-type: application/json' \
+  -d '{"grant_type":"client_credentials","client_id":"…","client_secret":"…",
+       "audience":"https://your-host.example.com/mcp"}'
+```
+
+### 4. An interactive caller (a person, through a browser)
+
+An assistant that logs a human in needs a **different application**, because a
+machine-to-machine application has no browser and no redirect — filling in its
+callback field changes nothing.
+
+**Applications → Create Application → Regular Web Application**, then on it:
+
+- **Allowed Callback URLs**: the client's callback. For Claude's hosted
+  surfaces that is `https://claude.ai/api/mcp/auth_callback`.
+- **Save Changes** — the button is at the very bottom and nothing autosaves.
+
+### 5. Authorize the caller for the door — the step that hides
+
+A new application is not allowed to request your API. Auth0 refuses with:
+
+```
+Client "…" is not authorized to access resource server "https://your-host.example.com/mcp"
+```
+
+The fix is on the **API**, not the application, and **it is not a toggle**:
+
+**APIs → your API → Application Access → find the application → `Edit` →
+`Grant Access`.**
+
+The greyed pills in that table are progress bars. The control is inside the side
+panel the `Edit` button opens, and `Grant ID: No per-app authorization grant`
+underneath confirms whether one exists.
+
+Pick the right column:
+
+| column                    | grant                | used by                                   |
+| ------------------------- | -------------------- | ----------------------------------------- |
+| **User-delegated Access** | `authorization_code` | an assistant acting as a signed-in person |
+| **Client Access**         | `client_credentials` | a script, worker or backend agent         |
+
+An application needs only the one it uses. Granting also ticks **"Always grant
+all permissions"**, which matters only if you later add scopes to this API —
+ksor checks issuer and audience, never scopes.
+
+### What Auth0 gets right
+
+It honours RFC 8707. An MCP client sending
+`resource=https://your-host.example.com/mcp` gets a token audienced there, with
+no `audience=` parameter and no mapper — which is why the authorization request
+works unmodified once the grant exists.
 
 ## What an agent does
 
