@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { DocumentActions } from "@/components/document-actions";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 
 import {
   caveatStatus,
@@ -113,28 +113,17 @@ export function GovernanceMeta({
   governance,
   replaces = [],
   markdownUrl,
-  teaching,
 }: {
   governance: DocumentGovernance;
   /** Documents this one replaced — derived from the record, never declared. */
   replaces?: readonly Successor[];
   /** The document's markdown twin, offered beside its governance. */
   markdownUrl?: string;
-  /**
-   * The teaching-guide control, when the document carries a guide.
-   *
-   * Passed in as a NODE rather than looked up here, so this component keeps
-   * knowing nothing about collections — it renders what it is handed.
-   */
-  teaching?: ReactNode;
 }): ReactElement | null {
   const { owner, effective } = governance;
   const status = caveatStatus(governance.status);
   const bare = status === null && owner === null && effective === null && replaces.length === 0;
-  // The row also exists to carry the actions. A document with governance
-  // turned off but a teaching guide present still needs somewhere to put the
-  // control, so the guide counts toward "is there anything to show".
-  if (bare && markdownUrl === undefined && teaching === undefined) return null;
+  if (bare && markdownUrl === undefined) return null;
 
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
@@ -206,8 +195,7 @@ export function GovernanceMeta({
         // longer empty space but a line the eye already follows. The two form
         // a right-hand column of things you DO, against a left-hand row of
         // things the record DECLARES.
-        <span className="ms-auto flex items-center gap-1">
-          {teaching}
+        <span className="ms-auto">
           <DocumentActions href={markdownUrl} />
         </span>
       )}

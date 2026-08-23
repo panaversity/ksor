@@ -89,29 +89,6 @@ describe("a quiz is an attachment of its document, on the same rule as the deck"
   });
 });
 
-describe("a teaching guide is an attachment, on the same rule as the rest", () => {
-  it("recognises .teaching.yaml", () => {
-    expect(attachmentKindOf("returns.teaching.yaml")).toBe("teaching");
-    expect(isAttachment("returns.teaching.yaml")).toBe(true);
-    expect(parentDocumentOf("returns.teaching.yaml")).toBe("returns.md");
-  });
-
-  it("a dotfile with no stem attaches to nothing", () => {
-    expect(attachmentKindOf(".teaching.yaml")).toBeNull();
-  });
-
-  it("a document merely named teaching.yaml is not one", () => {
-    expect(attachmentKindOf("teaching.yaml")).toBeNull();
-  });
-
-  it(".teaching.yml is a NAMED near miss", () => {
-    expect(nearMissOf("returns.teaching.yml")).toEqual({
-      is: ".teaching.yml",
-      want: ".teaching.yaml",
-    });
-  });
-});
-
 describe("a slide deck is an attachment, on the same rule as the rest", () => {
   it("recognises .slides.yaml", () => {
     expect(attachmentKindOf("returns.slides.yaml")).toBe("slides");

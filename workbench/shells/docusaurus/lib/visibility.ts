@@ -238,7 +238,6 @@ const ATTACHMENT_SUFFIXES = [
   ".summary.mdx",
   ".flashcards.yaml",
   ".quiz.yaml",
-  ".teaching.yaml",
   ".slides.yaml",
 ];
 

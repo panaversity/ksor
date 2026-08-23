@@ -4,7 +4,6 @@ import { z } from "zod";
 import { DeckSchema } from "./lib/deck";
 import { QuizSchema } from "./lib/quiz";
 import { SlidesSchema } from "./lib/slides";
-import { TeachingSchema } from "./lib/teaching";
 import { knowledgeSourceDir } from "./lib/stage-knowledge";
 
 // The record lives at <repo>/knowledge — two levels up from this site.
@@ -103,18 +102,6 @@ export const quizzes = defineCollections({
   dir: knowledgeSourceDir(),
   files: ["**/*.quiz.yaml"],
   schema: QuizSchema,
-});
-
-/**
- * Teaching guides — for whoever explains a document to someone else, which is
- * a different audience from every other attachment here. Same loader, same
- * reason for `.yaml`.
- */
-export const teachings = defineCollections({
-  type: "meta",
-  dir: knowledgeSourceDir(),
-  files: ["**/*.teaching.yaml"],
-  schema: TeachingSchema,
 });
 
 /** The presentation that teaches a document — see components/slides.tsx. */

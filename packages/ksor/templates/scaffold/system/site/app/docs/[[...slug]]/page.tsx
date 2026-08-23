@@ -19,9 +19,8 @@ import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
 import { Quiz } from "@/components/quiz";
 import { Slides } from "@/components/slides";
-import { TeachingGuide } from "@/components/teaching-guide";
 import { StudyAids } from "@/components/study-aids";
-import { deckFor, quizFor, slidesFor, summaryFor, teachingFor } from "@/lib/attachments";
+import { deckFor, quizFor, slidesFor, summaryFor } from "@/lib/attachments";
 import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -36,7 +35,6 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const Summary = summary?.body ?? null;
   const deck = deckFor(page.path);
   const quiz = quizFor(page.path);
-  const teaching = teachingFor(page.path);
   const presentation = slidesFor(page.path);
   // Counted at BUILD time from the document's own markdown, so the figure is in
   // the shipped HTML for a reader with a failed bundle, a crawler and an agent
@@ -126,12 +124,7 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         <DocsTitle>{page.data.title}</DocsTitle>
         <DocsDescription>{page.data.description}</DocsDescription>
         {showGovernance ? (
-          <GovernanceMeta
-            governance={governance}
-            replaces={replaces}
-            markdownUrl={markdownUrl}
-            teaching={teaching === null ? undefined : <TeachingGuide guide={teaching} />}
-          />
+          <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
         ) : null}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to

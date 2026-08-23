@@ -56,10 +56,6 @@ Two habits worth keeping:
 - **Name the boundary.** Slide 11 is the one people remember, because it is the
   one that tells them when to go and ask.
 
-If the document already carries a `<doc>.teaching.yaml`, read it first: its
-`key_points` and `misconceptions` are the outline's spine, already written and
-already reviewed.
-
 ## 3 · Build the deck
 
 Any tool that produces a shareable https link works — the record does not care

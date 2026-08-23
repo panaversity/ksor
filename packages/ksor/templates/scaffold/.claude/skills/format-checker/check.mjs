@@ -46,7 +46,6 @@ const ATTACHMENT_SUFFIXES = [
   ".summary.mdx",
   ".flashcards.yaml",
   ".quiz.yaml",
-  ".teaching.yaml",
   ".slides.yaml",
 ];
 // One character off a real attachment, refused BY NAME: `.yml` reaches the
@@ -58,8 +57,6 @@ const ATTACHMENT_NEAR_MISSES = [
   [".summary.markdown", ".summary.md"],
   [".quiz.yml", ".quiz.yaml"],
   [".quiz.json", ".quiz.yaml"],
-  [".teaching.yml", ".teaching.yaml"],
-  [".teaching.json", ".teaching.yaml"],
   [".slides.yml", ".slides.yaml"],
   [".slides.json", ".slides.yaml"],
 ];
