@@ -274,6 +274,44 @@ html > body[data-scroll-locked] {
   --ksor-caution: #e0906e;
 }
 
+/* Code tabs — one instruction per tool, in the record's own voice.
+
+   Two fixes over the shipped default. The container is painted `--card`,
+   which is WHITE in the light theme, so the "surface" was invisible against
+   the page and the strip read as text floating above a code block — the same
+   trap that made fenced code look like loose monospace until `.prose
+figure.shiki` was given `--muted`. And the labels were sans at body size,
+   where every other machine-facing string on this site is mono: a tool name
+   IS machine-facing, and putting it in the same voice as the prose made the
+   choice look like a sentence rather than a control.
+
+   Scoped by `data-orientation`, which fumadocs puts on the tabs root and the
+   document's own Document/Summary strip does not have — without that scope
+   this would restyle the view tabs too. */
+.prose [data-orientation]:has(> [role="tablist"]) {
+  background-color: var(--muted);
+}
+
+.prose [data-orientation] > [role="tablist"] {
+  border-bottom: 1px solid var(--border);
+  gap: 0.125rem;
+}
+
+.prose [data-orientation] > [role="tablist"] > [role="tab"] {
+  font-family: var(--font-display-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+  /* Rides the strip's own hairline rather than sitting above it, so the
+     active marker and the separator are one line, not two. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.prose [data-orientation] > [role="tablist"] > [role="tab"][data-state="active"] {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
 /* The slide STAGE.
 
    A slide is a projected surface, and reading as one at a glance is most of
