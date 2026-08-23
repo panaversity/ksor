@@ -19,6 +19,7 @@ import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
 import { StudyAids } from "@/components/study-aids";
 import { deckFor, summaryFor } from "@/lib/attachments";
+import { ReadingTime } from "@/components/reading-time";
 import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -119,13 +120,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         {successor === null ? null : <SupersededNotice successor={successor} />}
         <DocsTitle>{page.data.title}</DocsTitle>
         <DocsDescription>{page.data.description}</DocsDescription>
+        {/* With the description, not with the governance: this is derived from
+          the document's own words, and the facts row is what the record
+          declares. It therefore also survives `site.governance: false`. */}
+        <ReadingTime minutes={minutes} />
         {showGovernance ? (
-          <GovernanceMeta
-            governance={governance}
-            replaces={replaces}
-            markdownUrl={markdownUrl}
-            readingMinutes={minutes}
-          />
+          <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
         ) : null}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to

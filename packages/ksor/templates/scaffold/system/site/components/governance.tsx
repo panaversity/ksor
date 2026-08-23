@@ -1,4 +1,4 @@
-import { Clock, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import Link from "next/link";
 
 import { CopyMarkdown } from "@/components/copy-markdown";
@@ -114,25 +114,17 @@ export function GovernanceMeta({
   governance,
   replaces = [],
   markdownUrl,
-  readingMinutes,
 }: {
   governance: DocumentGovernance;
   /** Documents this one replaced — derived from the record, never declared. */
   replaces?: readonly Successor[];
   /** The document's markdown twin, offered beside its governance. */
   markdownUrl?: string;
-  /**
-   * About how long the document takes to read, counted at build time from its
-   * own markdown. Not governance — the record does not declare it — but it
-   * belongs on this row because this row is what the page says ABOUT the
-   * document, and a reader deciding whether to start wants it here.
-   */
-  readingMinutes?: number;
 }): ReactElement | null {
   const { owner, effective } = governance;
   const status = caveatStatus(governance.status);
   const bare = status === null && owner === null && effective === null && replaces.length === 0;
-  if (bare && markdownUrl === undefined && readingMinutes === undefined) return null;
+  if (bare && markdownUrl === undefined) return null;
 
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
@@ -144,22 +136,6 @@ export function GovernanceMeta({
             {status}
           </span>
         </Fact>
-      )}
-      {readingMinutes === undefined ? null : (
-        // A clock instead of a "READ" label: the icon says what the number is
-        // faster than a word does, and the other facts on this row are things
-        // the record DECLARES — a mono label beside them implied this was one
-        // too. The clock is also what carries "roughly": nobody reads a time
-        // beside a clock icon as a promise, so the hedge does not need saying.
-        <span
-          className="flex items-center gap-2"
-          title={`${readingMinutes} minute${readingMinutes === 1 ? "" : "s"} to read`}
-        >
-          <Clock aria-hidden className="size-3.5 shrink-0 text-fd-muted-foreground" />
-          <span className="font-mono text-[0.8125rem] font-medium text-fd-foreground">
-            {readingMinutes} min
-          </span>
-        </span>
       )}
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
       {replaces.length === 0 ? null : (

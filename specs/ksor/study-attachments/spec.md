@@ -95,12 +95,20 @@ Each is separately observable on the built output:
   `role="tabpanel"`, `aria-selected`, `aria-controls`, roving `tabIndex`, and
   Left/Right/Home/End keys.
 - `C19` The tab state is in the URL fragment, so a summary is linkable.
-- `C19a` Each document shows a clock and how long it takes to read, counted at BUILD
-  time from its own markdown so the figure is in the shipped HTML — a reader
-  with a failed bundle, a crawler and an agent all get it. Fenced code and
-  frontmatter are excluded: a short page with a long code block is not a
-  twenty-minute read. Where a summary exists, each tab carries its own figure,
-  which is what makes the summary's value legible without a word of copy.
+- `C19a` Each document shows how long it takes to read, **under its
+  description** rather than on the facts row. That row is what the record
+  DECLARES — every entry an author wrote and a reviewer checked — and this is
+  derived from the document's own words and declared by nobody. It therefore
+  also survives `site.governance: false`, which removes the facts row
+  wholesale: a record that publishes no governance still takes three minutes to
+  read.
+
+  Counted at BUILD time so the figure is in the shipped HTML — a reader with a
+  failed bundle, a crawler and an agent all get it. Fenced code and frontmatter
+  are excluded: a short page with a long code block is not a twenty-minute
+  read. Where a summary exists, each tab carries its own figure, which is what
+  makes the summary's value legible without a word of copy.
+
 - `C20` **The inactive panel is present in the server-rendered HTML**, not
   mounted on click — an agent parsing the page and a reader with JavaScript
   off both get both texts.

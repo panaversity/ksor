@@ -406,7 +406,7 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
   are available. No other keys; never
   `id:` or `name:` — the path is the identity.
-- **Each page says how long it takes to read**, counted from the
+- **Each page says how long it takes to read**, under its description, counted from the
   document's own words when the site is built. Fenced code and frontmatter do
   not count toward it, so a short page carrying a long example is not reported
   as a long read. Nothing to author — it is derived. A document with a summary
