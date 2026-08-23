@@ -3,6 +3,8 @@
 import {
   Check,
   ChevronLeft,
+  ClipboardCheck,
+  Copy,
   ChevronRight,
   Download,
   Info,
@@ -14,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 
 import { StudyAidHeader } from "@/components/study-aids";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { DeckCard, DeckEntry } from "@/lib/attachments";
 import { SCHEDULER_POLICY, dueOrder, newCard, schedule, type CardSchedule } from "@/lib/srs";
@@ -118,6 +120,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
   const [reviewAll, setReviewAll] = useState(false);
   const [shuffled, setShuffled] = useState<readonly string[] | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,6 +189,20 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
     },
     [card],
   );
+
+  /** Both sides of the card, for pasting somewhere the reader is working. */
+  const copyCard = useCallback((c: DeckCard) => {
+    void navigator.clipboard
+      ?.writeText(`${c.front}\n\n${c.back}`)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1600);
+      })
+      .catch(() => {
+        // A clipboard the browser refuses is not worth an error where a deck
+        // should be; the card is on screen either way.
+      });
+  }, []);
 
   const move = useCallback(
     (delta: number) => {
@@ -297,7 +314,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
         <>
           {/* The movement controls sit OUTSIDE the card: the whole card is the
             flip target, and a chevron inside it would compete for the click. */}
-          <div className="relative flex items-stretch justify-center gap-1 sm:gap-2">
+          <div className="relative flex items-stretch justify-center gap-4 sm:gap-6">
             <StepButton
               onClick={() => move(-1)}
               disabled={index === 0}
@@ -321,24 +338,6 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               className="relative w-full max-w-2xl"
               style={{ perspective: "3200px", perspectiveOrigin: "50% 50%" }}
             >
-              {/* The rest of the deck, showing under the top card. Only while
-                there IS a rest of the deck: a stack drawn under the last card
-                would be telling the reader there is more to come. */}
-              {total - index > 1 ? (
-                <>
-                  <Card
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] py-0"
-                  />
-                  {total - index > 2 ? (
-                    <Card
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] py-0 opacity-70"
-                    />
-                  ) : null}
-                </>
-              ) : null}
-
               <button
                 type="button"
                 onClick={() => setRevealed((r) => !r)}
@@ -355,33 +354,20 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               >
                 <CardFace
                   hidden={revealed}
-                  label="QUESTION"
-                  tab={`${position + 1} / ${total}`}
-                  slug={card.hash}
+                  text={card.front}
+                  why={card.why}
                   hint="Click to flip"
-                >
-                  <span className="font-(family-name:--font-display) mx-auto block max-w-[34rem] text-balance text-xl leading-[1.3] text-fd-foreground sm:text-[1.75rem]">
-                    {card.front}
-                  </span>
-                  {card.why === undefined ? null : (
-                    <span className="mt-5 block max-w-md text-sm italic text-fd-muted-foreground">
-                      {card.why}
-                    </span>
-                  )}
-                </CardFace>
-
+                  onCopy={() => copyCard(card)}
+                  copied={copied}
+                />
                 <CardFace
                   back
                   hidden={!revealed}
-                  label="ANSWER"
-                  tab={`${position + 1} / ${total}`}
-                  slug={card.hash}
+                  text={card.back}
                   hint="Click to flip back"
-                >
-                  <span className="font-(family-name:--font-display) mx-auto block max-w-[34rem] text-balance text-xl leading-[1.3] text-fd-foreground sm:text-[1.75rem]">
-                    {card.back}
-                  </span>
-                </CardFace>
+                  onCopy={() => copyCard(card)}
+                  copied={copied}
+                />
               </button>
             </div>
 
@@ -422,36 +408,15 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
             ) : null}
           </div>
 
-          {/* One tick per card, because that is what the deck IS — a countable
-            set you are working through, not a percentage. Past a point the
-            ticks stop being countable and a bar says the same thing better. */}
-          <div
-            role="progressbar"
-            aria-valuenow={position + 1}
-            aria-valuemin={1}
-            aria-valuemax={total}
-            aria-label={`Card ${position + 1} of ${total}`}
-            className="mx-auto mt-7 flex max-w-2xl gap-1.5"
-          >
-            {total <= 24 ? (
-              deck.cards
-                .slice(0, total)
-                .map((_, i) => (
-                  <span
-                    key={i}
-                    className={[
-                      "h-1 flex-1 rounded-full transition-colors",
-                      i < position
-                        ? "bg-fd-primary/40"
-                        : i === position
-                          ? "bg-fd-primary"
-                          : "bg-fd-border",
-                    ].join(" ")}
-                  />
-                ))
-            ) : (
-              <Progress value={progress} className="h-1" />
-            )}
+          <div className="mx-auto mt-8 flex max-w-2xl items-center gap-5">
+            <Progress
+              value={progress}
+              aria-label={`Card ${position + 1} of ${total}`}
+              className="h-1.5"
+            />
+            <span className="shrink-0 text-sm text-muted-foreground">
+              {position + 1} / {total} cards
+            </span>
           </div>
         </>
       )}
@@ -499,16 +464,12 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
 }
 
 /**
- * One side of a catalogue card, built on shadcn's `Card`.
+ * One side of the card.
  *
- * The record's world already has this object: a card filed in a drawer, with a
- * tab you read the position off and a number in the corner. `Card` gives the
- * surface, the radius and the shadow from the same tokens every other surface
- * in this site uses; the tab and the number are what make it a FILED card.
- *
- * The number is not decoration. A card's identity here IS the hash of its own
- * text (lib/deck.ts), which is what lets an edited card reset alone while its
- * neighbours keep their history. The card is showing its own filing.
+ * Built to the reference the owner supplied: a tall, quiet card carrying the
+ * question in the interface's own sans, a copy action in the top-left corner,
+ * and the flip hint centred at the foot. Nothing else on the face — the tab and
+ * the catalogue number an earlier pass added were mine, not the brief's.
  *
  * The front sits in flow and therefore SETS the height; the back is absolutely
  * positioned over it, pre-rotated so it reads the right way round once the card
@@ -518,26 +479,26 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
 function CardFace({
   back = false,
   hidden,
-  label,
-  tab,
-  slug,
+  text,
+  why,
   hint,
-  children,
+  onCopy,
+  copied,
 }: {
   readonly back?: boolean;
   readonly hidden: boolean;
-  readonly label: string;
-  readonly tab: string;
-  readonly slug: string;
+  readonly text: string;
+  readonly why?: string | undefined;
   readonly hint: string;
-  readonly children: React.ReactNode;
+  readonly onCopy: () => void;
+  readonly copied: boolean;
 }): ReactElement {
   return (
     <Card
       aria-hidden={hidden}
       className={[
-        "min-h-[22rem] gap-0 py-0 transition-shadow",
-        "group-hover:shadow-md",
+        "min-h-[30rem] gap-0 rounded-lg py-0 shadow-none",
+        "transition-colors group-hover:border-fd-primary/40",
         "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
         back ? "absolute inset-0" : "relative",
       ].join(" ")}
@@ -547,26 +508,38 @@ function CardFace({
         ...(back ? { transform: "rotateY(180deg)" } : {}),
       }}
     >
-      {/* The tab you would grip to pull the card out of the drawer, protruding
-        above the top edge. It carries the position AND the side, because two
-        labels at the top were two things telling the reader where they are.
-        The inner span paints over the card's top border across the tab's width,
-        so the tab reads as part of the card rather than sitting on it. */}
-      <span className="absolute -top-[1.6rem] left-8 flex items-center gap-2 rounded-t-sm border border-b-0 bg-card px-3 py-1 font-mono text-[10px] tracking-[0.12em] text-muted-foreground">
-        {tab}
-        <span className="text-muted-foreground/50">·</span>
-        {label}
-        <span aria-hidden className="absolute inset-x-px -bottom-px h-px bg-card" />
+      {/* Nested inside the card's own button, so it stops the click that would
+        otherwise flip the card out from under the reader. */}
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={copied ? "Copied" : "Copy this card"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onCopy();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.stopPropagation();
+            event.preventDefault();
+            onCopy();
+          }
+        }}
+        className="absolute left-5 top-5 rounded p-1 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
+      >
+        {copied ? <ClipboardCheck className="size-4" /> : <Copy className="size-4" />}
       </span>
 
-      <CardContent className="flex flex-1 flex-col items-center justify-center px-6 py-14 text-center sm:px-10">
-        {children}
+      <CardContent className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center sm:px-14">
+        <span className="mx-auto block max-w-[34rem] text-balance text-xl leading-[1.45] text-foreground sm:text-[1.6rem]">
+          {text}
+        </span>
+        {why === undefined ? null : (
+          <span className="mt-8 block max-w-md text-sm text-muted-foreground">{why}</span>
+        )}
       </CardContent>
 
-      <CardFooter className="absolute inset-x-0 bottom-4 items-baseline justify-between px-6 sm:px-8">
-        <span className="font-mono text-[10px] text-muted-foreground/70">{slug}</span>
-        <span className="text-sm text-muted-foreground">{hint}</span>
-      </CardFooter>
+      <span className="absolute inset-x-0 bottom-8 text-base text-muted-foreground">{hint}</span>
     </Card>
   );
 }
@@ -595,12 +568,11 @@ function StepButton({
   return (
     <Button
       type="button"
-      variant="ghost"
-      size="icon-lg"
+      variant="outline"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={`my-auto shrink-0 rounded-full text-muted-foreground disabled:opacity-20 ${className}`}
+      className={`my-auto h-20 w-12 shrink-0 rounded-md text-muted-foreground disabled:opacity-30 ${className}`}
     >
       {children}
     </Button>
