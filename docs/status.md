@@ -2,11 +2,11 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-22.
+updated: 2026-08-23.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.18** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.22** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -16,10 +16,13 @@ unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
 
-Verified end to end against each published version (most recently 0.0.18,
-2026-08-22: fresh `npm install` into a bare project, driven by the real
-`@modelcontextprotocol/client` SDK over live Postgres 17.7 + pgvector 0.8.2
-with real Gemini embeddings). What that walk covers: install · `schema` ·
+Verified end to end against each published version. The full KERNEL walk was
+last run against **0.0.18** (2026-08-22: fresh `npm install` into a bare
+project, driven by the real `@modelcontextprotocol/client` SDK over live
+Postgres 17.7 + pgvector 0.8.2 with real Gemini embeddings) and has not been
+re-run since — 0.0.19 through 0.0.22 changed the site surface, not the kernel,
+and this page says which walk covered what rather than letting a version bump
+re-attribute one. What that walk covers: install · `schema` ·
 `grant` · first `ingest` builds and flips · a **second ingest consumes nothing**
 ("unchanged — generation N already serves this corpus") · the shrink guard
 refusing a catastrophic deletion · `serve` boots and prints its posture · three
@@ -27,6 +30,32 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### What a concurrent build found (0.0.22)
+
+Walked from the registry on 2026-08-23: `npm install @panaversity/ksor@0.0.22`
+into a bare project, `ksor init`, `pnpm install`, then six real `next build`s.
+The out-of-the-box (level-0) build renders the shipped record; three consecutive
+internal builds each stage all 66 documents and leave no lock behind; and an
+internal/public pair stages 66 against 65 — exactly the one restricted document
+— with no trace of its body or title anywhere in the public output, against a
+240-page positive control that proves the sweep was not blind.
+
+That pair is the guarantee; the count is what was broken. A site build evaluates
+`source.config.ts` in **seven** processes, and staging was destructive on every
+one of them — delete the whole per-audience stage, refill it — so seven
+processes deleted trees the others were copying into. Six concurrent evaluations
+of a 150-document record failed **42 of 48 runs**: `ENOENT` and `EINVAL` out of
+`copyFileSync`, `ENOTEMPTY` out of `rmSync` despite the retries added for it,
+and — 27 of the 48, the majority — no error at all, staging returning SUCCESS
+with a third of the record missing.
+
+The silent shape is the one that shipped. A crash fails a build; a short stage
+PUBLISHES one, with documents missing from `/docs`, `llms.txt` and the search
+index and nothing anywhere saying so. Staging now takes a pid-stamped lock (so a
+killed build's lock is broken rather than waited on) and skips the rebuild
+entirely when the stage already holds exactly its plan, byte for byte — so the
+destructive path runs once per build, alone (issue #100).
 
 ### What attacking the door found (0.0.18)
 
