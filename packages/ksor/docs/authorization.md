@@ -16,22 +16,64 @@ and that is the point: three different implementations are shown because a
 single one proves nothing about neutrality. Two are self-hosted (one `docker
 run` each, no account); the third is a hosted provider with a free tier.
 
+## What this protects — and what it does not
+
+Read this before spending an afternoon on a provider's console.
+
+**It protects the MCP door, not the website.** Everything on this page is a
+bearer token on `POST /mcp`. Your static site is a separate surface, served by
+whatever hosts it, and configuring auth here leaves it exactly as public as it
+was. If people must not read the record at all, the site needs its own access
+control — or must not be published.
+
+**It is one gate, not per-user rules.** The door checks that a token was signed
+by the issuer you named and audienced at this record. It reads no scopes, no
+roles, no groups. **Any caller holding a valid token gets the whole record**, to
+the extent the audience tier allows. If different readers must see different
+documents, that is the record's `audiences:` / `visibility:` model, and it is a
+different mechanism from this page — see the scaffold's AGENTS.md.
+
+So: this page answers _"can a stranger read my record over MCP?"_ It does not
+answer _"can Alice read what Bob can."_
+
 ## What the door needs
 
-Three variables, and one more you should set even though it is optional:
+Four variables turn auth on. Two more matter on any public deployment, and are
+listed here rather than at the bottom because you will hit them during setup,
+not after it.
 
-| variable                     | what it is                                                                    | where the value comes from                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `KSOR_SSO_URL`               | your authorization server's base URL                                          | the AS itself; for OIDC it is the issuer, the URL whose `/.well-known/openid-configuration` answers |
-| `KSOR_MCP_RESOURCE_URL`      | **this record's** canonical URL — the identifier a token must be audienced at | you choose it; it is the public URL agents reach the door on                                        |
-| `KSOR_JWT_ALLOWED_AUDIENCES` | which audiences are accepted, comma-separated                                 | normally exactly `KSOR_MCP_RESOURCE_URL`                                                            |
-| `KSOR_SSO_ISSUER`            | the issuer to enforce                                                         | the `issuer` field of the AS's discovery document                                                   |
+| variable                     | what it is                                                                    | where the value comes from                                       |
+| ---------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `KSOR_SSO_URL`               | your authorization server's base URL, used to FIND its metadata document      | the AS itself                                                    |
+| `KSOR_MCP_RESOURCE_URL`      | **this record's** canonical URL — the identifier a token must be audienced at | you choose it; it is the public URL agents reach the door on     |
+| `KSOR_JWT_ALLOWED_AUDIENCES` | which audiences are accepted, comma-separated                                 | normally exactly `KSOR_MCP_RESOURCE_URL`                         |
+| `KSOR_SSO_ISSUER`            | the issuer to enforce                                                         | the `iss` claim of a real token — see below                      |
+| `KSOR_ALLOWED_HOSTS`         | Host header allow-list, comma-separated `host:port` (bare host on 80/443)     | the hostname you serve on                                        |
+| `KSOR_SNAPSHOT_KEYS`         | `kid=secret[,kid2=secret2]`, first active; identical on every replica         | `openssl rand -hex 32` — used as literal text, never hex-decoded |
 
-`KSOR_MCP_RESOURCE_URL` is **not** a place the door fetches anything from. It is
-the name of this resource, in the RFC 8707 sense: a token minted for a different
-resource is refused even when the signature is perfect and the issuer is right.
-That is what stops a token issued for some other service being replayed at your
-record.
+**First, delete `KSOR_AUTH` if it is set.** It is the _auth-off_ posture —
+`disabled-local` for a loopback dev run, `disabled-public` to serve the record
+to anyone who can reach the port — and it wins over everything below. A scaffold
+ships with `KSOR_AUTH=disabled-local` in its `.env.example`, so a deployment
+that copied that file has it set and will stay unauthenticated no matter how
+carefully you configure the four variables above. Configuring the SSO door is
+what turns auth **on**; removing `KSOR_AUTH` is what stops it being off.
+
+Every variable here is read from the environment of the `ksor serve` process —
+your host's environment panel, or a `.env` beside `instance.md`. **Changing any
+of them requires restarting the door**; nothing is re-read at runtime.
+
+`KSOR_MCP_RESOURCE_URL` is this record's **name**, in the RFC 8707 sense: a
+token minted for a different resource is refused even when the signature is
+perfect and the issuer is right. That is what stops a token issued for some
+other service being replayed at your record.
+
+**Use the real URL agents reach the door on.** Your authorization server never
+fetches it — but a CLIENT does. An unauthorized request answers `401` with
+`www-authenticate: Bearer resource_metadata="…"`, and the client follows that to
+a document the door serves at its own host. Invent a value that does not resolve
+and the boot report will still look green while every standards-following client
+fails to discover where to authenticate.
 
 The door finds the signing keys by discovery, in this order, and says at boot
 which one it used:
@@ -42,6 +84,12 @@ which one it used:
 3. /.well-known/openid-configuration         OIDC discovery
 4. <KSOR_SSO_URL>/api/auth/jwks              a vendor default, reported as a GUESS
 ```
+
+**`KSOR_SSO_URL` and `KSOR_SSO_ISSUER` are different strings, and often differ
+by a trailing slash.** The first is a base that paths are joined onto; the
+second is compared **byte-exact** against the token's `iss` claim. Setting both
+to the same value is the commonest cause of a 401 on a perfectly good token.
+Mint one token, decode it, and copy `iss` out of it verbatim.
 
 **Set `KSOR_SSO_ISSUER`.** Without it, a token from a _different_ authorization
 server produces an unknown key id, which is indistinguishable from key-rotation
@@ -221,7 +269,11 @@ leaving a disabled posture set keeps it off no matter what else is configured.
 
 ### 3. A scripted caller (machine-to-machine)
 
-The test application already works. Its credentials live under
+The test application already works **for this grant only** — creating the API
+authorized it. Do not read that as permission to skip step 5: any application
+you create yourself starts unauthorized, and that is where the next hour goes.
+
+Its credentials live under
 **Applications → Applications → `<API> (Test Application)` → Settings**.
 
 ```sh
@@ -242,6 +294,12 @@ callback field changes nothing.
 - **Allowed Callback URLs**: the client's callback. For Claude's hosted
   surfaces that is `https://claude.ai/api/mcp/auth_callback`.
 - **Save Changes** — the button is at the very bottom and nothing autosaves.
+
+Its **Client ID and Secret go into the client**, not into ksor — the connector
+form of whatever assistant you are configuring. The door never holds client
+credentials and cannot mint a token for itself; it only verifies what it is
+handed. Then do step 5, or the login will succeed and the token request will
+not.
 
 ### 5. Authorize the caller for the door — the step that hides
 
@@ -277,6 +335,49 @@ It honours RFC 8707. An MCP client sending
 `resource=https://your-host.example.com/mcp` gets a token audienced there, with
 no `audience=` parameter and no mapper — which is why the authorization request
 works unmodified once the grant exists.
+
+## Verify it — against the door, not the provider
+
+A token from your provider proves the provider works. It does not prove the door
+does. Both halves matter, and the refusal matters more.
+
+**1. Decode the token before using it.** This is the single most useful
+debugging step on this page, because a valid token audienced at the wrong thing
+looks identical to a broken one:
+
+```sh
+echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, aud, exp}'
+```
+
+- `aud` must equal your `KSOR_MCP_RESOURCE_URL`. If it is your provider's
+  `/userinfo` endpoint, the audience never carried — fix that before anything
+  else.
+- `iss` is what belongs in `KSOR_SSO_ISSUER`, character for character.
+
+**2. No token must be REFUSED.** Run this first; it is the half that proves auth
+is on at all:
+
+```sh
+curl -s -i -X POST https://your-host.example.com/mcp \
+  -H 'content-type: application/json' -d '{}' | head -5
+```
+
+Expect `401`, and a `www-authenticate: Bearer resource_metadata="…"` header. A
+`200` here means auth is off — check `KSOR_AUTH` is unset and that you restarted.
+
+**3. A good token must be ACCEPTED:**
+
+```sh
+curl -s -X POST https://your-host.example.com/mcp \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -H 'mcp-protocol-version: 2025-11-25' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+Expect the record's tools. A `401` here with a `200` above means the token is
+being read and rejected — go back to step 1 and compare `aud` and `iss`.
 
 ## What an agent does
 
@@ -325,7 +426,10 @@ A genuine key-rotation lag stays a `503` on purpose: it is transient, retrying i
 the right response, and the refusal is never cached — a valid bearer is
 re-admitted the instant the key set catches up.
 
-## Before a public bind
+## Before a public bind — recap
+
+Everything here is stated above; it is repeated because it is the checklist you
+want open while deploying.
 
 - Auth configured as above, **or** `KSOR_AUTH=disabled-public` set
   deliberately — the door will not come up on a public address without one of
