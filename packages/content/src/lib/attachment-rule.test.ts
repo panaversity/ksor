@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ATTACHMENT_CASES,
+  ATTACHMENT_SUFFIXES,
   attachmentKindOf,
   isAttachment,
   nearMissOf,
@@ -46,16 +47,44 @@ describe("near misses are named, not left to fail in the bundler", () => {
 });
 
 describe("the table itself is honest", () => {
-  it("covers both kinds and the negative case", () => {
+  it("covers EVERY declared kind, and the negative case", () => {
     const kinds = new Set(ATTACHMENT_CASES.map((c) => c.kind));
     expect(kinds, "a table that never says null proves nothing about documents").toContain(null);
-    expect(kinds).toContain("summary");
-    expect(kinds).toContain("deck");
+    // Derived from the suffix list rather than named here, so a kind added to
+    // the rule with no row in the table fails on the kind it forgot — the
+    // previous form hardcoded summary + deck and would have passed the quiz in
+    // silently.
+    for (const kind of new Set(ATTACHMENT_SUFFIXES.map((entry) => entry.kind))) {
+      expect(kinds, `no ATTACHMENT_CASES row exercises kind "${kind}"`).toContain(kind);
+    }
   });
 
   it("every positive row names a parent, and every negative row names none", () => {
     for (const row of ATTACHMENT_CASES) {
       expect(row.parent === null, `${row.name}`).toBe(row.kind === null);
     }
+  });
+});
+
+describe("a quiz is an attachment of its document, on the same rule as the deck", () => {
+  it("recognises .quiz.yaml", () => {
+    expect(attachmentKindOf("returns.quiz.yaml")).toBe("quiz");
+    expect(isAttachment("returns.quiz.yaml")).toBe(true);
+    expect(parentDocumentOf("returns.quiz.yaml")).toBe("returns.md");
+  });
+
+  it("a dotfile with no stem attaches to nothing", () => {
+    expect(attachmentKindOf(".quiz.yaml")).toBeNull();
+  });
+
+  it("a document merely named quiz.yaml is not one", () => {
+    expect(attachmentKindOf("quiz.yaml")).toBeNull();
+  });
+
+  it(".quiz.yml is a NAMED near miss, not a silent bundler failure", () => {
+    expect(nearMissOf("returns.quiz.yml")).toEqual({
+      is: ".quiz.yml",
+      want: ".quiz.yaml",
+    });
   });
 });
