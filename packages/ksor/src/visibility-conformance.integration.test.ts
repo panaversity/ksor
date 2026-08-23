@@ -42,6 +42,13 @@ const INTERNAL_BODY = "INTERNALCANARY7A1D";
 // public default.
 const DASHCLOSE_BODY = "DASHCLOSECANARY5D9";
 const BLOCKLIST_BODY = "BLOCKLISTCANARY3E7";
+// Study attachments of the RESTRICTED document. They carry no frontmatter and
+// no tier of their own, so they are published only where their parent is —
+// and before the attachment rule, a frontmatter-less summary read as "no
+// visibility declared", took the record DEFAULT tier, and published a
+// restricted document's precis to the public build (decision 23).
+const SUMMARY_BODY = "SUMMARYCANARY6C4B";
+const DECK_BODY = "DECKCANARY2F8E";
 
 // A real 4x4 PNG for the asset probe; its bytes are the probe.
 const ASSET_PNG = Buffer.from(
@@ -194,6 +201,14 @@ describe.runIf(enabled).each(SHELLS)(
       );
       writeFileSync(path.join(knowledge, "comp-chart.png"), ASSET_PNG);
       writeFileSync(
+        path.join(knowledge, "compensation.summary.md"),
+        `Bands run to 240000 ${SUMMARY_BODY}.\n`,
+      );
+      writeFileSync(
+        path.join(knowledge, "compensation.flashcards.yaml"),
+        `deck:\n  title: Bands\ncards:\n  - front: Top of band 4?\n    back: 240000 ${DECK_BODY}.\n`,
+      );
+      writeFileSync(
         path.join(knowledge, "board-minutes.md"),
         `---\ntitle: Board minutes\nstatus: approved\nvisibility: restricted\n----\n\nMinutes ${DASHCLOSE_BODY} of the board.\n`,
       );
@@ -260,6 +275,8 @@ describe.runIf(enabled).each(SHELLS)(
         INTERNAL_BODY,
         DASHCLOSE_BODY,
         BLOCKLIST_BODY,
+        SUMMARY_BODY,
+        DECK_BODY,
       ]) {
         const hits = filesContaining(outDir, canary);
         expect(hits, `canary "${canary.slice(0, 24)}…" leaked into: ${hits.join(", ")}`).toEqual(
@@ -335,6 +352,18 @@ describe.runIf(enabled).each(SHELLS)(
         filesContaining(outDir, RESTRICTED_BODY).length,
         "control: restricted content present before the rebuild",
       ).toBeGreaterThan(0);
+      // The attachment canaries need their own control, or the sweep below
+      // passes for the wrong reason: an attachment that is published NOWHERE,
+      // at any tier, would satisfy every "did not leak" assertion in this file
+      // while the feature was simply broken (research/visibility.md §8).
+      expect(
+        filesContaining(outDir, SUMMARY_BODY).length,
+        "control: a restricted document's summary IS published at its own tier",
+      ).toBeGreaterThan(0);
+      expect(
+        filesContaining(outDir, DECK_BODY).length,
+        "control: a restricted document's deck IS published at its own tier",
+      ).toBeGreaterThan(0);
       // Rebuild public WITHOUT wiping: the shell's own output handling is
       // what must not leave restricted bytes behind.
       mustPass(build(undefined, { keepOut: true }), "public rebuild over restricted output");
@@ -345,6 +374,8 @@ describe.runIf(enabled).each(SHELLS)(
         INTERNAL_BODY,
         DASHCLOSE_BODY,
         BLOCKLIST_BODY,
+        SUMMARY_BODY,
+        DECK_BODY,
       ]) {
         const hits = filesContaining(outDir, canary);
         expect(
