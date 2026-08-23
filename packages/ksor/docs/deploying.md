@@ -103,30 +103,81 @@ setting came out.
 
 ## Configuration
 
-The door takes everything from the environment. Set these on the deployment, not
-in a file:
+Three tiers, because listing them as one table reads as "set all of these or you
+are doing it wrong" — and only the first tier is true.
 
-| variable                | why                                                                      |
-| ----------------------- | ------------------------------------------------------------------------ |
-| `KSOR_DB_URL`           | the record's Postgres store                                              |
-| `GEMINI_API_KEY`        | embeds the incoming query, so retrieval works at all                     |
-| `KSOR_SNAPSHOT_KEYS`    | `kid=secret` — **required in practice**, see below                       |
-| `KSOR_ALLOWED_HOSTS`    | the host you serve on (DNS-rebind defence)                               |
-| `KSOR_MCP_RESOURCE_URL` | this record's canonical URL, e.g. `https://your-host/mcp`                |
-| auth, one of two        | `KSOR_SSO_URL` + audiences, **or** `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` |
+### Required — the door will not boot without these
 
-`KSOR_SNAPSHOT_KEYS` is listed as a production knob but behaves as a
-requirement on any host that scales to zero. Unset, the signing key is generated
-**per process** — so a citation minted before a scale-down stops validating
-after it, with a single instance and no replicas involved. Generate one:
+| variable                                  | why                                                  |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `KSOR_DB_URL`                             | the record's Postgres store                          |
+| `GEMINI_API_KEY`                          | embeds the incoming query, so retrieval works at all |
+| `KSOR_AUTH`, **or** a configured SSO door | see below                                            |
+
+`KSOR_AUTH` takes one of two values, and the value IS the decision:
+
+```sh
+KSOR_AUTH=disabled-local    # no auth, loopback only — a public bind REFUSES
+KSOR_AUTH=disabled-public   # no auth, and served to anyone who can reach the port
+```
+
+**A container sets `$PORT`, so the door binds `0.0.0.0` — a public bind.**
+`disabled-local` refuses there, deliberately: copying a dev `.env` into a hosting
+dashboard must not quietly open your record to the internet. `disabled-public` is
+correct for a genuinely public record or one behind your own gateway; it is not a
+way to make a deploy go green.
+
+The alternative is a real authorization server — `KSOR_SSO_URL`,
+`KSOR_MCP_RESOURCE_URL`, `KSOR_JWT_ALLOWED_AUDIENCES`, with worked recipes for two
+of them in [authorization.md](./authorization.md).
+
+### Set this on any container host
+
+| variable             | why                                      |
+| -------------------- | ---------------------------------------- |
+| `KSOR_SNAPSHOT_KEYS` | `kid=secret`, identical on every replica |
+
+Unset mints an **ephemeral per-process key**. A `search` hands back a snapshot
+token pinning the generation it answered from; `read` honours that pin so a
+conversation stays on one version of the record. With a per-process key, a token
+minted by one instance is unverifiable by the next — so `read` silently drops to
+the ACTIVE generation and reports `refreshed (invalid)`.
+
+It fails **soft**, so nothing errors and nothing logs. The only symptom is an
+agent reading a generation it did not search, seen as roughly one read in three
+coming back unpinned. Generate one with `openssl rand -hex 32`:
 
 ```sh
 KSOR_SNAPSHOT_KEYS="k1=$(openssl rand -hex 32)"
 ```
 
-The value is `kid=secret`, not `kid:secret`, and the first entry is the active
-one. Multiple entries let you rotate without invalidating outstanding
-citations.
+`k1` is a label, not a secret — it appears in the token as `key_id` so you can
+rotate later. The secret is used as literal text, never hex-decoded, and must be
+byte-identical across every instance of one deployment. Set it once and leave it
+alone: rotating invalidates every outstanding pin, and a compromised snapshot key
+cannot read a withdrawn document, cross an audience boundary, or authenticate
+anything.
+
+The boot report now says so out loud when it matters:
+
+```
+snapshot EPHEMERAL key — generation pins will NOT survive a restart or a
+         second instance; set KSOR_SNAPSHOT_KEYS to a value shared by every replica
+```
+
+### Set these once auth is ON
+
+| variable               | why                                        |
+| ---------------------- | ------------------------------------------ |
+| `KSOR_ALLOWED_HOSTS`   | Host allow-list — DNS-rebind defence       |
+| `KSOR_ALLOWED_ORIGINS` | browser Origin allow-list                  |
+| `KSOR_SSO_ISSUER`      | one more check per token, for one variable |
+
+Unset, Host validation is simply off on a public bind — permissive, not refusing,
+so it is never the reason a deploy fails. It earns its place when auth is on:
+rebinding is worth an attacker's effort only when it reaches something they could
+not reach directly. With `KSOR_AUTH=disabled-public` the record is already served
+to anyone who types the URL, so there is nothing for rebinding to steal.
 
 ### The site build needs the DSN too
 
@@ -154,7 +205,7 @@ ways past it:
 - **Configure the SSO door** — `KSOR_SSO_URL`, `KSOR_MCP_RESOURCE_URL`,
   `KSOR_JWT_ALLOWED_AUDIENCES`. Worked recipes for two different authorization
   servers: [authorization.md](./authorization.md).
-- **Set `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`** — a deliberate decision that
+- **Set `KSOR_AUTH=disabled-public`** — a deliberate decision that
   serves your whole record to anyone who can reach the port. Correct for a
   genuinely public record, or behind your own gateway. Never as a way to get a
   deploy green.

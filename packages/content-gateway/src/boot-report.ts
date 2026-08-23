@@ -78,11 +78,39 @@ export function authPosture(
   // The moment an operator most needs a loud line was the moment it lied.
   if (publicUnauthenticated) {
     return (
-      `UNAUTHENTICATED and bound to ${host} — KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1 is set, so ` +
+      `UNAUTHENTICATED and bound to ${host} — KSOR_AUTH=disabled-public is set, so ` +
       "the whole record is served to anyone who can reach this port"
     );
   }
   return `DISABLED — ${host} only, and a public bind will refuse to boot`;
+}
+
+/**
+ * Whether a generation pin will survive this deployment.
+ *
+ * Unset `KSOR_SNAPSHOT_KEYS` mints an EPHEMERAL per-process key. That is honest
+ * for one process — the code that chose it said so — but a container is not one
+ * process. On a scale-to-zero host every cold start mints a new key, so a
+ * snapshot token issued by one instance is unverifiable by the next and `read`
+ * silently drops to the ACTIVE generation, reporting `refreshed (invalid)`.
+ *
+ * Silently is the problem. It fails SOFT by design, so nothing errors and
+ * nothing logs; the only symptom is an agent reading a generation it did not
+ * search, which surfaces as roughly one read in three coming back unpinned.
+ * Found exactly that way on a real deployment, which is why this line exists —
+ * every other posture on this report announced itself and this one did not.
+ *
+ * Not a refusal: a loopback dev run and a genuine single-instance deployment
+ * are both legitimate, and neither is harmed. So the line appears only where
+ * the assumption actually stops holding — a public bind.
+ */
+export function snapshotPosture(activeKeyId: string, loopback: boolean): string | null {
+  if (activeKeyId !== "ephemeral") return null;
+  if (loopback) return null;
+  return (
+    "EPHEMERAL key — generation pins will NOT survive a restart or a second " +
+    "instance; set KSOR_SNAPSHOT_KEYS to a value shared by every replica"
+  );
 }
 
 /**

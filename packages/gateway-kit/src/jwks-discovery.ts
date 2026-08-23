@@ -8,7 +8,7 @@
  * and every one of them failed the fetch — classified TRANSIENT rather than
  * misconfiguration, so the door booted clean and every request 503'd with
  * nothing naming the cause. The only posture an operator could actually reach
- * was `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1`: the one key we handed people was
+ * was `KSOR_AUTH=disabled-public`: the one key we handed people was
  * the one that props the door open (issue #26).
  *
  * Every standards-compliant AS advertises `jwks_uri` in a metadata document:

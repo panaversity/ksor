@@ -189,7 +189,7 @@ re-admitted the instant the key set catches up.
 
 ## Before a public bind
 
-- Auth configured as above, **or** `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1` set
+- Auth configured as above, **or** `KSOR_AUTH=disabled-public` set
   deliberately — the door will not come up on a public address without one of
   them, and the second is a decision, not a default.
 - `KSOR_ALLOWED_HOSTS` set to the host you serve on.

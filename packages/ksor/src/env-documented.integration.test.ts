@@ -32,6 +32,15 @@ const DOCUMENTED_ELSEWHERE = new Map([
   ["KSOR_BASE_PATH", "scaffold README + AGENTS.md — a site build flag, not a server variable"],
   ["KSOR_AUDIENCE", "scaffold README + AGENTS.md — a site build flag"],
   ["KSOR_INSTANCE", "a CLI convenience for --instance; the flag is the documented form"],
+  // RETIRED, replaced by KSOR_AUTH. The code still READS them, solely to tell an
+  // operator following an old runbook what replaced them — documenting them in
+  // env.example would present them as current, which is the opposite of the
+  // point. They leave this list when the migration error does.
+  ["KSOR_AUTH_DISABLED", "retired — buildAuth reads it only to name its replacement, KSOR_AUTH"],
+  [
+    "KSOR_ALLOW_PUBLIC_UNAUTHENTICATED",
+    "retired — buildAuth reads it only to name its replacement, KSOR_AUTH",
+  ],
 ]);
 
 /**

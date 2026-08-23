@@ -88,7 +88,18 @@ export type AuthPublic = {
    */
   jwks: () => Promise<JwksResolution>;
 };
-export type AuthDisabled = { mode: "disabled" };
+export type AuthDisabled = {
+  mode: "disabled";
+  /**
+   * Whether the operator accepted serving the record to anyone who can reach
+   * the port. `false` is the dev posture and REFUSES a public bind.
+   *
+   * One field rather than a second environment variable: two booleans that must
+   * agree to express one decision produced a state nobody could read off either
+   * name, and a fourth combination that meant nothing at all.
+   */
+  publicAllowed: boolean;
+};
 export type Auth = AuthPublic | AuthDisabled;
 
 /**
@@ -230,19 +241,42 @@ function configFromEnv(env: Env): AuthConfig | null {
  */
 export function buildAuth(env: Env = process.env, deps: VerifierDeps = {}): Auth {
   const warn = deps.warn ?? defaultWarn;
-  const disabled = env.KSOR_AUTH_DISABLED === "1";
+  const declared = (env.KSOR_AUTH ?? "").trim();
   const config = configFromEnv(env);
-  if (disabled) {
+
+  // The retired pair. Named explicitly rather than ignored: an operator who
+  // copies an old runbook would otherwise get "auth is not configured", which
+  // is true and useless — it does not say that the variable they set no longer
+  // exists.
+  if (
+    declared === "" &&
+    (env.KSOR_AUTH_DISABLED !== undefined || env.KSOR_ALLOW_PUBLIC_UNAUTHENTICATED !== undefined)
+  ) {
+    throw new AuthConfigError(
+      "KSOR_AUTH_DISABLED and KSOR_ALLOW_PUBLIC_UNAUTHENTICATED have been replaced by one " +
+        "variable, KSOR_AUTH. Set KSOR_AUTH=disabled-local for a loopback dev run, or " +
+        "KSOR_AUTH=disabled-public to serve the whole record to anyone who can reach the port.",
+    );
+  }
+
+  if (declared === "disabled-local" || declared === "disabled-public") {
     if (config !== null) {
-      warn("auth DISABLED via KSOR_AUTH_DISABLED despite SSO config — UNAUTHENTICATED (dev)");
+      warn(`auth DISABLED via KSOR_AUTH=${declared} despite SSO config — UNAUTHENTICATED`);
     }
-    return { mode: "disabled" };
+    return { mode: "disabled", publicAllowed: declared === "disabled-public" };
+  }
+  if (declared !== "") {
+    throw new AuthConfigError(
+      `KSOR_AUTH=${JSON.stringify(declared)} is not a posture. Use "disabled-local" (loopback ` +
+        'dev run) or "disabled-public" (serves the whole record to anyone who can reach the ' +
+        "port), or unset it and configure the SSO door.",
+    );
   }
   if (config === null) {
     throw new AuthConfigError(
-      "auth is not configured (KSOR_SSO_URL / KSOR_MCP_RESOURCE_URL unset) and KSOR_AUTH_DISABLED " +
-        "is not '1' — refusing to boot unauthenticated. Set both SSO env vars, or set " +
-        "KSOR_AUTH_DISABLED=1 for a deliberate dev/unauthenticated run.",
+      "auth is not configured (KSOR_SSO_URL / KSOR_MCP_RESOURCE_URL unset) and KSOR_AUTH is " +
+        "unset — refusing to boot unauthenticated. Set both SSO env vars, or set " +
+        "KSOR_AUTH=disabled-local for a deliberate dev/unauthenticated run.",
     );
   }
   if (config.allowedAudiences.length === 0) {

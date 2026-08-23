@@ -7,6 +7,7 @@ import {
   bootLine,
   SDK_RESPONSE_MODE_WARNING,
   UNDESCRIBED_RECORD,
+  snapshotPosture,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
 
@@ -52,11 +53,11 @@ describe("authPosture", () => {
     // The one configuration that needs a loud line printed the reassurance
     // meant for a loopback dev run: "DISABLED — 0.0.0.0 only, and a public bind
     // will refuse to boot", which is false on both counts once
-    // KSOR_ALLOW_PUBLIC_UNAUTHENTICATED=1 permits exactly that bind.
+    // KSOR_AUTH=disabled-public permits exactly that bind.
     const out = authPosture("disabled", "0.0.0.0", true);
     expect(out, "must not claim a public bind would refuse").not.toContain("refuse to boot");
     expect(out).toContain("UNAUTHENTICATED");
-    expect(out).toContain("KSOR_ALLOW_PUBLIC_UNAUTHENTICATED");
+    expect(out).toContain("KSOR_AUTH=disabled-public");
     expect(out, "says what it actually means for the record").toContain("anyone who can reach");
   });
 });
@@ -128,5 +129,24 @@ describe("UNDESCRIBED_RECORD", () => {
     expect(UNDESCRIBED_RECORD).toContain("scope is unstated");
     expect(UNDESCRIBED_RECORD).toContain("intake interview");
     expect(UNDESCRIBED_RECORD).not.toMatch(/error|must|failed/i);
+  });
+});
+
+describe("snapshotPosture", () => {
+  // Written because the door said NOTHING about this and a real deployment
+  // found it by observing one read in three come back unpinned.
+  it("warns on a public bind with an ephemeral key", () => {
+    expect(snapshotPosture("ephemeral", false)).toContain("EPHEMERAL");
+    expect(snapshotPosture("ephemeral", false)).toContain("KSOR_SNAPSHOT_KEYS");
+  });
+
+  it("says nothing once a shared key is configured", () => {
+    expect(snapshotPosture("k1", false)).toBeNull();
+  });
+
+  // Not a scold: a loopback dev run is one process, which is the exact case the
+  // ephemeral default was designed for.
+  it("says nothing on loopback, where the default is honest", () => {
+    expect(snapshotPosture("ephemeral", true)).toBeNull();
   });
 });

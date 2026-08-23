@@ -177,10 +177,10 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     );
     // The served rung's variables ship as an example, including the auth
     // posture: `ksor serve` refuses to boot unauthenticated, so a runbook that
-    // omitted KSOR_AUTH_DISABLED dead-ended at the last step (found live,
+    // omitted KSOR_AUTH dead-ended at the last step (found live,
     // 2026-08-20).
     const env = readFileSync(path.join(dir, "served-sor", ".env.example"), "utf8");
-    for (const key of ["KSOR_DB_URL", "GEMINI_API_KEY", "KSOR_AUTH_DISABLED"]) {
+    for (const key of ["KSOR_DB_URL", "GEMINI_API_KEY", "KSOR_AUTH"]) {
       expect(env, `.env.example names ${key}`).toContain(key);
     }
     // …and it must survive the ignore rule that hides real .env files.

@@ -191,7 +191,7 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    review, not an editor** (the agent writes; the human checks).
    _Revision 2026-08-20: the serving clause read "local serve binds loopback
    with auth off", describing a default the code has never had — `buildAuth`
-   refuses to boot unless SSO is configured OR `KSOR_AUTH_DISABLED=1` is
+   refuses to boot unless SSO is configured OR `KSOR_AUTH=disabled-local` is
    explicit, loopback included (`packages/gateway-kit/src/auth.ts`). The
    posture is unchanged and STRONGER than the sentence claimed; the wording is
    corrected here and in the three docs that had copied it (both READMEs and
@@ -208,7 +208,7 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    per-clause with evidence, recorded there. _Revision 2026-08-20: the closed
    root set gains ONE member, `.env.example`. The served rung needs three
    variables and one of them is not guessable — `ksor serve` refuses to boot
-   unauthenticated, so `KSOR_AUTH_DISABLED=1` is required for a local run, and
+   unauthenticated, so `KSOR_AUTH=disabled-local` is required for a local run, and
    a runbook that omitted it dead-ended at its last step (found live). An empty
    directory is an unanswered question; a named, commented example of the
    variables a rung needs is an ANSWERED one, and it is the only place those
