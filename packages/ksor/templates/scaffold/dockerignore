@@ -1,5 +1,10 @@
 # DENY EVERYTHING, then allow exactly what the door needs.
 #
+# Defence in depth, NOT the bound. The Dockerfile names the files it copies,
+# because a .dockerignore is not honoured by every build host — Vercel's is
+# not. This file protects local `docker build` and every builder that does
+# respect it; the Dockerfile protects the rest.
+#
 # The inverse — listing what to exclude — cannot bound the image, because it can
 # only exclude what someone thought of. A build output, a cache, a backup
 # directory or a vendored dependency in the project root all end up inside, and
