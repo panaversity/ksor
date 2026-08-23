@@ -258,8 +258,8 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
 
   it("after a node takedown, the marker appears in NO response", async () => {
     await pool.query(
-      `INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason, actor)
-       VALUES ($1, $2, 'docs/legal/secret', 'node', 'legal request', 'acceptance')`,
+      `INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason)
+       VALUES ($1, $2, 'docs/legal/secret', 'node', 'legal request')`,
       [TENANT, CORPUS],
     );
 
@@ -328,8 +328,8 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
   it("a subtree takedown of the parent hides it by every shape too", async () => {
     await pool.query(`DELETE FROM takedown_denylist WHERE tenant_id = $1`, [TENANT]);
     await pool.query(
-      `INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason, actor)
-       VALUES ($1, $2, 'docs/legal', 'subtree', 'legal request', 'acceptance')`,
+      `INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason)
+       VALUES ($1, $2, 'docs/legal', 'subtree', 'legal request')`,
       [TENANT, CORPUS],
     );
 
