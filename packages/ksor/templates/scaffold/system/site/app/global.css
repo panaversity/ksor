@@ -276,40 +276,63 @@ html > body[data-scroll-locked] {
 
 /* Code tabs — one instruction per tool, in the record's own voice.
 
-   Two fixes over the shipped default. The container is painted `--card`,
-   which is WHITE in the light theme, so the "surface" was invisible against
-   the page and the strip read as text floating above a code block — the same
-   trap that made fenced code look like loose monospace until `.prose
-figure.shiki` was given `--muted`. And the labels were sans at body size,
-   where every other machine-facing string on this site is mono: a tool name
-   IS machine-facing, and putting it in the same voice as the prose made the
-   choice look like a sentence rather than a control.
+   The first attempt painted the tabs container `--muted` and drew a hairline
+   under the strip. Measured, the container and the code block INSIDE it were
+   the identical colour — so it was a box the same tone as its own contents,
+   with an arbitrary line through the middle. Two surfaces where the content
+   needs one.
+
+   This removes the outer surface instead of decorating it. The code block is
+   the only panel; the tabs sit on the page and ATTACH to it — the active tab's
+   rule is flush with the block's top edge, so a tab and its panel read as one
+   shape, which is the thing a physical tab does and most web tab strips fail
+   to express. Nothing new is spent: the same `--muted`, the same hairline, the
+   same one accent already used for every other active state on this site.
 
    Scoped by `data-orientation`, which fumadocs puts on the tabs root and the
-   document's own Document/Summary strip does not have — without that scope
+   document's own Document/Summary strip does not carry — without that scope
    this would restyle the view tabs too. */
 .prose [data-orientation]:has(> [role="tablist"]) {
-  background-color: var(--muted);
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .prose [data-orientation] > [role="tablist"] {
+  padding-inline: 0;
+  gap: 0;
+  /* The strip's own baseline, which the active tab's rule overlays and the
+     panel below continues. One line across the whole component. */
   border-bottom: 1px solid var(--border);
-  gap: 0.125rem;
 }
 
 .prose [data-orientation] > [role="tablist"] > [role="tab"] {
-  font-family: var(--font-display-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.8125rem;
-  letter-spacing: 0.01em;
-  /* Rides the strip's own hairline rather than sitting above it, so the
-     active marker and the separator are one line, not two. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Small enough to read as a label rather than as prose, and left in
+     sentence case: these are proper nouns, and uppercase mangles "OpenCode". */
+  font-size: 0.78rem;
+  letter-spacing: 0.005em;
+  padding: 0.45rem 0.8rem;
+  color: var(--muted-foreground);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
 
+.prose [data-orientation] > [role="tablist"] > [role="tab"]:hover {
+  color: var(--foreground);
+}
+
 .prose [data-orientation] > [role="tablist"] > [role="tab"][data-state="active"] {
-  color: var(--primary);
+  color: var(--foreground);
   border-bottom-color: var(--primary);
+}
+
+/* The panel begins where the strip ends: no gap, no second border, and square
+   at the top so the join is a continuation rather than a seam. */
+.prose [data-orientation] > [role="tabpanel"] > figure {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /* The slide STAGE.
