@@ -17,6 +17,7 @@ import { showGovernance } from "@/lib/shared";
 import { RecordToc, TocItems } from "@/components/record-toc";
 import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
+import { StudyAids } from "@/components/study-aids";
 import { deckFor, summaryFor } from "@/lib/attachments";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
@@ -132,7 +133,6 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
                 <Summary components={getMDXComponents({ a: createRelativeLink(source, page) })} />
               )
             }
-            recall={deck === null ? null : <Flashcards deck={deck} />}
           >
             <MDX
               components={getMDXComponents({
@@ -143,6 +143,11 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
             />
           </RecordViews>
         </DocsBody>
+        {/* What a reader DOES with this document once they have read it. One
+          region, so the quiz that will sit beside the deck is a child here and
+          not a new argument about where it goes. Renders nothing at all when
+          the document has no study aids. */}
+        <StudyAids>{deck === null ? null : <Flashcards deck={deck} />}</StudyAids>
         {/* A folder's index page lists what the folder holds. Without it the
           page ended at its own sentence and the documents below it were
           reachable only from the sidebar (research/site-design.md F5). Empty

@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Layers, ListTree } from "lucide-react";
+import { FileText, ListTree } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -12,7 +12,12 @@ import {
 } from "react";
 
 /**
- * The views of one document: the record's own words, its summary, its deck.
+ * The two READINGS of one document: the record's own words, and its summary.
+ *
+ * Study aids are NOT here. A deck — and the quiz that will sit beside it — is
+ * something you do AFTER reading, so it belongs at the end of the page rather
+ * than behind a tab that hides the document while you use it. See
+ * components/study-aids.tsx.
  *
  * PRESENCE-DRIVEN. With neither attachment there is no tab strip at all — not a
  * disabled tab, not a greyed affordance, not an empty panel. A control that
@@ -28,7 +33,7 @@ import {
  * rendering governance as plain markup.
  */
 
-type ViewId = "document" | "summary" | "recall";
+type ViewId = "document" | "summary";
 
 interface View {
   readonly id: ViewId;
@@ -42,13 +47,11 @@ export interface RecordViewsProps {
   readonly children: ReactNode;
   /** Rendered summary, or null when the document has none. */
   readonly summary: ReactNode | null;
-  /** The deck, or null when the document has none. */
-  readonly recall: ReactNode | null;
 }
 
 const ICON = "size-3.5 shrink-0";
 
-export function RecordViews({ children, summary, recall }: RecordViewsProps): ReactElement {
+export function RecordViews({ children, summary }: RecordViewsProps): ReactElement {
   const views: View[] = [
     { id: "document", label: "Document", icon: <FileText className={ICON} />, panel: children },
   ];
@@ -59,9 +62,6 @@ export function RecordViews({ children, summary, recall }: RecordViewsProps): Re
       icon: <ListTree className={ICON} />,
       panel: summary,
     });
-  }
-  if (recall !== null) {
-    views.push({ id: "recall", label: "Recall", icon: <Layers className={ICON} />, panel: recall });
   }
 
   // No attachment, no chrome. Returned before any hook state matters — the
@@ -82,7 +82,7 @@ export function RecordViews({ children, summary, recall }: RecordViewsProps): Re
    */
   useEffect(() => {
     const fromHash = window.location.hash.replace("#", "");
-    if (fromHash === "summary" || fromHash === "recall") {
+    if (fromHash === "summary") {
       setActive((current) =>
         views.some((v) => v.id === fromHash) ? (fromHash as ViewId) : current,
       );
