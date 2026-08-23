@@ -1,0 +1,42 @@
+# How to teach what-is-a-ksor.md to someone new to it.
+#
+# This is for whoever EXPLAINS the document — onboarding a hire, handing a
+# process to another team — not for the person reading it. Everything here must
+# be true of the parent document; a guide is a way of teaching the record, never
+# a second source.
+#
+# Every key below except `teaching.title` is optional. A guide with nothing but
+# `key_points` is a real guide, and `pnpm check` refuses one with nothing at all
+# rather than rendering a button that opens an empty panel.
+teaching:
+  title: Introducing the record
+  audience: Anyone joining a team that has one
+  duration: 15 minutes
+prerequisites:
+  - No prior knowledge — this is the first document in the record
+objectives:
+  - Can say what makes a system of record different from a wiki
+  - Can explain why an assistant cannot tell you which of its claims were checked
+  - Can recognise an abstention as a correct answer rather than a failure
+key_points:
+  - The ledger wins. A system of record is the copy that governs, not the newest copy.
+  - Businesses have had systems of record for decades; AI never had one, and that is the gap.
+  - Abstention is a feature. "Not in this corpus" is correct, not a failure to answer.
+misconceptions:
+  - text: That this is a wiki with better search
+    instead: A wiki has no authoritative copy. The point here is that one copy governs when two disagree.
+  - text: That a bigger record is a better one
+    instead: Coverage is not authority. A small governed record beats a large ungoverned one, which is the whole argument.
+  - text: That an assistant refusing to answer means the setup is broken
+    instead: It means the gate is working — the alternative is an answer nobody checked.
+discussion:
+  - Where does your team's real answer live today, when the wiki and the spreadsheet disagree?
+  - Who would notice if a policy here went out of date? How long would that take?
+  - What would it cost your team if an agent answered confidently from the wrong copy?
+check:
+  - Ask them to name one document their team has that would belong in the record, and who owns it.
+  - Ask them what should happen when someone asks the record a question it does not cover.
+tips:
+  - Start from a disagreement they have actually had — two copies of one policy is the fastest way in.
+  - Show llms.txt next to the page. Seeing one source render twice lands better than describing it.
+  - Do not open with governance levels. They are a ladder to climb later, not an entry fee.

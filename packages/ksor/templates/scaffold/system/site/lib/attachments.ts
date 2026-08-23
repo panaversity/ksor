@@ -1,9 +1,11 @@
-import { decks, quizzes, summaries } from "collections/server";
+import { decks, quizzes, summaries, teachings } from "collections/server";
 
 import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
 import { cardHash, type Card, type Deck } from "./deck";
 import { newCard, type CardSchedule } from "./srs";
 import { type Question, type Quiz } from "./quiz";
+import { type Teaching } from "./teaching";
+import { hasTeachingContent } from "./teaching-shape";
 import { DEFAULT_QUESTIONS_PER_ROUND } from "./quiz-round";
 import { questionHash } from "./identity";
 
@@ -115,6 +117,27 @@ export function quizFor(documentPath: string): QuizEntry | null {
     path: parsed.info.path,
     questions: parsed.questions.map((q) => ({ ...q, hash: questionHash(q) })),
   };
+}
+
+export interface TeachingEntry extends Teaching {
+  /** The record-relative path — the guide's identity. */
+  readonly path: string;
+}
+
+/**
+ * The teaching guide for a document, or null.
+ *
+ * Null also when the guide somehow carries no content: the schema refuses that
+ * at parse time, and this asks the same question at RENDER time, because the
+ * control must never open an empty panel.
+ */
+export function teachingFor(documentPath: string): TeachingEntry | null {
+  const wanted = attachmentPath(documentPath, ".teaching.yaml");
+  const hit = teachings.find((entry) => entry.info.path === wanted);
+  if (hit === undefined) return null;
+  const parsed = hit as unknown as Teaching & { readonly info: { readonly path: string } };
+  if (!hasTeachingContent(parsed)) return null;
+  return { ...parsed, path: parsed.info.path };
 }
 
 /** True when a document has ANY attachment — the presence gate for the UI. */
