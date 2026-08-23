@@ -157,7 +157,23 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
    * returns. The sweep serializes the WHOLE result, so a shape does not need to
    * know which field could carry a leak.
    */
-  const SHAPES: ReadonlyArray<{ name: string; run: (c: pg.PoolClient) => Promise<unknown> }> = [
+  /**
+   * `addressed` marks a shape that NAMED the document in its request.
+   *
+   * Content must never come back from any shape. IDENTITY is different: a caller
+   * who typed `docs/legal/secret` and gets "unknown slug: docs/legal/secret"
+   * learns nothing they did not already know, and scrubbing their own input out
+   * of the refusal would make the error worse without protecting anything. What
+   * must never happen is a shape that was NOT told the identity REVEALING it —
+   * search and outline surfacing a withdrawn document's stable_id to someone who
+   * never asked for it. The sweep asserts the strong property where it means
+   * something and the honest one where it does not.
+   */
+  const SHAPES: ReadonlyArray<{
+    name: string;
+    addressed?: boolean;
+    run: (c: pg.PoolClient) => Promise<unknown>;
+  }> = [
     // Search, by several routes to the same document.
     {
       name: "hybridSearch by its own body",
@@ -192,14 +208,17 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
     // Read, by every address form.
     {
       name: "findDocument by stable_id",
+      addressed: true,
       run: (c) => findDocument(c, rscope, "docs/legal/secret").catch((e) => String(e)),
     },
     {
       name: "findDocument by slug",
+      addressed: true,
       run: (c) => findDocument(c, rscope, "secret").catch((e) => String(e)),
     },
     {
       name: "findDocument by qualified path",
+      addressed: true,
       run: (c) => findDocument(c, rscope, "legal/secret").catch((e) => String(e)),
     },
     // Outline, at every anchor and page that could surface it.
@@ -220,19 +239,22 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
     },
   ];
 
-  const sweep = async (): Promise<Map<string, string>> => {
-    const seen = new Map<string, string>();
+  const sweep = async (): Promise<Map<string, { body: string; addressed: boolean }>> => {
+    const seen = new Map<string, { body: string; addressed: boolean }>();
     for (const shape of SHAPES) {
       const value = await runRead(pool, TENANT, async (c) => shape.run(c), {
         ...VECTOR_TXN_GUCS,
         ...WHOLE_RECORD_SCOPE,
       });
-      seen.set(shape.name, JSON.stringify(value ?? null));
+      seen.set(shape.name, {
+        body: JSON.stringify(value ?? null),
+        addressed: shape.addressed === true,
+      });
     }
     return seen;
   };
 
-  let before: Map<string, string>;
+  let before: Map<string, { body: string; addressed: boolean }>;
 
   it("POSITIVE CONTROL: the marker is reachable before the takedown", async () => {
     before = await sweep();
@@ -253,7 +275,7 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
       ).toContain(MARKER);
     }
     // And the gate can see it: a non-null top score means it is retrievable.
-    expect(before.get("topOneScore")).not.toBe("null");
+    expect(before.get("topOneScore")?.body).not.toBe("null");
   });
 
   it("after a node takedown, the marker appears in NO response", async () => {
@@ -303,7 +325,7 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
 
     // The survivor is untouched — a sweep that passed by serving nothing at all
     // would be worthless.
-    expect(after.get("outline at root")).toContain("guide");
+    expect(after.get("outline at root")?.body).toContain("guide");
   });
 
   it("the abstention gate stops scoring it, so coverage is not claimed on withdrawn text", async () => {
@@ -334,11 +356,9 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
     );
 
     const after = await sweep();
-    for (const [name, serialized] of after) {
-      expect(serialized, `${name} leaked a document under a withdrawn subtree`).not.toContain(
-        MARKER,
-      );
+    for (const [name, { body }] of after) {
+      expect(body, `${name} leaked a document under a withdrawn subtree`).not.toContain(MARKER);
     }
-    expect(after.get("outline at root")).toContain("guide");
+    expect(after.get("outline at root")?.body).toContain("guide");
   });
 });
