@@ -1,8 +1,11 @@
-import { decks, summaries } from "collections/server";
+import { decks, quizzes, summaries } from "collections/server";
 
 import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
 import { cardHash, type Card, type Deck } from "./deck";
 import { newCard, type CardSchedule } from "./srs";
+import { type Question, type Quiz } from "./quiz";
+import { DEFAULT_QUESTIONS_PER_ROUND } from "./quiz-round";
+import { questionHash } from "./quiz-identity";
 
 /**
  * Finding a document's study attachments.
@@ -83,9 +86,44 @@ export function deckFor(documentPath: string): DeckEntry | null {
   };
 }
 
-/** True when a document has either attachment — the presence gate for the UI. */
+/** One question as the quiz UI consumes it: authored text plus its identity. */
+export interface QuizQuestion extends Question {
+  /** Identity: a hash of the question's own text, so an edit resets only this one. */
+  readonly hash: string;
+}
+
+export interface QuizEntry {
+  readonly title: string;
+  readonly description?: string;
+  readonly questionsPerRound: number;
+  readonly questions: readonly QuizQuestion[];
+  /** The record-relative path — the quiz's identity, used to key saved answers. */
+  readonly path: string;
+}
+
+/** The quiz for a document, or null when it has none. */
+export function quizFor(documentPath: string): QuizEntry | null {
+  const wanted = attachmentPath(documentPath, ".quiz.yaml");
+  const hit = quizzes.find((entry) => entry.info.path === wanted);
+  if (hit === undefined) return null;
+
+  const parsed = hit as unknown as Quiz & { readonly info: { readonly path: string } };
+  return {
+    title: parsed.quiz.title,
+    description: parsed.quiz.description,
+    questionsPerRound: parsed.quiz.questionsPerRound ?? DEFAULT_QUESTIONS_PER_ROUND,
+    path: parsed.info.path,
+    questions: parsed.questions.map((q) => ({ ...q, hash: questionHash(q) })),
+  };
+}
+
+/** True when a document has ANY attachment — the presence gate for the UI. */
 export function hasAttachments(documentPath: string): boolean {
-  return summaryFor(documentPath) !== null || deckFor(documentPath) !== null;
+  return (
+    summaryFor(documentPath) !== null ||
+    deckFor(documentPath) !== null ||
+    quizFor(documentPath) !== null
+  );
 }
 
 /**

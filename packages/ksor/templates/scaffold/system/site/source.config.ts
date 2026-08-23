@@ -2,6 +2,7 @@ import { defineCollections, defineConfig, defineDocs } from "fumadocs-mdx/config
 import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
 import { z } from "zod";
 import { DeckSchema } from "./lib/deck";
+import { QuizSchema } from "./lib/quiz";
 import { knowledgeSourceDir } from "./lib/stage-knowledge";
 
 // The record lives at <repo>/knowledge — two levels up from this site.
@@ -85,6 +86,21 @@ export const decks = defineCollections({
   dir: knowledgeSourceDir(),
   files: ["**/*.flashcards.yaml"],
   schema: DeckSchema,
+});
+
+/**
+ * Quizzes, on the deck's terms exactly — same loader, same reason for `.yaml`.
+ *
+ * `QuizSchema` runs the hygiene audit as part of parsing, so a quiz whose
+ * answers are guessable fails HERE, during the build, naming the questions.
+ * That is the point of putting it in the schema rather than in a script: the
+ * predecessor had these checks and shipped the bugs anyway.
+ */
+export const quizzes = defineCollections({
+  type: "meta",
+  dir: knowledgeSourceDir(),
+  files: ["**/*.quiz.yaml"],
+  schema: QuizSchema,
 });
 
 export default defineConfig({
