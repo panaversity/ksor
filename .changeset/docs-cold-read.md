@@ -40,3 +40,21 @@ stated only for takedowns.
 
 The pooler section — the longest technical passage in `ingesting.md`, about a
 classification the same section calls informational — is cut to four sentences.
+
+Adds a fourth recipe: **Better Auth**, an organization's own SSO — the case that
+matters most for "vendor-free is the ownership argument", because it is the one
+with no vendor in it. It is also the simplest shape on the page: a static public
+client with PKCE, **no client secret**, no dynamic client registration, and no
+authorize-this-client-for-that-resource step at all — the step that costs an
+afternoon elsewhere simply does not exist.
+
+Both it and Auth0 were connected to the same assistant against the same record,
+changing only environment variables. That is the neutrality claim in its testable
+form: **moving authorization servers is an environment change, not a code
+change**, and the two audience variables do not change at all because they
+describe the record rather than the provider.
+
+Also names the vendor behind the JWKS fallback (`/api/auth/jwks` is Better
+Auth's layout) — the cold read flagged it as "a vendor default and the vendor is
+never named", and it turns out to be the same stack the door was first written
+against.

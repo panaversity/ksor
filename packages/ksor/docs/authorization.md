@@ -9,12 +9,14 @@ status: draft
 posture, and it means the last step of a deployment is standing up an
 authorization server and pointing the door at it.
 
-This page is three worked recipes, all executed against real servers rather than
+This page is four worked recipes, all executed against real servers rather than
 written from their documentation, plus what an agent does to obtain a token. The
 mechanism is standard OAuth 2.0 — nothing here is specific to any one product,
 and that is the point: three different implementations are shown because a
 single one proves nothing about neutrality. Two are self-hosted (one `docker
-run` each, no account); the third is a hosted provider with a free tier.
+run` each, no account), one is a hosted commercial provider with a free tier,
+and one is an organization's own SSO — which is the case that matters most,
+because it is the one where no vendor is involved at all.
 
 The claim they exist to support is narrow and testable: **moving between
 authorization servers is an environment change, not a code change.** Three
@@ -88,7 +90,7 @@ which one it used:
 1. KSOR_JWKS_URL                        you stated the URI outright
 2. /.well-known/oauth-authorization-server   RFC 8414 metadata
 3. /.well-known/openid-configuration         OIDC discovery
-4. <KSOR_SSO_URL>/api/auth/jwks              a vendor default, reported as a GUESS
+4. <KSOR_SSO_URL>/api/auth/jwks              Better Auth's layout, reported as a GUESS
 ```
 
 **`KSOR_SSO_URL` and `KSOR_SSO_ISSUER` are different strings, and often differ
@@ -390,6 +392,46 @@ It honours RFC 8707. An MCP client sending
 `resource=https://your-host.example.com/mcp` gets a token audienced there, with
 no `audience=` parameter and no mapper — which is why the authorization request
 works unmodified once the grant exists.
+
+## Recipe: Better Auth
+
+The simplest of the four, and the one the door was originally written against —
+the JWKS fallback in `auth.ts` is Better Auth's layout (`/api/auth/jwks`), which
+is why an unconfigured `KSOR_JWKS_URL` still finds keys on a Better Auth
+deployment even if discovery never runs.
+
+It is also the only recipe here with **no client secret**, because a static
+public client with PKCE is enough:
+
+```sh
+KSOR_SSO_URL=https://auth.your-org.example
+KSOR_MCP_RESOURCE_URL=https://your-host.example.com/mcp
+KSOR_JWT_ALLOWED_AUDIENCES=https://your-host.example.com/mcp
+```
+
+Three variables, no fourth. Register one OAuth client with:
+
+- **PKCE required**, `token_endpoint_auth_method: none` — a public client, so
+  there is no secret to distribute, rotate, or leak into a config file
+- the assistant's callback in its redirect list
+  (`https://claude.ai/api/mcp/auth_callback` for Claude's hosted surfaces)
+
+### Why this shape is worth preferring
+
+**Nothing to authorize afterwards.** The step that costs an afternoon on Auth0 —
+finding where a client is granted access to a resource server — does not exist
+here. A registered client can request your resource.
+
+**No dynamic client registration.** DCR is what an assistant falls back to when
+you have not given it a client, and it brings its own tenant-wide toggles and
+third-party permission defaults. A statically-registered public client skips all
+of it.
+
+**No secret in the assistant's config.** PKCE proves the caller is the same one
+that started the flow, without a shared secret. There is simply less to get
+wrong, and less to leak.
+
+If your organization runs its own SSO, this is the shape to ask for.
 
 ## Verify it — against the door, not the provider
 
