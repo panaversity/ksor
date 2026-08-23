@@ -294,8 +294,13 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
         <>
           {/* The movement controls sit OUTSIDE the card: the whole card is the
             flip target, and a chevron inside it would compete for the click. */}
-          <div className="relative flex items-stretch justify-center gap-3 sm:gap-5">
-            <StepButton onClick={() => move(-1)} disabled={index === 0} label="Previous card">
+          <div className="relative flex items-stretch justify-center gap-1 sm:gap-2">
+            <StepButton
+              onClick={() => move(-1)}
+              disabled={index === 0}
+              label="Previous card"
+              className="hidden sm:flex"
+            >
               <ChevronLeft className="size-5" />
             </StepButton>
 
@@ -352,7 +357,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   slug={card.hash}
                   hint="Click to flip"
                 >
-                  <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
+                  <span className="font-(family-name:--font-display) mx-auto block max-w-[34rem] text-balance text-xl leading-[1.3] text-fd-foreground sm:text-[1.75rem]">
                     {card.front}
                   </span>
                   {card.why === undefined ? null : (
@@ -370,13 +375,30 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   slug={card.hash}
                   hint="Click to flip back"
                 >
-                  <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
+                  <span className="font-(family-name:--font-display) mx-auto block max-w-[34rem] text-balance text-xl leading-[1.3] text-fd-foreground sm:text-[1.75rem]">
                     {card.back}
                   </span>
                 </CardFace>
               </button>
             </div>
 
+            <StepButton
+              onClick={() => move(1)}
+              disabled={index >= total - 1}
+              label="Next card"
+              className="hidden sm:flex"
+            >
+              <ChevronRight className="size-5" />
+            </StepButton>
+          </div>
+
+          {/* Below the card on a narrow screen. Flanking, the two controls took
+            96px of a 375px viewport and left the card 263px — measured, and far
+            too narrow for the question to set well. */}
+          <div className="mt-2 flex justify-center gap-8 sm:hidden">
+            <StepButton onClick={() => move(-1)} disabled={index === 0} label="Previous card">
+              <ChevronLeft className="size-5" />
+            </StepButton>
             <StepButton onClick={() => move(1)} disabled={index >= total - 1} label="Next card">
               <ChevronRight className="size-5" />
             </StepButton>
@@ -406,7 +428,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
             aria-valuemin={1}
             aria-valuemax={total}
             aria-label={`Card ${position + 1} of ${total}`}
-            className="mx-auto mt-7 flex max-w-2xl gap-1"
+            className="mx-auto mt-7 flex max-w-2xl gap-1.5"
           >
             {total <= 24 ? (
               deck.cards
@@ -415,7 +437,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   <span
                     key={i}
                     className={[
-                      "h-0.5 flex-1 rounded-full transition-colors",
+                      "h-1 flex-1 rounded-full transition-colors",
                       i < position
                         ? "bg-fd-primary/40"
                         : i === position
@@ -425,7 +447,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   />
                 ))
             ) : (
-              <span className="h-0.5 w-full overflow-hidden rounded-full bg-fd-border">
+              <span className="h-1 w-full overflow-hidden rounded-full bg-fd-border">
                 <span
                   className="block h-full rounded-full bg-fd-primary transition-[width] duration-300 motion-reduce:transition-none"
                   style={{ width: `${progress}%` }}
@@ -514,8 +536,8 @@ function CardFace({
     <span
       aria-hidden={hidden}
       className={[
-        "flex min-h-[24rem] flex-col rounded-md border border-fd-border bg-fd-card",
-        "px-10 pb-12 pt-12 text-center",
+        "flex min-h-[22rem] flex-col rounded-md border border-fd-border bg-fd-card",
+        "px-6 pb-14 pt-14 text-center sm:px-10",
         "shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_-12px_rgb(0_0_0/0.14)]",
         "transition-[border-color,box-shadow] group-hover:border-fd-primary/50",
         "group-hover:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-14px_rgb(0_0_0/0.2)]",
@@ -562,11 +584,13 @@ function StepButton({
   onClick,
   disabled,
   label,
+  className = "",
   children,
 }: {
   readonly onClick: () => void;
   readonly disabled: boolean;
   readonly label: string;
+  readonly className?: string;
   readonly children: React.ReactNode;
 }): ReactElement {
   return (
@@ -575,7 +599,7 @@ function StepButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="relative my-auto flex size-11 shrink-0 items-center justify-center rounded-full text-fd-muted-foreground transition-colors hover:bg-fd-muted hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary disabled:pointer-events-none disabled:opacity-25"
+      className={`relative my-auto flex size-12 shrink-0 items-center justify-center rounded-full text-fd-muted-foreground transition-colors hover:bg-fd-muted hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary disabled:pointer-events-none disabled:opacity-20 ${className}`}
     >
       {children}
     </button>
