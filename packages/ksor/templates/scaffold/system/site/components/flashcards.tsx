@@ -305,7 +305,14 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               the shipped HTML for an agent and for a failed bundle — and the
               hidden one is taken out of the accessibility tree rather than left
               for a screen reader to read out of turn. */}
-            <div className="relative w-full max-w-2xl" style={{ perspective: "1600px" }}>
+            {/* A distant vanishing point. At 1600px the near edge of a card
+              this wide swelled far enough mid-rotation to overflow the section
+              above it; at 3200px the turn still reads as depth without the
+              card lunging at the reader. */}
+            <div
+              className="relative w-full max-w-2xl"
+              style={{ perspective: "3200px", perspectiveOrigin: "50% 50%" }}
+            >
               {/* The rest of the deck, showing under the top card. Only while
                 there IS a rest of the deck: a stack drawn under the last card
                 would be telling the reader there is more to come. */}
@@ -313,12 +320,12 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                 <>
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] rounded-sm border border-fd-border bg-fd-muted"
+                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] rounded-md border border-fd-border bg-fd-card"
                   />
                   {total - index > 2 ? (
                     <div
                       aria-hidden
-                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] rounded-sm border border-fd-border/70 bg-fd-muted/70"
+                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] rounded-md border border-fd-border/70 bg-fd-card"
                     />
                   ) : null}
                 </>
@@ -507,9 +514,11 @@ function CardFace({
     <span
       aria-hidden={hidden}
       className={[
-        "flex min-h-[24rem] flex-col rounded-sm border border-fd-border bg-fd-muted",
+        "flex min-h-[24rem] flex-col rounded-md border border-fd-border bg-fd-card",
         "px-10 pb-12 pt-12 text-center",
-        "transition-colors group-hover:border-fd-primary/50",
+        "shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_-12px_rgb(0_0_0/0.14)]",
+        "transition-[border-color,box-shadow] group-hover:border-fd-primary/50",
+        "group-hover:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-14px_rgb(0_0_0/0.2)]",
         "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
         back ? "absolute inset-0" : "relative",
       ].join(" ")}
@@ -524,11 +533,11 @@ function CardFace({
         labels at the top were two things telling the reader where they are.
         The inner span paints over the card's top border across the tab's width,
         so the tab reads as part of the card rather than sitting on it. */}
-      <span className="absolute -top-[1.6rem] left-8 flex items-center gap-2 rounded-t-sm border border-b-0 border-fd-border bg-fd-muted px-3 pb-1 pt-1 font-mono text-[10px] tracking-[0.12em] text-fd-muted-foreground">
+      <span className="absolute -top-[1.6rem] left-8 flex items-center gap-2 rounded-t-sm border border-b-0 border-fd-border bg-fd-card px-3 pb-1 pt-1 font-mono text-[10px] tracking-[0.12em] text-fd-muted-foreground">
         {tab}
         <span className="text-fd-muted-foreground/50">·</span>
         {label}
-        <span aria-hidden className="absolute inset-x-px -bottom-px h-px bg-fd-muted" />
+        <span aria-hidden className="absolute inset-x-px -bottom-px h-px bg-fd-card" />
       </span>
 
       <span className="flex flex-1 flex-col items-center justify-center">{children}</span>
@@ -664,7 +673,7 @@ function DeckDone({
     .reduce((soonest, due) => (due < soonest ? due : soonest), Number.POSITIVE_INFINITY);
 
   return (
-    <div className="mx-auto flex min-h-[24rem] max-w-2xl flex-col items-center justify-center rounded-sm border border-fd-border bg-fd-muted px-8 py-12 text-center">
+    <div className="mx-auto flex min-h-[24rem] max-w-2xl flex-col items-center justify-center rounded-md border border-fd-border bg-fd-card px-8 py-12 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_-12px_rgb(0_0_0/0.14)]">
       <p className="font-(family-name:--font-display) text-xl text-fd-foreground">
         {reviewed === 0 ? "Nothing due right now." : "Session complete."}
       </p>
