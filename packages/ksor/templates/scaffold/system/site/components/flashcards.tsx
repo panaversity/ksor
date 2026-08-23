@@ -295,14 +295,6 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
           {/* The movement controls sit OUTSIDE the card: the whole card is the
             flip target, and a chevron inside it would compete for the click. */}
           <div className="relative flex items-stretch justify-center gap-3 sm:gap-5">
-            {/* A soft field behind the card so it reads as lifted, without the
-              drop shadow this hairline design language uses nowhere else.
-              Decorative only. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-4 inset-y-2 rounded-[2rem] bg-fd-primary/10 blur-3xl"
-            />
-
             <StepButton onClick={() => move(-1)} disabled={index === 0} label="Previous card">
               <ChevronLeft className="size-5" />
             </StepButton>
@@ -321,12 +313,12 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                 <>
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] rounded-xl border border-fd-border bg-fd-muted"
+                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] rounded-sm border border-fd-border bg-fd-muted"
                   />
                   {total - index > 2 ? (
                     <div
                       aria-hidden
-                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] rounded-xl border border-fd-border/70 bg-fd-muted/70"
+                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] rounded-sm border border-fd-border/70 bg-fd-muted/70"
                     />
                   ) : null}
                 </>
@@ -346,7 +338,13 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   transform: revealed ? "rotateY(180deg)" : "rotateY(0deg)",
                 }}
               >
-                <CardFace hidden={revealed} label="QUESTION" hint="Click to flip">
+                <CardFace
+                  hidden={revealed}
+                  label="QUESTION"
+                  tab={`${position + 1} / ${total}`}
+                  slug={card.hash}
+                  hint="Click to flip"
+                >
                   <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
                     {card.front}
                   </span>
@@ -357,7 +355,14 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   )}
                 </CardFace>
 
-                <CardFace back hidden={!revealed} label="ANSWER" hint="Click to flip back">
+                <CardFace
+                  back
+                  hidden={!revealed}
+                  label="ANSWER"
+                  tab={`${position + 1} / ${total}`}
+                  slug={card.hash}
+                  hint="Click to flip back"
+                >
                   <span className="font-(family-name:--font-display) block text-xl leading-snug text-fd-foreground sm:text-2xl">
                     {card.back}
                   </span>
@@ -449,7 +454,14 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
 }
 
 /**
- * One side of the card.
+ * One side of a catalogue card.
+ *
+ * The record's world already has this object: a ruled card, filed in a drawer,
+ * with a tab you read the position off and a number in the corner. That is the
+ * design, rather than a generic app card — and the number is not decoration.
+ * A card's identity here IS the hash of its own text (lib/deck.ts), which is
+ * what lets an edited card reset alone while its neighbours keep their history.
+ * Printing it is the record showing its own filing.
  *
  * The front sits in flow and therefore SETS the height; the back is absolutely
  * positioned over it, pre-rotated so it reads the right way round once the card
@@ -460,12 +472,16 @@ function CardFace({
   back = false,
   hidden,
   label,
+  tab,
+  slug,
   hint,
   children,
 }: {
   readonly back?: boolean;
   readonly hidden: boolean;
   readonly label: string;
+  readonly tab: string;
+  readonly slug: string;
   readonly hint: string;
   readonly children: React.ReactNode;
 }): ReactElement {
@@ -473,12 +489,9 @@ function CardFace({
     <span
       aria-hidden={hidden}
       className={[
-        "flex min-h-[24rem] flex-col rounded-xl border border-fd-border px-8 pb-14 pt-12 text-center",
-        // A face, not a flat fill: the gradient lifts the top of the card a
-        // shade above its foot, which is what stops a 24rem panel reading as a
-        // grey box.
-        "bg-gradient-to-b from-fd-muted to-fd-background",
-        "transition-colors group-hover:border-fd-primary/40",
+        "flex min-h-[24rem] flex-col rounded-sm border border-fd-border bg-fd-muted",
+        "px-10 pb-12 pt-12 text-center",
+        "transition-colors group-hover:border-fd-primary/50",
         "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
         back ? "absolute inset-0" : "relative",
       ].join(" ")}
@@ -488,11 +501,24 @@ function CardFace({
         ...(back ? { transform: "rotateY(180deg)" } : {}),
       }}
     >
-      <span className="absolute left-4 top-4 font-mono text-[10px] tracking-wider text-fd-muted-foreground">
+      {/* The tab you would grip to pull the card out of the drawer, protruding
+        above the top edge. It carries the position AND the side, because two
+        labels at the top were two things telling the reader where they are.
+        The inner span paints over the card's top border across the tab's width,
+        so the tab reads as part of the card rather than sitting on it. */}
+      <span className="absolute -top-[1.6rem] left-8 flex items-center gap-2 rounded-t-sm border border-b-0 border-fd-border bg-fd-muted px-3 pb-1 pt-1 font-mono text-[10px] tracking-[0.12em] text-fd-muted-foreground">
+        {tab}
+        <span className="text-fd-muted-foreground/50">·</span>
         {label}
+        <span aria-hidden className="absolute inset-x-px -bottom-px h-px bg-fd-muted" />
       </span>
+
       <span className="flex flex-1 flex-col items-center justify-center">{children}</span>
-      <span className="absolute inset-x-0 bottom-5 text-sm text-fd-muted-foreground">{hint}</span>
+
+      <span className="absolute inset-x-0 bottom-4 flex items-baseline justify-between px-8">
+        <span className="font-mono text-[10px] text-fd-muted-foreground/70">{slug}</span>
+        <span className="text-sm text-fd-muted-foreground">{hint}</span>
+      </span>
     </span>
   );
 }
@@ -620,7 +646,7 @@ function DeckDone({
     .reduce((soonest, due) => (due < soonest ? due : soonest), Number.POSITIVE_INFINITY);
 
   return (
-    <div className="mx-auto flex min-h-[22rem] max-w-2xl flex-col items-center justify-center rounded-xl border border-fd-border bg-fd-muted px-8 py-12 text-center">
+    <div className="mx-auto flex min-h-[24rem] max-w-2xl flex-col items-center justify-center rounded-sm border border-fd-border bg-fd-muted px-8 py-12 text-center">
       <p className="font-(family-name:--font-display) text-xl text-fd-foreground">
         {reviewed === 0 ? "Nothing due right now." : "Session complete."}
       </p>
