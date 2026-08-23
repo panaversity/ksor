@@ -13,3 +13,4 @@ scaffold/**/*.tsbuildinfo
 scaffold/.env*
 scaffold/**/.DS_Store
 scaffold/system/site/.staged-knowledge/
+scaffold/system/site/.staged-knowledge.lock

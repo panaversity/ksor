@@ -1,11 +1,13 @@
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
   watch,
+  writeFileSync,
 } from "node:fs";
 import path from "node:path";
 
@@ -343,47 +345,191 @@ function planStage(recordDir: string, denied: DenylistManifest): StagePlan {
   return { files: [...documents, ...assets], documents: documents.length, total };
 }
 
+/** How often a waiter looks again. */
+const LOCK_POLL_MS = 25;
+/** How long a wait goes unexplained. A build that looks hung must say why. */
+const LOCK_ANNOUNCE_MS = 10_000;
+
+/** Synchronous, because everything on this path is: a bundler cannot await. */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM is a process that exists and is not ours to signal.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Is this lock abandoned — stamped with a process that no longer exists?
+ *
+ * Blank is the one ambiguous read: the holder writes its pid in the same call
+ * that creates the file, so a blank lock is either a holder caught between the
+ * two (microseconds) or one that died there (forever). Looking twice tells
+ * them apart, and only the second look may break a lock.
+ */
+function lockIsAbandoned(lockFile: string): boolean {
+  for (const look of [0, 1]) {
+    let stamp: string;
+    try {
+      stamp = readFileSync(lockFile, "utf8").trim();
+    } catch {
+      // Released while we read it; the next acquire attempt takes it.
+      return false;
+    }
+    const pid = Number(stamp);
+    if (Number.isInteger(pid) && pid > 0) return !isAlive(pid);
+    if (look === 0) sleepSync(LOCK_POLL_MS * 2);
+  }
+  return true;
+}
+
+/**
+ * Hold the stage lock for the duration of `work`: ONE evaluation writes the
+ * stage at a time, and this file says which.
+ *
+ * A build evaluates `source.config.ts` in more than one process — SEVEN of
+ * them staged the record in one measured `next build` of a scaffolded site
+ * (2026-08-23) — and staging was destructive on every evaluation: delete the
+ * whole stage, refill it. Two of those overlapping is not a rare interleaving,
+ * it is what seven of them do — six concurrent evaluations of a 150-document
+ * record failed 42 of 48 runs, in four shapes: `ENOENT` and `EINVAL` out of `copyFileSync` (the reported one,
+ * issue #100), `ENOTEMPTY` out of `rmSync` *with* its retries already in
+ * place, and — 27 of the 48, the majority — no error at all: staging returned
+ * success and handed the build a stage a third of the record short.
+ *
+ * The silent shape is why this is a lock and not another retry. A crash fails
+ * a build; a short stage PUBLISHES one, with documents missing from /docs,
+ * llms.txt and the search index, and nothing anywhere saying so.
+ *
+ * `wx` is the whole primitive: create-if-absent, atomically, on every
+ * filesystem Node supports — and it stamps the holder's pid in the same call,
+ * so a waiter can tell a live holder from a killed one.
+ *
+ * Waiting on a LIVE holder is unbounded on purpose: it is another evaluation
+ * of the same build, staging the same bytes from the same record, and this
+ * build is not finished until it has. Unbounded is not silent, though — a wait
+ * long enough to look like a hang names what it is waiting for.
+ */
+function withStageLock<T>(stageDir: string, work: () => T): T {
+  const lockFile = `${stageDir}.lock`;
+  let waited = 0;
+  let announced = false;
+  for (;;) {
+    try {
+      writeFileSync(lockFile, String(process.pid), { flag: "wx" });
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      if (lockIsAbandoned(lockFile)) {
+        rmSync(lockFile, { force: true });
+        continue;
+      }
+      sleepSync(LOCK_POLL_MS);
+      waited += LOCK_POLL_MS;
+      if (waited >= LOCK_ANNOUNCE_MS && !announced) {
+        announced = true;
+        console.warn(
+          `[ksor] waiting on ${path.basename(lockFile)} — another evaluation of this build is ` +
+            "staging the record. Delete that file if no build is running.",
+        );
+      }
+    }
+  }
+  try {
+    return work();
+  } finally {
+    rmSync(lockFile, { force: true });
+  }
+}
+
 /**
  * Remove the stage, asking for the retries this exact failure needs.
  *
- * `force: true` suppresses ENOENT; it does NOT retry anything. Node retries
- * EBUSY / EMFILE / ENFILE / ENOTEMPTY / EPERM only when `maxRetries` is set,
- * and it defaults to zero. The build evaluates `source.config.ts` more than
- * once when the bundler wants it in more than one place, so two runs can
- * overlap: one removing the stage while the other is still copying into it.
- * That surfaced as `ENOTEMPTY` out of `rmSync` and failed the whole site build
- * (CI, 2026-08-21) — a race that is safe to lose, because the stage is a
- * deterministic function of the record and the denylist, so redoing it produces
- * the same bytes.
+ * Callers hold the stage lock, so no OTHER evaluation is writing here — but
+ * `force: true` suppresses ENOENT and does NOT retry anything, and Node
+ * retries EBUSY / EMFILE / ENFILE / ENOTEMPTY / EPERM only when `maxRetries`
+ * is set (it defaults to zero). Those are what a Windows indexer or an
+ * antivirus scanner holding a handle looks like — not ksor, and not something
+ * the lock can serialise. Losing that race is safe: the stage is a
+ * deterministic function of the record and the denylist, so redoing it
+ * produces the same bytes.
  */
 function removeStage(stageDir: string): void {
   rmSync(stageDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 }
 
+/**
+ * Does the stage already hold EXACTLY this plan, byte for byte?
+ *
+ * The wipe-and-refill is the destructive half of staging, and it is pure waste
+ * whenever the answer is yes — which is every evaluation after the first in
+ * one build, since the plan is a deterministic function of the record and the
+ * denylist. Skipping it is not an optimisation: while a wipe is running there
+ * is a window in which the stage is not the record, and an evaluation that has
+ * already returned is reading it. The lock stops two writers colliding; this
+ * stops the second writer existing at all.
+ *
+ * Bytes, not names and not timestamps: the alternative is serving a previous
+ * build's copy of a document that has since been edited.
+ */
+function stageHolds(recordDir: string, stageDir: string, plan: StagePlan): boolean {
+  let staged: string[];
+  try {
+    staged = walkFiles(stageDir);
+  } catch {
+    return false;
+  }
+  if (staged.length !== plan.files.length) return false;
+  const expected = new Map(
+    plan.files.map((from) => [path.join(stageDir, path.relative(recordDir, from)), from]),
+  );
+  for (const file of staged) {
+    const from = expected.get(file);
+    if (from === undefined) return false;
+    if (!readFileSync(from).equals(readFileSync(file))) return false;
+  }
+  return true;
+}
+
 /** Fill a clean stage with exactly the set this build may publish. */
 function fillStage(recordDir: string, stageDir: string, denied: DenylistManifest): void {
-  // The old stage goes first, before any refusal can throw: a refused build
-  // that leaves the previous, more permissive stage on disk hands the next
-  // careless build a filtered copy nothing governs (review finding,
-  // 2026-08-19).
-  removeStage(stageDir);
-  const plan = planStage(recordDir, denied);
-  // An empty record is its own problem, reported by the page that renders it;
-  // an empty AUDIENCE is a misconfiguration that would otherwise surface as
-  // "the record has no documents" against a record full of them.
-  if (plan.documents === 0 && plan.total > 0) {
-    refuse(
-      "ksor-audience-empty",
-      `no document in the record is visible to the ${buildAudience} build (${plan.total} document${plan.total === 1 ? "" : "s"}, all above that tier)`,
-      "a site with nothing on it is a deploy that looks successful and serves nobody — and the record is not empty, this audience's slice of it is",
-      "build a wider audience with KSOR_AUDIENCE, lower default_visibility in instance.md, or give at least one document this tier",
-    );
-  }
-  for (const from of plan.files) {
-    const to = path.join(stageDir, path.relative(recordDir, from));
-    mkdirSync(path.dirname(to), { recursive: true });
-    copyFileSync(from, to);
-  }
+  withStageLock(stageDir, () => {
+    let plan: StagePlan;
+    try {
+      plan = planStage(recordDir, denied);
+      // An empty record is its own problem, reported by the page that renders
+      // it; an empty AUDIENCE is a misconfiguration that would otherwise
+      // surface as "the record has no documents" against a record full of them.
+      if (plan.documents === 0 && plan.total > 0) {
+        refuse(
+          "ksor-audience-empty",
+          `no document in the record is visible to the ${buildAudience} build (${plan.total} document${plan.total === 1 ? "" : "s"}, all above that tier)`,
+          "a site with nothing on it is a deploy that looks successful and serves nobody — and the record is not empty, this audience's slice of it is",
+          "build a wider audience with KSOR_AUDIENCE, lower default_visibility in instance.md, or give at least one document this tier",
+        );
+      }
+    } catch (error) {
+      // No refusal may leave the previous, more permissive stage on disk: it
+      // hands the next careless build a filtered copy nothing governs (review
+      // finding, 2026-08-19). The removal used to lead this function, which is
+      // why nothing could ask whether the stage was already correct.
+      removeStage(stageDir);
+      throw error;
+    }
+    if (stageHolds(recordDir, stageDir, plan)) return;
+    removeStage(stageDir);
+    for (const from of plan.files) {
+      const to = path.join(stageDir, path.relative(recordDir, from));
+      mkdirSync(path.dirname(to), { recursive: true });
+      copyFileSync(from, to);
+    }
+  });
 }
 
 /**
@@ -421,13 +567,17 @@ function refuseVisibilityWithoutAudiences(recordDir: string): void {
  * published build is always staged from scratch.
  */
 function refreshStage(recordDir: string, stageDir: string, denied: DenylistManifest): void {
-  const permitted = new Set(planStage(recordDir, denied).files);
-  for (const staged of walkFiles(stageDir)) {
-    const from = path.join(recordDir, path.relative(stageDir, staged));
-    if (!permitted.has(from)) continue;
-    if (readFileSync(from).equals(readFileSync(staged))) continue;
-    copyFileSync(from, staged);
-  }
+  // Under the lock like every other write here: a save landing while another
+  // evaluation is refilling the stage is the same race from the other side.
+  withStageLock(stageDir, () => {
+    const permitted = new Set(planStage(recordDir, denied).files);
+    for (const staged of walkFiles(stageDir)) {
+      const from = path.join(recordDir, path.relative(stageDir, staged));
+      if (!permitted.has(from)) continue;
+      if (readFileSync(from).equals(readFileSync(staged))) continue;
+      copyFileSync(from, staged);
+    }
+  });
 }
 
 let watching = false;
@@ -484,8 +634,11 @@ export function knowledgeSourceDir(): string {
     // Nothing to filter — serve the record itself, the level-0 fast path.
     // A stage left behind by an earlier model would be a filtered copy of the
     // record nothing governs any more — removed before the refusal below can
-    // throw, so a refused build never leaves one behind either.
-    removeStage(stageDir);
+    // throw, so a refused build never leaves one behind either. Under the lock,
+    // because two evaluations removing one tree is the `ENOTEMPTY` shape of the
+    // same race; the existence check keeps a record that never stages from
+    // taking a lock on every build.
+    if (existsSync(stageDir)) withStageLock(stageDir, () => removeStage(stageDir));
     refuseVisibilityWithoutAudiences(recordDir);
     return RECORD_DIR;
   }

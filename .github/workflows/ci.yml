@@ -207,4 +207,9 @@ jobs:
       # — AGENTS.md assigns repo-tree scans here — so name them explicitly or
       # Windows stops running the checks it is best placed to catch.
       - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/audience-rule-drift.integration.test.ts packages/ksor/src/denial-rule-drift.integration.test.ts packages/ksor/src/scaffold-scripts.integration.test.ts packages/ksor/src/discovery-document.integration.test.ts
+      # The stage lock rests on three primitives whose Windows semantics are
+      # the whole question: exclusive create (`wx`), pid liveness, and removing
+      # a file another process may hold. Named here for the same reason as the
+      # drift tests above — this runner is the one placed to catch them.
+      - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/stage-concurrency.integration.test.ts
       - run: pnpm test:unit

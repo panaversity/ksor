@@ -8,6 +8,9 @@ system/site/out/
 # the per-audience copy of the record a build stages — a filtered derivative,
 # never a second record; committing it would publish what a build excluded
 system/site/.staged-knowledge/
+# and the lock that keeps one evaluation of a build staging at a time; it only
+# outlives a build that was killed mid-stage, and the next build clears it
+system/site/.staged-knowledge.lock
 *.tsbuildinfo
 
 # secrets never enter the record — system/ is their future home (serve)
