@@ -1,7 +1,6 @@
-import { FileText } from "lucide-react";
 import Link from "next/link";
 
-import { CopyMarkdown } from "@/components/copy-markdown";
+import { DocumentActions } from "@/components/document-actions";
 import type { ReactElement } from "react";
 
 import {
@@ -182,29 +181,22 @@ export function GovernanceMeta({
         // On the governance row, not as a footnote below the sources: it is
         // how a reader hands this document to an agent, and it was previously
         // the smallest text on the page, last (research/site-design.md F2).
-        // These are the ACTIONS on a row of FACTS, so they wear neither the
-        // bordered badge (that means "a status the record declares", and
-        // dressing a link in it made the only clickable thing look like another
-        // read-only field) nor the accent at rest. An icon and a hover surface
-        // say "control" without spending the brand colour on something that is
-        // merely sitting there — the page had gone blue enough that the accent
-        // had stopped meaning anything (owner, 2026-08-22).
-        // Inline after the facts, NOT right-aligned: `ms-auto` parked it at the
-        // far edge of a 900px row, 498px from the nearest thing on a document
-        // with two facts, where it read as belonging to nothing (measured in
-        // Chromium, 2026-08-21).
-        <span className="flex items-center gap-0.5">
-          <a
-            href={markdownUrl}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[0.6875rem] tracking-[0.14em] text-fd-muted-foreground uppercase transition-colors hover:bg-fd-muted hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-          >
-            <FileText aria-hidden className="size-3.5" />
-            Markdown
-          </a>
-          {/* Beside the link, not instead of it: opening the markdown and
-              handing it to an agent are different acts, and a reader who wants
-              the second should not have to perform the first. */}
-          <CopyMarkdown href={markdownUrl} />
+        // ONE control rather than two: opening the markdown and copying it are
+        // different acts, but two bare controls on a row of read-only facts
+        // made the row look half clickable. It wears neither the bordered badge
+        // (that means "a status the record declares") nor the accent at rest —
+        // the page had gone blue enough that the accent had stopped meaning
+        // anything (owner, 2026-08-22).
+        // RIGHT-ALIGNED (owner, and a reversal). The 2026-08-21 finding stands
+        // on its own terms: `ms-auto` once parked this 498px from the nearest
+        // thing on a two-fact document, where it read as belonging to nothing.
+        // What changed is the column beside it — the reading time now sits at
+        // the right end of the strip directly below, so the far edge is no
+        // longer empty space but a line the eye already follows. The two form
+        // a right-hand column of things you DO, against a left-hand row of
+        // things the record DECLARES.
+        <span className="ms-auto">
+          <DocumentActions href={markdownUrl} />
         </span>
       )}
     </dl>

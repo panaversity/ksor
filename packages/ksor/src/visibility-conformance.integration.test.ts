@@ -42,6 +42,13 @@ const INTERNAL_BODY = "INTERNALCANARY7A1D";
 // public default.
 const DASHCLOSE_BODY = "DASHCLOSECANARY5D9";
 const BLOCKLIST_BODY = "BLOCKLISTCANARY3E7";
+// Study attachments of the RESTRICTED document. They carry no frontmatter and
+// no tier of their own, so they are published only where their parent is —
+// and before the attachment rule, a frontmatter-less summary read as "no
+// visibility declared", took the record DEFAULT tier, and published a
+// restricted document's precis to the public build (decision 24).
+const SUMMARY_BODY = "SUMMARYCANARY6C4B";
+const DECK_BODY = "DECKCANARY2F8E";
 
 // A real 4x4 PNG for the asset probe; its bytes are the probe.
 const ASSET_PNG = Buffer.from(
@@ -69,12 +76,25 @@ function assetHits(root: string): string[] {
 interface Shell {
   readonly shellName: string;
   readonly swap: ((project: string) => void) | null;
+  /**
+   * Whether this shell RENDERS study attachments, as opposed to merely
+   * excluding them. The surface contract requires every shell to keep an
+   * attachment off the route table; rendering one as a summary tab and a deck
+   * is the reference shell's own design, not a clause of the contract. The
+   * distinction decides which positive control this suite is entitled to: on a
+   * shell that renders them, "published at its own tier" proves the leak sweep
+   * is not passing over a broken feature; on a shell that does not, the same
+   * assertion is simply false, and the sweep leans on the parent document's
+   * control instead.
+   */
+  readonly rendersAttachments: boolean;
 }
 
 const SHELLS: readonly Shell[] = [
-  { shellName: "fumadocs", swap: null },
+  { shellName: "fumadocs", swap: null, rendersAttachments: true },
   {
     shellName: "docusaurus",
+    rendersAttachments: false,
     swap: (project) => {
       // The swap recipe, as in shell-conformance (filtered copy).
       const GENERATED = new Set([
@@ -142,7 +162,7 @@ function filesContaining(root: string, probe: string | Buffer): string[] {
 
 describe.runIf(enabled).each(SHELLS)(
   "visibility conformance — $shellName shell",
-  ({ shellName, swap }) => {
+  ({ shellName, swap, rendersAttachments }) => {
     let work: string;
     let project: string;
     let outDir: string;
@@ -193,6 +213,14 @@ describe.runIf(enabled).each(SHELLS)(
         `---\ntitle: "${RESTRICTED_TITLE}"\ndescription: ${RESTRICTED_DESC}\nstatus: approved\nvisibility: restricted\n---\n\nBand 4 engineers ${RESTRICTED_BODY} receive between 180000 and 240000.\n\n![bands](./comp-chart.png)\n`,
       );
       writeFileSync(path.join(knowledge, "comp-chart.png"), ASSET_PNG);
+      writeFileSync(
+        path.join(knowledge, "compensation.summary.md"),
+        `Bands run to 240000 ${SUMMARY_BODY}.\n`,
+      );
+      writeFileSync(
+        path.join(knowledge, "compensation.flashcards.yaml"),
+        `deck:\n  title: Bands\ncards:\n  - front: Top of band 4?\n    back: 240000 ${DECK_BODY}.\n`,
+      );
       writeFileSync(
         path.join(knowledge, "board-minutes.md"),
         `---\ntitle: Board minutes\nstatus: approved\nvisibility: restricted\n----\n\nMinutes ${DASHCLOSE_BODY} of the board.\n`,
@@ -260,6 +288,8 @@ describe.runIf(enabled).each(SHELLS)(
         INTERNAL_BODY,
         DASHCLOSE_BODY,
         BLOCKLIST_BODY,
+        SUMMARY_BODY,
+        DECK_BODY,
       ]) {
         const hits = filesContaining(outDir, canary);
         expect(hits, `canary "${canary.slice(0, 24)}…" leaked into: ${hits.join(", ")}`).toEqual(
@@ -335,6 +365,33 @@ describe.runIf(enabled).each(SHELLS)(
         filesContaining(outDir, RESTRICTED_BODY).length,
         "control: restricted content present before the rebuild",
       ).toBeGreaterThan(0);
+      // The attachment canaries need their own control, or the sweep below
+      // passes for the wrong reason: an attachment that is published NOWHERE,
+      // at any tier, would satisfy every "did not leak" assertion in this file
+      // while the feature was simply broken (research/visibility.md §8).
+      // Which control is the true one depends on the shell — see
+      // `rendersAttachments`. Both are asserted rather than one being skipped,
+      // so a shell that starts or stops rendering attachments fails here and
+      // has to say so in the table.
+      if (rendersAttachments) {
+        expect(
+          filesContaining(outDir, SUMMARY_BODY).length,
+          "control: a restricted document's summary IS published at its own tier",
+        ).toBeGreaterThan(0);
+        expect(
+          filesContaining(outDir, DECK_BODY).length,
+          "control: a restricted document's deck IS published at its own tier",
+        ).toBeGreaterThan(0);
+      } else {
+        expect(
+          filesContaining(outDir, SUMMARY_BODY),
+          "this shell excludes attachments without rendering them, so a summary is published at NO tier",
+        ).toEqual([]);
+        expect(
+          filesContaining(outDir, DECK_BODY),
+          "this shell excludes attachments without rendering them, so a deck is published at NO tier",
+        ).toEqual([]);
+      }
       // Rebuild public WITHOUT wiping: the shell's own output handling is
       // what must not leave restricted bytes behind.
       mustPass(build(undefined, { keepOut: true }), "public rebuild over restricted output");
@@ -345,6 +402,8 @@ describe.runIf(enabled).each(SHELLS)(
         INTERNAL_BODY,
         DASHCLOSE_BODY,
         BLOCKLIST_BODY,
+        SUMMARY_BODY,
+        DECK_BODY,
       ]) {
         const hits = filesContaining(outDir, canary);
         expect(

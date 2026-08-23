@@ -35,6 +35,35 @@ const REQUIRED_KEYS = ["title", "status"]; // level 0 — the ladder, not a gate
 const STATUS_VALUES = new Set(["draft", "review", "approved", "superseded"]);
 const ASSET_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]);
 
+// Study attachments: `x.summary.md` and `x.flashcards.yaml` belong to `x.md`.
+// An attachment is PART OF its parent — no route, no stable id, no governance
+// of its own — so it is neither a document nor an asset, and gets its own
+// rules below. This mirrors packages/content/src/lib/attachment-rule.ts, which
+// this dependency-free file cannot import; ATTACHMENT_CASES there is the table
+// both are held to.
+const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
+// One character off a real attachment, refused BY NAME: `.yml` reaches the
+// site bundler's `Unknown file type` throw, which names the path and nothing
+// about the rule.
+const ATTACHMENT_NEAR_MISSES = [
+  [".flashcards.yml", ".flashcards.yaml"],
+  [".flashcards.json", ".flashcards.yaml"],
+  [".summary.markdown", ".summary.md"],
+];
+
+/** The attachment suffix this name carries, or null. A dotfile has no stem. */
+function attachmentSuffixOf(base) {
+  return ATTACHMENT_SUFFIXES.find((s) => base.length > s.length && base.endsWith(s)) ?? null;
+}
+function isAttachment(base) {
+  return attachmentSuffixOf(base) !== null;
+}
+/** The document an attachment belongs to: always `<stem>.md`. */
+function parentDocumentOf(base) {
+  const suffix = attachmentSuffixOf(base);
+  return suffix === null ? null : `${base.slice(0, -suffix.length)}.md`;
+}
+
 // PNG integrity, dependency-free: signature + per-chunk CRC-32. A damaged
 // image beside a document is a check-time problem with the file named, never
 // a build-time 500 with no filename in it.
@@ -381,7 +410,9 @@ if (!existsSync(knowledgeDir)) {
   }
   const dirs = walkDirs(knowledgeDir);
   const all = [...files, ...dirs];
-  const mdFiles = files.filter((p) => p.endsWith(".md"));
+  // Attachments are never documents: they carry no frontmatter, own no route,
+  // and are checked by their own rules instead.
+  const mdFiles = files.filter((p) => p.endsWith(".md") && !isAttachment(path.basename(p)));
 
   if (mdFiles.length === 0) {
     problem(
@@ -446,7 +477,12 @@ if (!existsSync(knowledgeDir)) {
       );
     }
     seenLower.set(lower, rel);
-    if (files.includes(p) && !p.endsWith(".md") && !ASSET_EXTENSIONS.has(path.extname(p))) {
+    if (
+      files.includes(p) &&
+      !p.endsWith(".md") &&
+      !isAttachment(base) &&
+      !ASSET_EXTENSIONS.has(path.extname(p))
+    ) {
       problem(
         rel,
         `unexpected file type "${path.extname(p) || base}"`,
@@ -483,6 +519,51 @@ if (!existsSync(knowledgeDir)) {
         "renderers strip parenthesized segments from routes, giving one document two identities",
         "rename without parentheses",
       );
+    }
+  }
+
+  // Study attachments: bound to a parent, carrying no governance of their own.
+  for (const p of files) {
+    const base = path.basename(p);
+    const rel = path.relative(root, p);
+
+    const nearMiss = ATTACHMENT_NEAR_MISSES.find(
+      ([wrong]) => base.length > wrong.length && base.endsWith(wrong),
+    );
+    if (nearMiss && !isAttachment(base)) {
+      problem(
+        rel,
+        `${nearMiss[0]} is not an attachment extension`,
+        "the site reads decks as YAML and accepts only .yaml — a near miss is not picked up as a deck, and fails the build naming the path but not the rule",
+        `rename it to ${base.slice(0, -nearMiss[0].length)}${nearMiss[1]}`,
+      );
+      continue;
+    }
+
+    if (!isAttachment(base)) continue;
+
+    const parent = parentDocumentOf(base);
+    if (parent && !existsSync(path.join(path.dirname(p), parent))) {
+      problem(
+        rel,
+        `attachment of ${parent}, which is not in the record`,
+        "an attachment inherits its parent's governance — with no parent there is nothing to inherit, so it would be published under no tier and covered by no takedown",
+        `add ${path.join(path.dirname(rel), parent)}, or remove ${rel}`,
+      );
+    }
+
+    if (base.endsWith(".md") || base.endsWith(".mdx")) {
+      const text = readFileSync(p, "utf8")
+        .replace(/^\uFEFF/, "")
+        .replaceAll("\r\n", "\n");
+      if (text.startsWith("---\n")) {
+        problem(
+          rel,
+          "attachment declares frontmatter",
+          "an attachment is part of its parent and carries none of its own governance — a key here would look like it governs something and would govern nothing (a visibility: on a summary of a restricted document is the shape that matters)",
+          `remove the frontmatter block; ${parent ?? "its parent"} is what carries the governance`,
+        );
+      }
     }
   }
 

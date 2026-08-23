@@ -103,11 +103,30 @@ function docSlug(file: string): string {
   return noExt.endsWith("/index") ? noExt.slice(0, -"/index".length) : noExt;
 }
 
+/**
+ * Study attachments belong to a document and are not documents themselves, so
+ * clause 2 must not demand a route for one. They get their own clause below.
+ */
+const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
+const isAttachment = (base: string): boolean =>
+  ATTACHMENT_SUFFIXES.some((s) => base.length > s.length && base.endsWith(s));
+
 function knowledgeFiles(dir: string, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()
       ? knowledgeFiles(path.join(dir, entry.name), `${prefix}${entry.name}/`)
-      : entry.name.endsWith(".md")
+      : entry.name.endsWith(".md") && !isAttachment(entry.name)
+        ? [`${prefix}${entry.name}`]
+        : [],
+  );
+}
+
+/** Every attachment in the record, whatever its extension. */
+function attachmentFiles(dir: string, prefix = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? attachmentFiles(path.join(dir, entry.name), `${prefix}${entry.name}/`)
+      : isAttachment(entry.name)
         ? [`${prefix}${entry.name}`]
         : [],
   );
@@ -279,6 +298,41 @@ describe.runIf(enabled).each(SHELLS)(
         if (plain.length >= 12 && !plain.startsWith("!") && !plain.startsWith("#")) {
           expect(html, `${file}: body not rendered`).toContain(plain);
         }
+      }
+    });
+
+    /**
+     * A CONTRACT CLAUSE, not shell chrome. Rendering a summary or a deck is a
+     * feature the reference shell has and the workbench shell does not — but
+     * PUBLISHING an attachment as a routed document is a cross-surface
+     * divergence: it would carry its own URL, its own sidebar row and its own
+     * llms.txt line on one shell and not the other, with governance that
+     * inherits on neither. Decision 19: a surface that refuses must refuse on
+     * both surfaces.
+     */
+    it("clause 2: no shell publishes a study attachment as a document", () => {
+      const knowledge = path.join(project, "knowledge");
+      const attachments = attachmentFiles(knowledge);
+      expect(
+        attachments.length,
+        "the scaffold ships attachments; without one this clause proves nothing",
+      ).toBeGreaterThan(0);
+
+      for (const file of attachments) {
+        // The route an attachment would take IF a shell treated it as a
+        // document: only the final extension comes off, so
+        // `x.summary.md` -> `/docs/x.summary`. Stripping the WHOLE attachment
+        // suffix instead yields the PARENT's slug, which exists and must —
+        // asserting on that is how this clause first went red against correct
+        // code.
+        const slug = file.replace(/\.(md|mdx|yaml)$/, "");
+        expect(
+          existsSync(path.join(outDir, "docs", slug, "index.html")),
+          `${file} was published as a document at /docs/${slug}`,
+        ).toBe(false);
+
+        const llms = readFileSync(path.join(outDir, "llms.txt"), "utf8");
+        expect(llms, `${file} reached llms.txt`).not.toContain(`/docs/${slug}`);
       }
     });
 

@@ -15,6 +15,11 @@ import {
 import { predecessorsOf, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
 import { showGovernance } from "@/lib/shared";
 import { RecordToc, TocItems } from "@/components/record-toc";
+import { RecordViews } from "@/components/record-views";
+import { Flashcards } from "@/components/flashcards";
+import { StudyAids } from "@/components/study-aids";
+import { deckFor, summaryFor } from "@/lib/attachments";
+import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
@@ -22,6 +27,18 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  // Attachments of THIS document, found by suffix on its own path. Null is the
+  // ordinary case, not an error.
+  const summary = summaryFor(page.path);
+  const Summary = summary?.body ?? null;
+  const deck = deckFor(page.path);
+  // Counted at BUILD time from the document's own markdown, so the figure is in
+  // the shipped HTML for a reader with a failed bundle, a crawler and an agent
+  // alike. The predecessor measured the rendered DOM after paint, which put it
+  // out of reach of all three.
+  const minutes = readingMinutes(await page.data.getText("processed"));
+  const summaryMinutes =
+    summary === null ? null : readingMinutes(await summary.getText("processed"));
   // What the record says about this document. The page renders it; it never
   // supplies it — an undeclared key shows nothing (specs/ksor/site-governance).
   const governance = readGovernance(page.data, page.path);
@@ -112,14 +129,35 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           describes (measured, 2026-08-21). Short documents now end where their
           text ends. */}
         <DocsBody style={{ flexGrow: 0 }}>
-          <MDX
-            components={getMDXComponents({
-              // relative links between documents in knowledge/ resolve to
-              // their rendered pages
-              a: createRelativeLink(source, page),
-            })}
-          />
+          {/* The summary panel is built HERE, on the server, and handed to the
+            client tab strip as a prop — so it is in the shipped HTML whether or
+            not the bundle runs, which is what an agent parsing the page and a
+            reader with a failed bundle both depend on. Presence-driven: with no
+            summary, RecordViews renders the body alone and no tab strip exists
+            (specs/ksor/study-attachments C3, C20). */}
+          <RecordViews
+            documentMinutes={minutes}
+            summaryMinutes={summaryMinutes ?? undefined}
+            summary={
+              Summary === null ? null : (
+                <Summary components={getMDXComponents({ a: createRelativeLink(source, page) })} />
+              )
+            }
+          >
+            <MDX
+              components={getMDXComponents({
+                // relative links between documents in knowledge/ resolve to
+                // their rendered pages
+                a: createRelativeLink(source, page),
+              })}
+            />
+          </RecordViews>
         </DocsBody>
+        {/* What a reader DOES with this document once they have read it. One
+          region, so the quiz that will sit beside the deck is a child here and
+          not a new argument about where it goes. Renders nothing at all when
+          the document has no study aids. */}
+        <StudyAids>{deck === null ? null : <Flashcards deck={deck} />}</StudyAids>
         {/* A folder's index page lists what the folder holds. Without it the
           page ended at its own sentence and the documents below it were
           reachable only from the sidebar (research/site-design.md F5). Empty

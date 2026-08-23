@@ -168,3 +168,50 @@ describe("loadManifest", () => {
     expect(manifestToJson(manifest)).toEqual(JSON.parse(await readFile(GOLDEN, "utf8")));
   });
 });
+
+describe("study attachments are not nodes", () => {
+  /**
+   * `x.summary.md` ends in `.md`, so before the attachment rule it ingested as
+   * a document of its own: `stable_id` `<root>/x.summary`, its own visibility
+   * coalescing to the record default, and its own takedown state. That is one
+   * cause wearing four costumes — the door served a summary the site hides, at
+   * the wrong tier, undenied when the parent was withdrawn, and orphaned when
+   * the parent was gone. No id, no node, no citation.
+   */
+  it("neither a summary nor a deck becomes a document", async () => {
+    const tmp = await makeTmp();
+    const root = join(tmp, "docs");
+    await mkdir(root);
+    await writeFile(join(root, "pay.md"), "# Pay\n\nHow pay is set.\n", "utf8");
+    await writeFile(join(root, "pay.summary.md"), "Pay is set annually.\n", "utf8");
+    await writeFile(join(root, "pay.flashcards.yaml"), "deck:\n  title: Pay\ncards: []\n", "utf8");
+
+    const { manifest } = await buildManifest(root, { corpusId: "c", sourceCommit: "dev" });
+    const ids = manifest.nodes.map((n) => n.stable_id);
+
+    expect(ids, "the parent document is still ingested").toContain("docs/pay");
+    expect(ids, "a summary must never be independently citable").not.toContain("docs/pay.summary");
+    expect(
+      ids.some((id) => id.includes("summary")),
+      `ids: ${ids.join(", ")}`,
+    ).toBe(false);
+    expect(
+      ids.some((id) => id.includes("flashcards")),
+      `ids: ${ids.join(", ")}`,
+    ).toBe(false);
+  });
+
+  it("a document merely named like one is still a document", async () => {
+    const tmp = await makeTmp();
+    const root = join(tmp, "docs");
+    await mkdir(root);
+    // No stem before the suffix, and a name that only CONTAINS the word.
+    await writeFile(join(root, "summary.md"), "# Summary\n\nA real document.\n", "utf8");
+    await writeFile(join(root, "my-summary.md"), "# Mine\n\nAlso real.\n", "utf8");
+
+    const { manifest } = await buildManifest(root, { corpusId: "c", sourceCommit: "dev" });
+    const ids = manifest.nodes.map((n) => n.stable_id);
+    expect(ids).toContain("docs/summary");
+    expect(ids).toContain("docs/my-summary");
+  });
+});

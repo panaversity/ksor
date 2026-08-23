@@ -448,6 +448,12 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
   are available. No other keys; never
   `id:` or `name:` — the path is the identity.
+- **Each page says how long it takes to read**, just above the body, counted from the
+  document's own words when the site is built. Fenced code and frontmatter do
+  not count toward it, so a short page carrying a long example is not reported
+  as a long read. Nothing to author — it is derived. A document with a summary
+  shows the figure on both tabs, so a reader can see at a glance how much the
+  summary saves them.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every
   `provenance` entry separately at the foot, and — for a superseded document —
@@ -500,6 +506,49 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   refused.
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
+- **Study attachments.** A document may carry two optional companions named
+  after it, in the same folder: `<doc>.summary.md` (a short précis) and
+  `<doc>.flashcards.yaml` (a recall deck). The summary appears as a second tab
+  beside the document's own words; the deck appears at the END of that
+  document's page. Both appear nowhere else in the site.
+
+  An attachment is **part of its document**, not a document. It has no URL of
+  its own, no sidebar row, no line in `llms.txt`, and no identity an agent can
+  cite — so it carries **no frontmatter at all** (the checker refuses any), and
+  it takes its `visibility:` and any takedown from its parent. Restrict the
+  document and its summary and deck go with it; there is no way to publish a
+  summary more widely than the document it summarises. An attachment whose
+  document is missing is refused, by `pnpm check` and by `pnpm build` alike.
+
+  A deck is YAML, and the extension is exactly `.flashcards.yaml` — `.yml` is
+  refused by name:
+
+  ```yaml
+  deck:
+    title: Expense approvals
+    description: Recall checks for the approvals policy.
+  cards:
+    - front: Who approves a purchase above the threshold?
+      back: A second approver, independent of the requester.
+      why: Optional — a prompt shown before the answer.
+  ```
+
+  No `id:` anywhere, on the deck or a card: the path is the deck's identity,
+  and a card's identity is its own text. Edit a card and only that card's
+  review progress starts again; the rest is untouched.
+
+  **A card may only say what its document says.** The summary and the deck are
+  ways of rehearsing the record, never a second source — a card asserting
+  something its document does not is a claim nothing governs and no agent can
+  cite. Ask your coding agent to write them from a document and to check every
+  answer back against it.
+
+  Review scheduling uses a simple interval ladder (an SM-2 variant): a missed
+  card returns in about a minute, a recalled card's interval grows by roughly
+  2.5x each time. It is not FSRS and makes no retention guarantee. Progress is
+  kept in the reader's own browser, so it is per-person and per-device, and it
+  is not part of the record.
+
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.
 

@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { ATTACHMENT_SUFFIXES, isAttachment, parentDocumentOf } from "./attachment-rule";
 import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience";
 import { isDenied, recordPathFrom, stableIdFrom, type DenylistManifest } from "./denial-rule";
 import { appName, instanceFrontmatter } from "./shared";
@@ -316,11 +317,22 @@ function stableIdOf(recordDir: string, file: string, text: string): string {
   );
 }
 
+/**
+ * The suffixes staging probes for — DERIVED from the shared rule, so a new
+ * attachment kind cannot be added there and forgotten here.
+ */
+const ATTACHMENT_SUFFIXES_FOR_STAGE: readonly string[] = ATTACHMENT_SUFFIXES.map((e) => e.suffix);
+
 function planStage(recordDir: string, denied: DenylistManifest): StagePlan {
   const documents: string[] = [];
   const assets = new Set<string>();
   let total = 0;
   for (const file of walkFiles(recordDir)) {
+    // An attachment is not a document: it is neither counted nor filtered on
+    // its own terms. It rides in below, with the parent that survived — which
+    // is the whole of governance inheritance, obtained by POSITION rather than
+    // by a second rule that could disagree with this one.
+    if (isAttachment(path.basename(file))) continue;
     if (!file.toLowerCase().endsWith(".md")) continue;
     total += 1;
     const text = readFileSync(file, "utf8");
@@ -332,6 +344,13 @@ function planStage(recordDir: string, denied: DenylistManifest): StagePlan {
     if (isDenied(denied, stableIdOf(recordDir, file, text), recordPathOf(recordDir, file)))
       continue;
     documents.push(file);
+    // The parent survived BOTH filters, so its attachments may be published.
+    // Reached only here: a filtered or denied parent never gets this far, so
+    // there is no path on which an attachment is staged without its parent.
+    for (const suffix of ATTACHMENT_SUFFIXES_FOR_STAGE) {
+      const attachment = file.replace(/\.mdx?$/i, "") + suffix;
+      if (existsSync(attachment)) assets.add(attachment);
+    }
     // Body only: frontmatter carries no links in the record grammar, and
     // scanning it here while the other shell strips it staged different
     // asset sets from one record (review finding, 2026-08-18).
@@ -539,6 +558,53 @@ function fillStage(recordDir: string, stageDir: string, denied: DenylistManifest
  * deleted or mistyped `audiences:` block would otherwise publish every
  * restricted document on a green build (vis-docusaurus, 2026-08-18).
  */
+/**
+ * Attachments the record cannot publish, refused at the BUILD.
+ *
+ * Staging never depends on the checker having run, so both rules need a home
+ * here as well as in `pnpm check` — the checker is where they get a good
+ * message, this is where they are guaranteed.
+ *
+ * Runs on every path, including the level-0 fast path that stages nothing:
+ * an orphan is a governance hole whether or not this record declares
+ * audiences.
+ */
+function assertAttachmentsWellFormed(recordDir: string): void {
+  for (const file of walkFiles(recordDir)) {
+    const base = path.basename(file);
+    if (!isAttachment(base)) continue;
+    const rel = path.relative(recordDir, file);
+
+    const parent = parentDocumentOf(base);
+    if (parent !== null && !existsSync(path.join(path.dirname(file), parent))) {
+      refuse(
+        "ksor-attachment-orphan",
+        `${rel} is an attachment of ${parent}, which is not in the record`,
+        "an attachment inherits its parent's governance — with no parent there is nothing to inherit, so it would be published under no tier and covered by no takedown",
+        `add ${path.join(path.dirname(rel), parent)}, or remove ${rel}`,
+      );
+    }
+
+    // No frontmatter, at all. One rule kills the whole widening class:
+    // no `visibility:` claiming a tier the parent does not have, no `sor_id:`
+    // escaping the parent's takedown, no `status:`/`owner:` claiming
+    // governance a thing with no id cannot carry.
+    if (base.toLowerCase().endsWith(".md") || base.toLowerCase().endsWith(".mdx")) {
+      const text = readFileSync(file, "utf8")
+        .replace(/^\uFEFF/, "")
+        .replaceAll("\r\n", "\n");
+      if (text.startsWith("---\n")) {
+        refuse(
+          "ksor-attachment-frontmatter",
+          `${rel} declares frontmatter`,
+          "an attachment is part of its parent and carries none of its own governance — a key here would look like it governs something and would govern nothing",
+          `remove the frontmatter block from ${rel}; ${parent ?? "its parent"} is what carries the governance`,
+        );
+      }
+    }
+  }
+}
+
 function refuseVisibilityWithoutAudiences(recordDir: string): void {
   for (const file of walkFiles(recordDir)) {
     if (!file.toLowerCase().endsWith(".md")) continue;
@@ -640,9 +706,11 @@ export function knowledgeSourceDir(): string {
     // taking a lock on every build.
     if (existsSync(stageDir)) withStageLock(stageDir, () => removeStage(stageDir));
     refuseVisibilityWithoutAudiences(recordDir);
+    assertAttachmentsWellFormed(recordDir);
     return RECORD_DIR;
   }
   if (audienceModel === null) refuseVisibilityWithoutAudiences(recordDir);
+  assertAttachmentsWellFormed(recordDir);
   fillStage(recordDir, stageDir, denied);
   watchRecord(recordDir, stageDir);
   return STAGE_DIR;

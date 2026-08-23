@@ -1216,4 +1216,77 @@ describe("scaffolded format-checker — torture", () => {
     const result = runChecker();
     expect(result.status, result.output).toBe(0);
   });
+
+  describe("study attachments", () => {
+    it("accepts a well-formed pair beside its document", () => {
+      const result = probe({
+        "knowledge/pay.md": doc("How pay is set."),
+        "knowledge/pay.summary.md": "Pay is set annually.\n",
+        "knowledge/pay.flashcards.yaml":
+          "deck:\n  title: Pay\ncards:\n  - front: When?\n    back: Annually.\n",
+      });
+      expect(result.status, result.output).toBe(0);
+    });
+
+    it("refuses an attachment whose document is not in the record", () => {
+      const result = probe({ "knowledge/ghost.summary.md": "No parent.\n" });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("ghost.summary.md");
+      expect(result.output).toContain("which is not in the record");
+      // The remedy names the file to create, not a rule to go and read.
+      expect(result.output).toContain("ghost.md");
+    });
+
+    it("refuses a deck whose document is not in the record", () => {
+      const result = probe({
+        "knowledge/ghost.flashcards.yaml": "deck:\n  title: G\ncards: []\n",
+      });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("which is not in the record");
+    });
+
+    /**
+     * The widening attack: a summary of a restricted document declaring a
+     * wider tier for itself. Refused as a CLASS — no frontmatter at all —
+     * rather than by allow-listing keys, so sor_id, status and owner are
+     * closed by the same rule.
+     */
+    it("refuses frontmatter on an attachment", () => {
+      const result = probe({
+        "knowledge/pay.md": doc(
+          "How pay is set.",
+          "title: Pay\nstatus: draft\nvisibility: restricted",
+        ),
+        "knowledge/pay.summary.md": "---\nvisibility: public\n---\n\nBands are 1-5.\n",
+        "instance.md": instance(MODEL),
+      });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("attachment declares frontmatter");
+    });
+
+    it("refuses .yml by name, pointing at .yaml", () => {
+      const result = probe({
+        "knowledge/pay.md": doc("How pay is set."),
+        "knowledge/pay.flashcards.yml": "deck:\n  title: Pay\ncards: []\n",
+      });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("not an attachment extension");
+      expect(result.output).toContain("pay.flashcards.yaml");
+    });
+
+    it("still refuses an ordinary stray file — the allowance is the suffix, not the extension", () => {
+      const result = probe({ "knowledge/notes.yaml": "a: 1\n" });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toContain("unexpected file type");
+    });
+
+    it("does not demand document frontmatter of a summary", () => {
+      const result = probe({
+        "knowledge/pay.md": doc("How pay is set."),
+        "knowledge/pay.summary.md": "Just prose, no keys.\n",
+      });
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).not.toContain("no frontmatter");
+    });
+  });
 });

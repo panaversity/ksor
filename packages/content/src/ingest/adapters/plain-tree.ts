@@ -32,6 +32,7 @@ import { basename, join } from "node:path";
 
 import { governanceFromFrontmatter, NO_GOVERNANCE } from "../governance.js";
 import { compareSiblings, orderValue, tieKey, type Sibling } from "../../lib/order-rule.js";
+import { isAttachment } from "../../lib/attachment-rule.js";
 import {
   type Manifest,
   ManifestError,
@@ -297,8 +298,23 @@ export function buildManifestFromTree(
   return { manifest, sources };
 }
 
-/** Python `p.suffix in (".md", ".mdx")` parity: a dotfile named exactly ".md" has NO suffix. */
+/**
+ * Python `p.suffix in (".md", ".mdx")` parity: a dotfile named exactly ".md"
+ * has NO suffix.
+ *
+ * ATTACHMENTS ARE NOT DOCUMENTS. `x.summary.md` ends in `.md`, so without the
+ * attachment rule it ingested as a node of its own — `stable_id`
+ * `knowledge/x.summary`, its own `content_nodes.visibility` coalescing to the
+ * record default, and its own takedown state. That is one cause wearing four
+ * costumes: the door served a summary the site hides; served an internal
+ * parent's summary at the public tier; served a taken-down parent's summary
+ * undenied (per-node denial matches a different id, and the subtree walk goes
+ * through `parent_id`, which is the enclosing SECTION, not the sibling
+ * document); and served an orphan the site refuses. An attachment belongs to
+ * its parent, so it gets no id and is never independently citable.
+ */
 function isDoc(name: string): boolean {
+  if (isAttachment(name)) return false;
   const dot = name.lastIndexOf(".");
   if (dot <= 0) return false;
   const suffix = name.slice(dot);

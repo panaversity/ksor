@@ -232,6 +232,13 @@ interface KnowledgeDoc {
   readonly visibility: string | null;
 }
 
+/** Mirrors record.ts and the reference shell — see decision 24. */
+const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
+
+function isAttachment(base: string): boolean {
+  return ATTACHMENT_SUFFIXES.some((s) => base.length > s.length && base.endsWith(s));
+}
+
 function* documents(dir: string, prefix: string): Generator<KnowledgeDoc> {
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
@@ -240,7 +247,11 @@ function* documents(dir: string, prefix: string): Generator<KnowledgeDoc> {
     const rel = `${prefix}${entry.name}`;
     if (entry.isDirectory()) {
       yield* documents(path.join(dir, entry.name), `${rel}/`);
-    } else if (entry.name.endsWith(".md")) {
+    } else if (entry.name.endsWith(".md") && !isAttachment(entry.name)) {
+      // Attachments are not documents. This shell renders none of them, so it
+      // stages none — which is all the contract asks of a shell: refuse to
+      // publish one as a routed document (decision 24). Rendering a summary
+      // tab is a FEATURE the reference shell has and this one does not.
       const text = fs.readFileSync(path.join(dir, entry.name), "utf8");
       const block = FRONTMATTER.exec(text)?.[1] ?? "";
       // Present-but-empty (a block-list visibility:) must never read as
@@ -388,7 +399,7 @@ function stageFile(from: string, to: string): void {
 function stageRecord(
   knowledgeDir: string,
   stageDir: string,
-  model: AudienceModel,
+  model: AudienceModel | null,
   audience: string,
 ): string {
   fs.mkdirSync(stageDir, { recursive: true });
@@ -398,7 +409,10 @@ function stageRecord(
   const assets = new Set<string>();
   let staged = 0;
   for (const doc of documents(recordRoot, "")) {
-    if (!permits(model, audience, doc.visibility)) continue;
+    // A null model means there is no audience to filter BY — the record stages
+    // anyway, because `documents()` is also what drops study attachments and
+    // this shell's docs plugin globs whatever directory it is handed.
+    if (model !== null && !permits(model, audience, doc.visibility)) continue;
     staged += 1;
     const from = path.join(recordRoot, doc.rel);
     stageFile(from, path.join(stageDir, doc.rel));
@@ -411,7 +425,7 @@ function stageRecord(
       if (asset !== null) assets.add(asset);
     }
   }
-  if (staged === 0) {
+  if (staged === 0 && model !== null) {
     // Docusaurus refuses an empty docs directory on its own, but its message
     // names `.staged-knowledge` — a directory the adopter never created and cannot
     // find an explanation for. The refusal is right; the reason has to travel
@@ -437,6 +451,14 @@ function stageRecord(
  * languages — a predicate here, exclude globs there — is two chances to
  * drift, and the drift is silent.
  */
+/** Does this record carry any study attachment at all? */
+function hasAttachments(dir: string): boolean {
+  return fs.readdirSync(dir, { withFileTypes: true }).some((entry) => {
+    if (entry.isDirectory()) return hasAttachments(path.join(dir, entry.name));
+    return isAttachment(entry.name);
+  });
+}
+
 export function planRecord(options: {
   readonly repoRoot: string;
   readonly knowledgeDir: string;
@@ -451,7 +473,18 @@ export function planRecord(options: {
   const audience = buildAudience(model);
   if (model === null) {
     refuseUngovernedVisibility(knowledgeDir);
-    return { recordDir: knowledgeDir, label: null };
+    // No audience model, so nothing is filtered BY TIER — but study
+    // attachments are still not documents, and Docusaurus globs the directory
+    // it is given. `exclude:` is not an option here (it serializes into the
+    // client bundle, above), so a record carrying attachments is handed a
+    // staged copy that simply does not contain them. A record with none keeps
+    // the zero-copy path.
+    return {
+      recordDir: hasAttachments(knowledgeDir)
+        ? stageRecord(knowledgeDir, stageDir, null, audience)
+        : knowledgeDir,
+      label: null,
+    };
   }
 
   return {

@@ -5,8 +5,9 @@ project's people and AI agents operate from.
 
 Two worlds live here:
 
-- **`knowledge/` — the record.** Plain governed markdown. Yours forever,
-  readable anywhere, portable without this repository's code.
+- **`knowledge/` — the record.** Plain governed markdown (plus the optional
+  study attachments a document may carry). Yours forever, readable anywhere,
+  portable without this repository's code.
 - **`system/` — the system.** The site (and later, services) that serve the
   record. Replaceable machinery.
 
