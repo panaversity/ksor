@@ -1,4 +1,5 @@
 import { defineCollections, defineConfig, defineDocs } from "fumadocs-mdx/config";
+import { remarkCodeTab } from "fumadocs-core/mdx-plugins/remark-code-tab";
 import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
 import { z } from "zod";
 import { DeckSchema } from "./lib/deck";
@@ -114,6 +115,28 @@ export const slides = defineCollections({
 
 export default defineConfig({
   mdxOptions: {
-    // MDX options
+    /**
+     * Alternative versions of the same instruction, as TABS.
+     *
+     * A record often has to say the same thing twice — one way for one tool,
+     * one for another — and stacking both is how a reader follows the wrong
+     * one. `remarkCodeTab` turns consecutive fenced blocks that declare a
+     * `tab="…"` into a tab group.
+     *
+     * The reason this works HERE, where a JSX `<Tabs>` cannot: a fence's info
+     * string is free text in CommonMark. `\`\`\`bash tab="Claude Code"` is a
+     * perfectly ordinary bash block to every other markdown reader, which sees
+     * both blocks one after another and is not misled — it just does not get
+     * to pick. So the record stays framework-free (critical rule 2) and the
+     * site still renders the affordance.
+     *
+     * `CodeBlockTabs` rather than `Tabs`, and the difference is not cosmetic:
+     * only that branch honours `tab-group`, which is what makes ONE choice
+     * apply to every group on the page and persist to the next visit. The
+     * `Tabs` branch drops the attribute silently, so a reader with a
+     * ten-section document would pick their tool ten times (verified against
+     * fumadocs-core 16.14.5, remark-code-tab.js).
+     */
+    remarkPlugins: [[remarkCodeTab, { Tabs: "CodeBlockTabs" }]],
   },
 });
