@@ -424,6 +424,95 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     }
   }, 300_000);
 
+  /**
+   * A presentation the record OWNS. The attachment guarantees are inherited
+   * from the one rule and proved for the quiz already; what is new here is
+   * that a deck must ship WHOLE in the html — a reader without JavaScript, a
+   * crawler and an agent parsing the page all get every slide — and that it
+   * must reach no third party at all.
+   */
+  it("publishes an owned deck whole in the html, reaching nobody", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const knowledge = path.join(project, "knowledge");
+    const parent = path.join(knowledge, "deck-host.md");
+    const deckFile = path.join(knowledge, "deck-host.slides.yaml");
+    try {
+      writeFileSync(parent, "---\ntitle: Deck host\nstatus: approved\n---\n\nHost body.\n");
+      expect(buildScaffold(project).status, "baseline build").toBe(0);
+      const before = {
+        md: readFileSync(path.join(outDir, "md", "deck-host.md"), "utf8"),
+        llms: readFileSync(path.join(outDir, "llms.txt"), "utf8"),
+        llmsFull: readFileSync(path.join(outDir, "llms-full.txt"), "utf8"),
+      };
+
+      const MARKS = ["zzslideonezz", "zzslidetwozz", "zzslidethreezz"];
+      const NOTE = "zznotemarkerzz";
+      writeFileSync(
+        deckFile,
+        `slides:\n  title: Host deck\ndeck:\n` +
+          MARKS.map(
+            (m, i) =>
+              `  - heading: Slide ${i} ${m}\n` +
+              `    bullets: ["a point about ${m}"]\n` +
+              (i === 0 ? `    note: ${NOTE}\n` : ""),
+          ).join(""),
+      );
+      expect(buildScaffold(project).status, "build with an owned deck").toBe(0);
+
+      const page = readFileSync(path.join(outDir, "docs", "deck-host", "index.html"), "utf8");
+
+      // EVERY slide, not just the visible one. This is the clause that fails
+      // the moment somebody builds the deck on mount instead of on the server.
+      for (const mark of MARKS) {
+        expect(page, `slide "${mark}" is not in the server-rendered html`).toContain(mark);
+      }
+      expect(page, "the presenter note is not in the html").toContain(NOTE);
+
+      // Reaches nobody: an owned deck has no frame and no third-party url.
+      expect(page, "an owned deck must not ship an iframe").not.toContain("<iframe");
+
+      // The parent's own bytes did not move.
+      expect(readFileSync(path.join(outDir, "md", "deck-host.md"), "utf8")).toBe(before.md);
+      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).toBe(before.llms);
+      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).toBe(before.llmsFull);
+
+      // No route, no markdown twin.
+      expect(existsSync(path.join(outDir, "docs", "deck-host.slides"))).toBe(false);
+      expect(existsSync(path.join(outDir, "md", "deck-host.slides.yaml"))).toBe(false);
+
+      // And nowhere else in the export.
+      const carriers: string[] = [];
+      const walk = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else if (readFileSync(full, "utf8").includes(MARKS[0] ?? "")) {
+            carriers.push(path.relative(outDir, full));
+          }
+        }
+      };
+      walk(outDir);
+      expect(carriers.length, "control: the deck IS published somewhere").toBeGreaterThan(0);
+      for (const file of carriers) {
+        expect(file.startsWith(path.join("docs", "deck-host")), `leaked into ${file}`).toBe(true);
+      }
+
+      // Two sources have no answer to which one governs, so the build refuses.
+      writeFileSync(
+        deckFile,
+        `slides:\n  title: Host deck\n` +
+          `  url: https://docs.google.com/presentation/d/abc123/edit\n` +
+          `deck:\n  - heading: Slide zero ${MARKS[0]}\n`,
+      );
+      const refused = buildScaffold(project);
+      expect(refused.status, "a deck declaring both sources must refuse").not.toBe(0);
+      const output = `${refused.stdout ?? ""}${refused.stderr ?? ""}`;
+      expect(output).toContain("ksor-slides-two-sources");
+    } finally {
+      for (const leftover of [parent, deckFile]) rmSync(leftover, { force: true });
+    }
+  }, 300_000);
+
   it("renders each document's declared governance, and infers nothing", () => {
     const doc = (name: string, frontmatter: string, body: string): void =>
       writeFileSync(
