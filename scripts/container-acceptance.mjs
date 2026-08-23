@@ -242,10 +242,16 @@ try {
       clientInfo: { name: "container-acceptance", version: "1" },
     },
   });
-  if (init.result?.serverInfo?.name !== "ksor") {
-    fail(`initialize did not answer as ksor: ${JSON.stringify(init).slice(0, 300)}`);
+  // The server NAME comes from the registration file, so this is already the
+  // first evidence that the file reached the image: "ksor" would mean it did not.
+  const served = init.result?.serverInfo;
+  if (served?.name !== "acceptance") {
+    fail(
+      `initialize answered as ${JSON.stringify(served?.name)} — the registration file did ` +
+        `not reach the image, so the door fell back to the compiled default`,
+    );
   }
-  console.log("initialize: ksor", init.result.serverInfo.version);
+  console.log(`initialize: ${served.name} ${served.version} — from the registration file`);
 
   // The tool the REGISTRATION FILE names — not the default. If system/gateways/
   // never reached the image, this is "search" and the assertion says so.
