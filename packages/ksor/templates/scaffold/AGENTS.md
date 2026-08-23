@@ -633,6 +633,35 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   Declaring both `deck:` and `slides.url:` is refused — two presentations with
   nothing to say which one governs.
 
+- **One instruction per tool, as tabs.** When a document has to say the same
+  thing two ways — one command for one agent, another for another — put each in
+  its own fenced block and give the fence a `tab`:
+
+  ````markdown
+  ```bash tab="Claude Code" tab-group="agent"
+  curl -fsSL https://claude.ai/install.sh | bash
+  ```
+
+  ```bash tab="OpenCode" tab-group="agent"
+  curl -fsSL https://opencode.ai/install | bash
+  ```
+  ````
+
+  Consecutive blocks that declare a `tab` become one tab group. This is still
+  CommonMark: a fence's info string is free text, so any other markdown reader
+  shows both blocks one after another — correct, just without the picker.
+
+  **`tab-group` is what makes the choice stick.** Blocks sharing a group name
+  switch together across the whole page and the choice is remembered for the
+  reader's next visit, so a document with ten tabbed sections is one decision
+  rather than ten. Leave it off and each group is independent, which is almost
+  never what you want. Use the same group name for the same axis throughout a
+  record.
+
+  A tool the site knows gets its own colour and mark on its tab; anything else
+  renders in the site's accent. The list lives in `system/site/app/global.css`
+  and is yours — adding a tool is one colour and one mark.
+
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.
 

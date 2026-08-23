@@ -513,6 +513,71 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     }
   }, 300_000);
 
+  /**
+   * Tabs, authored in CommonMark.
+   *
+   * The failure this pins is SILENT. `remarkCodeTab` takes a `Tabs` option,
+   * and only its `CodeBlockTabs` branch honours `tab-group` — the other drops
+   * it and renders tabs that look correct and do not sync, so a reader on a
+   * ten-section document picks their tool ten times. Nothing errors, so only
+   * an assertion on the shipped bytes catches it.
+   */
+  it("renders code tabs from a fence's info string, and carries the group", () => {
+    const knowledge = path.join(project, "knowledge");
+    const doc = path.join(knowledge, "tabbed.md");
+    try {
+      writeFileSync(
+        doc,
+        [
+          "---",
+          "title: Tabbed",
+          "status: approved",
+          "---",
+          "",
+          "Pick one.",
+          "",
+          '```bash tab="Alpha Tool" tab-group="picker"',
+          "zzalphacmdzz --version",
+          "```",
+          "",
+          '```bash tab="Beta Tool" tab-group="picker"',
+          "zzbetacmdzz --version",
+          "```",
+          "",
+        ].join("\n"),
+      );
+      expect(buildScaffold(project).status, "build with tabs").toBe(0);
+
+      const page = readFileSync(
+        path.join(project, "system", "site", "out", "docs", "tabbed", "index.html"),
+        "utf8",
+      );
+
+      // Both variants ship, whichever is selected — a reader with no
+      // JavaScript still gets every instruction.
+      //
+      // Asserted on a SINGLE token, not a phrase: the highlighter splits code
+      // into per-token spans, so `zzalphacmdzz --version` never appears as
+      // contiguous text in the html and a phrase assertion fails on a feature
+      // that works (found on the first run of this test).
+      expect(page, "the first tab's code is missing").toContain("zzalphacmdzz");
+      expect(page, "the second tab's code is missing").toContain("zzbetacmdzz");
+
+      // The per-tab hook the branding keys on. Ours, not Radix's generated id.
+      expect(page).toContain('data-tab-value="Alpha Tool"');
+      expect(page).toContain('data-tab-value="Beta Tool"');
+
+      // The group. Without this the tabs render and do not sync, which is the
+      // whole point of the CodeBlockTabs branch.
+      expect(page, "tab-group did not reach the markup — sync is silently off").toContain("picker");
+
+      // And the fence is not left as a plain code block: a tab strip exists.
+      expect(page, "no tablist rendered — the remark plugin did not run").toContain('role="tab"');
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  }, 300_000);
+
   it("renders each document's declared governance, and infers nothing", () => {
     const doc = (name: string, frontmatter: string, body: string): void =>
       writeFileSync(
