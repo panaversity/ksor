@@ -56,9 +56,20 @@ function fail(message) {
 function cleanup() {
   if (container) {
     try {
-      console.error(run("docker", ["logs", container]).slice(-4000));
-    } catch {
-      /* the container may never have started */
+      // BOTH streams, through a shell: execFileSync returns stdout only, and
+      // the door writes its boot report — including every refusal — to stderr.
+      // Capturing stdout alone printed an empty string over a real failure.
+      console.error("--- container state ---");
+      console.error(
+        run("sh", [
+          "-c",
+          `docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}}' ${container}`,
+        ]).trim(),
+      );
+      console.error("--- container logs ---");
+      console.error(run("sh", ["-c", `docker logs ${container} 2>&1`]).slice(-6000));
+    } catch (error) {
+      console.error(`could not read the container's logs: ${error.message}`);
     }
     try {
       run("docker", ["rm", "-f", container]);
