@@ -296,12 +296,45 @@ either stops being true.
 
 ## Released since 0.0.7
 
+- **Quizzes** (`specs/ksor/quiz/spec.md`, unreleased on this branch). A
+  document may carry `<doc>.quiz.yaml` as a THIRD attachment, on the same rule
+  as the summary and the deck — so no route, no `llms.txt` line, no stable id,
+  and its parent's tier and takedown, all inherited rather than
+  re-implemented. It renders under the deck in the study-aids region: choose,
+  see immediately whether you were right, read the explanation. No pass mark,
+  and answers stay in the reader's browser.
+
+  Because ingest creates no node, **the answer key cannot reach the MCP
+  surface** — the question issue #35 raises about whether an agent should get
+  a quiz's answers is settled by the row not existing, rather than by a filter.
+
+  The predecessor's quiz audit is carried, and carried as a REFUSAL rather
+  than a script: five checks run inside the schema, so a quiz a reader could
+  pass by guessing cannot be loaded. `ksor-quiz-answer-bias`,
+  `ksor-quiz-length-bias`, `ksor-quiz-answer-run`, `ksor-quiz-contradiction`,
+  `ksor-quiz-duplicate-stem`, each naming the questions to fix. Its own
+  README records these as bugs that shipped and were found by students — one
+  quiz with every correct answer in the same position across 451 questions —
+  and its findings file still reports 88% pick-longest in one file, which is
+  what an advisory checker is worth. Run against that project's real data, the
+  audit reports 67% of answers at option C and 78% pick-longest on the 18
+  parsed questions of its `11-chapter-quiz.md`.
+
+  Thresholds diverge deliberately: 60% floors rather than the predecessor's
+  15–35% distribution target, and no ratio check below five questions, because
+  a five-question bank cannot satisfy a distribution without the checker
+  choosing an author's answers. Verified live on a built scaffold — quiz text
+  in **0** files outside its document's own page, parent's `/md/` and both
+  llms files **byte-identical** with and without it, zero console errors, both
+  themes. The seed quiz `ksor init` ships was itself refused on first draft
+  for putting four of five answers at option B.
+
 - **Study attachments — summaries and flashcard decks** (decision 24,
   `specs/ksor/study-attachments/spec.md`, unreleased on this branch). A
   document may carry `<doc>.summary.md` and `<doc>.flashcards.yaml` beside it.
   The summary joins the record's own words as a second TAB — the two readings
-  of a document. The deck renders at the END of the page, in a region the quiz
-  will share, because a study aid is used after reading and a tab would hide
+  of a document. The deck renders at the END of the page, in the region the quiz
+  now shares, because a study aid is used after reading and a tab would hide
   the document while you used it. `ksor init` ships one of each on the seed
   document. Presence-driven: a document with neither gets no tab strip and no
   region at all (verified live: a page without attachments renders zero

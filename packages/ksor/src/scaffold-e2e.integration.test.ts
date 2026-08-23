@@ -338,6 +338,92 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     }
   }, 300_000);
 
+  /**
+   * A quiz is an attachment on the same rule, so the exclusion is inherited
+   * rather than re-implemented. What is NEW and needs its own proof is the
+   * audit: it runs inside the schema, so a quiz a reader could pass by
+   * guessing must stop the BUILD rather than being published.
+   */
+  it("publishes a quiz on its document's page only, and refuses a guessable one", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const knowledge = path.join(project, "knowledge");
+    const parent = path.join(knowledge, "quiz-host.md");
+    const quizFile = path.join(knowledge, "quiz-host.quiz.yaml");
+    try {
+      writeFileSync(parent, "---\ntitle: Quiz host\nstatus: approved\n---\n\nHost body.\n");
+      expect(buildScaffold(project).status, "baseline build").toBe(0);
+      const before = {
+        md: readFileSync(path.join(outDir, "md", "quiz-host.md"), "utf8"),
+        llms: readFileSync(path.join(outDir, "llms.txt"), "utf8"),
+        llmsFull: readFileSync(path.join(outDir, "llms-full.txt"), "utf8"),
+      };
+
+      const MARK = "zzquizmarkerzz";
+      /** Answers cycle and options match in length, so the audit is silent. */
+      const clean = [0, 1, 2, 3, 0, 1]
+        .map(
+          (answer, i) =>
+            `  - question: Question ${i} ${MARK} on a wholly separate matter here\n` +
+            `    options: ["option alpha", "option gamma", "option delta", "option omega"]\n` +
+            `    answer: ${answer}\n` +
+            `    explanation: It follows from the document.\n`,
+        )
+        .join("");
+      writeFileSync(quizFile, `quiz:\n  title: Host quiz\nquestions:\n${clean}`);
+      expect(buildScaffold(project).status, "build with a well-formed quiz").toBe(0);
+
+      // The parent's own bytes did not move.
+      expect(readFileSync(path.join(outDir, "md", "quiz-host.md"), "utf8")).toBe(before.md);
+      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).toBe(before.llms);
+      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).toBe(before.llmsFull);
+
+      // No route, no markdown twin.
+      expect(existsSync(path.join(outDir, "docs", "quiz-host.quiz"))).toBe(false);
+      expect(existsSync(path.join(outDir, "md", "quiz-host.quiz.yaml"))).toBe(false);
+
+      // Present on the parent's page, in the SERVER HTML rather than behind a click.
+      const page = readFileSync(path.join(outDir, "docs", "quiz-host", "index.html"), "utf8");
+      expect(page, "the quiz is not in the parent's server-rendered HTML").toContain(MARK);
+
+      // And nowhere else in the whole export.
+      const carriers: string[] = [];
+      const walk = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else if (readFileSync(full, "utf8").includes(MARK)) {
+            carriers.push(path.relative(outDir, full));
+          }
+        }
+      };
+      walk(outDir);
+      expect(carriers.length, "control: the quiz IS published somewhere").toBeGreaterThan(0);
+      for (const file of carriers) {
+        expect(file.startsWith(path.join("docs", "quiz-host")), `leaked into ${file}`).toBe(true);
+      }
+
+      // Now the audit. Every answer at the same index is the predecessor's
+      // shipped bug — 451 questions of it — and it must stop the build.
+      const biased = [0, 0, 0, 0, 0, 0]
+        .map(
+          (answer, i) =>
+            `  - question: Question ${i} ${MARK} on a wholly separate matter here\n` +
+            `    options: ["option alpha", "option gamma", "option delta", "option omega"]\n` +
+            `    answer: ${answer}\n` +
+            `    explanation: It follows from the document.\n`,
+        )
+        .join("");
+      writeFileSync(quizFile, `quiz:\n  title: Host quiz\nquestions:\n${biased}`);
+      const refused = buildScaffold(project);
+      expect(refused.status, "a guessable quiz must refuse the build").not.toBe(0);
+      const output = `${refused.stdout ?? ""}${refused.stderr ?? ""}`;
+      expect(output, "the refusal must name the rule").toContain("ksor-quiz-answer-bias");
+      expect(output, "and name the questions to fix").toMatch(/questions .*1/);
+    } finally {
+      for (const leftover of [parent, quizFile]) rmSync(leftover, { force: true });
+    }
+  }, 300_000);
+
   it("renders each document's declared governance, and infers nothing", () => {
     const doc = (name: string, frontmatter: string, body: string): void =>
       writeFileSync(

@@ -731,6 +731,33 @@ gateway` package, serve-by-spawn) is superseded._
     evidence; the no-independent-id clause is not reversible without an owner
     decision, because it IS the governance guarantee.
 
+    _Revision 2026-08-23: a THIRD kind, `<doc>.quiz.yaml`, on the same rule and
+    with no new pattern — which is the test this decision was meant to face.
+    Adding it touched the suffix list and nothing else about the guarantee: no
+    route, no stable id, no MCP node, parent's tier and takedown, all
+    inherited. It also settles issue #35's open question — "does an agent get
+    the answers? Should it?" — without a mechanism, because ingest creates no
+    node and there is therefore no row for `search` or `read` to return. And it
+    routes around that issue's stated blocker rather than resolving it: a quiz
+    is a FILE named after its document, not a `:::quiz` directive inside one,
+    so `knowledge/` stays CommonMark with no grammar ratified. The directive
+    grammar remains unratified and remains worth ratifying for other reasons.
+    Contract: `specs/ksor/quiz/spec.md`._
+
+    _One thing IS new, and is the reason this revision is recorded rather than
+    silent: the quiz carries the predecessor's hygiene audit, converted as a
+    REFUSAL instead of a script. Its own README lists these as bugs that
+    shipped and were caught by students — every correct answer at one position
+    across 9 quizzes and 451 questions — and its findings file, six weeks old,
+    still reports 88% pick-longest in a file nobody fixed. That is what an
+    advisory checker is worth, so here the checks run inside the schema and a
+    quiz that fails them cannot be loaded at all. Thresholds diverge
+    deliberately (60% floors, not its 15–35% distribution target, and no ratio
+    rule below five questions) because a small bank cannot satisfy a
+    distribution without the checker choosing an author's answers for them —
+    which would be governance overreaching into content. Reversed by a
+    measurement showing the floors refusing honest quizzes._
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

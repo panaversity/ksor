@@ -4,7 +4,7 @@ import type { ReactElement, ReactNode } from "react";
  * The end-of-document region: what a reader DOES with a document once they
  * have read it.
  *
- * The deck lives here, and the quiz will sit beside it. Deliberately not a tab:
+ * The deck and the quiz live here, in that order. Deliberately not a tab:
  * a study aid is used AFTER the document, and a tab would hide the document
  * while you used it. Deliberately one region rather than each aid finding its
  * own spot on the page, so a second aid is a child here and not a new layout

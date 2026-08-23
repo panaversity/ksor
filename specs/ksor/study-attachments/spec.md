@@ -126,7 +126,7 @@ Each is separately observable on the built output:
 - `C21a` The deck renders at the **end of the document**, never behind a tab: a
   study aid is used AFTER reading, and a tab hides the document while you use
   it. It sits in ONE end-of-document region (`components/study-aids.tsx`) that
-  the quiz will share, so a second aid is a child there rather than a new
+  the quiz now shares, so a second aid is a child there rather than a new
   argument about placement. The region renders nothing when a document has no
   aids.
 - `C21` The deck is ordered by **what is due**, not by authored order. This is
