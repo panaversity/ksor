@@ -242,10 +242,23 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
   const sweep = async (): Promise<Map<string, { body: string; addressed: boolean }>> => {
     const seen = new Map<string, { body: string; addressed: boolean }>();
     for (const shape of SHAPES) {
-      const value = await runRead(pool, TENANT, async (c) => shape.run(c), {
-        ...VECTOR_TXN_GUCS,
-        ...WHOLE_RECORD_SCOPE,
-      });
+      // A REFUSAL is a response, and it gets swept like any other: anchoring an
+      // outline at a withdrawn node correctly throws, and the message it throws
+      // must not carry what it just refused to serve. Letting the throw escape
+      // would abort the sweep and skip every shape after it — which is how a
+      // suite quietly stops testing most of what it claims to.
+      const value = await runRead(
+        pool,
+        TENANT,
+        async (c) => {
+          try {
+            return await shape.run(c);
+          } catch (error) {
+            return { refused: String(error) };
+          }
+        },
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
+      );
       seen.set(shape.name, {
         body: JSON.stringify(value ?? null),
         addressed: shape.addressed === true,
