@@ -46,7 +46,7 @@ const BLOCKLIST_BODY = "BLOCKLISTCANARY3E7";
 // no tier of their own, so they are published only where their parent is —
 // and before the attachment rule, a frontmatter-less summary read as "no
 // visibility declared", took the record DEFAULT tier, and published a
-// restricted document's precis to the public build (decision 23).
+// restricted document's precis to the public build (decision 24).
 const SUMMARY_BODY = "SUMMARYCANARY6C4B";
 const DECK_BODY = "DECKCANARY2F8E";
 

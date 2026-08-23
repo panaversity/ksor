@@ -1,26 +1,37 @@
-# Keep the serving image to what serving needs.
+# DENY EVERYTHING, then allow exactly what the door needs.
+#
+# Defence in depth, NOT the bound. The Dockerfile names the files it copies,
+# because a .dockerignore is not honoured by every build host — Vercel's is
+# not. This file protects local `docker build` and every builder that does
+# respect it; the Dockerfile protects the rest.
+#
+# The inverse — listing what to exclude — cannot bound the image, because it can
+# only exclude what someone thought of. A build output, a cache, a backup
+# directory or a vendored dependency in the project root all end up inside, and
+# the failure arrives as a registry rejecting the push rather than as anything
+# about the file you added (found live: PAYLOAD_TOO_LARGE).
+#
+# So: nothing ships unless it is named here.
+*
 
-# Secrets. The image takes its configuration from the environment at RUN time;
-# baking a .env into a layer publishes it to anyone who can pull the image.
-.env
-.env.*
-!.env.example
+# The manifest, which pins @panaversity/ksor and is what `npm install` reads.
+!package.json
 
-# The corpus. The door serves from Postgres — knowledge/ was published by
-# `ksor ingest` before this container ever started, and copying it in would
-# suggest the container reads it. It does not.
-knowledge/
+# The record's identity and configuration. Its prose is the MCP server's
+# instructions, so the door genuinely needs the file.
+!instance.md
 
-# The website. It is the OTHER surface, built and hosted separately.
-system/
+# This door's own MCP registration — what its tools are called, what it says it
+# covers, and which of them exist. Excluding it makes the container serve the
+# default surface while your repository says otherwise.
+!system
+system/*
+!system/gateways
 
-# Build and tooling noise.
-node_modules/
-.git/
-.github/
-.agents/
-.claude/
-.gemini/
-*.log
-.DS_Store
-.ksor-denylist.json
+# Deliberately NOT here, and each for a reason:
+#   .env          configuration arrives from the environment at run time; a DSN
+#                 baked into a layer is published to anyone who can pull it.
+#   knowledge/    the door serves from Postgres. Copying the corpus in would
+#                 suggest the container reads it, and it never does.
+#   system/site/  the other surface, built and hosted separately.
+#   node_modules/ installed inside the image, from the manifest above.

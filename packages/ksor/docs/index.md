@@ -32,6 +32,10 @@ instead of their training memory. The corpus grows with each implemented verb.
   export the manifest the site build reads), `ksor calibrate` (measure the
   abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
   implemented: each prints an honest notice and exits `2`.
+  - **[tool-surface.md](./tool-surface.md)** — shaping what agents see.
+    `system/gateways/content.ts` is emitted, adopter-owned and deletable; it
+    decides tool names, what the record says it covers, and how much of the
+    caller's context an answer costs. Includes the measurements.
   - **[deploying.md](./deploying.md)** — getting both surfaces onto a host. The
     scaffold emits a `Dockerfile` that names no vendor, and a `vercel.json` that
     points at it to put the site and the MCP door behind one domain. Includes

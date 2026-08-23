@@ -50,6 +50,12 @@ const REQUIRED_IN_TARBALL = [
   // The container artifacts. Shipping these is what makes the served rung
   // deployable anywhere rather than only where we happened to test.
   "templates/scaffold/Dockerfile",
+  // The adopter's registration file, and the subpath it imports. Both are
+  // shipped surfaces with no other pin: a build that stopped emitting either
+  // would break every adopter at install time with every test still green.
+  "templates/scaffold/system/gateways/content.ts",
+  "dist/gateway.mjs",
+  "dist/gateway.d.mts",
   // Not ".gitignore"/".dockerignore": npm pack drops leading-dot names from
   // the tarball, so these templates ship bare and init renames them on emit.
   "templates/scaffold/gitignore",
@@ -117,7 +123,14 @@ describe("published tarball", () => {
     const staged = path.join(workDir(), "pkg");
     cpSync(pkgDir, staged, {
       recursive: true,
-      filter: (src) => path.basename(src) !== "node_modules",
+      // Also skip the init suite's fake installs. They are created and removed
+      // INSIDE packages/ksor while vitest runs files in parallel, so a copy that
+      // walks into one mid-teardown fails ENOENT — the residual half of the
+      // 2026-08-18 flake, seen again 2026-08-23.
+      filter: (src) => {
+        const base = path.basename(src);
+        return base !== "node_modules" && !base.startsWith("ksor-fakeinstall-");
+      },
     });
     const probe = path.join(staged, "templates", "scaffold", "system", "site", "probe.tsbuildinfo");
     writeFileSync(probe, "transient\n");

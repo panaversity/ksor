@@ -342,7 +342,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // decision, recorded (decision 13) and true for this record, so it is not the
   // adopter's warning to read — see withoutSdkResponseModeWarning.
   const mcpHandler = withoutSdkResponseModeWarning(() =>
-    createMcpHandler(() => buildServer(ctx, version), {
+    createMcpHandler(() => buildServer(ctx, version, composition.registration), {
       legacy: "stateless",
       responseMode: "json",
       onerror: (error) => console.error(`mcp handler: ${error.name}: ${error.message}`),

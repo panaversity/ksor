@@ -134,6 +134,28 @@ try {
   ksor(["grant", "--instance", "instance.md"]);
   ksor(["ingest", "--instance", "instance.md", "--knowledge", "knowledge", "--flip"]);
 
+  // 4b. Customize the tool surface, so the walk proves the registration file
+  //     actually REACHES the image. It did not once: .dockerignore excluded all
+  //     of system/, the door fell back to the compiled default, and every test
+  //     stayed green because none of them looked at the served tool names.
+  writeFileSync(
+    path.join(project, "system", "gateways", "content.ts"),
+    "import { FLOOR, McpServer, READ_ONLY, SEARCH_OUTPUT, composeInstructions, searchHandler, z }\n" +
+      '  from "@panaversity/ksor/gateway";\n' +
+      "export default function buildGateway(ctx, version) {\n" +
+      '  const server = new McpServer({ name: "acceptance", version },\n' +
+      "    { instructions: composeInstructions(ctx.instance.instructions) });\n" +
+      '  server.registerTool("search_the_record", {\n' +
+      '    title: "Search",\n' +
+      "    description: `Acceptance corpus.\\n\\n${FLOOR.search}`,\n" +
+      "    inputSchema: z.object({ query: z.string(), k: z.number().int().min(1).max(50).default(2) }),\n" +
+      "    outputSchema: SEARCH_OUTPUT,\n" +
+      "    annotations: READ_ONLY,\n" +
+      "  }, searchHandler(ctx));\n" +
+      "  return server;\n" +
+      "}\n",
+  );
+
   // 5. Build the emitted Dockerfile, plus exactly one line for the tarball.
   const emitted = readFileSync(path.join(project, "Dockerfile"), "utf8");
   const INSERT = "COPY ksor-local.tgz ./\n";
@@ -143,10 +165,38 @@ try {
   if (overlay.replace(INSERT, "") !== emitted) fail("the overlay changed more than one line");
   writeFileSync(path.join(project, "Dockerfile.citest"), overlay);
 
+  // The emitted .dockerignore DENIES everything not explicitly allowed, which
+  // correctly excludes the local tarball this walk injects. Allow it for the
+  // test build only — appended to the scaffold's copy in a temp directory, so
+  // the shipped file is untouched and `init.integration.test.ts` still asserts
+  // the real one. If this line ever fails to help, the deny-all changed shape.
+  const ignorePath = path.join(project, ".dockerignore");
+  writeFileSync(
+    ignorePath,
+    `${readFileSync(ignorePath, "utf8")}\n# CI only: the locally packed build under test.\n!ksor-local.tgz\n`,
+  );
+
   run("docker", ["build", "-f", "Dockerfile.citest", "-t", IMAGE, "."], {
     cwd: project,
     stdio: "inherit",
   });
+
+  // An image the registry refuses is a failure that arrives from the HOST, long
+  // after the change that caused it — a build output or a backup directory in
+  // the project root riding in through a permissive .dockerignore (found live:
+  // PAYLOAD_TOO_LARGE). The allow-list is what bounds this; the number is a
+  // tripwire on the allow-list, not a performance target.
+  const sizeBytes = Number(
+    run("docker", ["image", "inspect", IMAGE, "--format", "{{.Size}}"]).trim(),
+  );
+  const sizeMb = Math.round(sizeBytes / 1_000_000);
+  console.log(`image: ${sizeMb} MB`);
+  if (sizeMb > 400) {
+    fail(
+      `the image is ${sizeMb} MB. Something in the project root is riding in — ` +
+        "check .dockerignore still denies everything it does not explicitly allow",
+    );
+  }
 
   // 6. Boot it. --network host so the container reaches the Postgres service
   //    the same way the ingest above did.
@@ -220,24 +270,28 @@ try {
       clientInfo: { name: "container-acceptance", version: "1" },
     },
   });
-  if (init.result?.serverInfo?.name !== "ksor") {
-    fail(`initialize did not answer as ksor: ${JSON.stringify(init).slice(0, 300)}`);
+  // The server NAME comes from the registration file, so this is already the
+  // first evidence that the file reached the image: "ksor" would mean it did not.
+  const served = init.result?.serverInfo;
+  if (served?.name !== "acceptance") {
+    fail(
+      `initialize answered as ${JSON.stringify(served?.name)} — the registration file did ` +
+        `not reach the image, so the door fell back to the compiled default`,
+    );
   }
-  console.log("initialize: ksor", init.result.serverInfo.version);
+  console.log(`initialize: ${served.name} ${served.version} — from the registration file`);
 
-  const outline = await mcp({
-    jsonrpc: "2.0",
-    id: 2,
-    method: "tools/call",
-    params: { name: "outline", arguments: {} },
-  });
-  const structured = outline.result?.structuredContent;
-  if (!structured) fail(`outline returned nothing: ${JSON.stringify(outline).slice(0, 400)}`);
-  const nodes = structured.nodes ?? [];
-  if (nodes.length === 0) {
-    fail(`the outline carries no record: ${JSON.stringify(structured).slice(0, 400)}`);
+  // The tool the REGISTRATION FILE names — not the default. If system/gateways/
+  // never reached the image, this is "search" and the assertion says so.
+  const listed = await mcp({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+  const names = (listed.result?.tools ?? []).map((t) => t.name);
+  if (names.length !== 1 || names[0] !== "search_the_record") {
+    fail(
+      `the container served ${JSON.stringify(names)} — the registration file did not reach ` +
+        `the image, so the door fell back to the compiled default`,
+    );
   }
-  console.log(`outline: ${nodes.length} nodes, first "${nodes[0].title}"`);
+  console.log(`tools/list: ${JSON.stringify(names)} — the registration reached the image`);
 
   // The guarantee, not merely a reply: a search must come back CITED. Provenance
   // is what separates this from any other retrieval server, so it is what the
@@ -246,12 +300,17 @@ try {
     jsonrpc: "2.0",
     id: 3,
     method: "tools/call",
-    params: { name: "search", arguments: { query: "what is a knowledge system of record", k: 3 } },
+    params: {
+      name: "search_the_record",
+      arguments: { query: "what is a knowledge system of record" },
+    },
   });
   const found = search.result?.structuredContent;
   if (!found) fail(`search returned nothing: ${JSON.stringify(search).slice(0, 400)}`);
   const hits = found.hits ?? [];
   if (hits.length === 0) fail(`search found nothing: ${JSON.stringify(found).slice(0, 400)}`);
+  // The file's own default is k=2; nothing asked for a count, so the file decided.
+  if (hits.length > 2) fail(`the file's k=2 default was ignored: ${hits.length} hits`);
   for (const hit of hits) {
     const provenance = hit.provenance ?? {};
     if (!provenance.stable_id || provenance.generation === undefined) {
@@ -259,9 +318,10 @@ try {
     }
   }
   console.log(
-    `search: ${hits.length} cited hits, gate=${found.gate}, ` +
+    `search: ${hits.length} cited hits (file default k=2), gate=${found.gate}, ` +
       `first ${hits[0].provenance.stable_id} gen=${hits[0].provenance.generation}`,
   );
+
   // 8. And the claim the whole job exists for.
   const body = emitted
     .split("\n")

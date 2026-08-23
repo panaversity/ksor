@@ -1,6 +1,6 @@
 {
   "name": "@panaversity/ksor",
-  "version": "0.0.23",
+  "version": "0.0.27",
   "description": "Knowledge System of Record — compile governed markdown into a static site for people and an MCP server for AI agents, with citations and measured abstention.",
   "keywords": [
     "abstention",
@@ -43,6 +43,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./gateway": {
+      "types": "./dist/gateway.d.mts",
+      "import": "./dist/gateway.mjs",
+      "default": "./dist/gateway.mjs"
     },
     "./package.json": "./package.json"
   },

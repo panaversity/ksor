@@ -39,8 +39,15 @@ import {
 
 import { bootHeader, bootLine } from "./boot-report.js";
 
+import { loadGateway } from "./gateway-load.js";
+import { verifyGatewaySurface } from "./gateway-verify.js";
+import { buildServer } from "./server.js";
+import type { Registration } from "./server.js";
+
 export interface Composition {
   readonly ctx: ServiceContext;
+  /** The record's own registration; the compiled default when it ships no file. */
+  readonly registration: Registration;
   readonly instance: ContentInstance;
   readonly pool: pg.Pool;
   /** null when checked-clean; a reason string when skipped (rides /health). */
@@ -258,5 +265,17 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // and the door had nothing to filter on — review 2026-08-20).
     audience,
   };
-  return { ctx, instance, pool, spaceSkipReason, version, verifyBoot };
+  // Resolved at boot, before the door opens: a bad gateway file must refuse
+  // loudly rather than serve a surface nobody asked for.
+  const registration = await loadGateway(instancePath);
+
+  // Verify the surface this record will actually SERVE, before the door opens.
+  // The registration file is adopter-owned code, so nothing structural stops it
+  // dropping a framework description — and a door that lost one looks perfectly
+  // healthy while its agent quietly stops abstaining. Built on a throwaway
+  // server: the door constructs a fresh one per request, so closing this one
+  // touches nothing. Costs no database round trip.
+  await verifyGatewaySurface(buildServer(ctx, version, registration));
+
+  return { ctx, instance, pool, spaceSkipReason, version, verifyBoot, registration };
 }

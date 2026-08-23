@@ -1,5 +1,106 @@
 # @panaversity/ksor
 
+## 0.0.27
+
+### Patch Changes
+
+- 6bc9d8f: The emitted `Dockerfile` names the files it copies instead of `COPY . ./`.
+
+  **A `.dockerignore` is not honoured by every build host.** Vercel's container
+  builder ignores it, so `COPY . ./` swept in `node_modules` and the built site —
+  about a gigabyte — and the deploy failed with the registry rejecting the push as
+  `PAYLOAD_TOO_LARGE`. The error arrives from the host and says nothing about the
+  file that caused it.
+
+  Naming what enters the image is the only form portable across build hosts. The
+  `.dockerignore` stays as defence in depth for builders that do respect it, but it
+  is no longer what bounds the image.
+
+  The risk of naming files is forgetting one — which is exactly how the registration
+  file came to be missing from the image two releases ago. That is covered: the
+  container acceptance job boots the built image and asserts it serves the tools the
+  registration names, so a forgotten file fails there rather than at a deploy.
+
+## 0.0.26
+
+### Patch Changes
+
+- b90de22: Bound the container image: `.dockerignore` now denies everything and allows only
+  what the door needs.
+
+  The previous shape listed what to exclude, which cannot bound an image — it can
+  only exclude what someone thought of. A build output, a cache, a vendored
+  dependency or a backup directory in the project root all rode in, and the failure
+  arrived as a container registry rejecting the push (`PAYLOAD_TOO_LARGE`) rather
+  than as anything about the file that was added.
+
+  Now: `*`, then `!package.json`, `!instance.md`, and `system/gateways/` — this
+  door's own MCP registration. Everything else stays out, including the corpus (the
+  door serves from Postgres), the website (a separately hosted surface), and every
+  `.env` (a DSN baked into a layer is published to anyone who can pull the image).
+
+  The container acceptance job now reports the built image's size and fails past a
+  ceiling, so an allow-list that stops bounding it goes red here rather than at
+  someone's deploy.
+
+## 0.0.25
+
+### Patch Changes
+
+- ed2dce0: Fix the container serving the DEFAULT tool surface while the repository said
+  otherwise.
+
+  `.dockerignore` excluded all of `system/` — correct when that directory held only
+  the website, and wrong the moment the door's own registration moved into
+  `system/gateways/`. The file never reached the image, so a record that had
+  renamed its tools, dropped one, or written what it covers was deployed serving
+  none of it. Nothing went red: the door booted, `/health` was green, searches
+  returned cited hits, and only `tools/list` betrayed it.
+
+  It now excludes `system/site/`, and the Dockerfile copies the project rather than
+  naming files one at a time — which is how the door came to ship without the very
+  file that shapes its tool surface.
+
+  The container acceptance job now writes a customized registration before building
+  the image and asserts the served tool is the one that file names. Found by
+  deploying and looking at `tools/list`, which is the only thing that would have.
+
+## 0.0.24
+
+### Patch Changes
+
+- cbdc4c2: The MCP tool surface is now adopter-owned code. `ksor init` emits
+  `system/gateways/content.ts` — ordinary `registerTool` calls with ordinary zod —
+  where a record sets what its tools are called, what it says it covers, what they
+  accept, and which of them exist at all.
+
+  Agents are the operator, and an agent pays for this surface out of its context
+  window twice. Measured against a live 81-document record: the three tool
+  definitions cost ~2,990 tokens and stay resident for the whole session, and one
+  `search` at the default `k=10` costs ~3,541 tokens per call. Until now a record
+  could change none of it. Deleting the two tools your agents never call gives back
+  ~1,643 tokens a session — verified live at 5,337 bytes of definitions against the
+  default's 11,960.
+
+  Real code rather than a config API, because models are trained on the MCP SDK and
+  on zod and not on our field names — and because `registerTool` lets a record add
+  its own tools, which no config schema could have anticipated. One import
+  (`@panaversity/ksor/gateway`, which re-exports `z` and `McpServer`), so a
+  registration stays a file: no package, no build step, nothing new in your
+  lockfile. It is **deletable** — without it the door serves the identical surface.
+
+  The handlers, output schemas and framework description text stay in the package,
+  because a hand-written handler returning fabricated hits with plausible
+  `stable_id`s passes every shape check there is. Your prose composes ABOVE the
+  framework text, never instead of it — and since that is now a template literal in
+  a file you own, **the door inspects its own served surface at boot** and refuses
+  to start when a guarantee is gone: `ksor-gateway-floor-missing`,
+  `ksor-gateway-no-tools`, `ksor-gateway-unloadable`.
+
+  Adds a public subpath export, `@panaversity/ksor/gateway`.
+
+  New: `docs/tool-surface.md`.
+
 ## 0.0.23
 
 ### Patch Changes

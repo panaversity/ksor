@@ -232,7 +232,7 @@ interface KnowledgeDoc {
   readonly visibility: string | null;
 }
 
-/** Mirrors record.ts and the reference shell — see decision 23. */
+/** Mirrors record.ts and the reference shell — see decision 24. */
 const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
 
 function isAttachment(base: string): boolean {
@@ -250,7 +250,7 @@ function* documents(dir: string, prefix: string): Generator<KnowledgeDoc> {
     } else if (entry.name.endsWith(".md") && !isAttachment(entry.name)) {
       // Attachments are not documents. This shell renders none of them, so it
       // stages none — which is all the contract asks of a shell: refuse to
-      // publish one as a routed document (decision 23). Rendering a summary
+      // publish one as a routed document (decision 24). Rendering a summary
       // tab is a FEATURE the reference shell has and this one does not.
       const text = fs.readFileSync(path.join(dir, entry.name), "utf8");
       const block = FRONTMATTER.exec(text)?.[1] ?? "";

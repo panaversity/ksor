@@ -296,7 +296,7 @@ either stops being true.
 
 ## Released since 0.0.7
 
-- **Study attachments — summaries and flashcard decks** (decision 23,
+- **Study attachments — summaries and flashcard decks** (decision 24,
   `specs/ksor/study-attachments/spec.md`, unreleased on this branch). A
   document may carry `<doc>.summary.md` and `<doc>.flashcards.yaml` beside it.
   The summary joins the record's own words as a second TAB — the two readings
@@ -316,7 +316,7 @@ either stops being true.
   **0** files against a positive control of 26. `ksor ingest` creates no node
   for either, so neither is independently citable — previously `isDoc` accepted
   `x.summary.md` and gave it its own `stable_id`, which is the one cause behind
-  four cross-surface leaks (decision 23).
+  four cross-surface leaks (decision 24).
 
   Refusals carry remedies and fire in both `pnpm check` and `pnpm build`:
   `ksor-attachment-orphan` (an attachment whose document is missing) and

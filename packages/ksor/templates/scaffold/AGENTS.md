@@ -311,6 +311,48 @@ signing keys, an unknown key id answers **503**, not 401 — the token may well 
 good and the door's key set merely stale, so a client should retry rather than
 send the user back through a login.
 
+## Shaping the agent surface — `system/gateways/content.ts`
+
+That file is this record's MCP registration — ordinary `registerTool` with
+ordinary zod. It is yours, and it is **deletable**: without it the door serves
+the same defaults.
+
+Edit it because an agent pays for this surface out of its context window, twice.
+Measured on an 81-document record:
+
+|                                  |                                |
+| -------------------------------- | ------------------------------ |
+| all three tool definitions       | ~2,990 tokens, always resident |
+| one `search` at `k=10` (default) | ~3,541 tokens per call         |
+| one `search` at `k=5`            | ~2,002 tokens per call         |
+
+Three edits pay for themselves:
+
+- **Delete a tool nothing calls.** Removing `outline` and `read` gives back
+  ~1,643 tokens for the whole session.
+- **Say what this record covers**, above `FLOOR.search`. It is how an agent with
+  several records attached picks yours; name the subject AND the boundary.
+- **Set `k`** in the input schema — it is the lever on reply size.
+
+```ts
+description: `Leave, benefits, conduct. Not product docs.\n\n${FLOOR.search}`,
+inputSchema: z.object({ query: z.string(), k: z.number().int().default(5) }),
+```
+
+You can add your own tools with `registerTool` too — but be clear-eyed: ksor
+makes no provenance claim about a tool it did not hand you a handler for.
+
+What you cannot change is deliberate: the handlers, the output schemas, and the
+`FLOOR` text. Your prose goes ABOVE the floor, never instead of it — the floor
+tells an agent how to read an abstention and that corpus content is untrusted,
+and a record that dropped it would answer without ever declining.
+
+Because that is a template literal in a file you own, the door checks its own
+surface at boot and refuses to start if a guarantee is gone:
+`ksor-gateway-floor-missing`, `ksor-gateway-no-tools`,
+`ksor-gateway-unloadable`. Full detail:
+`node_modules/@panaversity/ksor/docs/tool-surface.md`.
+
 ## Withdrawing a document — `ksor takedown`
 
 A takedown is the one governance act that must reach EVERY surface at once.
