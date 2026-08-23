@@ -84,13 +84,34 @@ try {
   writeFileSync(instancePath, instance);
 
   // 3. Install the LOCAL build, not the published one.
-  const packed = run("npm", ["pack", "--pack-destination", project], {
+  //
+  //    PNPM pack, never npm pack. The manifest declares `"zod": "catalog:"`,
+  //    a pnpm-only protocol that pnpm RESOLVES to a concrete range when it
+  //    packs or publishes — so the registry serves `^4.4.3` and every consumer
+  //    is fine. `npm pack` copies the manifest verbatim, leaving `catalog:` in
+  //    the tarball, and the install then dies with EUNSUPPORTEDPROTOCOL. That
+  //    would be a test failing on its own packaging while the shipped artifact
+  //    was correct, which is the most expensive kind of red.
+  const packed = run("pnpm", ["pack", "--pack-destination", project], {
     cwd: path.join(repoRoot, "packages", "ksor"),
   })
     .trim()
     .split("\n")
-    .at(-1);
-  copyFileSync(path.join(project, packed), path.join(project, "ksor-local.tgz"));
+    .at(-1)
+    .trim();
+  copyFileSync(packed, path.join(project, "ksor-local.tgz"));
+
+  // The property that makes the line above correct, asserted rather than
+  // trusted: a pnpm-only protocol reaching the tarball would break every npm
+  // and yarn consumer of the published package.
+  const packedManifest = run("tar", ["-xzOf", "ksor-local.tgz", "package/package.json"], {
+    cwd: project,
+  });
+  const packedDeps = JSON.stringify(JSON.parse(packedManifest).dependencies ?? {});
+  if (packedDeps.includes("catalog:") || packedDeps.includes("workspace:")) {
+    fail(`the packed manifest carries an unresolved pnpm protocol: ${packedDeps}`);
+  }
+
   const pkgPath = path.join(project, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   pkg.dependencies["@panaversity/ksor"] = "file:./ksor-local.tgz";
