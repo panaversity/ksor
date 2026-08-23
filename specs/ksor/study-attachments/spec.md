@@ -86,7 +86,9 @@ Each is separately observable on the built output:
 ### 1.4 The summary surface
 
 - `C16` A document with a summary renders two tabs — the record's own words
-  first, the summary second. Without one, no tab strip renders at all.
+  first, the summary second. Without one, no tab strip renders at all. The tabs
+  are the two READINGS of a document; what a reader DOES with it lives at the
+  end of the page (§1.5).
 - `C17` The summary renders through the same MDX pipeline as the record, so
   it carries the same prose voice, code handling and heading anchors.
 - `C18` Tabs are a real WAI-ARIA tablist: `role="tablist"`/`role="tab"`/
@@ -99,6 +101,12 @@ Each is separately observable on the built output:
 
 ### 1.5 The deck surface
 
+- `C21a` The deck renders at the **end of the document**, never behind a tab: a
+  study aid is used AFTER reading, and a tab hides the document while you use
+  it. It sits in ONE end-of-document region (`components/study-aids.tsx`) that
+  the quiz will share, so a second aid is a child there rather than a new
+  argument about placement. The region renders nothing when a document has no
+  aids.
 - `C21` The deck is ordered by **what is due**, not by authored order. This is
   the mechanism the predecessor computed and discarded (§7 A).
 - `C22` Two grades — _Missed it_ / _Got it_ — matching what the UI exposes.
@@ -109,14 +117,17 @@ Each is separately observable on the built output:
   card**, and the deck says so accurately. Progress on untouched cards
   survives. No deck-wide version key (§7 B).
 - `C25` Keyboard, on the deck: Space/Enter reveals and hides, `1` and `2`
-  grade. On the tab strip: `←`/`→` cycle, `Home`/`End` jump, with a roving
-  `tabIndex` so the strip is one tab stop rather than three. Every control is
-  reachable and shows focus.
+  grade, `←`/`→` step between cards without grading. On the tab strip: `←`/`→`
+  cycle, `Home`/`End` jump, with a roving `tabIndex` so the strip is one tab
+  stop rather than two. Every control is reachable and shows focus.
 
-  Two keys named in an earlier draft are NOT built, and should not be: `←`/`→`
-  to move between cards, because a due-driven session has no meaningful
-  "previous card" once a card has been graded; and `Esc` to exit, because there
-  is nothing modal to exit — the deck is a panel, and the tab strip leaves it.
+  `Esc` is NOT built and should not be: there is nothing modal to exit — the
+  deck is a section of the page, and scrolling leaves it.
+
+- `C29` Deck actions: **Shuffle** walks the whole deck in random order,
+  **Guide** discloses how the card and the schedule work, **Download** exports
+  tab-separated front/back — the shape Anki and most other tools import, built
+  in the browser rather than written to disk beside the record.
 
 - `C26` The scheduler is a pure function `(CardSchedule, Rating, now) →
 CardSchedule` — no React, no storage, no ambient clock.
@@ -163,8 +174,9 @@ naming neither the file's purpose nor the rule.
 
 1. `ksor init` emits a record whose seed document carries a summary and a
    deck; `pnpm dev` renders both with no database and no key.
-2. A `.summary.md` beside a document produces a tab strip; removing it removes
-   the strip and leaves no trace.
+2. A `.summary.md` beside a document produces a tab strip and a
+   `.flashcards.yaml` produces a deck at the end of the page; removing either
+   removes it and leaves no trace, and removing both leaves no region at all.
 3. `grep` over `out/` finds the summary's text on the parent's page and
    **nowhere else** — no route, no `llms.txt`, no search index, no `/md/`.
 4. The parent's `/md/` bytes are identical with and without attachments.
@@ -176,8 +188,9 @@ naming neither the file's purpose nor the rule.
 9. Both shells refuse to publish an attachment as a routed document.
 10. The scheduler's transition table is asserted for every state × rating pair
     against a frozen clock.
-11. A real browser: both themes, both tabs, a full grade cycle, reload
-    persistence, zero console errors, zero external requests.
+11. A real browser: both themes, both tabs, the deck at the end of the page, a
+    full grade cycle, reload persistence, zero console errors, zero external
+    requests.
 
 ## 5 · Out of scope
 

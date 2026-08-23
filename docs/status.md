@@ -299,11 +299,13 @@ either stops being true.
 - **Study attachments — summaries and flashcard decks** (decision 23,
   `specs/ksor/study-attachments/spec.md`, unreleased on this branch). A
   document may carry `<doc>.summary.md` and `<doc>.flashcards.yaml` beside it.
-  They render as extra tabs on that document's page — the record's own words, a
-  summary, and a recall deck with spaced review kept in the reader's browser —
-  and `ksor init` ships one of each on the seed document. Presence-driven:
-  a document with neither gets no tab strip at all (verified live: a page
-  without attachments renders zero `role="tab"` elements).
+  The summary joins the record's own words as a second TAB — the two readings
+  of a document. The deck renders at the END of the page, in a region the quiz
+  will share, because a study aid is used after reading and a tab would hide
+  the document while you used it. `ksor init` ships one of each on the seed
+  document. Presence-driven: a document with neither gets no tab strip and no
+  region at all (verified live: a page without attachments renders zero
+  `role="tab"` elements).
 
   An attachment is part of its document, not a document. Verified on the
   shipped bytes of a scaffold built from the packed CLI: **no route, no `/md/`

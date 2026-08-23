@@ -460,8 +460,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   referenced by relative links. A relative link must never leave `knowledge/`.
 - **Study attachments.** A document may carry two optional companions named
   after it, in the same folder: `<doc>.summary.md` (a short précis) and
-  `<doc>.flashcards.yaml` (a recall deck). They appear as extra tabs on that
-  document's page and nowhere else.
+  `<doc>.flashcards.yaml` (a recall deck). The summary appears as a second tab
+  beside the document's own words; the deck appears at the END of that
+  document's page. Both appear nowhere else in the site.
 
   An attachment is **part of its document**, not a document. It has no URL of
   its own, no sidebar row, no line in `llms.txt`, and no identity an agent can

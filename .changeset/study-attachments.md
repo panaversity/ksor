@@ -5,10 +5,11 @@
 Summaries and flashcard decks, as governed attachments of a document.
 
 A document in `knowledge/` may now carry two companions named after it —
-`<doc>.summary.md` and `<doc>.flashcards.yaml`. They render as extra tabs on
-that document's page: the record's own words, a summary, and a recall deck with
-spaced review kept in the reader's browser. `ksor init` ships one of each so a
-fresh project shows the shape rather than describing it.
+`<doc>.summary.md` and `<doc>.flashcards.yaml`. The summary joins the record's
+own words as a second tab; the deck renders at the end of the page, with spaced
+review kept in the reader's browser and Shuffle / Guide / Download beneath it.
+`ksor init` ships one of each so a fresh project shows the shape rather than
+describing it.
 
 An attachment is **part of its document, not a document**. It gets no URL, no
 sidebar row, no `llms.txt` line, no markdown twin, no search entry — and no
