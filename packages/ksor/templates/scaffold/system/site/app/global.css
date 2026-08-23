@@ -274,6 +274,74 @@ html > body[data-scroll-locked] {
   --ksor-caution: #e0906e;
 }
 
+/* Right and wrong, for the quiz — the ONE place this record spends green and
+   red, and it earns them: a reader checking an answer is asking a true/false
+   question, and the accent cannot say "this is correct" while also saying
+   "this is what you picked". Both are needed at once when you answer wrongly.
+
+   Colour is never the only channel: the correct option also carries a check,
+   the wrong one a cross, and the line above states the verdict in words — so
+   the pair works for a reader who cannot distinguish them. Declared as
+   light/dark pairs on the root for the reason `--ksor-caution` above records.
+
+   Deliberately NOT `--ksor-caution`, which means "the record withdrew this".
+   A wrong answer is not a governance state. */
+:root {
+  --ksor-correct: #1a7f4b;
+  --ksor-incorrect: #b3261e;
+}
+
+.dark {
+  --ksor-correct: #6edaa0;
+  --ksor-incorrect: #f2897f;
+}
+
+/* The three states an answered question shows at once. Written as CLASSES,
+   the way `.ksor-caution` below is, rather than as Tailwind arbitrary values:
+   `border-[color:var(--x)]` emits a rule whose `var()` did not resolve on the
+   element in a real build (found live 2026-08-23 — the class was present, the
+   rule was in the stylesheet, the token computed correctly on the element, and
+   the border still painted the default hairline). A plain class has none of
+   that ambiguity, and this file is already where this record's semantic colour
+   lives. */
+.ksor-answer-correct {
+  border-color: var(--ksor-correct);
+  background-color: color-mix(in oklab, var(--ksor-correct) 10%, transparent);
+}
+
+.ksor-answer-wrong {
+  border-color: var(--ksor-incorrect);
+  background-color: color-mix(in oklab, var(--ksor-incorrect) 10%, transparent);
+}
+
+/* "This is the one you picked" — kept in the accent, and kept SEPARATE from
+   right/wrong, because after a wrong answer a reader needs all three facts. */
+.ksor-answer-mine {
+  outline: 2px solid var(--color-fd-primary);
+  outline-offset: 1px;
+}
+
+.ksor-answer-correct-text {
+  color: var(--ksor-correct);
+}
+
+.ksor-answer-wrong-text {
+  color: var(--ksor-incorrect);
+}
+
+.dark .ksor-answer-correct,
+.dark .ksor-answer-wrong {
+  background-color: color-mix(in oklab, currentColor 0%, transparent);
+}
+
+.dark .ksor-answer-correct {
+  background-color: color-mix(in oklab, var(--ksor-correct) 14%, transparent);
+}
+
+.dark .ksor-answer-wrong {
+  background-color: color-mix(in oklab, var(--ksor-incorrect) 14%, transparent);
+}
+
 .ksor-caution {
   border-color: color-mix(in oklab, var(--ksor-caution) 32%, transparent);
   border-left-color: var(--ksor-caution);

@@ -199,16 +199,33 @@ export function Quiz({ quiz }: { quiz: QuizEntry }): ReactElement {
               {current.options.map((option, i) => {
                 const isAnswer = i === current.answer;
                 const isChoice = i === chosen;
-                // After answering, the correct option is always marked — a
-                // reader who chose wrong has to be shown what was right, or
-                // the explanation below has nothing to attach to.
+                // Three things have to be legible at once after a wrong
+                // answer, and they are three different facts: which option is
+                // RIGHT (green), which one is WRONG (red), and which one YOU
+                // picked (the accent ring). The accent alone cannot carry two
+                // of those, which is what it was doing — the correct option
+                // wore the same colour as a selection, so choosing wrongly
+                // looked like the page had answered for you.
+                //
+                // Colour is never the only channel: the check and cross icons
+                // and the verdict line below say the same thing in shape and
+                // in words.
+                //
+                // Plain CSS classes, not Tailwind arbitrary values: a
+                // `border-[color:var(--x)]` utility did not paint in a real
+                // build even with the rule in the stylesheet and the token
+                // resolving on the element. `app/global.css` is where this
+                // record's semantic colour already lives.
                 const tone = !answered
                   ? "border-fd-border hover:border-fd-primary/60 hover:bg-fd-accent"
                   : isAnswer
-                    ? "border-fd-primary bg-fd-primary/10"
+                    ? "ksor-answer-correct"
                     : isChoice
-                      ? "border-[--color-ksor-caution] bg-[--color-ksor-caution]/10"
+                      ? "ksor-answer-wrong"
                       : "border-fd-border opacity-60";
+                // Your own pick keeps the accent, whether it was right or
+                // wrong, so "what I chose" is never in doubt.
+                const mine = answered && isChoice ? " ksor-answer-mine" : "";
                 return (
                   <li key={option}>
                     <button
@@ -216,17 +233,23 @@ export function Quiz({ quiz }: { quiz: QuizEntry }): ReactElement {
                       disabled={answered}
                       onClick={() => choose(i)}
                       aria-pressed={isChoice}
-                      className={`flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors motion-safe:duration-150 ${tone} ${answered ? "cursor-default" : "cursor-pointer"}`}
+                      className={`flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors motion-safe:duration-150 ${tone}${mine} ${answered ? "cursor-default" : "cursor-pointer"}`}
                     >
                       <span className="mt-px font-mono text-xs text-fd-muted-foreground">
                         {letterOf(i)}
                       </span>
                       <span className="flex-1 text-fd-foreground">{option}</span>
                       {answered && isAnswer ? (
-                        <Check aria-label="correct answer" className="size-4 shrink-0" />
+                        <Check
+                          aria-label="correct answer"
+                          className="ksor-answer-correct-text size-4 shrink-0"
+                        />
                       ) : null}
                       {answered && isChoice && !isAnswer ? (
-                        <X aria-label="your answer" className="size-4 shrink-0" />
+                        <X
+                          aria-label="your answer, which is wrong"
+                          className="ksor-answer-wrong-text size-4 shrink-0"
+                        />
                       ) : null}
                     </button>
                   </li>
@@ -244,9 +267,9 @@ export function Quiz({ quiz }: { quiz: QuizEntry }): ReactElement {
               >
                 <p className="font-mono text-xs tracking-wide uppercase">
                   {chosen === current.answer ? (
-                    <span className="text-fd-primary">Correct</span>
+                    <span className="ksor-answer-correct-text">Correct</span>
                   ) : (
-                    <span className="text-[--color-ksor-caution]">
+                    <span className="ksor-answer-wrong-text">
                       Not quite — the answer is {letterOf(current.answer)}
                     </span>
                   )}
