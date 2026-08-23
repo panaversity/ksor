@@ -4,7 +4,7 @@ import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
 import { cardHash, type Card, type Deck } from "./deck";
 import { newCard, type CardSchedule } from "./srs";
 import { type Question, type Quiz } from "./quiz";
-import { type Slides } from "./slides";
+import { type Slide, type Slides } from "./slides";
 import { embedUrlFor, providerOf } from "./slides-embed";
 import { DEFAULT_QUESTIONS_PER_ROUND } from "./quiz-round";
 import { questionHash } from "./identity";
@@ -119,9 +119,13 @@ export function quizFor(documentPath: string): QuizEntry | null {
   };
 }
 
+/** One slide the record carries. */
+export type DeckSlide = Slide;
+
 export interface SlidesEntry {
   readonly title: string;
-  readonly url: string;
+  /** Absent when the record owns the deck — see `deck` below. */
+  readonly url?: string;
   readonly description?: string;
   /** Explicit `provider:`, when the author named one. */
   readonly provider?: string;
@@ -129,6 +133,12 @@ export interface SlidesEntry {
   readonly derivedProvider?: string;
   /** The framable url: the author's `embed:`, or one derived from `url`. */
   readonly embed?: string;
+  /**
+   * Slides the record owns. When present this is the presentation, and there
+   * is no url — the schema refuses both, because two decks have no answer to
+   * which one governs.
+   */
+  readonly deck?: readonly DeckSlide[];
   readonly path: string;
 }
 
@@ -142,12 +152,13 @@ export function slidesFor(documentPath: string): SlidesEntry | null {
   return {
     title: d.title,
     url: d.url,
+    deck: parsed.deck,
     description: d.description,
     provider: d.provider,
-    derivedProvider: providerOf(d.url) ?? undefined,
+    derivedProvider: d.url === undefined ? undefined : (providerOf(d.url) ?? undefined),
     // An author's explicit embed wins; otherwise derive one, and a provider we
     // do not know simply renders as a link.
-    embed: d.embed ?? embedUrlFor(d.url) ?? undefined,
+    embed: d.url === undefined ? undefined : (d.embed ?? embedUrlFor(d.url) ?? undefined),
     path: parsed.info.path,
   };
 }

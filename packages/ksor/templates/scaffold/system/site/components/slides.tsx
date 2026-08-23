@@ -3,6 +3,7 @@
 import { ExternalLink, Presentation } from "lucide-react";
 import { useState, type ReactElement } from "react";
 
+import { DeckViewer } from "@/components/deck-viewer";
 import { StudyAidHeader } from "@/components/study-aids";
 import { Button } from "@/components/ui/button";
 import type { SlidesEntry } from "@/lib/attachments";
@@ -41,20 +42,29 @@ export function Slides({ slides }: { slides: SlidesEntry }): ReactElement {
       <StudyAidHeader title={slides.title} description={slides.description} />
 
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <a
-            href={slides.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-fd-primary underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-          >
-            Open the full presentation
-            <ExternalLink aria-hidden className="size-3.5" />
-          </a>
-          {provider === undefined ? null : (
-            <span className="font-mono text-xs text-fd-muted-foreground">{provider}</span>
-          )}
-        </p>
+        {/* A deck the record owns needs no link and no permission: it IS the
+            presentation. The linked mode below is for an adopter who already
+            has one somewhere else. */}
+        {slides.deck !== undefined && slides.deck.length > 0 ? (
+          <DeckViewer slides={slides.deck} title={slides.title} />
+        ) : null}
+
+        {slides.url === undefined ? null : (
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <a
+              href={slides.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-fd-primary underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+            >
+              Open the full presentation
+              <ExternalLink aria-hidden className="size-3.5" />
+            </a>
+            {provider === undefined ? null : (
+              <span className="font-mono text-xs text-fd-muted-foreground">{provider}</span>
+            )}
+          </p>
+        )}
 
         {slides.embed === undefined ? null : (
           <div

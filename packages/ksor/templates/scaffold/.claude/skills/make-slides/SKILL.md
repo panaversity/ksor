@@ -1,124 +1,160 @@
 ---
 name: make-slides
-description: Build a presentation that teaches one document, then attach it so it renders on that document's page. Use when the owner asks for slides, a deck, a presentation, a teaching aid, or something to present a policy from — or when onboarding needs a session rather than a page.
+description: Generate a presentation from one document and attach it, so it renders on that document's page. Use when the owner says "make slides for X", "turn this into a deck", "I need to present this", asks for a teaching aid or a slideshow, or when onboarding needs a session rather than a page.
 metadata:
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
-# Making a presentation for a document
+# Generating a presentation for a document
 
-A document can carry a deck: `<doc>.slides.yaml` beside `<doc>.md`. It renders
-at the end of that document's page as **the presentation that teaches it** — a
-link out, and a frame the reader loads on click.
+You write the slides. Not an outline for somebody else to build — the actual
+deck, into `<doc>.slides.yaml`, which the site renders on that document's page.
+No browser, no third-party tool, no step where a human takes over.
 
-This skill is the whole procedure: what to put in the deck, how to build it,
-and how to attach it. Two rules govern all of it.
+Run it end to end: read the document, write the deck, check every line back
+against the document, verify it builds. **The check is not optional** — it is
+the step that keeps the record's guarantee true.
 
-**A slide may only say what the document says.** The deck is a way of
-presenting the record, never a second source. A slide asserting a threshold the
-document does not contain is a claim nothing governs and no agent can cite. Every
-number, date and rule comes from the document, copied exactly.
+## The one rule everything else serves
 
-**The document is the source, the deck is a rendering.** When the document
-changes, the deck is stale. Rebuild it from the document rather than patching
-the slides, or the two drift and the deck starts winning arguments it should
-lose.
+**A slide may only say what the document says.**
 
-## 1 · Decide whether a deck is the right thing
+The deck is a way of presenting the record, never a second source. A slide
+asserting a threshold the document does not contain is a claim nothing governs
+and no agent can cite — and because the deck is an attachment, the record now
+stands behind it. Every number, date, name and rule is copied from the
+document exactly, units included.
 
-Do not make one by default. A deck earns its place when the document will be
-**presented to a room** — onboarding, an induction, a handover session. If the
-answer is "someone will read this at their desk", the summary and the quiz
-already serve that better, and a deck is work nobody asked for.
+If the document does not say something you want on a slide, there are two
+honest options: leave it out, or tell the owner the document is missing it.
+Never a third.
 
-## 2 · Write the outline FIRST, from the document
+## 1 · Read the document whole, first
 
-Before opening any slide tool, write the outline as plain text and check it
-against the document line by line. This is the step that decides quality, and
-it is the step a tool will happily skip for you.
+Read `<doc>.md` completely before writing anything. Note as you go:
 
-A working shape for a policy document, 8–14 slides:
+- **the decision it settles** — the reason it exists
+- **the rule, in its own words** — usually one or two sentences
+- **the numbers** — thresholds, deadlines, limits, and their units
+- **the cases** — what happens in each situation it names
+- **the boundary** — what it explicitly does NOT cover
+- **its governance** — `owner`, `effective`, `status` from the frontmatter
 
-| Slides | What                                                                      |
-| ------ | ------------------------------------------------------------------------- |
-| 1      | Title: the document's own title, and what the record is authoritative for |
-| 2      | Why this exists — the decision this document settles                      |
-| 3–4    | The rule itself, stated once, in the document's own words                 |
-| 5–8    | One slide per case that comes up, with the actual thresholds              |
-| 9–10   | What people get wrong, and what is true instead                           |
-| 11     | Where the edges are — what this document does NOT cover                   |
-| 12     | Where to find it: the document's URL, its owner, its effective date       |
+If the document carries `<doc>.summary.md`, read that too: it is a reviewed
+compression of the same thing, and it tells you what the author thought was
+load-bearing.
 
-Two habits worth keeping:
-
-- **Three to five lines a slide.** A slide someone reads aloud is a slide
-  nobody listens to.
-- **Name the boundary.** Slide 11 is the one people remember, because it is the
-  one that tells them when to go and ask.
-
-## 3 · Build the deck
-
-Any tool that produces a shareable https link works — the record does not care
-which, and naming one here would make it a dependency it is not. What matters
-is that the deck is **shareable and embeddable**, because a link only you can
-open publishes a broken panel to everyone else.
-
-Whatever you use: paste the outline from step 2 rather than asking the tool to
-read the document. The outline is the reviewed artifact; the document may be
-long, and a tool summarising it unattended is exactly how a slide gains a claim
-the document never made.
-
-Then check the deck against the document once more, slide by slide, before
-attaching it. Numbers and dates especially — a transcription error in a deck
-outlives the session.
-
-## 4 · Attach it
+## 2 · Write the deck
 
 Write `<doc>.slides.yaml` beside the document:
 
 ```yaml
 slides:
   title: Expense approvals
-  description: The 20-minute version, for a room.
+  description: The 15-minute version, for a room.
+deck:
+  - heading: What this settles
+    lead: One sentence, in the document's own words.
+    note: What to say here. Spoken, never shown.
+
+  - heading: The rule
+    bullets:
+      - Two approvers above the threshold, always
+      - The threshold is per invoice, including tax
+    note: Pause here. This is the slide people remember wrong.
+```
+
+**Per slide:**
+
+| Field     | Use                                                          |
+| --------- | ------------------------------------------------------------ |
+| `heading` | required — a statement, not a label. "The rule", not "Rules" |
+| `lead`    | one sentence, for a slide making a single point              |
+| `bullets` | three to five. Six is the cap, and six is already too many   |
+| `note`    | what the presenter SAYS — never a repeat of the slide        |
+
+**Per deck** — 8 to 14 slides for an ordinary policy document:
+
+1. What this settles, and for whom
+2. Why it exists — the decision behind it
+3. The rule itself, stated once
+4. One slide per case, with the real numbers
+5. What people get wrong, and what is true instead
+6. The boundary — what this document does not cover
+7. Where to find it: the route, the owner, the effective date
+
+**Habits that decide whether it is any good:**
+
+- **A heading is a claim.** "Recency is not authority" teaches; "Authority"
+  does not.
+- **A bullet is one thought.** If it needs a comma splice, it is two bullets.
+- **The note carries the argument.** The slide holds the shape; the presenter
+  holds the reasoning. A note repeating the bullets is a wasted field.
+- **Do not pad to a target.** Five slides of substance beat twelve with three
+  that exist to reach twelve.
+
+## 3 · Check every line against the document
+
+Go back through slide by slide with the document open. For each:
+
+- Is every claim in the document? Name where.
+- Is every number identical, same units, same rounding?
+- Does any slide imply a rule the document does not state?
+- Does the boundary slide match what the document actually excludes?
+
+This pass finds real errors, reliably. A transcription slip in a deck outlives
+the session it was made for, because the next presenter trusts it.
+
+## 4 · Verify it
+
+```sh
+pnpm check     # refuses an orphan, frontmatter, or a malformed deck
+pnpm dev       # look at the page — the deck renders at the end
+```
+
+`pnpm build` refuses:
+
+- `ksor-slides-empty` — neither `deck:` nor `slides.url:`; nothing to show
+- `ksor-slides-two-sources` — both, so nothing says which one governs
+- `ksor-attachment-orphan` — no `<doc>.md` beside it
+- `ksor-attachment-frontmatter` — an attachment carries none of its own
+
+## 5 · Tell the owner what you did
+
+Which document, how many slides, and **anything you left out because the
+document did not support it**. That last part is the useful half: it is how an
+owner finds out their document has a gap.
+
+## Embedding a deck made elsewhere
+
+If the owner already has a deck in Google Slides, Canva or SlideShare, use the
+linked mode — `slides.url:` and no `deck:`:
+
+```yaml
+slides:
+  title: Expense approvals
   url: https://docs.google.com/presentation/d/<id>/edit?usp=sharing
 ```
 
-That is usually all of it. Rules worth knowing:
+The embed url is derived for those three providers; for anything else add
+`embed:` explicitly or it renders as a link. `url` must be https — a browser
+blocks a mixed-content frame silently, so an http one publishes a panel that
+never loads.
 
-- **`url` must be https.** A browser blocks an http frame on a secure page as
-  mixed content, so `pnpm check` refuses one rather than publishing a panel
-  that silently never loads.
-- **`embed:` is optional.** For a provider whose embed url can be derived —
-  Google Slides, Canva, SlideShare — leave it out. For anything else, paste the
-  provider's own embed url, or the deck renders as a link with no frame and
-  `pnpm build` tells you so.
-- **No frontmatter, no `id:`.** It is an attachment: the path is its identity.
-- **It inherits the document's tier and takedown.** Restrict the document and
-  the deck goes with it. There is no way to attach a private deck to a public
-  document — if you need that, the deck belongs in a second record.
-
-Then:
-
-```sh
-pnpm check     # the rules above, as a program
-pnpm dev       # look at the page
-```
-
-## 5 · What the reader gets
-
-A link out, always. And a frame that loads **on click**, not on page load —
-because the site guarantees a page makes no external requests, and because a
-reader who only wanted the policy should not have to announce that to a slide
-host. Say that out loud if someone asks why the deck is not already showing:
-it is deliberate, not a bug.
+**Prefer the record-owned deck.** A linked deck is not reviewed in a pull
+request, not versioned with its document, not withdrawn when the document is,
+and can rot to a dead link with nothing going red. Use the link when the deck
+already exists and somebody else maintains it — not as the default.
 
 ## What NOT to do
 
 - **Do not put the deck in the document.** No `<iframe>`, no raw HTML.
   `knowledge/` is CommonMark and must read cleanly in any markdown viewer.
-- **Do not attach a deck you have not checked against the document.** The
-  attachment inherits the document's governance, which means the record now
-  stands behind those slides.
+- **Do not write a slide the document cannot support**, even a true one. If it
+  is not in the record, the record cannot stand behind it.
 - **Do not make one deck for several documents.** A deck belongs to one
   document, the way a summary does. A deck spanning five policies has no
-  document to be governed by, and nothing to be withdrawn with.
+  document to be governed by and nothing to be withdrawn with.
+- **Do not patch a stale deck.** When the document changes materially,
+  regenerate from it. Patching is how a deck and its document drift, and a
+  deck that drifts starts winning arguments it should lose.
