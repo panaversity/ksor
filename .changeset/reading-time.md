@@ -2,7 +2,7 @@
 "@panaversity/ksor": patch
 ---
 
-Each document page now says about how long it takes to read.
+Each document page now says how long it takes to read.
 
 The figure is counted when the site is built, from the document's own markdown,
 so it is in the shipped HTML — a reader whose bundle failed, a crawler and an

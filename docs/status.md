@@ -324,7 +324,7 @@ either stops being true.
   rule that closes `visibility:` widening, `sor_id:` takedown escape, and
   claimed governance a non-node cannot carry). `.yml` is refused by name.
 
-  Each document also reports about how long it takes to read, counted at build
+  Each document also reports how long it takes to read, counted at build
   time from its own markdown — so the figure is in the shipped HTML rather than
   measured in the browser after paint. Fenced code and frontmatter are excluded
   from the count. Where a summary exists both tabs carry their own figure.

@@ -14,9 +14,10 @@
  * Words per minute for prose.
  *
  * 200 is the conventional figure for adult silent reading of ordinary text and
- * is what the predecessor used. It is a rough number and the label says "about"
- * for that reason — a governed record's prose is denser than a novel's, so if
- * anything this reads slightly fast.
+ * is what the predecessor used. It is a rough number, and the clock beside it
+ * is what says so — nobody reads a time next to a clock icon as a promise. A
+ * governed record's prose is denser than a novel's, so if anything this reads
+ * slightly fast.
  */
 export const WORDS_PER_MINUTE = 200;
 

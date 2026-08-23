@@ -149,12 +149,15 @@ export function GovernanceMeta({
         // A clock instead of a "READ" label: the icon says what the number is
         // faster than a word does, and the other facts on this row are things
         // the record DECLARES — a mono label beside them implied this was one
-        // too. "About", because it is an estimate from a word count, and a
-        // figure presented as exact invites the reader to notice it is not.
-        <span className="flex items-center gap-2" title={`About ${readingMinutes} minutes to read`}>
+        // too. The clock is also what carries "roughly": nobody reads a time
+        // beside a clock icon as a promise, so the hedge does not need saying.
+        <span
+          className="flex items-center gap-2"
+          title={`${readingMinutes} minute${readingMinutes === 1 ? "" : "s"} to read`}
+        >
           <Clock aria-hidden className="size-3.5 shrink-0 text-fd-muted-foreground" />
           <span className="font-mono text-[0.8125rem] font-medium text-fd-foreground">
-            about {readingMinutes} min
+            {readingMinutes} min
           </span>
         </span>
       )}
