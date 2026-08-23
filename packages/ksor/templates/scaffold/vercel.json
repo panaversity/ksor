@@ -1,8 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build",
-  "outputDirectory": "system/site/out",
-  "trailingSlash": true
+  "services": {
+    "site": {
+      "root": ".",
+      "installCommand": "pnpm install --no-frozen-lockfile",
+      "buildCommand": "pnpm build",
+      "outputDirectory": "system/site/out"
+    },
+    "door": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
+    }
+  },
+  "rewrites": [
+    { "source": "/mcp(.*)", "destination": { "service": "door" } },
+    {
+      "source": "/.well-known/oauth-protected-resource(.*)",
+      "destination": { "service": "door" }
+    },
+    { "source": "/health", "destination": { "service": "door" } },
+    { "source": "/ready", "destination": { "service": "door" } },
+    { "source": "/(.*)", "destination": { "service": "site" } }
+  ]
 }

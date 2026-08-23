@@ -34,6 +34,7 @@ const pkgVersion = (JSON.parse(readFileSync(pkgManifest, "utf8")) as { version: 
 const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([
   ["gitignore", ".gitignore"],
   ["env.example", ".env.example"],
+  ["dockerignore", ".dockerignore"],
 ]);
 
 function emittedPath(templateRel: string): string {
@@ -243,16 +244,22 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     // install must not be frozen — otherwise an adopter's very first Vercel
     // import dies on ERR_PNPM_OUTDATED_LOCKFILE before any build (review,
     // 2026-08-20). The repo's own e2e suites already had to make this switch.
+    // It lives on the SITE service since the config gained the door alongside
+    // it; the property is unchanged and belongs wherever the site is built.
     const vercel = JSON.parse(
       readFileSync(path.join(dir, "served-sor", "vercel.json"), "utf8"),
-    ) as { installCommand?: string };
-    expect(vercel.installCommand, "the deploy install must tolerate the stamped dep").toContain(
-      "--no-frozen-lockfile",
-    );
-    // The kernel's build-scripted deps must be explicitly denied, or pnpm 11
-    // exits 1 on the adopter's first install (found live 2026-08-20).
-    expect(workspace, "@google/genai build denied").toMatch(/"@google\/genai":\s*false/);
-    expect(workspace, "protobufjs build denied").toMatch(/protobufjs:\s*false/);
+    ) as { services?: { site?: { installCommand?: string } } };
+    expect(
+      vercel.services?.site?.installCommand,
+      "the deploy install must tolerate the stamped dep",
+    ).toContain("--no-frozen-lockfile");
+    // Build-scripted deps must be explicitly decided, or pnpm 11 exits 1 on
+    // the adopter's first install (found live 2026-08-20). The site's two are
+    // the whole set now: dropping the Gemini SDK for its REST API took
+    // @google/genai and protobufjs out of the tree entirely, and a denial for
+    // a package that is never installed documents a dependency we do not have.
+    expect(workspace, "esbuild build denied").toMatch(/esbuild:\s*false/);
+    expect(workspace, "sharp build denied").toMatch(/sharp:\s*false/);
   });
 
   it.runIf(process.platform !== "win32")(
@@ -559,6 +566,9 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
       [
         ".agents",
         ".claude",
+        // The container build's exclusions — secrets, the corpus, the site
+        // (decision 8 revision 2026-08-23).
+        ".dockerignore",
         // The served rung's variables, including the auth posture serve
         // requires (decision 8 revision 2026-08-20).
         ".env.example",
@@ -568,6 +578,9 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
         ".gitignore",
         "AGENTS.md",
         "CLAUDE.md",
+        // The MCP door as a portable container — no host named in it
+        // (decision 8 revision 2026-08-23).
+        "Dockerfile",
         "README.md",
         "instance.md",
         "knowledge",
@@ -578,6 +591,59 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
         "vercel.json",
       ].sort(),
     );
+  });
+
+  // "Vendor-free is the ownership argument" — the emitted container is where
+  // that claim is cheapest to lose. A Dockerfile that grew one host-specific
+  // line would still deploy, still pass every other test, and quietly make the
+  // artifact unportable; the neutrality is only real while nothing in it knows
+  // where it runs. vercel.json POINTS AT this file rather than replacing it,
+  // which is what keeps the host a choice.
+  it("emits a container that names no host", () => {
+    const dir = workDir();
+    runInit(["my-sor"], dir);
+    const dockerfile = readFileSync(path.join(dir, "my-sor", "Dockerfile"), "utf8");
+
+    for (const vendor of ["vercel", "cloud run", "cloudrun", "fly.io", "heroku", "render.com"]) {
+      expect(
+        dockerfile
+          .toLowerCase()
+          .split("\n")
+          .filter((l) => !l.trimStart().startsWith("#"))
+          .join("\n"),
+      ).not.toContain(vendor);
+    }
+    // It must still be a runnable image rather than a comment file.
+    expect(dockerfile).toContain("FROM node:");
+    expect(dockerfile).toContain("ksor");
+    expect(dockerfile).toContain("serve");
+
+    // And the host config defers to it, so there is exactly one build recipe.
+    const vercel: unknown = JSON.parse(
+      readFileSync(path.join(dir, "my-sor", "vercel.json"), "utf8"),
+    );
+    expect(vercel).toMatchObject({
+      services: { door: { runtime: "container", entrypoint: "Dockerfile" } },
+    });
+  });
+
+  // The image serves; it does not publish, and it does not carry secrets. Both
+  // are governance properties, not build hygiene: a corpus copied in suggests
+  // the container reads it (it reads Postgres), and a baked .env publishes the
+  // DSN to anyone who can pull the image.
+  it("excludes secrets, the corpus, and the site from the image", () => {
+    const dir = workDir();
+    runInit(["my-sor"], dir);
+    const ignore = readFileSync(path.join(dir, "my-sor", ".dockerignore"), "utf8");
+    const lines = ignore.split("\n").map((l) => l.trim());
+
+    expect(lines).toContain(".env");
+    expect(lines).toContain("knowledge/");
+    expect(lines).toContain("system/");
+    expect(lines).toContain("node_modules/");
+    // The example is documentation, not a secret, and the .env* rule would
+    // otherwise take it — the same carve-out .gitignore makes.
+    expect(lines).toContain("!.env.example");
   });
 
   it("CLAUDE.md is a one-line pointer file, never a symlink", () => {

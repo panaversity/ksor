@@ -47,9 +47,13 @@ const REQUIRED_IN_TARBALL = [
   "templates/scaffold/pnpm-lock.yaml",
   "templates/scaffold/instance.md",
   "templates/scaffold/vercel.json",
-  // Not ".gitignore": npm pack drops that name from every tarball, so the
-  // template ships bare and init renames it on emit.
+  // The container artifacts. Shipping these is what makes the served rung
+  // deployable anywhere rather than only where we happened to test.
+  "templates/scaffold/Dockerfile",
+  // Not ".gitignore"/".dockerignore": npm pack drops leading-dot names from
+  // the tarball, so these templates ship bare and init renames them on emit.
   "templates/scaffold/gitignore",
+  "templates/scaffold/dockerignore",
   "templates/scaffold/system/site/package.json",
   "templates/scaffold/.agents/skills/format-checker/check.mjs",
   "templates/scaffold/.claude/skills/format-checker/check.mjs",

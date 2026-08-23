@@ -118,7 +118,9 @@ and anything that can serve files can serve it.
 - **Vercel** — connect the repository (or run `vercel`); the shipped
   `vercel.json` answers the setup interview: deploy from the repo root
   (never pin `system/site` as the root directory — the record lives
-  outside it), build with `pnpm build`, serve `system/site/out/`. If the
+  outside it), build with `pnpm build`, serve `system/site/out/`. It also
+  declares the MCP **door** as a second service built from the shipped
+  `Dockerfile`, so `/mcp` and the site share one domain. If the
   build image's pnpm predates the `packageManager` pin, set the
   `ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
 **Once `instance.md` declares a `database:`, the BUILD needs the DSN too.**
@@ -142,6 +144,24 @@ writes "nothing denied" and exits 0.
   `user.github.io/repo`)? Build with `KSOR_BASE_PATH=/repo pnpm build`.
 - **Verify any deploy** the same way: the home page, one document page,
   and `/llms.txt` all load; nothing else is required.
+
+### The agent surface deploys separately
+
+The site is files; the MCP door is a process. `Dockerfile` and `.dockerignore`
+at the repo root build it, and they name no host — the same image runs on
+Cloud Run, Fly, Render, ECS, Kubernetes or a VPS:
+
+```sh
+docker build -t my-record .
+docker run --rm -p 8080:80 --env-file .env my-record
+```
+
+One thing surprises people: **deploying does not publish.** The door serves
+whatever generation is already in the database, so a first deploy with no
+`pnpm refresh` serves an empty record. Publishing is a step you run — from your
+machine or from CI — and it is deliberately not something a booting container
+does. The full walkthrough, including what a cold start costs and where ingest
+belongs, is in `node_modules/@panaversity/ksor/docs/deploying.md`.
 
 If `instance.md` declares `audiences:`, what you deploy is a **tier**.
 Plain `pnpm build` always builds the public tier — safe for any host.
