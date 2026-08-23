@@ -1,5 +1,72 @@
 # @panaversity/ksor
 
+## 0.0.31
+
+### Patch Changes
+
+- c69232d: Adversarial coverage for the MCP door (issue #33), first slice: the governance
+  leak sweep and cross-replica snapshot behaviour.
+
+  **A withdrawn document must not appear in any field of any reachable response.**
+  The existing takedown test proves each serving arm behaves at the arms someone
+  thought of. This one plants an unguessable marker inside the withdrawn document
+  — in its body _and its title_ — and asserts the marker appears nowhere in the
+  serialized result, across eighteen request shapes: search by body, by marker, by
+  title words, at several limits, keyword search, `topOneScore`, read by
+  stable_id / slug / qualified path, and outline at every anchor and page. A leak
+  into a field the test has never heard of still fails it.
+
+  It carries a **positive control**, because every other assertion is a
+  not-contains and a probe that could never see the marker would pass them all
+  while proving nothing: each shape runs before the takedown and the ones that
+  testify are required to have found it first.
+
+  It also covers the subtlest case, which carries no content at all — `topOneScore`
+  feeds the abstention gate, so a withdrawn document scoring there would let a
+  record claim coverage on the strength of text it refuses to show.
+
+  **Cross-replica snapshot tokens**, listed in #33 as "documented, untested" and
+  since found on a real deployment: two processes with no `KSOR_SNAPSHOT_KEYS`
+  produce tokens neither can verify from the other, and the verdict is `invalid`
+  rather than `unknown_key` — the key _id_ matches and only the secret differs,
+  which is why the failure is invisible until you read it. Also pins rotation
+  (outstanding tokens survive while the old key is listed, and die when it is
+  dropped) and cross-deployment refusal.
+
+- d96b139: Presentations, as governed attachments of a document.
+
+  A document in `knowledge/` may now carry `<doc>.slides.yaml`. It renders at the
+  top of that document's page — before the prose, because a deck is the shape of
+  the thing and gives the detail somewhere to land.
+
+  **Ask your coding agent and it writes the deck.** `make slides for
+knowledge/expenses/approvals.md` runs the new `make-slides` skill, which reads
+  the document whole, writes the slides, checks every claim and every number back
+  against it, and tells you what it left out because the document did not support
+  it — which is usually how you find out a document has a gap. No browser, no
+  third-party tool, no step where a person takes over.
+
+  **The record owns the deck by default.** `deck:` carries the slides themselves
+  and the site renders them, which is the only mode where a presentation is
+  governed: reviewed in the same pull request as its document, versioned with it,
+  withdrawn when it is withdrawn, and incapable of rotting into a dead link. Every
+  slide ships in the server-rendered HTML, so a reader without JavaScript, a
+  crawler and an agent parsing the page all get the whole deck. Presenter notes
+  render outside the slide, so they are not projected in fullscreen.
+
+  **A deck you keep elsewhere** can be embedded instead — `slides.url:`, with the
+  embed url derived for Google Slides, Canva and SlideShare. Its frame is
+  click-to-load: nothing is requested from the host until a reader asks for it, so
+  a page still makes zero external requests and a reader who only wanted the
+  policy never announces that to a slide host. Declaring both modes is refused
+  (`ksor-slides-two-sources`) — two presentations with nothing to say which one
+  governs is the disagreement a system of record exists to settle. `http` urls are
+  refused too, since a browser blocks a mixed-content frame silently.
+
+  Like every attachment, a deck has no URL, no sidebar row, no `llms.txt` line and
+  no id an agent can cite, and it takes its `visibility:` and any takedown from its
+  parent.
+
 ## 0.0.30
 
 ### Patch Changes
