@@ -1,0 +1,26 @@
+# Keep the serving image to what serving needs.
+
+# Secrets. The image takes its configuration from the environment at RUN time;
+# baking a .env into a layer publishes it to anyone who can pull the image.
+.env
+.env.*
+!.env.example
+
+# The corpus. The door serves from Postgres — knowledge/ was published by
+# `ksor ingest` before this container ever started, and copying it in would
+# suggest the container reads it. It does not.
+knowledge/
+
+# The website. It is the OTHER surface, built and hosted separately.
+system/
+
+# Build and tooling noise.
+node_modules/
+.git/
+.github/
+.agents/
+.claude/
+.gemini/
+*.log
+.DS_Store
+.ksor-denylist.json

@@ -356,6 +356,35 @@ refuses rather than publish a document someone took down.
 behind that audience's own access control, never on a public host.
 Details in README → Deploying.
 
+### The MCP door is a container
+
+The other surface is a live process, so it ships as one. `Dockerfile` and
+`.dockerignore` are yours, at the repo root, and they name no host:
+
+```sh
+docker build -t my-record .
+docker run --rm -p 8080:80 --env-file .env my-record
+```
+
+That image runs on Cloud Run, Fly, Render, ECS, Kubernetes or a VPS unchanged.
+`vercel.json` declares BOTH surfaces — a `site` service built from
+`system/site/out/` and a `door` service pointing at that same `Dockerfile` —
+with rewrites putting the door on `/mcp`, `/health`, `/ready` and the
+`/.well-known/oauth-protected-resource` document, and the site on everything
+else. Two rules if you edit it: the `/(.*)` catch-all must stay LAST, and do
+not add a project-level `trailingSlash` — the site's Next config already sets
+it, and at project level it 308-redirects `POST /mcp`, which breaks the door.
+
+The image deliberately excludes `.env` (a baked DSN is published to anyone who
+can pull the image), `knowledge/` (the door reads Postgres, never the folder)
+and `system/` (the other surface).
+
+**Deploying does not publish.** A container that ingested on boot would pay the
+whole record's embedding cost on every cold start and need write credentials at
+runtime. So `pnpm refresh` is a DEPLOY step you run — from your machine or from
+CI — and a first deploy without it serves an empty record. Full walkthrough:
+`node_modules/@panaversity/ksor/docs/deploying.md` and `…/docs/ingesting.md`.
+
 ## Writing knowledge
 
 - One document per file under `knowledge/`; the path is the document's

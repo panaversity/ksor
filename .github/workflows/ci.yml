@@ -213,3 +213,39 @@ jobs:
       # drift tests above — this runner is the one placed to catch them.
       - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/stage-concurrency.integration.test.ts
       - run: pnpm test:unit
+
+  container:
+    name: Container acceptance (no vendor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ksor
+          POSTGRES_PASSWORD: ksor
+          POSTGRES_DB: ksor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ksor"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      # `ksor init` ships a Dockerfile, and the claim on it is that a served
+      # record runs anywhere. A claim only checked by deploying to one vendor is
+      # a claim about that vendor — so this walks the emitted artifact on plain
+      # Docker: scaffold, publish a generation, build the image, boot it, and
+      # ask it a question over MCP. It installs the LOCAL build, and asserts the
+      # Dockerfile it builds differs from the emitted one by exactly the line
+      # that brings that tarball in.
+      - run: node scripts/container-acceptance.mjs
+        env:
+          KSOR_DB_URL: postgresql://ksor:ksor@localhost:5432/ksor
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

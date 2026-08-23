@@ -21,6 +21,7 @@ const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([
   // Same reason as .gitignore: npm pack is unreliable about leading-dot names,
   // so the template ships bare and init restores the dot.
   ["env.example", ".env.example"],
+  ["dockerignore", ".dockerignore"],
 ]);
 
 const TEXT_EXTENSIONS = new Set([

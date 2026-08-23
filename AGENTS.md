@@ -214,7 +214,23 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    variables a rung needs is an ANSWERED one, and it is the only place those
    values can live without being pasted into a shell. `.gitignore` gains
    `!.env.example` so the example survives the `.env*` rule that hides real
-   secrets._
+   secrets._ _Revision 2026-08-23: the closed root set gains TWO more,
+   `Dockerfile` and `.dockerignore`. The reasoning is the `.env.example` one
+   applied to the surface that IS the product: MCP serving is core (decision 11
+   revision 2026-08-20), a served record therefore has to reach a host, and
+   every container runtime asks for exactly these two files. Emitting them is
+   what makes "vendor-free is the ownership argument" true in the artifact
+   rather than only in the prose — the Dockerfile names no host, and
+   `vercel.json` POINTS AT it instead of replacing it, so moving hosts is a
+   redeploy and not a rewrite. A test asserts that neutrality directly, because
+   it is cheap to lose to one convenient host-specific line and nothing else
+   would go red. The same revision extends `vercel.json` from one static build
+   to two services (site + door) behind one domain. Verified live before it
+   shipped, and the verification earned its cost: a project-level
+   `trailingSlash: true` — harmless while the project was static-only —
+   308-redirected **every door route including `POST /mcp`**, which would have
+   broken the MCP endpoint of every adopter who deployed. It is removed; the
+   site's own Next config already sets it where it belongs._
 9. **Site shell: one in core — Next.js + Fumadocs + shadcn** (owner,
    2026-08-18), replacing Docusaurus natively before v1 traffic. No shell
    selector at init (one obvious way; a flag forks every skill, test, and

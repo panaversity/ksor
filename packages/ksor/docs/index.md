@@ -32,6 +32,14 @@ instead of their training memory. The corpus grows with each implemented verb.
   export the manifest the site build reads), `ksor calibrate` (measure the
   abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
   implemented: each prints an honest notice and exits `2`.
+  - **[deploying.md](./deploying.md)** — getting both surfaces onto a host. The
+    scaffold emits a `Dockerfile` that names no vendor, and a `vercel.json` that
+    points at it to put the site and the MCP door behind one domain. Includes
+    what a cold start costs, measured.
+  - **[ingesting.md](./ingesting.md)** — publishing the record and keeping it
+    current. Serving does not publish, so a first deploy with no ingest serves
+    an empty record; this is the page that explains why, where ingest belongs
+    (never inside the container), and how the abstention gate gets turned on.
   - **[authorization.md](./authorization.md)** — putting the record behind an
     authorization server, with worked recipes for two of them, executed rather
     than written. `ksor serve` refuses to boot unauthenticated on a public bind,
