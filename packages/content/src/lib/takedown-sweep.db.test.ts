@@ -270,7 +270,7 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
     ];
     for (const name of mustSee) {
       expect(
-        before.get(name),
+        before.get(name)?.body,
         `${name} never saw the marker, so its not-contains proves nothing`,
       ).toContain(MARKER);
     }
@@ -325,7 +325,10 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
 
     // The survivor is untouched — a sweep that passed by serving nothing at all
     // would be worthless.
-    expect(after.get("outline at root")?.body).toContain("guide");
+    // `outline deep`, not `outline at root`: the root listing is depth 0 and
+    // returns sections only, so the survivor LEAF is legitimately absent there.
+    // Asserting it at root would have failed for a reason that is not a leak.
+    expect(after.get("outline deep")?.body).toContain("guide");
   });
 
   it("the abstention gate stops scoring it, so coverage is not claimed on withdrawn text", async () => {
@@ -359,6 +362,9 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
     for (const [name, { body }] of after) {
       expect(body, `${name} leaked a document under a withdrawn subtree`).not.toContain(MARKER);
     }
-    expect(after.get("outline at root")?.body).toContain("guide");
+    // `outline deep`, not `outline at root`: the root listing is depth 0 and
+    // returns sections only, so the survivor LEAF is legitimately absent there.
+    // Asserting it at root would have failed for a reason that is not a leak.
+    expect(after.get("outline deep")?.body).toContain("guide");
   });
 });
