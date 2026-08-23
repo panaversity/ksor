@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { DeckCard, DeckEntry } from "@/lib/attachments";
+import { progressPercent } from "@/lib/deck";
 import { SCHEDULER_POLICY, dueOrder, newCard, schedule, type CardSchedule } from "@/lib/srs";
 
 /**
@@ -289,7 +290,8 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
   }, [revealed, card, grade, move]);
 
   const position = Math.min(index, Math.max(0, total - 1));
-  const progress = total === 0 ? 0 : ((done ? total : position) / total) * 100;
+  // One number for the bar and its caption, so they cannot disagree (lib/deck).
+  const progress = progressPercent(position, total);
 
   return (
     <div ref={containerRef}>
