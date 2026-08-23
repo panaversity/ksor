@@ -263,9 +263,37 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
       [TENANT, CORPUS],
     );
 
+    // A failing not-contains must say WHY. Report the state the predicate reads
+    // — the denylist row, the generation it resolves, and whether the node lands
+    // in the denied set — so a red run distinguishes "the seam leaked" from
+    // "the fixture never denied anything".
+    const state = await runRead(
+      pool,
+      TENANT,
+      async (c) => {
+        const rows = await c.query(
+          "SELECT tenant_id, corpus_id, stable_id, scope FROM takedown_denylist",
+        );
+        const gen = await c.query(
+          "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+          [TENANT, CORPUS],
+        );
+        const node = await c.query(
+          "SELECT node_id, generation FROM content_nodes WHERE tenant_id = $1 AND stable_id = $2",
+          [TENANT, "docs/legal/secret"],
+        );
+        return { denylist: rows.rows, active: gen.rows, node: node.rows };
+      },
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
+    );
+    expect(state.denylist.length, `no denial row was written: ${JSON.stringify(state)}`).toBe(1);
+
     const after = await sweep();
     for (const [name, serialized] of after) {
-      expect(serialized, `${name} leaked the withdrawn document`).not.toContain(MARKER);
+      expect(
+        serialized,
+        `${name} leaked the withdrawn document — state ${JSON.stringify(state)}`,
+      ).not.toContain(MARKER);
       // The identity leaks too, even without the text: a stable_id or slug in a
       // citation tells a caller the document exists and what it is called.
       expect(serialized, `${name} leaked the withdrawn stable_id`).not.toContain(
