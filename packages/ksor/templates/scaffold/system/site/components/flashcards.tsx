@@ -19,8 +19,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { DeckCard, DeckEntry } from "@/lib/attachments";
-import { progressPercent } from "@/lib/deck";
-import { SCHEDULER_POLICY, dueOrder, newCard, schedule, type CardSchedule } from "@/lib/srs";
+import {
+  SCHEDULER_POLICY,
+  dueOrder,
+  newCard,
+  progressPercent,
+  schedule,
+  type CardSchedule,
+} from "@/lib/srs";
 
 /**
  * A document's recall deck: one large card at a time, flipped to reveal.
@@ -122,7 +128,17 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
   const [shuffled, setShuffled] = useState<readonly string[] | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  /** Which way the deck last moved, so a card enters from the side it came. */
+  const [dir, setDir] = useState<1 | -1>(1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLButtonElement>(null);
+  /**
+   * A changing card REMOUNTS, which is how its entrance animation restarts —
+   * and a remount drops focus to the body. The keyboard handler only fires
+   * while the deck holds focus, so without this the shortcuts died silently
+   * the first time a reader graded a card with the keyboard.
+   */
+  const restoreFocus = useRef(false);
 
   useEffect(() => {
     const at = Date.now();
@@ -156,6 +172,12 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
     writePersisted(deck.path, schedules);
   }, [hydrated, schedules, deck.path]);
 
+  useEffect(() => {
+    if (!restoreFocus.current) return;
+    restoreFocus.current = false;
+    cardRef.current?.focus();
+  }, [index]);
+
   /** What this session walks: due first, never-seen ahead of overdue. */
   const queue = useMemo(() => {
     const base =
@@ -177,6 +199,8 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
   const grade = useCallback(
     (rating: "again" | "good") => {
       if (card === undefined) return;
+      restoreFocus.current = containerRef.current?.contains(document.activeElement) ?? false;
+      setDir(1);
       const at = Date.now();
       // The updater stays PURE — no write in here. React may invoke an updater
       // more than once, and a side effect in one is a write that fires a
@@ -207,6 +231,8 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
 
   const move = useCallback(
     (delta: number) => {
+      restoreFocus.current = containerRef.current?.contains(document.activeElement) ?? false;
+      setDir(delta < 0 ? -1 : 1);
       setRevealed(false);
       setIndex((i) => Math.min(Math.max(0, i + delta), total));
     },
@@ -341,6 +367,8 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               style={{ perspective: "3200px", perspectiveOrigin: "50% 50%" }}
             >
               <button
+                key={card.hash}
+                ref={cardRef}
                 type="button"
                 onClick={() => setRevealed((r) => !r)}
                 aria-expanded={revealed}
@@ -348,7 +376,15 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                 // The focus ring is drawn on the FACES, not here: an outline on
                 // a preserve-3d element rotates with it and renders as a
                 // sheared rectangle mid-flip.
-                className="group relative block w-full outline-none transition-transform duration-500 ease-out motion-reduce:duration-0"
+                // Both literals are written out because Tailwind scans source
+                // for whole class names; a template string would generate
+                // neither. `motion-safe:` means a reader who asked for less
+                // motion gets the new card with no travel at all.
+                className={`group relative block w-full outline-none transition-transform duration-500 ease-out motion-reduce:duration-0 ${
+                  dir === 1
+                    ? "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-6 motion-safe:duration-300"
+                    : "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-6 motion-safe:duration-300"
+                }`}
                 style={{
                   transformStyle: "preserve-3d",
                   transform: revealed ? "rotateY(180deg)" : "rotateY(0deg)",
@@ -500,7 +536,10 @@ function CardFace({
       aria-hidden={hidden}
       className={[
         "min-h-[22rem] gap-0 rounded-xl py-0",
-        "transition-colors group-hover:border-fd-primary/40",
+        // The lift is gated on motion-safe rather than overridden under
+        // motion-reduce: a reader who asked for less motion gets no travel at
+        // all, instead of travel plus a rule trying to cancel it.
+        "transition-[border-color,transform] duration-200 group-hover:border-fd-primary/40 motion-safe:group-hover:-translate-y-0.5",
         "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
         back ? "absolute inset-0" : "relative",
       ].join(" ")}

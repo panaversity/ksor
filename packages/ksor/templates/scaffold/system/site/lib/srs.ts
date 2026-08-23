@@ -201,3 +201,19 @@ export function dueOrder<T>(
  *  6. Four grades reduced to two, which costs nothing: the UI never exposed
  *     Hard or Easy, so no information that was ever collected was discarded.
  */
+
+/**
+ * How far through the deck the reader is, as a percentage, counting the card
+ * they are ON rather than the ones behind it.
+ *
+ * Extracted because it was wrong and silently so: the bar read `position` while
+ * its caption read `position + 1`, so the two disagreed by one card the whole
+ * way — "1 / 5" over an empty bar, "5 / 5" over a bar at 80%, and a full bar
+ * never once on screen, because reaching the end swaps the bar for the
+ * completion panel. One number, one place, one test.
+ */
+export function progressPercent(position: number, total: number): number {
+  if (total <= 0) return 0;
+  const shown = Math.min(Math.max(position, 0) + 1, total);
+  return (shown / total) * 100;
+}

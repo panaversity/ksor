@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { progressPercent } from "../templates/scaffold/system/site/lib/deck.js";
+import { progressPercent } from "../templates/scaffold/system/site/lib/srs.js";
 
 describe("deck progress", () => {
   it("reaches 100% on the last card, not one short of it", () => {
