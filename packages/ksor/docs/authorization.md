@@ -38,9 +38,8 @@ answer _"can Alice read what Bob can."_
 
 ## What the door needs
 
-Four variables turn auth on. Two more matter on any public deployment, and are
-listed here rather than at the bottom because you will hit them during setup,
-not after it.
+**Three** variables turn auth on. The rest are hardening: add them once it
+works, not while you are trying to make it work.
 
 | variable                     | what it is                                                                    | where the value comes from                                       |
 | ---------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------- |
@@ -91,7 +90,14 @@ second is compared **byte-exact** against the token's `iss` claim. Setting both
 to the same value is the commonest cause of a 401 on a perfectly good token.
 Mint one token, decode it, and copy `iss` out of it verbatim.
 
-**Set `KSOR_SSO_ISSUER`.** Without it, a token from a _different_ authorization
+**`KSOR_SSO_ISSUER` is optional, and you cannot set it correctly until auth
+already works** — it comes from a token you must first be able to mint. Get the
+three required variables working, decode a token, then add it. Unset, the issuer
+is simply not checked (`auth.ts:398`); the signature, the audience and the
+expiry all still are, and audience binding is what actually refuses a foreign
+token.
+
+What it buys is a better ERROR. Without it, a token from a _different_ authorization
 server produces an unknown key id, which is indistinguishable from key-rotation
 lag — so the door answers `503`, the client retries a credential that can never
 work, and a misconfiguration reads as an outage. With the issuer declared, that
