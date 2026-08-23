@@ -5,6 +5,36 @@ status: draft
 
 # Deploying a Knowledge System of Record
 
+## Before you start
+
+Four things must exist, and the order matters. Nothing below works without them,
+and three of the four are outside this page.
+
+|     | what                                                 | where                                                                                    |
+| --- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1   | **A Postgres with pgvector** — a managed one is fine | your provider; `CREATE EXTENSION vector;`                                                |
+| 2   | **A provider key** for embeddings — `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/apikey) — free tier is enough to start |
+| 3   | **The schema applied, and ingest authorized**        | `pnpm provision` (runs `ksor schema` + `ksor grant`)                                     |
+| 4   | **A published generation**                           | `pnpm refresh` (runs `ksor ingest --flip`)                                               |
+
+Steps 3 and 4 are [ingesting.md](./ingesting.md), and **they come before your
+first deploy, not after**. A door with no published generation boots healthy and
+serves an empty record — the single most common "it deployed but does not work".
+
+The whole sequence, end to end:
+
+```
+provision the database  →  ksor schema  →  ksor grant  →  ksor ingest --flip
+       →  set environment variables  →  deploy  →  verify  →  calibrate
+```
+
+Calibration is last on purpose: it measures the corpus, so the corpus has to be
+in there first. Until you run it, `/health` will report `abstain OFF` and the
+record will answer out-of-corpus questions instead of declining — honest, and
+not what most people want to ship.
+
+---
+
 A KSoR publishes two surfaces from one record, and they deploy differently
 because they are different things:
 
@@ -49,6 +79,14 @@ The emitted `Dockerfile` names no host. It installs the pinned
 docker build -t my-record .
 docker run --rm -p 8080:80 --env-file .env my-record
 ```
+
+Two things about that command, both of which bite:
+
+- **The image listens on 80**, which is why the mapping is `8080:80`. If your
+  `.env` sets `PORT`, change the right-hand side to match.
+- **`.env` must contain `KSOR_AUTH=disabled-public`, even locally.** A container
+  gets `$PORT` and therefore binds `0.0.0.0` — a public bind — and
+  `disabled-local` refuses there by design. Your laptop is not the exception.
 
 That runs on Cloud Run, Fly, Render, ECS, Kubernetes, or a VPS with no changes.
 `vercel.json` **points at this same file** rather than replacing it, which is
@@ -121,6 +159,11 @@ KSOR_AUTH=disabled-local    # no auth, loopback only — a public bind REFUSES
 KSOR_AUTH=disabled-public   # no auth, and served to anyone who can reach the port
 ```
 
+`KSOR_AUTH` has no "on" value. Auth is on when the SSO door is configured and
+`KSOR_AUTH` is **absent**; setting it to either value turns auth off. If you
+move from a disabled posture to a real provider, deleting the variable is part
+of the change.
+
 **A container sets `$PORT`, so the door binds `0.0.0.0` — a public bind.**
 `disabled-local` refuses there, deliberately: copying a dev `.env` into a hosting
 dashboard must not quietly open your record to the internet. `disabled-public` is
@@ -152,7 +195,14 @@ KSOR_SNAPSHOT_KEYS="k1=$(openssl rand -hex 32)"
 ```
 
 `k1` is a label, not a secret — it appears in the token as `key_id` so you can
-rotate later. The secret is used as literal text, never hex-decoded, and must be
+rotate later. Rotation is comma-separated, newest first, keeping the old key
+until outstanding tokens age out (30 minutes):
+
+```sh
+KSOR_SNAPSHOT_KEYS="k2=<new secret>,k1=<old secret>"
+```
+
+The secret is used as literal text, never hex-decoded, and must be
 byte-identical across every instance of one deployment. Set it once and leave it
 alone: rotating invalidates every outstanding pin, and a compromised snapshot key
 cannot read a withdrawn document, cross an audience boundary, or authenticate
