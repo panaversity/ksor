@@ -274,45 +274,66 @@ html > body[data-scroll-locked] {
   --ksor-caution: #e0906e;
 }
 
-/* A tool's own colour on its own tab.
+/* A tool's own colour, across the whole block.
 
    When a document gives one instruction per tool, the tab is the moment a
-   reader picks their tool — so it is worth being unmistakable, and a tool's
-   own brand colour is the fastest thing to recognise. The active tab takes the
-   tool's colour as a solid fill; everything else on the strip stays quiet.
+   reader picks theirs — so the choice is worth being unmistakable, and a
+   tool's own brand colour is the fastest thing to recognise. The colour is not
+   confined to the tab: the strip and the panel around it take a wash of it
+   too, so the whole block says which tool you are looking at even once the
+   tabs have scrolled past.
+
+   Each tool declares ONE value and the shared rules below do the rest, so
+   adding a tool is a line rather than a set. `:has()` puts the active tab's
+   colour on the container, which is what lets the panel follow the tab.
 
    Keyed on `data-tab-value`, which `components/mdx.tsx` puts on the trigger.
    Radix also encodes the value in its generated id, but that is a private
    format and keying on it would drop the branding silently if it changed.
 
-   THIS BLOCK IS YOURS. The list below is the tools this scaffold happened to
-   know about; a tab value that matches nothing renders in the site's own
-   accent, which is the correct default. Add your own, or delete the block —
-   nothing else depends on it.
-
-   Values are the vendors' own (Anthropic #DA7756, OpenCode #6366F1). */
-.prose [role="tab"][data-tab-value="Claude Code"][data-state="active"] {
-  background-color: #da7756;
-  color: #fff;
+   THIS BLOCK IS YOURS. These are the tools this scaffold happened to know
+   about; a tab value matching nothing renders in the site's own accent, which
+   is the right default for a record whose tabs are npm/pnpm or US/EU. Add
+   your own, or delete the block — nothing else depends on it. Values are the
+   vendors' own. */
+.prose [data-orientation]:has([data-tab-value="Claude Code"][data-state="active"]) {
+  --ksor-tool: #da7756;
 }
 
-.prose [role="tab"][data-tab-value="Claude Code"][data-state="inactive"]:hover {
-  background-color: color-mix(in oklab, #da7756 12%, transparent);
+.prose [data-orientation]:has([data-tab-value="OpenCode"][data-state="active"]) {
+  --ksor-tool: #6366f1;
 }
 
-.prose [role="tab"][data-tab-value="OpenCode"][data-state="active"] {
-  background-color: #6366f1;
-  color: #fff;
+/* Everything below is shared, and applies only where a tool was recognised. */
+.prose [data-orientation]:has([data-tab-value][data-state="active"]) {
+  background-color: color-mix(in oklab, var(--ksor-tool) 9%, transparent);
+  border-color: color-mix(in oklab, var(--ksor-tool) 32%, transparent);
 }
 
-.prose [role="tab"][data-tab-value="OpenCode"][data-state="inactive"]:hover {
-  background-color: color-mix(in oklab, #6366f1 12%, transparent);
+.prose [data-orientation]:has([data-tab-value][data-state="active"]) > [role="tablist"] {
+  background-color: color-mix(in oklab, var(--ksor-tool) 13%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--ksor-tool) 22%, transparent);
 }
 
-/* Shared shape for any branded tab, so adding a tool is one colour pair and
-   not a fresh set of geometry. */
 .prose [role="tab"][data-tab-value][data-state="active"] {
+  background-color: var(--ksor-tool);
+  color: #fff;
   border-radius: 0.375rem;
+}
+
+.prose [role="tab"][data-tab-value][data-state="inactive"]:hover {
+  background-color: color-mix(in oklab, var(--ksor-tool) 14%, transparent);
+  border-radius: 0.375rem;
+}
+
+/* The code keeps its own surface so it stays readable on the wash — a tinted
+   page with tinted code on it is one colour with words in it. */
+.prose [data-orientation]:has([data-tab-value][data-state="active"]) figure {
+  background-color: var(--card);
+}
+
+.dark .prose [data-orientation]:has([data-tab-value][data-state="active"]) figure {
+  background-color: color-mix(in oklab, var(--muted) 92%, #000);
 }
 
 /* The slide STAGE.
