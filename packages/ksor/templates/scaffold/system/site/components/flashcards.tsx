@@ -300,7 +300,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               Decorative only. */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-8 inset-y-6 rounded-[2rem] bg-fd-primary/5 blur-3xl"
+              className="pointer-events-none absolute inset-x-4 inset-y-2 rounded-[2rem] bg-fd-primary/10 blur-3xl"
             />
 
             <StepButton onClick={() => move(-1)} disabled={index === 0} label="Previous card">
@@ -314,6 +314,24 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
               hidden one is taken out of the accessibility tree rather than left
               for a screen reader to read out of turn. */}
             <div className="relative w-full max-w-2xl" style={{ perspective: "1600px" }}>
+              {/* The rest of the deck, showing under the top card. Only while
+                there IS a rest of the deck: a stack drawn under the last card
+                would be telling the reader there is more to come. */}
+              {total - index > 1 ? (
+                <>
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] rounded-xl border border-fd-border bg-fd-muted"
+                  />
+                  {total - index > 2 ? (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] rounded-xl border border-fd-border/70 bg-fd-muted/70"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => setRevealed((r) => !r)}
