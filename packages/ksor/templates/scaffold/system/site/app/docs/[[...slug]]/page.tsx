@@ -121,12 +121,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
           describes (measured, 2026-08-21). Short documents now end where their
           text ends. */}
         <DocsBody style={{ flexGrow: 0 }}>
-          {/* The document's study attachments, if it has any. Both panels are
-            built HERE, on the server, and handed to the client tab strip as
-            props — so the summary is in the shipped HTML whether or not the
-            bundle runs. Presence-driven: with neither attachment RecordViews
-            renders the body alone and no tab strip exists (specs/ksor/
-            study-attachments C3). */}
+          {/* The summary panel is built HERE, on the server, and handed to the
+            client tab strip as a prop — so it is in the shipped HTML whether or
+            not the bundle runs, which is what an agent parsing the page and a
+            reader with a failed bundle both depend on. Presence-driven: with no
+            summary, RecordViews renders the body alone and no tab strip exists
+            (specs/ksor/study-attachments C3, C20). */}
           <RecordViews
             summary={
               Summary === null ? null : (
