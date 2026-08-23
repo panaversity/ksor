@@ -233,7 +233,7 @@ interface KnowledgeDoc {
 }
 
 /** Mirrors record.ts and the reference shell — see decision 24. */
-const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml"];
+const ATTACHMENT_SUFFIXES = [".summary.md", ".summary.mdx", ".flashcards.yaml", ".quiz.yaml"];
 
 function isAttachment(base: string): boolean {
   return ATTACHMENT_SUFFIXES.some((s) => base.length > s.length && base.endsWith(s));
