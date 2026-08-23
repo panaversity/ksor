@@ -61,6 +61,14 @@ export const summaries = defineCollections({
   type: "doc",
   dir: knowledgeSourceDir(),
   files: ["**/*.summary.md"],
+  postprocess: {
+    // So the page can count the summary's words for its reading time without
+    // reading the file again. `getText("raw")` would go back to disk, and it
+    // resolves against the working directory rather than the collection's dir
+    // — which fails the export outright (found live: ENOENT on
+    // knowledge/<doc>.md during prerender).
+    includeProcessedMarkdown: true,
+  },
 });
 
 /**

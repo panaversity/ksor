@@ -27,6 +27,12 @@ function attachmentPath(documentPath: string, suffix: string): string {
 export interface SummaryEntry {
   readonly body: (props: { components?: Record<string, unknown> }) => React.ReactElement;
   readonly toc: unknown;
+  /**
+   * The summary's processed markdown, for counting its reading time. The
+   * collection enables `includeProcessedMarkdown` so this is in memory —
+   * `"raw"` would go back to disk and resolve against the wrong base.
+   */
+  readonly getText: (type: "raw" | "processed") => Promise<string>;
 }
 
 /**

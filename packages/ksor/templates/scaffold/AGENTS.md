@@ -406,6 +406,12 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
   are available. No other keys; never
   `id:` or `name:` — the path is the identity.
+- **Each page says about how long it takes to read**, counted from the
+  document's own words when the site is built. Fenced code and frontmatter do
+  not count toward it, so a short page carrying a long example is not reported
+  as a long read. Nothing to author — it is derived. A document with a summary
+  shows the figure on both tabs, so a reader can see at a glance how much the
+  summary saves them.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every
   `provenance` entry separately at the foot, and — for a superseded document —

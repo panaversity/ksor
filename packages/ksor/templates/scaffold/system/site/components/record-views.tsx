@@ -40,6 +40,8 @@ interface View {
   readonly label: string;
   readonly icon: ReactElement;
   readonly panel: ReactNode;
+  /** About how long this reading takes, in minutes. */
+  readonly minutes?: number | undefined;
 }
 
 export interface RecordViewsProps {
@@ -47,13 +49,27 @@ export interface RecordViewsProps {
   readonly children: ReactNode;
   /** Rendered summary, or null when the document has none. */
   readonly summary: ReactNode | null;
+  /** Minutes to read the document, and the summary if there is one. */
+  readonly documentMinutes?: number | undefined;
+  readonly summaryMinutes?: number | undefined;
 }
 
 const ICON = "size-3.5 shrink-0";
 
-export function RecordViews({ children, summary }: RecordViewsProps): ReactElement {
+export function RecordViews({
+  children,
+  summary,
+  documentMinutes,
+  summaryMinutes,
+}: RecordViewsProps): ReactElement {
   const views: View[] = [
-    { id: "document", label: "Document", icon: <FileText className={ICON} />, panel: children },
+    {
+      id: "document",
+      label: "Document",
+      icon: <FileText className={ICON} />,
+      panel: children,
+      minutes: documentMinutes,
+    },
   ];
   if (summary !== null) {
     views.push({
@@ -61,6 +77,7 @@ export function RecordViews({ children, summary }: RecordViewsProps): ReactEleme
       label: "Summary",
       icon: <ListTree className={ICON} />,
       panel: summary,
+      minutes: summaryMinutes,
     });
   }
 
@@ -170,6 +187,13 @@ export function RecordViews({ children, summary }: RecordViewsProps): ReactEleme
             >
               {view.icon}
               {view.label}
+              {/* The minutes sit ON the tabs because that is where they answer
+                a question the reader is actually asking: the summary is worth
+                a tab only if it is meaningfully shorter, and two numbers side
+                by side say so without a word of copy. */}
+              {view.minutes === undefined ? null : (
+                <span className="text-fd-muted-foreground/70">{view.minutes}m</span>
+              )}
             </button>
           );
         })}

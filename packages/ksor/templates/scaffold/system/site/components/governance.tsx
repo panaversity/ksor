@@ -114,17 +114,25 @@ export function GovernanceMeta({
   governance,
   replaces = [],
   markdownUrl,
+  readingMinutes,
 }: {
   governance: DocumentGovernance;
   /** Documents this one replaced — derived from the record, never declared. */
   replaces?: readonly Successor[];
   /** The document's markdown twin, offered beside its governance. */
   markdownUrl?: string;
+  /**
+   * About how long the document takes to read, counted at build time from its
+   * own markdown. Not governance — the record does not declare it — but it
+   * belongs on this row because this row is what the page says ABOUT the
+   * document, and a reader deciding whether to start wants it here.
+   */
+  readingMinutes?: number;
 }): ReactElement | null {
   const { owner, effective } = governance;
   const status = caveatStatus(governance.status);
   const bare = status === null && owner === null && effective === null && replaces.length === 0;
-  if (bare && markdownUrl === undefined) return null;
+  if (bare && markdownUrl === undefined && readingMinutes === undefined) return null;
 
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
@@ -136,6 +144,12 @@ export function GovernanceMeta({
             {status}
           </span>
         </Fact>
+      )}
+      {readingMinutes === undefined ? null : (
+        // "About", because it is an estimate from a word count and saying so
+        // costs one word. A figure presented as exact invites the reader to
+        // notice it is not.
+        <Fact label="Read">{`about ${readingMinutes} min`}</Fact>
       )}
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
       {replaces.length === 0 ? null : (

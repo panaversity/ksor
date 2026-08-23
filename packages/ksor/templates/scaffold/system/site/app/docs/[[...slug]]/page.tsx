@@ -19,6 +19,7 @@ import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
 import { StudyAids } from "@/components/study-aids";
 import { deckFor, summaryFor } from "@/lib/attachments";
+import { readingMinutes } from "@/lib/reading-time";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
@@ -31,6 +32,13 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const summary = summaryFor(page.path);
   const Summary = summary?.body ?? null;
   const deck = deckFor(page.path);
+  // Counted at BUILD time from the document's own markdown, so the figure is in
+  // the shipped HTML for a reader with a failed bundle, a crawler and an agent
+  // alike. The predecessor measured the rendered DOM after paint, which put it
+  // out of reach of all three.
+  const minutes = readingMinutes(await page.data.getText("processed"));
+  const summaryMinutes =
+    summary === null ? null : readingMinutes(await summary.getText("processed"));
   // What the record says about this document. The page renders it; it never
   // supplies it — an undeclared key shows nothing (specs/ksor/site-governance).
   const governance = readGovernance(page.data, page.path);
@@ -112,7 +120,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         <DocsTitle>{page.data.title}</DocsTitle>
         <DocsDescription>{page.data.description}</DocsDescription>
         {showGovernance ? (
-          <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
+          <GovernanceMeta
+            governance={governance}
+            replaces={replaces}
+            markdownUrl={markdownUrl}
+            readingMinutes={minutes}
+          />
         ) : null}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to
@@ -128,6 +141,8 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
             summary, RecordViews renders the body alone and no tab strip exists
             (specs/ksor/study-attachments C3, C20). */}
           <RecordViews
+            documentMinutes={minutes}
+            summaryMinutes={summaryMinutes ?? undefined}
             summary={
               Summary === null ? null : (
                 <Summary components={getMDXComponents({ a: createRelativeLink(source, page) })} />
