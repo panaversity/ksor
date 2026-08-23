@@ -16,6 +16,13 @@ and that is the point: three different implementations are shown because a
 single one proves nothing about neutrality. Two are self-hosted (one `docker
 run` each, no account); the third is a hosted provider with a free tier.
 
+The claim they exist to support is narrow and testable: **moving between
+authorization servers is an environment change, not a code change.** Three
+variables point at a different provider and the door does not know the
+difference — no rebuild, no redeploy of the container, and the two audience
+variables do not even change, because they describe your record rather than
+the provider.
+
 ## What this protects — and what it does not
 
 Read this before spending an afternoon on a provider's console.
@@ -102,6 +109,48 @@ server produces an unknown key id, which is indistinguishable from key-rotation
 lag — so the door answers `503`, the client retries a credential that can never
 work, and a misconfiguration reads as an outage. With the issuer declared, that
 same token is refused `401` before any key is fetched.
+
+## Connecting an assistant — the way most people will use this
+
+The recipes below all end in a token you fetch with `curl`. That proves the door
+verifies tokens, and it is not what you actually want: you want to open an
+assistant and have it read your record. That path is the same for every provider,
+so it is written once, here.
+
+**What it needs from your provider — one browser client, separate from any
+machine one.** A `client_credentials` application has no browser and no redirect;
+filling in its callback field changes nothing. Create a second client that does
+`authorization_code`, and set its callback to the one your assistant uses. For
+Claude's hosted surfaces:
+
+```
+https://claude.ai/api/mcp/auth_callback
+```
+
+Then **authorize that client for your record's resource**. Every provider spells
+this differently — Auth0 calls it Application Access, Keycloak grants it through
+scope and audience mapping — and it is the step that most often looks done and
+is not. Skipping it gives an error at the authorization endpoint rather than at
+the token endpoint, so the login never even reaches your record:
+
+```
+Client "…" is not authorized to access resource server "https://your-host/mcp"
+```
+
+Finally, add the connector: the door's URL (`https://your-host/mcp`), plus the
+browser client's ID and secret. Those credentials go **into the assistant**,
+never into ksor — the door holds no client credentials and cannot mint a token
+for itself.
+
+**What you should see.** The assistant sends you to your provider's login page,
+you sign in, and it returns with the record's tools available. If instead you get
+a 401 from the door after a successful login, decode the token and compare `aud`
+against `KSOR_MCP_RESOURCE_URL` before looking anywhere else — that is the one
+failure that looks like a broken server and is a mismatched name.
+
+Standards-following clients send RFC 8707 (`resource=https://your-host/mcp`) on
+the authorization request, so a provider that honours it needs no vendor-specific
+audience parameter and no mapper.
 
 ## Will your provider work? Three questions, before you start
 
@@ -344,8 +393,12 @@ works unmodified once the grant exists.
 
 ## Verify it — against the door, not the provider
 
-A token from your provider proves the provider works. It does not prove the door
-does. Both halves matter, and the refusal matters more.
+If you connected an assistant and it read your record, auth works — that is the
+end-to-end proof and you can stop here.
+
+Use the commands below when it did NOT work, or when the caller is a script
+rather than a person. A token from your provider proves the provider works; it
+does not prove the door does. Both halves matter, and the refusal matters more.
 
 **1. Decode the token before using it.** This is the single most useful
 debugging step on this page, because a valid token audienced at the wrong thing
