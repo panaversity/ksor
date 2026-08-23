@@ -13,6 +13,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import { StudyAidHeader } from "@/components/study-aids";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import type { DeckCard, DeckEntry } from "@/lib/attachments";
 import { SCHEDULER_POLICY, dueOrder, newCard, schedule, type CardSchedule } from "@/lib/srs";
 
@@ -323,14 +326,14 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                 would be telling the reader there is more to come. */}
               {total - index > 1 ? (
                 <>
-                  <div
+                  <Card
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] rounded-md border border-fd-border bg-fd-card"
+                    className="pointer-events-none absolute inset-0 translate-y-[10px] scale-[0.975] py-0"
                   />
                   {total - index > 2 ? (
-                    <div
+                    <Card
                       aria-hidden
-                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] rounded-md border border-fd-border/70 bg-fd-card"
+                      className="pointer-events-none absolute inset-0 translate-y-[20px] scale-[0.95] py-0 opacity-70"
                     />
                   ) : null}
                 </>
@@ -447,12 +450,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
                   />
                 ))
             ) : (
-              <span className="h-1 w-full overflow-hidden rounded-full bg-fd-border">
-                <span
-                  className="block h-full rounded-full bg-fd-primary transition-[width] duration-300 motion-reduce:transition-none"
-                  style={{ width: `${progress}%` }}
-                />
-              </span>
+              <Progress value={progress} className="h-1" />
             )}
           </div>
         </>
@@ -501,14 +499,16 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
 }
 
 /**
- * One side of a catalogue card.
+ * One side of a catalogue card, built on shadcn's `Card`.
  *
- * The record's world already has this object: a ruled card, filed in a drawer,
- * with a tab you read the position off and a number in the corner. That is the
- * design, rather than a generic app card — and the number is not decoration.
- * A card's identity here IS the hash of its own text (lib/deck.ts), which is
- * what lets an edited card reset alone while its neighbours keep their history.
- * Printing it is the record showing its own filing.
+ * The record's world already has this object: a card filed in a drawer, with a
+ * tab you read the position off and a number in the corner. `Card` gives the
+ * surface, the radius and the shadow from the same tokens every other surface
+ * in this site uses; the tab and the number are what make it a FILED card.
+ *
+ * The number is not decoration. A card's identity here IS the hash of its own
+ * text (lib/deck.ts), which is what lets an edited card reset alone while its
+ * neighbours keep their history. The card is showing its own filing.
  *
  * The front sits in flow and therefore SETS the height; the back is absolutely
  * positioned over it, pre-rotated so it reads the right way round once the card
@@ -533,14 +533,11 @@ function CardFace({
   readonly children: React.ReactNode;
 }): ReactElement {
   return (
-    <span
+    <Card
       aria-hidden={hidden}
       className={[
-        "flex min-h-[22rem] flex-col rounded-md border border-fd-border bg-fd-card",
-        "px-6 pb-14 pt-14 text-center sm:px-10",
-        "shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_-12px_rgb(0_0_0/0.14)]",
-        "transition-[border-color,box-shadow] group-hover:border-fd-primary/50",
-        "group-hover:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-14px_rgb(0_0_0/0.2)]",
+        "min-h-[22rem] gap-0 py-0 transition-shadow",
+        "group-hover:shadow-md",
         "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
         back ? "absolute inset-0" : "relative",
       ].join(" ")}
@@ -555,20 +552,22 @@ function CardFace({
         labels at the top were two things telling the reader where they are.
         The inner span paints over the card's top border across the tab's width,
         so the tab reads as part of the card rather than sitting on it. */}
-      <span className="absolute -top-[1.6rem] left-8 flex items-center gap-2 rounded-t-sm border border-b-0 border-fd-border bg-fd-card px-3 pb-1 pt-1 font-mono text-[10px] tracking-[0.12em] text-fd-muted-foreground">
+      <span className="absolute -top-[1.6rem] left-8 flex items-center gap-2 rounded-t-sm border border-b-0 bg-card px-3 py-1 font-mono text-[10px] tracking-[0.12em] text-muted-foreground">
         {tab}
-        <span className="text-fd-muted-foreground/50">·</span>
+        <span className="text-muted-foreground/50">·</span>
         {label}
-        <span aria-hidden className="absolute inset-x-px -bottom-px h-px bg-fd-card" />
+        <span aria-hidden className="absolute inset-x-px -bottom-px h-px bg-card" />
       </span>
 
-      <span className="flex flex-1 flex-col items-center justify-center">{children}</span>
+      <CardContent className="flex flex-1 flex-col items-center justify-center px-6 py-14 text-center sm:px-10">
+        {children}
+      </CardContent>
 
-      <span className="absolute inset-x-0 bottom-4 flex items-baseline justify-between px-8">
-        <span className="font-mono text-[10px] text-fd-muted-foreground/70">{slug}</span>
-        <span className="text-sm text-fd-muted-foreground">{hint}</span>
-      </span>
-    </span>
+      <CardFooter className="absolute inset-x-0 bottom-4 items-baseline justify-between px-6 sm:px-8">
+        <span className="font-mono text-[10px] text-muted-foreground/70">{slug}</span>
+        <span className="text-sm text-muted-foreground">{hint}</span>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -594,15 +593,17 @@ function StepButton({
   readonly children: React.ReactNode;
 }): ReactElement {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon-lg"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={`relative my-auto flex size-12 shrink-0 items-center justify-center rounded-full text-fd-muted-foreground transition-colors hover:bg-fd-muted hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary disabled:pointer-events-none disabled:opacity-20 ${className}`}
+      className={`my-auto shrink-0 rounded-full text-muted-foreground disabled:opacity-20 ${className}`}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -618,23 +619,23 @@ function GradeButton({
   readonly children: React.ReactNode;
 }): ReactElement {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
       onClick={onClick}
       className={[
-        "flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary",
+        "flex-1",
         // The accent means "the thing you probably want" and is spent once.
-        // Missed-it is deliberately NOT red: getting a card wrong is the
-        // mechanism working, not an error.
+        // Missed-it is deliberately NOT destructive: getting a card wrong is
+        // the mechanism working, not an error.
         tone === "good"
-          ? "border-fd-primary/50 text-fd-foreground hover:bg-fd-primary/10"
-          : "border-fd-border text-fd-muted-foreground hover:bg-fd-muted hover:text-fd-foreground",
+          ? "border-fd-primary/50 hover:bg-fd-primary/10"
+          : "text-muted-foreground hover:text-foreground",
       ].join(" ")}
     >
       {children}
       <kbd className="ml-1 font-mono text-[10px] opacity-60">{hint}</kbd>
-    </button>
+    </Button>
   );
 }
 
@@ -652,21 +653,17 @@ function FooterAction({
   readonly children: React.ReactNode;
 }): ReactElement {
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       {...(expanded === undefined ? {} : { "aria-expanded": expanded })}
-      className={[
-        "flex items-center gap-2 border-b-2 pb-1 text-sm transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary",
-        active
-          ? "border-fd-primary text-fd-primary"
-          : "border-transparent text-fd-muted-foreground hover:text-fd-foreground",
-      ].join(" ")}
+      className={active ? "text-fd-primary underline underline-offset-8" : "text-muted-foreground"}
     >
       {icon}
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -697,7 +694,7 @@ function DeckDone({
     .reduce((soonest, due) => (due < soonest ? due : soonest), Number.POSITIVE_INFINITY);
 
   return (
-    <div className="mx-auto flex min-h-[24rem] max-w-2xl flex-col items-center justify-center rounded-md border border-fd-border bg-fd-card px-8 py-12 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_-12px_rgb(0_0_0/0.14)]">
+    <Card className="mx-auto min-h-[22rem] max-w-2xl items-center justify-center px-8 py-12 text-center">
       <p className="font-(family-name:--font-display) text-xl text-fd-foreground">
         {reviewed === 0 ? "Nothing due right now." : "Session complete."}
       </p>
@@ -705,14 +702,16 @@ function DeckDone({
         {reviewed > 0 ? `${reviewed} reviewed · ` : ""}
         next card due in {untilDue(nextDue - at)}
       </p>
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={onRestart}
-        className="mt-6 inline-flex items-center gap-2 rounded-md border border-fd-border px-3 py-1.5 font-mono text-xs text-fd-muted-foreground transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
+        className="mt-6 font-mono text-xs text-muted-foreground"
       >
         <RotateCcw className="size-3.5" />
         Review anyway
-      </button>
-    </div>
+      </Button>
+    </Card>
   );
 }
