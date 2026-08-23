@@ -314,7 +314,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
         <>
           {/* The movement controls sit OUTSIDE the card: the whole card is the
             flip target, and a chevron inside it would compete for the click. */}
-          <div className="relative flex items-stretch justify-center gap-4 sm:gap-6">
+          <div className="relative flex items-stretch justify-center gap-3 sm:gap-4">
             <StepButton
               onClick={() => move(-1)}
               disabled={index === 0}
@@ -395,7 +395,7 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
 
           {/* Reserved height, so revealing an answer does not push the progress
             bar and the action row down the page under the reader's cursor. */}
-          <div className="mx-auto mt-4 flex min-h-[2.75rem] max-w-2xl items-start justify-center gap-2">
+          <div className="mx-auto mt-5 flex min-h-[2.75rem] max-w-2xl items-start justify-center gap-3">
             {revealed ? (
               <>
                 <GradeButton onClick={() => grade("again")} tone="again" hint="1">
@@ -408,21 +408,21 @@ export function Flashcards({ deck }: { deck: DeckEntry }): ReactElement {
             ) : null}
           </div>
 
-          <div className="mx-auto mt-8 flex max-w-2xl items-center gap-5">
+          <div className="mx-auto mt-7 flex max-w-2xl items-center gap-5">
             <Progress
               value={progress}
               aria-label={`Card ${position + 1} of ${total}`}
-              className="h-1.5"
+              className="h-1 bg-border/60"
             />
-            <span className="shrink-0 text-sm text-muted-foreground">
-              {position + 1} / {total} cards
+            <span className="shrink-0 font-mono text-[0.6875rem] tracking-wide text-muted-foreground">
+              {position + 1} / {total}
             </span>
           </div>
         </>
       )}
 
-      <div className="mt-8 border-t border-fd-border pt-5">
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+      <div className="mt-10 border-t border-border/70 pt-6">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
           <FooterAction onClick={doShuffle} icon={<Shuffle className="size-3.5" />}>
             Shuffle
           </FooterAction>
@@ -497,7 +497,7 @@ function CardFace({
     <Card
       aria-hidden={hidden}
       className={[
-        "min-h-[30rem] gap-0 rounded-lg py-0 shadow-none",
+        "min-h-[22rem] gap-0 rounded-xl py-0",
         "transition-colors group-hover:border-fd-primary/40",
         "group-focus-visible:border-fd-primary group-focus-visible:ring-2 group-focus-visible:ring-fd-primary/30",
         back ? "absolute inset-0" : "relative",
@@ -525,21 +525,34 @@ function CardFace({
             onCopy();
           }
         }}
-        className="absolute left-5 top-5 rounded p-1 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
+        className="absolute left-5 top-5 rounded p-1 text-muted-foreground/40 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
       >
         {copied ? <ClipboardCheck className="size-4" /> : <Copy className="size-4" />}
       </span>
 
-      <CardContent className="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center sm:px-14">
-        <span className="mx-auto block max-w-[34rem] text-balance text-xl leading-[1.45] text-foreground sm:text-[1.6rem]">
+      <CardContent className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center sm:px-12">
+        {/* Tracking tightened a hair and leading opened: at display sizes the
+          interface face sets loose, and the default 1.5 leading pulls a
+          two-line question apart. */}
+        <span className="mx-auto block max-w-[32rem] text-balance text-[1.35rem] font-medium leading-[1.4] tracking-[-0.011em] text-foreground sm:text-[1.5rem]">
           {text}
         </span>
         {why === undefined ? null : (
-          <span className="mt-8 block max-w-md text-sm text-muted-foreground">{why}</span>
+          <>
+            {/* A short rule rather than more space: the prompt is a different
+              KIND of sentence from the question, and a gap alone did not say
+              so. */}
+            <span aria-hidden className="mt-7 block h-px w-10 bg-border" />
+            <span className="mt-5 block max-w-sm text-[0.9375rem] leading-relaxed text-muted-foreground">
+              {why}
+            </span>
+          </>
         )}
       </CardContent>
 
-      <span className="absolute inset-x-0 bottom-8 text-base text-muted-foreground">{hint}</span>
+      <span className="absolute inset-x-0 bottom-6 text-[0.8125rem] tracking-wide text-muted-foreground/80">
+        {hint}
+      </span>
     </Card>
   );
 }
@@ -572,7 +585,7 @@ function StepButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={`my-auto h-20 w-12 shrink-0 rounded-md text-muted-foreground disabled:opacity-30 ${className}`}
+      className={`my-auto h-16 w-11 shrink-0 rounded-lg border-border/70 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-25 ${className}`}
     >
       {children}
     </Button>
@@ -596,7 +609,7 @@ function GradeButton({
       variant="outline"
       onClick={onClick}
       className={[
-        "flex-1",
+        "h-11 flex-1",
         // The accent means "the thing you probably want" and is spent once.
         // Missed-it is deliberately NOT destructive: getting a card wrong is
         // the mechanism working, not an error.
