@@ -21,6 +21,7 @@ export const REFUSAL_SLUGS = [
   "ksor-reserved-type-unowned",
   "ksor-source-unresourced",
   "ksor-actor-form",
+  "ksor-instant-form",
   "ksor-footnote-unkeyed",
   "ksor-reserved-name",
   "ksor-index-stale",

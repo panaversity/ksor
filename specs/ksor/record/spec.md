@@ -270,7 +270,9 @@ duplicate key, non-plain tag, second document, non-mapping),
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,
 `ksor-deprecated-unattributed`, `ksor-deprecator-unauthorised`,
 `ksor-reserved-type-unsourced`, `ksor-reserved-type-unowned`,
-`ksor-source-unresourced`, `ksor-actor-form`, `ksor-footnote-unkeyed`,
+`ksor-source-unresourced`, `ksor-actor-form`, `ksor-instant-form` (a
+timestamp that is not an instant with an explicit offset, §2.3),
+`ksor-footnote-unkeyed`,
 `ksor-reserved-name`, `ksor-index-stale` (check only),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
 `ksor-attachment-orphan`, `ksor-link-widens`, `ksor-supersession-strands`
