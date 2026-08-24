@@ -268,12 +268,22 @@ export async function runMigrate(
   }
 
   // ── the takedown ledger ────────────────────────────────────────────────
-  const denials = await collectDenials(root, oldFm, parsed.attributions, refusals, io);
+  // Transcribing the denylist is a ONE-TIME act, into a record that has no
+  // ledger yet. A record that already has one has already been migrated, and
+  // `ksor takedown` may have appended to it since — regenerating the file from
+  // the database would delete those entries, which is the one thing an
+  // append-only ledger must never suffer.
+  const hadLedger = record.files.has(".ksor/takedowns.yaml");
+  const denials = hadLedger
+    ? []
+    : await collectDenials(root, oldFm, parsed.attributions, refusals, io);
   const takedownActors = new Set<string>(denials.map((d) => d.by));
   if (denials.length > 0) {
-    const before = record.files.get(".ksor/takedowns.yaml") ?? null;
-    const after = renderLedger(denials, conceptIds);
-    if (before !== after) changes.push({ path: ".ksor/takedowns.yaml", before, after });
+    changes.push({
+      path: ".ksor/takedowns.yaml",
+      before: null,
+      after: renderLedger(denials, conceptIds),
+    });
   }
 
   // ── the governance policy ──────────────────────────────────────────────
@@ -444,7 +454,9 @@ function renderPolicy(input: PolicyInput): string | null {
  */
 function siteRuleChanges(root: string, templatesDir: string): FileChange[] {
   const from = path.join(templatesDir, "system", "site", "lib");
-  if (!existsSync(from)) return [];
+  // Only ever an UPDATE. A record with no site of its own is not one that
+  // wants a `system/site/lib` conjured into it by a migration.
+  if (!existsSync(from) || !existsSync(path.join(root, "system", "site"))) return [];
   const out: FileChange[] = [];
   for (const name of readdirSync(from).sort()) {
     if (!name.endsWith("-rule.ts")) continue;

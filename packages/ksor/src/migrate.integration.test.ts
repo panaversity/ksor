@@ -474,6 +474,40 @@ describe("ksor migrate — what it refuses to invent", () => {
   });
 });
 
+describe("ksor migrate — the takedown ledger is transcribed once", () => {
+  const instance = [
+    "instance.md",
+    "---\nformat: 1\nname: acme\ndatabase:\n  dsn_env: KSOR_WALK_DSN\n---\n\n# Acme\n\nOne sentence of scope.\n",
+  ] as const;
+  const concept = [
+    "knowledge/a.md",
+    "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n",
+  ] as const;
+
+  // Reading the denylist is how a pre-profile record's takedowns survive; a
+  // record that declares a database whose DSN is absent is refused rather than
+  // migrated without them.
+  it("refuses a declared database it cannot read, naming the variable", () => {
+    const root = repo([instance, concept]);
+    const r = run(root, "migrate", "--actor", ACTOR);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-migrate-underivable");
+    expect(r.stderr).toContain("KSOR_WALK_DSN");
+  });
+
+  // But only ONCE. A record that already has a ledger has already been
+  // migrated, and `ksor takedown` may have appended to it since — so migrate
+  // does not read the database at all, let alone regenerate the file from it.
+  it("does not touch a ledger that already exists, or the database behind it", () => {
+    const root = repo([instance, concept, [".ksor/takedowns.yaml", "[]\n"]]);
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr).not.toContain("KSOR_WALK_DSN");
+    expect(read(root, ".ksor/takedowns.yaml")).toBe(before.get(".ksor/takedowns.yaml"));
+  });
+});
+
 describe("ksor migrate --write-site", () => {
   it("offers the byte-copied rule modules as a diff, and copies them under --write", () => {
     const root = repo([
@@ -493,6 +527,18 @@ describe("ksor migrate --write-site", () => {
       "utf8",
     );
     expect(read(root, "system/site/lib/audience-rule.ts")).toBe(canonical);
+  });
+
+  // An update, never a creation: a record with no site of its own does not
+  // want one conjured into it by a migration.
+  it("offers nothing to a record that has no site", () => {
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--write-site");
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(path.join(root, "system"))).toBe(false);
   });
 });
 

@@ -72,8 +72,11 @@ expanded UPWARD through the old ordered model, `provenance` into `sources`,
 instance into format 2 with authority moved into `.ksor/governance.yaml`, a
 reserved `index.md`/`README.md` carrying prose into `overview.md`, every
 summary companion marked `type: Summary`, and every denylist row in the
-database into the committed ledger. Without `--write` it prints a unified diff
-and changes nothing. It refuses by name (`ksor-migrate-underivable`) rather
+database into the committed ledger (once, into a record that has no ledger
+yet — a record that already has one has already been migrated, and `ksor
+takedown` may have appended to it since). Without `--write` it prints a
+unified diff and changes nothing. `--write-site` UPDATES the byte-copied rule
+modules where a `system/site` exists; it never creates one. It refuses by name (`ksor-migrate-underivable`) rather
 than author a title, a description, a `generated.at` or the actor behind a
 takedown. `workbench/example-corpus` is migrated and builds green;
 `scripts/check-corpus.mjs` no longer applies the pre-profile rules to it.
