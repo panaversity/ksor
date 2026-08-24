@@ -190,15 +190,17 @@ it:
 | Publication integrity | SLSA / Sigstore                     | proof of which source and build produced a published artifact                 |
 | Observability         | OpenTelemetry                       | what the infrastructure did, without becoming another knowledge store         |
 
-The same model in nine lines:
+The same model as a stack, each line resting on the one beneath it — which
+is why OKF sits _under_ KSoR, not beside it:
 
-> **Markdown, in the KSoR Profile of OKF, is the authoritative record.**  
-> **Postgres + pgvector provide retrieval.**  
+> **Markdown is the authoritative medium.**  
+> **OKF makes that record open and portable.**  
+> **KSoR governance makes it authoritative.**  
+> **Postgres + pgvector make it retrievable.**  
 > **Fumadocs serves humans.**  
 > **`llms.txt` lets AI discover it.**  
 > **MCP lets agents interact with it.**  
-> **The same OKF representation lets knowledge systems exchange the record.**  
-> **OAuth/OIDC establishes identity. KSoR governance controls access.**  
+> **OAuth/OIDC establishes identity; KSoR governs access.**  
 > **SLSA/Sigstore proves what was published.**  
 > **OpenTelemetry tells us what happened.**
 
@@ -220,7 +222,12 @@ every surface.
 The full specification — the profile, the conformance classes, the
 governance requirements — is the **[KSoR Standard Proposal
 (KSP-001)](research/ksor-standard-proposal-001-v0.1-draft9.md)**, an open
-standard written so that anyone can implement a conformant KSoR.
+standard written so that anyone can implement a conformant KSoR. It defines
+five conformance classes — a corpus (A), a publisher (B), a retrieval layer
+(C), an agent surface (D), and exchange (E) — plus optional profiles for
+identity, publication integrity, and computation attestation. A complete
+KSoR implements all five classes; a partial implementation (a corpus linter,
+say) is valid too, and states its class.
 
 Which of the nine responsibilities the shipped tool implements today is
 recorded in [`docs/status.md`](docs/status.md) — always the authority, never
