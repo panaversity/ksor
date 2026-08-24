@@ -1,5 +1,75 @@
 # @panaversity/ksor
 
+## 0.0.38
+
+### Patch Changes
+
+- ba15879: The scaffolded site says where a document sits on **every** page, and the trail
+  names the document itself.
+
+  The shell's breadcrumb renders the folders above a page and nothing else, so it
+  appeared on `/docs/surfaces/for-agents` and was absent on `/docs/installing` —
+  the block above the title came and went as a reader moved through the record,
+  and it was missing on exactly the documents at the top of it. A page now reads
+  `⌂ › Surfaces › The agent surface`: a home link, the folders, and the document
+  itself.
+
+  The home link goes to the record's front door at `/`. The record's name became
+  the page tree's root, replacing fumadocs' "Docs" default, so a screen reader
+  hears it as the home link's label.
+
+- 7eeb74d: New skill: **`make-summary`**. Ask your coding agent to summarise a document
+  and it writes `<doc>.summary.md` from the document, which the site renders as a
+  Summary tab beside the document's own words.
+
+  It is `make-slides`' discipline applied to prose: read the document whole,
+  write the summary, check every claim and every number back against it, and
+  report what it left out because the document did not support it.
+
+  With one rule of its own — **every `##` section must be represented**. A
+  summary that covers the opening and trails off is worse than none: a reader who
+  used it believes they have the whole document. It also declines to summarise a
+  document too short to compress, and says so, rather than writing a Summary tab
+  that restates the page.
+
+  Slides had a generator; summaries did not, which is why records tend to have
+  one summary and forty documents.
+
+- cb263d5: The eyebrow that names a region of a page — Teaching aid, In this section,
+  Sources — is one class now, and carries the record's accent.
+
+  It was the same string of utility classes typed out in three components, which
+  is how "Teaching aid" ended up accent-coloured and the other two grey: nothing
+  tied them together, so they drifted apart one edit at a time.
+
+- b8de20a: The scaffolded site no longer logs a React key warning on every page in
+  `pnpm dev`.
+
+  The shell renders the sidebar footer as one child of an array, so the element
+  needs a `key`. Without it React logged "Each child in a list should have a
+  unique key prop" naming `RecordShell`, on every route. A production build
+  strips the warning, which is why it survived — it only appears in the dev
+  server, which is where an adopter meets the site first.
+
+- 0f17283: A document's teaching aid now renders **after its introduction**, not above it.
+
+  The deck used to sit between the governance row and the first word of prose,
+  which reads as a slot in the page's furniture rather than as part of the
+  document — and on a long lesson it put a fourteen-slide deck in front of the
+  paragraph that says what the lesson is.
+
+  The placement comes from the document's own shape: the introduction is
+  everything before the first `##` section, so the aid goes immediately before
+  that heading, and a document with no sections gets it after its prose. No
+  marker in the record and no frontmatter key — the headings the author already
+  wrote are the structure.
+
+  The recall aids (flashcards, quiz) are unchanged and stay at the end, because
+  those are used after reading.
+
+  The aid is placed in documents only — a `<doc>.summary.md` goes through the
+  same pipeline and is rendered without one.
+
 ## 0.0.37
 
 ### Patch Changes
