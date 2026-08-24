@@ -14,7 +14,7 @@
   "instance_sha256": "04952385a9e0d0350673a13053b815d429d74890528db8910877de566bae231b",
   "policy_sha256": "41b63d4d203785563e4d821c4f30b11e06f13740ddd4f9a4e84e1ad83a60a3a5",
   "ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "ledger_ids": [],
+  "ledger_entries": [],
   "audiences": {
     "registry": [],
     "viewers": {

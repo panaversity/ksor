@@ -99,7 +99,10 @@ describe("ksor build — acceptance 1: the conformant record", () => {
       "welcome.flashcards.yaml",
       "welcome.summary.md",
     ]);
-    expect(lock.ledger_ids).toEqual(["2026-08-24T10:00:00Z-aaaaaa", "2026-08-24T11:00:00Z-bbbbbb"]);
+    expect(lock.ledger_entries.map((e: { id: string }) => e.id)).toEqual([
+      "2026-08-24T10:00:00Z-aaaaaa",
+      "2026-08-24T11:00:00Z-bbbbbb",
+    ]);
 
     const second = build(root);
     expect(second.status, second.stderr).toBe(0);
@@ -177,7 +180,7 @@ describe("ksor build — acceptance 1: the emitted starter", () => {
       /^---\nokf_version: "0.2"\n---\n/,
     );
     // No ledger file at all: the hash of the empty string, and no ids.
-    expect(lock.ledger_ids).toEqual([]);
+    expect(lock.ledger_entries).toEqual([]);
 
     const pinned = readFileSync(path.join(root, "build.lock.json"), "utf8");
     build(root, "--as-of", AS_OF);
@@ -241,7 +244,7 @@ describe("ksor build — acceptance 2: what moves build_id", () => {
     const denied = lockOf(root);
     expect(denied.build_id).not.toBe(base);
     expect(denied.documents.find((d) => d.path === "policies/board-pay.md")?.admitted).toEqual([]);
-    expect(denied.ledger_ids).toHaveLength(3);
+    expect(denied.ledger_entries).toHaveLength(3);
   });
 });
 
@@ -290,6 +293,53 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     expect(r.stderr.split("\n")[0]).toBe("error: ksor-ledger-shrank");
     expect(r.stderr).toContain("2026-08-24T11:00:00Z-bbbbbb");
     expect(r.stderr).toMatch(/git history/);
+  });
+
+  /**
+   * Editing a committed entry in place — same id, same actor, a different
+   * target — republished the denied document and denied an innocent one, and
+   * every gate stayed green because only the ID SET was compared. The baseline
+   * now carries each entry's digest, so the edit is named on the field.
+   */
+  it("a committed entry RETARGETED in place is ksor-ledger-amended, naming the id, the field and the commit", () => {
+    const root = repo();
+    const ledger = path.join(root, ".ksor/takedowns.yaml");
+    const sha = git(root, "rev-parse", "--short=7", "HEAD");
+    writeFileSync(
+      ledger,
+      readFileSync(ledger, "utf8").replace("knowledge/policies/retired", "knowledge/policies/open"),
+    );
+    const r = build(root);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-ledger-amended");
+    expect(r.stderr).toContain("2026-08-24T10:00:00Z-aaaaaa");
+    expect(r.stderr).toContain("stable_id");
+    expect(r.stderr).toContain(sha);
+    expect(existsSync(path.join(root, "build.lock.json"))).toBe(false);
+  });
+
+  it("the committed lock catches the same edit where there is no history to read", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-norepo-amend-"));
+    roots.push(root);
+    for (const [rel, text] of Object.entries(VALID.files)) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), text);
+    }
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const ledger = path.join(root, ".ksor/takedowns.yaml");
+    // A `reason` edit alone: nothing else about the record changes, so this is
+    // the append-only rule and nothing else answering.
+    writeFileSync(
+      ledger,
+      readFileSync(ledger, "utf8").replace("superseded figure", "a reason someone preferred"),
+    );
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-ledger-amended");
+    expect(r.stderr).toContain("build.lock.json");
+    // The lock carries digests, not entries, so it names the id and not the
+    // field — which is why the git-history baseline is the richer one.
+    expect(r.stderr).toContain("2026-08-24T10:00:00Z-aaaaaa");
   });
 
   it("a shallow clone refuses ksor-ledger-unverifiable unless --allow-unverifiable-ledger is explicit", () => {

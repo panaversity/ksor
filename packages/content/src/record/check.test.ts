@@ -245,13 +245,16 @@ describe("checkRecord — one rule set (record spec §6)", () => {
         ledgerBaselines: [
           {
             source: "build.lock.json",
-            ids: ["2026-08-25T10:00:00Z-aaaaaa", "2026-08-25T10:00:00Z-bbbbbb"],
+            entries: [
+              { id: "2026-08-25T10:00:00Z-aaaaaa", digest: null },
+              { id: "2026-08-25T10:00:00Z-bbbbbb", digest: null },
+            ],
           },
         ],
       },
     );
     expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-ledger-shrank"]);
-    expect(out.ledgerIds).toEqual(["2026-08-25T10:00:00Z-aaaaaa"]);
+    expect(out.ledgerEntries.map((e) => e.id)).toEqual(["2026-08-25T10:00:00Z-aaaaaa"]);
   });
 
   it("ksor-instance-format: the instance must say format: 2 and carry none of the moved keys", () => {

@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   checkLedgerActors,
   checkLedgerAgainstTree,
-  checkLedgerShrank,
+  checkLedgerAppendOnly,
   denies,
+  entryDigest,
   inForce,
   parseLedger,
   type Denial,
@@ -189,23 +190,92 @@ describe("checkLedgerAgainstTree", () => {
   });
 });
 
-describe("checkLedgerShrank", () => {
+describe("checkLedgerAppendOnly — the ledger is append-only in ids AND in text", () => {
   it("the current id set must be a superset of every baseline; the refusal names the ids and each source", () => {
-    const r = checkLedgerShrank(
-      ["a", "b"],
-      [
-        { source: "git history", ids: ["a", "b", "c"] },
-        { source: "build.lock.json", ids: ["a"] },
-      ],
-    );
+    const r = checkLedgerAppendOnly(ledgerOf(DENIAL), [
+      { source: "git history", entries: [{ id: "c", digest: null }] },
+      { source: "build.lock.json", entries: [] },
+    ]);
     expect(r.map((x) => x.slug)).toEqual(["ksor-ledger-shrank"]);
     expect(r[0]?.why).toMatch(/c/);
     expect(r[0]?.why).toMatch(/git history/);
+  });
+
+  it("says nothing when every baseline id is present with the text it was recorded with", () => {
+    const ledger = ledgerOf(DENIAL + REVOCATION);
+    const entries = ledger.entries.map((e) => ({ id: e.id, digest: entryDigest(e), entry: e }));
+    expect(checkLedgerAppendOnly(ledger, [{ source: "git history", entries }])).toEqual([]);
+  });
+
+  /**
+   * The blocker this replaces: `checkLedgerShrank` compared ID SETS, so editing
+   * a committed entry in place — same id, same actor, a different `stable_id` —
+   * republished the denied document and denied an innocent one, with nothing
+   * red on any surface. Hand-editing was strictly easier than hand-appending.
+   */
+  it("refuses an entry whose text moved under an id history already recorded", () => {
+    const before = ledgerOf(DENIAL);
+    const entries = before.entries.map((e) => ({
+      id: e.id,
+      digest: entryDigest(e),
+      entry: e,
+      where: "abc1234",
+    }));
+    const retargeted = ledgerOf(DENIAL.replace("policies/old-threshold", "policies/open"));
+    const r = checkLedgerAppendOnly(retargeted, [{ source: "git history", entries }]);
+    expect(r.map((x) => x.slug)).toEqual(["ksor-ledger-amended"]);
+    expect(r[0]?.why).toContain("2026-08-25T10:00:00Z-a1b2c3");
+    expect(r[0]?.why).toContain("stable_id");
+    expect(r[0]?.why).toContain("abc1234");
+  });
+
+  it("refuses a retargeted entry against a digest-only baseline too (the committed lock)", () => {
+    const digest = entryDigest(ledgerOf(DENIAL).entries[0]!);
+    const retargeted = ledgerOf(DENIAL.replace("expected: present", "expected: removed"));
+    const r = checkLedgerAppendOnly(retargeted, [
+      { source: "build.lock.json", entries: [{ id: "2026-08-25T10:00:00Z-a1b2c3", digest }] },
+    ]);
+    expect(r.map((x) => x.slug)).toEqual(["ksor-ledger-amended"]);
+    expect(r[0]?.why).toContain("build.lock.json");
+  });
+
+  it("a baseline that could not be parsed carries no digest and judges ids only", () => {
+    const retargeted = ledgerOf(DENIAL.replace("policies/old-threshold", "policies/open"));
     expect(
-      checkLedgerShrank(["a", "b", "c"], [{ source: "git history", ids: ["a", "b", "c"] }]),
+      checkLedgerAppendOnly(retargeted, [
+        { source: "git history", entries: [{ id: "2026-08-25T10:00:00Z-a1b2c3", digest: null }] },
+      ]),
     ).toEqual([]);
   });
 });
+
+describe("entryDigest", () => {
+  it("covers every governing field, so no edit to an entry is invisible", () => {
+    const base = ledgerOf(DENIAL).entries[0] as Denial;
+    const digest = entryDigest(base);
+    for (const [from, to] of [
+      ["knowledge/policies/old-threshold", "knowledge/policies/open"],
+      ["node", "subtree"],
+      ["present", "removed"],
+      ["human:ciso", "human:cfo"],
+      ["2026-08-25T10:00:00Z", "2026-08-26T10:00:00Z"],
+      ["superseded figure", "a different reason"],
+    ] as const) {
+      const moved = { ...base, ...fieldFor(base, from, to) };
+      expect(entryDigest(moved), `${from} → ${to}`).not.toBe(digest);
+    }
+  });
+});
+
+/** Rebuilds one denial field from a literal, so the table above reads as the entry does. */
+function fieldFor(base: Denial, from: string, to: string): Partial<Denial> {
+  if (base.stableId === from) return { stableId: to };
+  if (base.scope === from) return { scope: to as Denial["scope"] };
+  if (base.expected === from) return { expected: to as Denial["expected"] };
+  if (base.by === from) return { by: to };
+  if (base.at === from) return { at: to };
+  return { reason: to };
+}
 
 describe("denies — the in-force denials as a predicate over concept ids", () => {
   const denial = (stableId: string, scope: "node" | "subtree"): Denial => ({

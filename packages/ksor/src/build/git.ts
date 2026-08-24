@@ -7,6 +7,12 @@
  */
 import { spawnSync } from "node:child_process";
 
+import {
+  entryDigest,
+  parseLedger,
+  type LedgerBaselineEntry,
+} from "@panaversity/ksor-content/record";
+
 /** The inputs a projection reads; nothing else moves `source_commit` (the lock itself included). */
 export const INPUTS: readonly string[] = [
   "knowledge",
@@ -23,8 +29,12 @@ export interface GitFacts {
   readonly shallow: boolean;
   readonly sourceCommit: string | null;
   readonly dirty: boolean;
-  /** Every ledger id any committed version of the file has carried, or null when history is unreadable. */
-  readonly historicLedgerIds: readonly string[] | null;
+  /**
+   * Every ledger entry any committed version of the file has carried — id and,
+   * where that version parses, the digest of its text — or null when history is
+   * unreadable.
+   */
+  readonly historicLedger: readonly LedgerBaselineEntry[] | null;
 }
 
 function run(root: string, args: readonly string[]): string | null {
@@ -40,7 +50,7 @@ export function gitFacts(root: string): GitFacts {
       shallow: false,
       sourceCommit: null,
       dirty: true,
-      historicLedgerIds: null,
+      historicLedger: null,
     };
   }
   const shallow = (run(root, ["rev-parse", "--is-shallow-repository"]) ?? "").trim() === "true";
@@ -61,24 +71,43 @@ export function gitFacts(root: string): GitFacts {
     shallow,
     sourceCommit,
     dirty,
-    historicLedgerIds: shallow ? null : born ? historicIds(root) : [],
+    historicLedger: shallow ? null : born ? historicEntries(root) : [],
   };
 }
 
 /**
- * Ids from every version of the ledger in history, read permissively (a
- * historic version that would not parse today still counts — the point is
- * that an id once written never disappears).
+ * Every version of the ledger in history, entry by entry. A version that
+ * parses contributes each entry's digest, so an entry EDITED in place is
+ * caught, not only one deleted; a version that no longer parses still
+ * contributes its ids, read permissively — the point there is that an id once
+ * written never disappears.
  */
-function historicIds(root: string): readonly string[] | null {
+function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
   const prefix = (run(root, ["rev-parse", "--show-prefix"]) ?? "").trim();
   const commits = run(root, ["log", "--format=%H", "--", LEDGER]);
   if (commits === null) return null;
-  const ids = new Set<string>();
+  const seen = new Map<string, LedgerBaselineEntry>();
   for (const sha of commits.split("\n").filter((s) => s !== "")) {
     const text = run(root, ["show", `${sha}:${prefix}${LEDGER}`]);
     if (text === null) continue;
-    for (const m of text.matchAll(/^\s*(?:-\s+)?id:\s*["']?([^\s"']+)/gm)) ids.add(m[1] ?? "");
+    const where = sha.slice(0, 7);
+    const parsed = parseLedger(text, LEDGER);
+    if (parsed.ok) {
+      for (const entry of parsed.ledger.entries) {
+        seen.set(`${entry.id}\u0000${entryDigest(entry)}`, {
+          id: entry.id,
+          digest: entryDigest(entry),
+          entry,
+          where,
+        });
+      }
+      continue;
+    }
+    for (const m of text.matchAll(/^\s*(?:-\s+)?id:\s*["']?([^\s"']+)/gm)) {
+      const id = m[1] ?? "";
+      const key = `${id}\u0000`;
+      if (!seen.has(key)) seen.set(key, { id, digest: null, where });
+    }
   }
-  return [...ids].sort();
+  return [...seen.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

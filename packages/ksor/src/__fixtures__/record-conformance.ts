@@ -5,6 +5,7 @@
  * and the emitted `check.mjs` (`checker-drift.integration.test.ts`). Files
  * are record-relative; `dirs` names directories that hold no file.
  */
+import { ledgerDigests, parseLedger } from "@panaversity/ksor-content/record";
 
 export interface ConformanceRecord {
   readonly name: string;
@@ -24,8 +25,15 @@ export interface ConformanceRecord {
   readonly expected: readonly string[];
 }
 
-/** A parseable lock carrying `ledgerIds` and nothing else that matters (build spec §2). */
-export function lockWith(ledgerIds: readonly string[]): string {
+/**
+ * A parseable lock carrying the ledger baseline and nothing else that matters
+ * (build spec §2). `ledgerFor` builds the `(id, digest)` pairs from a ledger's
+ * TEXT, so a fixture can commit a lock that recorded a DIFFERENT text under the
+ * same id — which is what `ksor-ledger-amended` catches.
+ */
+export function lockWith(
+  ledgerEntries: readonly { readonly id: string; readonly digest: string }[],
+): string {
   const zero = "0".repeat(64);
   return `${JSON.stringify(
     {
@@ -40,7 +48,7 @@ export function lockWith(ledgerIds: readonly string[]): string {
       instance_sha256: zero,
       policy_sha256: zero,
       ledger_sha256: zero,
-      ledger_ids: ledgerIds,
+      ledger_entries: ledgerEntries,
       audiences: { registry: [], viewers: {} },
       documents: [],
       companions: [],
@@ -48,6 +56,14 @@ export function lockWith(ledgerIds: readonly string[]): string {
     null,
     2,
   )}\n`;
+}
+
+/** The `(id, digest)` pairs a build would have recorded for this ledger text. */
+export function ledgerFor(text: string): { id: string; digest: string }[] {
+  const parsed = parseLedger(text, ".ksor/takedowns.yaml");
+  if (!parsed.ok)
+    throw new Error(`fixture ledger does not parse: ${JSON.stringify(parsed.refusals)}`);
+  return ledgerDigests(parsed.ledger);
 }
 
 export const POLICY = `version: "0.1"
@@ -452,8 +468,24 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     // repository it is the only one, so this is the path an adopter's CI takes.
     name: "ksor-ledger-shrank",
     files: base({}),
-    lock: lockWith(["2026-08-24T09:00:00Z-zzzzzz"]),
+    lock: lockWith([{ id: "2026-08-24T09:00:00Z-zzzzzz", digest: "0".repeat(64) }]),
     expected: ["ksor-ledger-shrank .ksor/takedowns.yaml"],
+  },
+  {
+    // The committed lock recorded this id with a DIFFERENT stable_id. Comparing
+    // id sets alone let exactly this edit through, republishing the denied
+    // document and denying an innocent one with nothing red on any surface.
+    name: "ksor-ledger-amended",
+    files: base({}),
+    lock: lockWith(
+      ledgerFor(
+        VALID_FILES[".ksor/takedowns.yaml"]!.replace(
+          "knowledge/policies/retired",
+          "knowledge/policies/open",
+        ),
+      ),
+    ),
+    expected: ["ksor-ledger-amended .ksor/takedowns.yaml"],
   },
   {
     name: "ksor-pointer-changed",

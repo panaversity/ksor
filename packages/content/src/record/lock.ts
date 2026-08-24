@@ -47,7 +47,7 @@ const lockSchema = z
     instance_sha256: hex64,
     policy_sha256: hex64,
     ledger_sha256: hex64,
-    ledger_ids: z.array(z.string()),
+    ledger_entries: z.array(z.object({ id: z.string().min(1), digest: hex64 }).strict()),
     audiences: z
       .object({ registry: z.array(z.string()), viewers: z.record(z.string(), viewerList) })
       .strict(),
@@ -88,7 +88,8 @@ export interface Lock {
   readonly instance_sha256: string;
   readonly policy_sha256: string;
   readonly ledger_sha256: string;
-  readonly ledger_ids: readonly string[];
+  /** `(id, digest)` per ledger entry, sorted by id — the baseline the next build compares TEXT against. */
+  readonly ledger_entries: readonly { readonly id: string; readonly digest: string }[];
   readonly audiences: {
     readonly registry: readonly string[];
     readonly viewers: Readonly<Record<string, readonly string[]>>;
@@ -204,7 +205,7 @@ export interface LockInput {
   readonly policyText: string;
   /** Null when the ledger file does not exist. */
   readonly ledgerText: string | null;
-  readonly ledgerIds: readonly string[];
+  readonly ledgerEntries: readonly { readonly id: string; readonly digest: string }[];
   /** Registered audiences, from the policy. */
   readonly audiences: readonly string[];
   readonly concepts: readonly (AdmissionConcept & { readonly text: string })[];
@@ -249,7 +250,7 @@ export function composeLock(input: LockInput): Lock {
     instance_sha256,
     policy_sha256,
     ledger_sha256,
-    ledger_ids: [...input.ledgerIds].sort(),
+    ledger_entries: [...input.ledgerEntries].sort((a, b) => compare(a.id, b.id)),
     audiences: { registry: [...input.audiences].sort(), viewers },
     documents,
     companions,

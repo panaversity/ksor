@@ -80,7 +80,7 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   "instance_sha256": "…",
   "policy_sha256": "…",
   "ledger_sha256": "…",
-  "ledger_ids": ["…"],
+  "ledger_entries": [{ "id": "2026-08-01T00:00:00Z-a1b2c3", "digest": "…" }],
   "audiences": {
     "registry": ["internal"],
     "viewers": { "public": ["public"], "internal": ["public", "internal"] }
@@ -128,10 +128,14 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   a different admitted set gets a different id (R21); the lock is
   byte-identical across two runs modulo `as_of`. The product invariant's
   wording gains "+ same `as_of`" (plan §2.9).
-- `ledger_ids` is the ledger's id set at this build (sorted) — maximal by
-  construction, because a build that lost an id is refused — and one of the
-  two baselines for `ksor-ledger-shrank` (record spec §5). `ledger_sha256`
-  hashes the file's bytes, or the empty string when no ledger exists.
+- `ledger_entries` is one `(id, digest)` pair per ledger entry, sorted by id —
+  maximal by construction, because a build that lost an id is refused — and one
+  of the two baselines the ledger is judged against (record spec §5). The digest
+  is over the entry's governing fields, not the file's bytes, so it is one of
+  the two things that makes `ksor-ledger-amended` reachable: an id alone cannot
+  tell a committed denial from the same id RETARGETED at another document.
+  `ledger_sha256` hashes the file's bytes, or the empty string when no ledger
+  exists.
   `as_of` is written with millisecond precision (`…T12:00:00.000Z`).
 
 Two identities, never confused in prose: `build_id` is what R14 stamps and

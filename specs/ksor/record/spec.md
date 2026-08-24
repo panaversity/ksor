@@ -242,13 +242,18 @@ order. Direction is file → database; the door refuses at once, the site at
 its next build from the merged ledger. Change-control verification of ledger
 actors (R27 as R22) lands with approvals in plan §4.2.
 
-**Shrink, without a database.** `ksor build` compares the ledger's id set
-against the union of every version of the file reachable in history
-(`git log -p -- .ksor/takedowns.yaml`, or the merge-base with the default
-branch in CI) and against `build.lock.json`'s committed `ledger_ids`; when
-history is unavailable (a shallow clone) it refuses unless
-`--allow-unverifiable-ledger` is explicit; the scaffold's `validate.yml`
-fetches full depth.
+**Append-only, without a database.** `ksor build` and the emitted checker
+compare the ledger against every version of the file reachable in history
+(`git log -- .ksor/takedowns.yaml`) and against `build.lock.json`'s committed
+`ledger_entries`. Each baseline carries `(id, digest)` — `digest` a sha256 over
+every governing field of the entry — so a lost id is `ksor-ledger-shrank` and an
+id whose TEXT moved is `ksor-ledger-amended`. Ids alone are not enough: a
+committed denial could be RETARGETED in place, keeping its id and its actor,
+which republished the denied document and denied an innocent one with nothing
+red on any surface. A historic version that does not parse today still counts
+for shrink, with no digest. When history is unavailable (a shallow clone) it
+refuses unless `--allow-unverifiable-ledger` is explicit; the scaffold's
+`validate.yml` fetches full depth.
 
 **Dangling.** `ksor-takedown-dangling` applies to in-force (unrevoked)
 entries: a `present` `node` entry whose stable_id resolves to no concept,
@@ -285,7 +290,10 @@ not exist, is not `stable`, or fails the widening rule — and the pointer on a
 concept that is not `deprecated` at all, which the old checker refused and
 which announces a replacement no surface shows),
 `ksor-takedown-unauthorised`, `ksor-takedown-dangling`,
-`ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-invalid`,
+`ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-amended` (an
+entry whose TEXT moved under an id a baseline recorded — comparing id sets
+alone let a committed denial be retargeted in place),
+`ksor-ledger-invalid`,
 `ksor-policy-missing`, `ksor-policy-invalid`, `ksor-legacy-key` (§2.6),
 `ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
 `^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside

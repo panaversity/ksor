@@ -33,6 +33,7 @@ export const REFUSAL_SLUGS = [
   "ksor-takedown-dangling",
   "ksor-takedown-readded",
   "ksor-ledger-shrank",
+  "ksor-ledger-amended",
   "ksor-ledger-invalid",
   "ksor-policy-missing",
   "ksor-policy-invalid",

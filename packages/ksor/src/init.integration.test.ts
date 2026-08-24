@@ -711,7 +711,7 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
     const { checkRecord, loadRecord } = await import("@panaversity/ksor-content/record");
     const result = checkRecord(loadRecord(root), { mode: "check" });
     expect(result.refusals.map((r) => `${r.path}: ${r.slug}`)).toEqual([]);
-    expect(result.ledgerIds).toEqual([]);
+    expect(result.ledgerEntries).toEqual([]);
   });
 
   it("the scaffold's own format checker passes on the fresh scaffold", () => {

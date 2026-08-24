@@ -32,7 +32,7 @@ function lockBaseline(): LedgerBaseline[] {
   const lockPath = path.join(root, "build.lock.json");
   if (!existsSync(lockPath)) return [];
   const parsed = parseLock(readFileSync(lockPath, "utf8"));
-  return parsed.ok ? [{ source: "build.lock.json", ids: parsed.lock.ledger_ids }] : [];
+  return parsed.ok ? [{ source: "build.lock.json", entries: parsed.lock.ledger_entries }] : [];
 }
 
 const record = checkRecord(loadRecord(root), { mode: "check", ledgerBaselines: lockBaseline() });

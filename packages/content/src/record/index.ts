@@ -39,11 +39,14 @@ export {
   inForce,
   checkLedgerActors,
   checkLedgerAgainstTree,
-  checkLedgerShrank,
+  checkLedgerAppendOnly,
+  entryDigest,
+  ledgerDigests,
   denies,
   type Ledger,
   type LedgerEntry,
   type LedgerBaseline,
+  type LedgerBaselineEntry,
   type Denial,
 } from "./ledger.js";
 export {

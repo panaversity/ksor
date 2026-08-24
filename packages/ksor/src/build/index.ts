@@ -130,7 +130,7 @@ export function runBuild(
   }
 
   const facts = gitFacts(root);
-  if (facts.repository && facts.historicLedgerIds === null && !parsed.allowUnverifiable) {
+  if (facts.repository && facts.historicLedger === null && !parsed.allowUnverifiable) {
     return refuse(
       io,
       "ksor-ledger-unverifiable",
@@ -150,8 +150,8 @@ export function runBuild(
   }
 
   const baselines: LedgerBaseline[] = [];
-  if (facts.historicLedgerIds !== null) {
-    baselines.push({ source: "git history", ids: facts.historicLedgerIds });
+  if (facts.historicLedger !== null) {
+    baselines.push({ source: "git history", entries: facts.historicLedger });
   }
   const lockPath = path.join(root, "build.lock.json");
   if (existsSync(lockPath)) {
@@ -164,7 +164,7 @@ export function runBuild(
         "delete the file and rebuild — the lock is regenerated from the tree, never edited",
       );
     }
-    baselines.push({ source: "build.lock.json", ids: committed.lock.ledger_ids });
+    baselines.push({ source: "build.lock.json", entries: committed.lock.ledger_entries });
   }
 
   const record = loadRecord(root);
@@ -188,7 +188,7 @@ export function runBuild(
     instanceText: record.files.get("instance.md") ?? "",
     policyText: record.files.get(".ksor/governance.yaml") ?? "",
     ledgerText,
-    ledgerIds: result.ledgerIds,
+    ledgerEntries: result.ledgerEntries,
     audiences: result.policy?.audiences ?? [],
     concepts: result.concepts.map((c) => ({
       id: c.id,

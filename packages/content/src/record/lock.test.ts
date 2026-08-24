@@ -144,7 +144,7 @@ describe("composeLock + parseLock", () => {
     instanceText: "---\nformat: 2\n---\n",
     policyText: "version: '0.1'\n",
     ledgerText: null,
-    ledgerIds: [],
+    ledgerEntries: [],
     audiences: ["internal"],
     concepts: [
       {

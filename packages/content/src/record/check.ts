@@ -12,7 +12,8 @@ import { generateIndexes } from "./index-file.js";
 import {
   checkLedgerActors,
   checkLedgerAgainstTree,
-  checkLedgerShrank,
+  checkLedgerAppendOnly,
+  ledgerDigests,
   parseLedger,
   type LedgerBaseline,
 } from "./ledger.js";
@@ -34,7 +35,7 @@ export interface RecordFiles {
 export interface CheckOptions {
   /** `check` is read-only and refuses a stale index; `build` regenerates and never does. */
   readonly mode: "check" | "build";
-  /** Id sets the ledger must still contain (git history, the committed lock). */
+  /** What the ledger must still contain, entry by entry (git history, the committed lock). */
   readonly ledgerBaselines?: readonly LedgerBaseline[];
 }
 
@@ -43,7 +44,8 @@ export interface CheckResult {
   /** Record-relative index path → bytes, generated from the tree. */
   readonly indexes: ReadonlyMap<string, string>;
   readonly concepts: readonly Concept[];
-  readonly ledgerIds: readonly string[];
+  /** `(id, digest)` per entry, in file order — what the lock records so the next build can compare text. */
+  readonly ledgerEntries: readonly { readonly id: string; readonly digest: string }[];
   readonly policy: Policy | null;
 }
 
@@ -218,12 +220,12 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
 
   // ── the ledger ─────────────────────────────────────────────────────────
   const ledgerResult = parseLedger(record.files.get(LEDGER_PATH) ?? null, LEDGER_PATH);
-  let ledgerIds: readonly string[] = [];
+  let ledgerEntries: readonly { readonly id: string; readonly digest: string }[] = [];
   if (!ledgerResult.ok) {
     refusals.push(...ledgerResult.refusals);
   } else {
     const ledger = ledgerResult.ledger;
-    ledgerIds = ledger.ids;
+    ledgerEntries = ledgerDigests(ledger);
     if (policy !== null) refusals.push(...checkLedgerActors(ledger, policy.takedownActors));
     refusals.push(
       ...checkLedgerAgainstTree(ledger, {
@@ -231,14 +233,14 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
         dirs: new Set(dirs),
       }),
     );
-    refusals.push(...checkLedgerShrank(ledger.ids, options.ledgerBaselines ?? []));
+    refusals.push(...checkLedgerAppendOnly(ledger, options.ledgerBaselines ?? []));
   }
 
   return {
     refusals: sortRefusals(refusals),
     indexes,
     concepts: [...concepts.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
-    ledgerIds,
+    ledgerEntries,
     policy,
   };
 }
