@@ -28,15 +28,6 @@ export interface TakedownRow {
   readonly createdAt: Date;
 }
 
-export interface TakedownOutcome {
-  readonly stableId: string;
-  readonly scope: TakedownScope;
-  /** false when the row already said exactly this — the act is idempotent. */
-  readonly changed: boolean;
-  /** Does this stable_id name a document in the generation being served? */
-  readonly resolves?: boolean;
-}
-
 /** The ledger, readable at last — through the auditor role (schema 2.3). */
 export interface LedgerRow {
   readonly action: string;
