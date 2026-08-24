@@ -93,6 +93,43 @@ deployment:
   and email in the navbar, sign out returning the control. Two different
   identity providers on one deployment, neither named in framework code.
 
+### A record can raise its voice, and a reader can unwrap a line (unreleased)
+
+The document page gains the affordances a written record actually needs, all
+of them defaults in the scaffold rather than things to configure.
+
+A passage the reader must not miss is a CALLOUT, written in GitHub's alert
+syntax (`> [!WARNING]`) and rendered as a panel tinted in that kind's colour
+with a rule down its left edge. Not `:::warning`: a dialect renders as literal
+colons in every reader except the one site that understands it. The conversion
+is a REHYPE step, because this record's markdown is serialized from the mdast —
+doing it in remark publishes `<Callout>` to the agent surface in place of the
+author's blockquote, which is what the first build of it did.
+
+A code block wider than the column gets a button beside its copy button that
+wraps it, and one that fits gets no button at all. Wrapping everything by
+default was tried and reverted: a yaml file rewrapped at the column reads as
+though its indentation means something else.
+
+The rest is typography with a reason: a table head that reads as a head and
+rows that alternate, a numbered list whose markers count in the accent, the
+term a list item defines picked out, and a language-less fence set as a passage
+to reproduce rather than as code — selected by the absence of shiki's own
+token colours, so nothing has to be authored.
+
+Two things this exposed rather than caused. A document with no summary was
+rendering a full-width rule under an empty band holding one number; the reading
+time moved into the governance row beside the owner and effective date. And the
+reset that keeps the top of a document from moving with the author's choice of
+first block targets `.prose > :first-child`, which the first block has not been
+for some time — every document was starting 20px low.
+
+Pinned on the SHIPPED BYTES: a test asserts the export's own stylesheet carries
+the rule for each affordance and that an alert became a callout rather than a
+marker served as text, with the markdown twin asserted in the same test because
+that is the clause that fails if the conversion moves to remark. Proved it can
+fail by disabling one rule and watching it go red.
+
 ### The site names its reader (0.0.35)
 
 The scaffolded site gains an optional sign-in control: OAuth 2.0

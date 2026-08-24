@@ -678,11 +678,51 @@ html > body[data-scroll-locked] {
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-fd-muted-foreground);
+  /* The record's own accent, at reading strength. The labels were grey on
+     near-white and the head did not read as a head at all — on a three-column
+     table the eye had to work out which row was the label. */
+  color: color-mix(in oklab, var(--color-fd-primary) 72%, var(--color-fd-foreground));
+  background: color-mix(in oklab, var(--color-fd-primary) 7%, var(--color-fd-muted));
+}
+
+/* The head is a band, so it is ruled off from the body rather than floating
+   above it — and the rule is the accent's, not the hairline's, so the two read
+   as one object. */
+#nd-page .prose thead {
+  border-bottom: 2px solid color-mix(in oklab, var(--color-fd-primary) 28%, var(--color-fd-border));
+}
+
+.dark #nd-page .prose thead th {
+  /* Against near-black the same 7% is almost nothing, and the same 72% ink is
+     too bright to sit under body text. */
+  color: color-mix(in oklab, var(--color-fd-primary) 60%, var(--color-fd-foreground));
+  background: color-mix(in oklab, var(--color-fd-primary) 12%, var(--color-fd-muted));
 }
 
 #nd-page .prose tbody tr {
   border-bottom: 1px solid var(--color-fd-border);
+}
+
+/* And every other row carries a wash. A hairline alone is enough on a
+   two-column table; across three columns of wrapped prose the eye loses which
+   cells belong together, because the gap between rows and the gap between
+   lines INSIDE a cell are the same distance. The band is what holds a row
+   together over that distance.
+
+   Faint on purpose: it groups, it does not label. Anything stronger competes
+   with the head, which is the row that is meant to be read first. */
+#nd-page .prose tbody tr:nth-child(even) {
+  background: var(--color-fd-background);
+}
+
+#nd-page .prose tbody tr:nth-child(odd) {
+  background: color-mix(in oklab, var(--color-fd-border) 14%, var(--color-fd-muted));
+}
+
+.dark #nd-page .prose tbody tr:nth-child(odd) {
+  /* A step of the same SIZE reads much stronger against near-black, so the
+     dark pair takes less of the border to land at the same apparent distance. */
+  background: color-mix(in oklab, var(--color-fd-border) 8%, var(--color-fd-muted));
 }
 
 #nd-page .prose tbody tr:last-child {
@@ -731,6 +771,117 @@ html > body[data-scroll-locked] {
   background: var(--color-fd-muted);
 }
 
+/* A block with no language is not code — it is a passage to reproduce
+   verbatim: a prompt to type, a command to say, a message to paste. This
+   record has eight, and they arrived as walls of tight monospace, set for
+   scanning columns of code when what is in them is sentences.
+
+   The highlighter's own output is the selector, so nothing has to be authored
+   and nothing changes for the record: shiki gives every token in a HIGHLIGHTED
+   block an inline `--shiki-light`, and a plain one has none. `:has()` asks
+   that question directly.
+
+   Prose leading, because the lines are sentences; and the accent down the left
+   edge, which is what the rest of this site uses to mark structure — here it
+   says "reproduce this exactly", which is the one thing these blocks have in
+   common. */
+#nd-page .prose figure.shiki:not(:has(code span[style*="--shiki-light"])) {
+  border-left: 3px solid color-mix(in oklab, var(--color-fd-primary) 55%, var(--color-fd-border));
+}
+
+#nd-page .prose figure.shiki:not(:has(code span[style*="--shiki-light"])) code {
+  line-height: 1.7;
+}
+
+/* Showing the whole of a long line, when the reader asks for it.
+   components/code-block.tsx puts the button on the block and sets the
+   attribute; this is what the attribute means.
+
+   `pre` is `w-max` in the shell, which sizes it to the longest line — that is
+   what makes wrapping impossible, so the width has to come back to the column
+   before `pre-wrap` can do anything. A wrapped line is then indented under its
+   own, the way a terminal marks a continuation, because otherwise a two-line
+   command reads as two commands.
+
+   Wrapping is NOT the default. It was, for one commit, and it is worse for the
+   blocks that do not need it: a yaml file rewrapped at the column reads as
+   though its indentation means something else. */
+#nd-page .prose figure.shiki[data-wrapped] pre {
+  width: 100%;
+  min-width: 0;
+}
+
+#nd-page .prose figure.shiki[data-wrapped] code > * {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* The hang, plus the gutter below — so a continuation is indented from the
+     text, not from the block's edge. */
+  padding-left: calc(1rem + 2ch);
+  text-indent: -2ch;
+}
+
+/* A block needs a gutter on both sides. Unwrapped, the shell gives one on the
+   left with `ps-*` and lets a long line run under the buttons on the right,
+   because the line can always be scrolled clear of them. Wrapped, it cannot:
+   the first line ends under the copy button with no way to move it, and the
+   left edge sits on the rule (seen live). So the wrapped state pays for its
+   own margins — a gutter left, and enough right for two 24px buttons. */
+#nd-page .prose figure.shiki[data-wrapped] code {
+  padding-inline: 0 4rem;
+}
+
+#nd-page .prose figure.shiki[data-wrapped] .fd-scroll-container {
+  padding-inline-start: 0;
+}
+
+/* And a hairline where a scrollbar appears, in place of the platform's slab. */
+#nd-page .prose figure.shiki .fd-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-fd-border) transparent;
+}
+/* A callout has to look like a callout. The same `bg-fd-card` trap as the code
+   block above: fumadocs paints the panel with `--card`, which in this palette
+   is all but the page colour, so a Note and a Warning both arrived as a white
+   box with a coloured hair down one edge — the kind was legible only in the
+   icon.
+
+   Fumadocs already puts the kind's own colour on the element as
+   `--callout-color`, so ONE rule tints every kind: a wash of that colour over
+   `--muted`, the token that means "a surface on the page". No per-kind
+   selector, and a kind added upstream is tinted without touching this.
+
+   6% in light and 10% in dark, because the same fraction reads as a different
+   amount of colour against near-white and against near-black. Kept low on
+   purpose: this is the record's own accent discipline — the tint says which
+   kind, it does not compete with the prose. */
+#nd-page .prose [style*="--callout-color"] {
+  background: color-mix(in oklab, var(--callout-color) 6%, var(--color-fd-muted));
+  border-color: color-mix(in oklab, var(--callout-color) 20%, var(--color-fd-border));
+  /* The shadow was doing the work the colour now does, and lifted the panel
+     off the page in a way nothing else on it does. */
+  box-shadow: none;
+
+  /* THE RULE DOWN THE LEFT EDGE — the same device the verbatim block uses, so
+     "this passage is set apart" looks the same everywhere it happens, whatever
+     kind of thing is set apart. Fumadocs draws a half-pixel bar INSIDE the
+     panel instead, which is too faint to read as a marker at all.
+
+     In the kind's own colour, which for a Note — much the commonest — is the
+     accent, so the standard case is the blue line. */
+  border-left: 3px solid color-mix(in oklab, var(--callout-color) 65%, var(--color-fd-border));
+}
+
+/* And the inner bar goes, now that the edge carries it. Two rules for the same
+   job, a pixel apart, read as a mistake. */
+#nd-page .prose [style*="--callout-color"] > div[class*="w-0.5"] {
+  display: none;
+}
+
+.dark #nd-page .prose [style*="--callout-color"] {
+  background: color-mix(in oklab, var(--callout-color) 10%, var(--color-fd-muted));
+  border-color: color-mix(in oklab, var(--callout-color) 24%, var(--color-fd-border));
+}
+
 /* Re-assert the shell's own reset, which the ramp above broke. The prose
    plugin zeroes the first block's top margin, but writes that rule as
    `.prose :where(> :first-child)`, and `:where()` contributes nothing to
@@ -740,6 +891,39 @@ html > body[data-scroll-locked] {
    the author's choice of first block. This selector is (1,2,0) against the
    heading rules' (1,1,1), so it takes the argument back. */
 #nd-page .prose > :first-child {
+  margin-top: 0;
+}
+
+/* A numbered list is a sequence, and its numbers should say so. The marker
+   arrived grey at regular weight, lighter than the text it counts, so a list
+   of six steps read as six paragraphs that happened to start with digits.
+
+   The accent, and only here: a number is structure, which is what this
+   record's accent is for. */
+#nd-page .prose ol > li::marker {
+  color: var(--color-fd-primary);
+  font-weight: 600;
+}
+
+/* And the TERM a list item defines. `**Heartbeat:** a schedule that…` is the
+   commonest shape in this record — a term, then what it means — and the term
+   is the thing a reader scans for.
+
+   Only the term. Bold elsewhere in the sentence stays ink, because a page
+   where every emphasis is coloured has no emphasis: the accent stops meaning
+   "this is the one to find" and starts meaning "this is bold". */
+#nd-page .prose li > strong:first-child,
+#nd-page .prose li > p:first-child > strong:first-child {
+  color: var(--color-fd-primary);
+}
+
+/* The same rule, one level in. The document's first block is not a child of
+   `.prose` — it is inside the views wrapper, and inside a tab panel when the
+   document has a summary — so the reset above never reached it and the top of
+   every document sat 20px lower than the rule above it intended (measured
+   after the empty view strip was removed, which is what exposed it). */
+#nd-page .prose > .ksor-views > :first-child,
+#nd-page .prose > .ksor-views [role="tabpanel"] > :first-child {
   margin-top: 0;
 }
 

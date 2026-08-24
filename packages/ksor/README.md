@@ -10,7 +10,7 @@ when the corpus does not cover the question.
 ## Start
 
 ```bash
-npx @panaversity/ksor init my-sor
+npx @panaversity/ksor@latest init my-sor
 cd my-sor
 pnpm install
 pnpm dev        # the site, live at http://localhost:3000
@@ -31,6 +31,22 @@ scaffold is deterministic and offline, and every refusal explains itself.
 > [`docs/status.md`](https://github.com/panaversity/ksor/blob/main/docs/status.md)
 > and the released version number are authoritative for the exact released
 > functionality.
+
+### What a document can do
+
+`knowledge/` is CommonMark, and stays CommonMark — every affordance below is
+syntax that other readers already handle, so a record renders honestly on
+GitHub, in a plain editor, at `/md/` and in `llms-full.txt`.
+
+| Write | The site renders |
+| ----- | ---------------- |
+| `> [!WARNING]` as a blockquote's first line | a callout, tinted in that kind's colour |
+| ` ```bash tab="Claude Code" ` on consecutive fences | one tab group, the choice remembered |
+| a fence with no language | a passage to reproduce, set for reading |
+
+Nothing to author for the rest: a table's head reads as a head, a numbered list
+counts in the record's accent, and a code block wider than the column gets a
+button that unwraps it.
 
 ### Study attachments
 
@@ -72,7 +88,7 @@ Full concept, design goals, and project status:
 
 ```bash
 npm install -g @panaversity/ksor   # command installed: ksor
-npx @panaversity/ksor              # or run without installing
+npx @panaversity/ksor@latest       # or run without installing
 ```
 
 ## License

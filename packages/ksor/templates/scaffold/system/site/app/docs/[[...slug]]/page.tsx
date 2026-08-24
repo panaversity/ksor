@@ -130,7 +130,15 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         <DocsTitle>{page.data.title}</DocsTitle>
         <DocsDescription>{page.data.description}</DocsDescription>
         {showGovernance ? (
-          <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
+          <GovernanceMeta
+            governance={governance}
+            replaces={replaces}
+            markdownUrl={markdownUrl}
+            // Only when there is no view strip to carry it — with a summary,
+            // the number belongs to the view the reader picked, not to the
+            // document as a whole.
+            minutes={summary === null ? minutes : undefined}
+          />
         ) : null}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to

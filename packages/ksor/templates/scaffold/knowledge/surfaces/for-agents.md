@@ -22,6 +22,12 @@ be checked against the document that carries it rather than taken on trust.
 "Not in this record" is a correct answer. It is never an error, and never a
 licence to fall back on what a model happens to remember.
 
+> [!WARNING]
+>
+> An agent that fills a gap from its own memory has not used this record — it
+> has used it as an opening paragraph. Nothing in the answer says which half
+> came from where.
+
 ## Files beside the interface
 
 The build publishes the same knowledge as plain files an agent can fetch without
