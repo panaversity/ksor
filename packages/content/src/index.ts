@@ -13,6 +13,7 @@ export {
 export {
   contentPool,
   contentPoolMin,
+  runAuditRead,
   runRead,
   runProbe,
   runAudit,
