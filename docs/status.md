@@ -6,7 +6,7 @@ updated: 2026-08-23.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.34** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.35** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -33,7 +33,7 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
 
-### Deployed live, both surfaces, with auth (0.0.23–0.0.33)
+### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
 Deployment stopped being prose and became shipped artifacts, then a walked
 deployment:
@@ -64,6 +64,36 @@ deployment:
   around the confusions because each was got wrong first on a real tenant.
   `deploying.md` and `ingesting.md` were then read cold by someone who had
   never used the product and corrected from their report (0.0.33).
+
+- Re-walked on **0.0.35** the day it published (2026-08-24): the record was
+  re-scaffolded from the registry, redeployed, and both surfaces exercised
+  live. The DOOR: `POST /mcp` answers curl `401` with its RFC 9728
+  `resource_metadata` challenge, and claude.ai — connected via OAuth against
+  the Panaversity SSO — ran `search` and returned the passage byte-exact with
+  its citation (`stable_id: knowledge/what-is-a-ksor`, `generation: 5`) and a
+  generation-pinned snapshot token; the client also relayed the envelope's
+  own `gate: "off"` disclosure, which is the honest-absence posture doing its
+  job on a record with no calibrated floor. The SITE: the 0.0.35 sign-in
+  control live on the same domain — sign in against Auth0, the reader's name
+  and email in the navbar, sign out returning the control. Two different
+  identity providers on one deployment, neither named in framework code.
+
+### The site names its reader (0.0.35)
+
+The scaffolded site gains an optional sign-in control: OAuth 2.0
+Authorization Code + PKCE against a public client, endpoints discovered (RFC
+8414, then OIDC — no vendor named anywhere), session in `sessionStorage` for
+the tab, no refresh token requested. Off unless three `NEXT_PUBLIC_KSOR_*`
+variables are set at build time; unconfigured it renders nothing at all. It
+NAMES an already-authenticated reader — it does not gate, and
+`deploying.md`'s "Naming the reader" section leads with that, beside the
+section that says what actually keeps people out of a static export. Walked
+live against a real Auth0 tenant before landing: sign-in, consent, session,
+sign-out, a forged callback refused on state before any code was redeemed,
+an issuer decline rendered honestly. The state-before-redemption assertion
+is mutation-tested. Also fixed the gap the work exposed: the site build
+never read the repository-root `.env`, so the scaffold's own instructions
+set variables that silently never reached the bundle.
 
 ### The tool surface is adopter-owned code (0.0.24, decision 23)
 
