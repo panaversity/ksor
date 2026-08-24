@@ -286,12 +286,35 @@ Plain `pnpm build` is always the public tier, so the safe thing is the default.
 
 ### "Different readers see different documents, decided per request"
 
-A static export cannot do this: `pnpm build` writes every published document into
-`system/site/out/` and the host serves what it is asked for. Doing it properly
-means the site stops being static, which is a decision with real cost — issue
-#130 records it, along with what would justify reopening it.
+Two supported answers, and a third that is yours.
 
-Until then, the honest shapes are the two above.
+**Read through the door instead.** This is the one ksor is built for. The MCP
+surface already applies the audience scope **per request** and writes a
+`retrieval_log` row carrying the actor for every read — per-person governance
+with an audit trail, which a static site cannot have at any price. If the
+requirement is "who read what, and were they allowed to", that is the door, not
+the website.
+
+**Or split the record.** Content needing per-person confidentiality inside one
+tier is usually content that belongs in its own record, with its own gate. That
+is what the audience model and the second-record design anticipate.
+
+**Or fork the site — you already own it.** `system/site` is yours outright
+(decision 4). Nothing stops you removing `output: "export"` and filtering per
+request in your own repository. ksor's contract is unaffected; this is a
+directory you own, changed the way you want it.
+
+What you take on if you do:
+
+> ksor's guarantee is **enforcement by absence** — a restricted document is
+> never written into the artifact, and a conformance suite asserts that against
+> a positive control that proves the check is not blind. A request-time filter
+> is a **different** guarantee, and it becomes yours to test, because those
+> suites will no longer be testing it for you. A filter that is bypassed serves
+> the document; an absent file cannot be.
+
+That is the whole trade. It is a reasonable thing to do with your eyes open, and
+a bad thing to drift into because a login button suggested it.
 
 ### What does NOT work
 
