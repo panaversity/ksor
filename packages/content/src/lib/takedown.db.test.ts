@@ -220,6 +220,42 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
     }
   });
 
+  it("a REVOKED denial serves again — the row is the state, the ledger is the history", async () => {
+    // Record spec §5: a revocation sets `revoked_ledger_id`/`revoked_at` on the
+    // row rather than deleting it, so the ledger keeps the whole history and
+    // the DENIED seam must read only rows still in force. Without this the
+    // revocation entry lands, the row stays, and the door refuses forever while
+    // the site (which reads the ledger) publishes — the two surfaces disagreeing
+    // is the state decision 19 exists to prevent.
+    await deny("docs/legal", "subtree");
+    await deny("docs/guide", "node");
+    try {
+      await expect(
+        runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/guide")),
+      ).rejects.toBeInstanceOf(UnknownSlug);
+      await pool.query(
+        "UPDATE takedown_denylist SET revoked_ledger_id = 'r1', revoked_at = now()" +
+          " WHERE tenant_id = $1 AND stable_id IN ('docs/guide', 'docs/legal')",
+        [TENANT],
+      );
+      // the revoked node denial
+      expect(
+        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/guide"))).stableId,
+      ).toBe("docs/guide");
+      expect(stableIds(await search(BODY["docs/guide"]!))).toContain("docs/guide");
+      // and the revoked SUBTREE denial: the cascade must stop cascading too,
+      // which is a second EXISTS in the same CTE and drifts independently
+      expect(
+        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/legal/policy"))).stableId,
+      ).toBe("docs/legal/policy");
+      expect(
+        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "LGL-9931"))).stableId,
+      ).toBe("LGL-9931");
+    } finally {
+      await undeny();
+    }
+  });
+
   it("topOneScore (the calibration signal, a distinct statement) honors a subtree deny", async () => {
     const topOne = (query: string): Promise<number | null> =>
       runRead(
