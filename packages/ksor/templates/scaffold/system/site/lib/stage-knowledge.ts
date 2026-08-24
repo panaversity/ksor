@@ -544,13 +544,17 @@ function fillStage(recordDir: string, stageDir: string, denied: DenylistManifest
       removeStage(stageDir);
       throw error;
     }
-    if (stageHolds(recordDir, stageDir, plan)) return;
+    if (stageHolds(recordDir, stageDir, plan)) {
+      publishSims(stageDir);
+      return;
+    }
     removeStage(stageDir);
     for (const from of plan.files) {
       const to = path.join(stageDir, path.relative(recordDir, from));
       mkdirSync(path.dirname(to), { recursive: true });
       copyFileSync(from, to);
     }
+    publishSims(stageDir);
   });
 }
 
@@ -707,7 +711,12 @@ function watchRecord(recordDir: string, stageDir: string): void {
  * ships its bytes there. Said rather than fixed, because the moment either
  * governance exists the staged dir is what this walks and the rule applies.
  */
-function publishSims(sourceDir: string, lockDir: string): void {
+/** Whether the record carries a sim at all — a lock nobody needs is churn. */
+function hasSims(dir: string): boolean {
+  return walkFiles(dir).some((file) => file.endsWith(SIM_SUFFIX));
+}
+
+function publishSims(sourceDir: string): void {
   const target = path.resolve(process.cwd(), PUBLIC_SIM_DIR);
 
   const walk = (dir: string, rel: string): void => {
@@ -741,12 +750,14 @@ function publishSims(sourceDir: string, lockDir: string): void {
     }
   };
 
-  // UNDER THE LOCK, for the reason `withStageLock` records at length: a build
-  // evaluates this file in seven processes, and a destructive pass run by two
-  // of them at once fails as `ENOENT`/`EINVAL` out of `copyFileSync`. Walked
-  // into directly while prototyping this (2026-08-24) — the same four shapes,
-  // from a pass that had not yet learned the lesson beside it.
-  withStageLock(lockDir, () => walk(sourceDir, ""));
+  // The CALLER holds the stage lock, and this takes none of its own — for the
+  // reason `withStageLock` records at length, plus one this change learned on
+  // Windows: taking it a SECOND time per evaluation doubles the create/delete
+  // churn on one lock file, and `wx` create against a file in Windows'
+  // pending-delete state fails as `EPERM`, which is not `EEXIST` and so is
+  // rethrown. Green on macOS and Linux, red on Windows CI, from a pass that
+  // was correct about needing the lock and wrong about taking it again.
+  walk(sourceDir, "");
 }
 
 export function knowledgeSourceDir(): string {
@@ -767,16 +778,24 @@ export function knowledgeSourceDir(): string {
     // because two evaluations removing one tree is the `ENOTEMPTY` shape of the
     // same race; the existence check keeps a record that never stages from
     // taking a lock on every build.
-    if (existsSync(stageDir)) withStageLock(stageDir, () => removeStage(stageDir));
     refuseVisibilityWithoutAudiences(recordDir);
     assertAttachmentsWellFormed(recordDir);
-    publishSims(recordDir, recordDir);
+    // ONE acquisition on this path too, doing both jobs — and keyed on the
+    // stage path rather than the record's, because `${recordDir}.lock` would
+    // drop a lock file beside `knowledge/`, in the adopter's repo, for a build
+    // that never stages anything.
+    const stale = existsSync(stageDir);
+    if (stale || hasSims(recordDir)) {
+      withStageLock(stageDir, () => {
+        if (stale) removeStage(stageDir);
+        publishSims(recordDir);
+      });
+    }
     return RECORD_DIR;
   }
   if (audienceModel === null) refuseVisibilityWithoutAudiences(recordDir);
   assertAttachmentsWellFormed(recordDir);
   fillStage(recordDir, stageDir, denied);
   watchRecord(recordDir, stageDir);
-  publishSims(stageDir, stageDir);
   return STAGE_DIR;
 }
