@@ -34,7 +34,7 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
 
-### The record module, `ksor build` and the emitted checker (unreleased, branch `okf-native-spec`)
+### The record, the CLI and the kernel on the profile (unreleased, branch `okf-native-spec`)
 
 `packages/content/src/record/` holds the OKF-native record's foundation
 (`specs/ksor/record/spec.md`; decision 26): the YAML frontmatter splitter,
@@ -81,13 +81,43 @@ than author a title, a description, a `generated.at` or the actor behind a
 takedown. `workbench/example-corpus` is migrated and builds green;
 `scripts/check-corpus.mjs` no longer applies the pre-profile rules to it.
 
-**Not yet converted on this branch:** `ksor ingest` still runs the pre-profile
-adapter and `ksor serve` still reads a format-1 instance; the site still
-enforces the RANKED audience model, reads `.ksor-denylist.json`, refuses a
-summary that carries frontmatter, renders the H1 of `instance.md` as the title
-and does not exclude `index.md` from its docs collection — so a fresh scaffold
-passes `pnpm check` and `ksor build` but its site build is the site half of
-this release's work. The rewritten `ksor takedown` is a separate work package.
+**The kernel reads the record through it, and stores what it finds.** Schema
+2.5 puts the profile on the row — `content_nodes.audience TEXT[]` with a GIN
+index (the ranked `visibility` is mapped and dropped), the authored status
+CHECKed onto `draft | stable | deprecated`, the OKF trust vocabulary as JSONB,
+`effective_from`/`stale_after` and a derived `trust_tier`; the run carries
+`build_id`, the policy as a row with its digest, and the ledger's id set; the
+denylist row carries the ledger entry that wrote it and the one that revoked
+it, and the `DENIED` seam denies only rows still in force. Existing databases
+walk 2.4 → 2.5 (decision 16). `ksor ingest` runs `checkRecord`, refuses
+without a fresh `build.lock.json` (`ksor-lock-missing` / `ksor-lock-stale`),
+applies the ledger in file order, and records the `build_id` it published;
+`GOVERNANCE_SINCE` is 2.5, so a carried-forward generation refuses to serve
+until it is re-ingested. `ksor takedown` is ledger-first (record spec §5):
+the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
+`--apply`, and `--export` and `.ksor-denylist.json` are gone.
+
+**And serving now reads all of it.** `lib/lifecycle.ts` and `lib/trust.ts`
+join the audience overlap in ONE admitted set (`lib/admit.ts`), bound beside
+`DENY` in search's two arms, read, outline and the calibration sampler: a
+draft, a document before its `effective_from`, one past its `stale_after` and
+a deprecated one are absent from every machine surface (record spec §2.5),
+and a caller may name a `min_trust_tier` the arm enforces before ranking. A
+SECTION carries no governance of its own and is admitted iff a descendant is
+visible, by a recursive `parent_id` walk. `AUDIENCE_CASES` is the overlap
+table and every row of it — sections and refusals included — runs through
+real Postgres, as does every line of `LIFECYCLE_CASES`. A calibrated floor
+carries the digest of the predicate it was measured under, and one measured
+under another (or under none) enters the declared-but-uncalibrated refusal
+rather than reading as `gate: off`. The snapshot token binds the viewer list.
+
+**Not yet converted on this branch:** the site still stages against the RANKED
+audience model (`decideVisible` and `RANKED_AUDIENCE_CASES` exist only for it),
+reads `.ksor-denylist.json`, renders the H1 of `instance.md` as the title and
+does not exclude `index.md` from its docs collection; and the door does not yet
+expose `min_trust_tier` as a tool parameter, carry the trust signals on a hit
+or return frontmatter from `read` — the seam under it is
+`ServiceContext.minTrustTier`.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
@@ -697,7 +727,7 @@ either stops being true.
   for the swap.
 
 - **Schema migrations — DONE.** `schema.sql` provisions a FRESH database at the
-  current version (2.4); an existing one moves forward through
+  current version (2.5); an existing one moves forward through
   `schema/migrations/<from>-<to>__<slug>.sql`, applied by a runner keyed on
   `schema_meta`. The chain is WALKED, not sorted, so a missing step refuses
   rather than being skipped, and each step commits with the `schema_meta` row
@@ -706,23 +736,24 @@ either stops being true.
   destroyed `retrieval_log` and `takedown_denylist` — the only two tables that
   cannot be rebuilt from markdown.
 
-- **The governance boot gate — DONE.** `ksor serve` refuses two states the SITE
+- **The governance boot gate — DONE.** `ksor serve` refuses the states the SITE
   already refuses to build in, because a door that serves where the site stops
-  is the two surfaces reading different truths. A generation built before
-  schema 2.2 carries no `visibility` at all — the 2.1 → 2.2 migration added the
-  column and cannot backfill frontmatter — and the serving predicate reads a
-  NULL as `default_visibility`, the WIDEST tier; 2.4 stamps each generation
-  with the schema it was built against, so that state is detectable and
-  refused. A document declaring `visibility:` in a record that declares no
-  `audiences:` is refused too, matching the site's
-  `ksor-visibility-without-audiences`.
+  is the two surfaces reading different truths. Each generation is stamped with
+  the schema it was built against, so a generation older than the governance it
+  needs is detectable and refused rather than served at the widest tier — the
+  floor is 2.5, the version that put the audience LIST on the node row. Since
+  schema 2.5 the gate also refuses a denylist row that no ledger entry accounts
+  for (`ksor-takedown-unledgered`) and REPORTS one whose entry the ingested
+  ledger does not contain (`ksor-takedown-unmerged`: the verb wrote the row,
+  the pull request never merged).
 
-- **Subtree takedowns reach the site — DONE.** The exported manifest carries
-  the DIRECTORIES a `--subtree` denial governs alongside the expanded id list,
-  derived from the descendants' `sources.origin_path`. The id list can only
-  name what the active generation holds, and the site builds from disk: a
-  document added under a withdrawn section after the last ingest was published
-  to `/docs` and `llms.txt` with no warning.
+- **Subtree takedowns reach the site — DONE, then replaced.** The database
+  export that carried a denial to the site is gone with `--export`: the ledger
+  `.ksor/takedowns.yaml` is committed, so the site reads the denial from the
+  repository and needs no database to ask. The finding the export existed for
+  stands and is now structural — a document added under a withdrawn section
+  after the last ingest is covered because the ledger names the section, not a
+  list of ids the active generation happened to hold.
 
 ## Designed, not implemented
 

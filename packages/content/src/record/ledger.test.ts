@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appendEntry,
   checkLedgerActors,
   checkLedgerAgainstTree,
   checkLedgerAppendOnly,
   denies,
   entryDigest,
   inForce,
+  mintLedgerId,
   parseLedger,
   type Denial,
   type Ledger,
+  type LedgerEntry,
 } from "./ledger.js";
 
 const P = ".ksor/takedowns.yaml";
@@ -295,5 +298,77 @@ describe("denies — the in-force denials as a predicate over concept ids", () =
     expect(denies([denial("knowledge/a#section", "subtree")], "ab/c")).toBe(false);
     expect(denies([denial("knowledge/#section", "subtree")], "anything")).toBe(true);
     expect(denies([], "a")).toBe(false);
+  });
+});
+
+describe("writing the ledger", () => {
+  const at = "2026-08-25T12:00:00.000Z";
+  const denial: LedgerEntry = {
+    kind: "denial",
+    id: `${at}-abc123`,
+    by: "human:ciso",
+    at,
+    reason: 'the "superseded" figure',
+    stableId: "knowledge/policies/old",
+    scope: "node",
+    expected: "present",
+  };
+
+  it("mints `<at>-<6 random>`, and the suffix is what makes two acts in the same instant distinct", () => {
+    expect(mintLedgerId(at, () => "ab12cd")).toBe(`${at}-ab12cd`);
+    const a = mintLedgerId(at);
+    const b = mintLedgerId(at);
+    expect(a).not.toBe(b);
+    expect(a.slice(at.length)).toMatch(/^-[0-9a-f]{6}$/);
+  });
+
+  it("round-trips every entry kind through the reader that judges it", () => {
+    const revocation: LedgerEntry = {
+      kind: "revocation",
+      id: `${at}-r00000`,
+      by: "human:ciso",
+      at,
+      reason: null,
+      revokes: denial.id,
+    };
+    const amendment: LedgerEntry = {
+      kind: "amendment",
+      id: `${at}-a00000`,
+      by: "human:ciso",
+      at,
+      reason: "deleted in the same change",
+      amends: denial.id,
+    };
+    let text: string | null = null;
+    for (const entry of [denial, revocation, amendment]) text = appendEntry(text, entry);
+    const parsed = parseLedger(text, ".ksor/takedowns.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+    if (!parsed.ok) return;
+    // Written and read back identically — a quoter that mangled the reason or
+    // resolved the id as a timestamp would show up HERE, not at the operator's
+    // next ingest.
+    expect(parsed.ledger.entries).toEqual([
+      denial,
+      revocation,
+      { ...amendment, kind: "amendment" },
+    ]);
+    expect(parsed.ledger.ids).toEqual([denial.id, revocation.id, amendment.id]);
+  });
+
+  it("appends rather than rewriting: every earlier byte survives, and a missing newline is added", () => {
+    const first = appendEntry(null, denial);
+    const second = appendEntry(first.replace(/\n$/, ""), { ...denial, id: `${at}-second` });
+    expect(second.startsWith(first)).toBe(true);
+    expect(parseLedger(second, "p").ok).toBe(true);
+  });
+
+  it("a subtree denial names the `#section` anchor, and the reader agrees", () => {
+    const text = appendEntry(null, {
+      ...denial,
+      stableId: "knowledge/policies#section",
+      scope: "subtree",
+    });
+    const parsed = parseLedger(text, "p");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
 });

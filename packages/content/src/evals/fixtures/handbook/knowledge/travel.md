@@ -1,7 +1,13 @@
 ---
+type: Document
 title: Travel and accommodation
-status: approved
+description: How to book travel, which cabin is permitted, and the nightly accommodation caps.
+status: stable
 order: 4
+generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }
 ---
 
 # Travel and accommodation

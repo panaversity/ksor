@@ -4,7 +4,6 @@ export * from "./config.js";
 export {
   parseInstance,
   parseInstanceText,
-  parseFrontmatter,
   InstanceParseError,
   NoDatabaseDeclared,
   SUPPORTED_FORMATS,
@@ -38,10 +37,12 @@ export { keywordAbstains, vectorAbstains, type AbstainConfig } from "./lib/absta
 export {
   audienceGucs,
   AudienceError,
-  visibleTiers,
+  parseViewer,
+  validateViewer,
   WHOLE_RECORD_SCOPE,
-  type AudienceModel,
+  type ViewerRefusal,
 } from "./lib/audience.js";
+export { servingPolicy, type ServingPolicy } from "./lib/policy-row.js";
 export {
   hybridSearch,
   keywordSearch,
@@ -127,7 +128,12 @@ export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 
 export { runContentCli } from "./commands.js";
 
-export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
+export {
+  AUDIENCE_CASES,
+  RANKED_AUDIENCE_CASES,
+  type AudienceCase,
+  type RankedAudienceCase,
+} from "./lib/audience-conformance.js";
 export { decideVisible, type AudienceModel as SiteAudienceModel } from "./lib/audience-rule.js";
 export { withProbeDeadline, ProbeDeadlineError } from "./db.js";
 export {
@@ -147,5 +153,23 @@ export {
 // The record module (record spec; decision 26): the profile, the control
 // files and the checker `ksor build`, `ksor ingest` and the emitted checker
 // run. Also exported as the `./record` subpath, which is what the emitted
-// checker bundles.
+// checker bundles; `ksor ingest` reads the record through it and `ksor build`
+// writes with it.
 export * from "./record/index.js";
+export { parseInstanceDocument, type InstanceDocument } from "./record/instance.js";
+// The ingest-side seams the record module does not own: the lock gate ingest
+// reads, the manifest it builds, and the ledger it applies.
+export {
+  checkLock,
+  conceptHashes,
+  sha256OfDocument,
+  formatRefusals,
+  LOCK_PATH,
+  type IngestRefusal,
+  type IngestSlug,
+} from "./ingest/lock-gate.js";
+export { RecordRefused, policyRow } from "./ingest/build.js";
+export { buildManifestFromRecord, BUNDLE } from "./ingest/adapters/plain-tree.js";
+export { manifestToJson, type Manifest, type ManifestNode } from "./ingest/manifest.js";
+export { governanceOf, sectionGovernance, type NodeGovernance } from "./ingest/governance.js";
+export { applyLedger, foldLedger, unmergedLines } from "./ingest/ledger-apply.js";

@@ -401,7 +401,21 @@ export function buildReport(
  * paste line (a machine-checked format; the provenance comment beside the
  * number implements "record the measurement beside the number").
  */
-export function renderReport(report: CalibrationReport): string {
+export function renderReport(
+  report: CalibrationReport,
+  /**
+   * The digest of the retrieval predicate this measurement ran under
+   * (`GATE_PREDICATE_DIGEST`), written beside the floor so the door can tell a
+   * floor measured on ITS candidate set from one measured on another's.
+   *
+   * REQUIRED and not defaulted: the caller that renders for an operator must
+   * name the predicate, and a default would let the one caller that matters
+   * silently omit it. `null` is the oracle-parity rendering — used by the
+   * fixture comparison, whose bytes come from a Python run that had no such
+   * concept.
+   */
+  predicateDigest: string | null,
+): string {
   const lines: string[] = [];
   const z = report.zero_fa;
   const how = report.pinned ? "PINNED" : "served";
@@ -466,7 +480,8 @@ export function renderReport(report: CalibrationReport): string {
     return lines.join("\n") + "\n";
   }
   lines.push(
-    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated ${report.measured_at} on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}`,
+    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated ${report.measured_at} on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}` +
+      (predicateDigest === null ? "" : `\n  floor_digest: ${predicateDigest}`),
   );
   return lines.join("\n") + "\n";
 }

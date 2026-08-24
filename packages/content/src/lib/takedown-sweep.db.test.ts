@@ -100,8 +100,10 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
         title: string,
       ): Promise<string> => {
         const r = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, status)
-           VALUES ($1, 1, $2, $3, $4, $5, $6, $7, 'published') RETURNING node_id`,
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, status, audience, doc_status)
+           VALUES ($1, 1, $2, $3, $4, $5, $6, $7, 'published',
+                   CASE WHEN $4 = 'section' THEN NULL ELSE ARRAY['public'] END,
+                   CASE WHEN $4 = 'section' THEN NULL ELSE 'stable' END) RETURNING node_id`,
           [TENANT, stableId, parent, kind, slug, title, position],
         );
         return String(r.rows[0].node_id);

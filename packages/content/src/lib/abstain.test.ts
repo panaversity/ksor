@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { keywordAbstains, vectorAbstains, type AbstainConfig } from "./abstain.js";
+import { GATE_PREDICATE_DIGEST } from "./search.js";
 
-const calibrated: AbstainConfig = { vectorFloor: 0.634, keywordFloor: null };
-const uncalibrated: AbstainConfig = { vectorFloor: null, keywordFloor: null };
+const calibrated: AbstainConfig = {
+  vectorFloor: 0.634,
+  keywordFloor: null,
+  floorDigest: GATE_PREDICATE_DIGEST,
+};
+const uncalibrated: AbstainConfig = { vectorFloor: null, keywordFloor: null, floorDigest: null };
 
 describe("vectorAbstains", () => {
   it("gate OFF when uncalibrated — never abstains on score", () => {
@@ -29,7 +34,7 @@ describe("keywordAbstains", () => {
   });
 
   it("a declared keyword floor gates strictly", () => {
-    const config: AbstainConfig = { vectorFloor: null, keywordFloor: 0.1 };
+    const config: AbstainConfig = { vectorFloor: null, keywordFloor: 0.1, floorDigest: null };
     expect(keywordAbstains(0.05, config)).toBe(true);
     expect(keywordAbstains(0.1, config)).toBe(false);
     expect(keywordAbstains(null, config)).toBe(true);

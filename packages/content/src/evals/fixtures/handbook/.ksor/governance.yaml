@@ -1,0 +1,5 @@
+version: "0.1"
+approval_authorities:
+  - actors: [human:cfo]
+takedown_authorities:
+  actors: [human:ciso]

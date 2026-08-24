@@ -14,8 +14,8 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
@@ -31,22 +31,31 @@ import {
 import { applySchema, renderSchema, schemaVersion, SchemaStateError } from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
+import { listTakedowns, readLedger } from "./takedown-ops.js";
+import { applyLedger, unmergedLines } from "./ingest/ledger-apply.js";
+import { appendEntry, mintLedgerId, parseLedger, type LedgerEntry } from "./record/ledger.js";
+import { resolveInstanceDir } from "./record/load.js";
+import { parsePolicy } from "./record/policy.js";
 import {
-  applyTakedown,
-  deniedStableIds,
-  deniedSubtreeDirs,
-  denylistManifest,
-  listTakedowns,
-  readLedger,
-  revokeTakedown,
-} from "./takedown-ops.js";
+  authorizeActor,
+  checkActorNamed,
+  conceptPathOf,
+  decideRowStep,
+  expectedFor,
+  planTakedown,
+  subtreeDirOf,
+  writesLedger,
+  type VerbRefusal,
+} from "./takedown-verb.js";
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
-import { buildGeneration, flipRefusal } from "./ingest/build.js";
+import { buildGeneration, flipRefusal, RecordRefused, type BuildReport } from "./ingest/build.js";
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
+import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
+import { widestViewer } from "./lib/policy-row.js";
 import { overlapAdvice } from "./calibrate/overlap.js";
 import { GeminiTextGenerator } from "./lib/providers/gemini.js";
 import { runGc } from "./ingest/gc.js";
@@ -62,11 +71,12 @@ Usage:
       --instance reads the dimension from instance.md; --apply (with
       --instance) provisions the instance's database, or migrates an
       existing one forward through schema/migrations/.
-  ksor ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
-      Build one generation from the knowledge tree: structure atomically,
-      embed resumably, finalize behind the ready gate. --flip activates it
-      (never implicit). The source commit is read from git when the tree is in
-      a repository; --source-commit overrides it.
+  ksor ingest --instance PATH [--flip] [--source-commit SHA]
+      Build one generation from the record beside instance.md: run the record
+      checker, require a fresh build.lock.json, apply the takedown ledger, then
+      structure atomically, embed resumably, finalize behind the ready gate.
+      --flip activates it (never implicit). The source commit is read from git
+      when the tree is in a repository; --source-commit overrides it.
   ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
                  [--generation N] [--per-node N] [--min-chars N]
       Measure the abstention floor for this corpus and report it. A
@@ -75,16 +85,24 @@ Usage:
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
-  ksor takedown --instance PATH [--actor NAME]   (--actor REQUIRED to deny or revoke)
-                (<stable-id> --reason TEXT [--subtree]
-                 | --list | --ledger | --revoke <stable-id> | --export PATH)
-      Deny a document from EVERY surface. Default scope is the node itself;
-      --subtree denies its descendants too. --export writes the manifest the
-      site build reads, so a takedown reaches the human surface as well.
-      --ledger prints the recorded governance acts: who denied what, when.
-      --actor names WHO is performing the act, and is REQUIRED for a denial or a
-      revocation: the ledger row is the evidence that a person withdrew this
-      document, and a name guessed from the shell attributes nothing.
+  ksor takedown --actor ACTOR [--instance PATH] [--scope node|subtree]
+                --reason TEXT [--file-only] <stable-id>
+                --actor ACTOR (--revoke ENTRY-ID | --removed ENTRY-ID) [--reason TEXT]
+                --apply | --list | --ledger        (read or replay; no --actor)
+      Withdraw a document from EVERY surface, ledger first: the act is appended
+      to .ksor/takedowns.yaml — committed, append-only, read by the site — and
+      then, when the record declares a database and its DSN is present, written
+      as the denylist row the door reads. A record with no database gets
+      takedown through the ledger alone. --scope subtree denies a directory and
+      every descendant; --file-only records the entry without the row;
+      --revoke lifts a denial by naming its entry id (never by deleting a line)
+      and --removed records that a denied document was deleted; --apply writes
+      every unapplied entry's row under its own recorded actor. --list shows
+      what is denied, --ledger the recorded governance acts.
+      --actor names WHO is performing the act and is REQUIRED to write the
+      ledger: the entry is the evidence that a person withdrew this document, a
+      name guessed from the shell attributes nothing, and the policy's
+      takedown_authorities must name it.
   ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
@@ -467,75 +485,94 @@ async function ingestCommand(args: string[]): Promise<number> {
       "source-commit": { type: "string" },
     },
   });
+  const instance = loadInstance(values.instance);
+  if (typeof instance === "number") return instance;
+  // The record root is where instance.md lives: `knowledge/`, `.ksor/` and
+  // build.lock.json resolve from it (build spec §1). `--knowledge` survives for
+  // the scaffold's scripts, but it can only ever name that one directory.
+  const recordRoot = dirname(resolve(values.instance!));
+  const knowledgeDir = join(recordRoot, "knowledge");
+  if (values.knowledge !== undefined && resolve(values.knowledge) !== knowledgeDir) {
+    return fail(
+      REFUSED,
+      `--knowledge ${values.knowledge} is not the record's knowledge/ directory (${knowledgeDir})\n` +
+        "  why: the record is read whole — instance, policy, ledger, lock and bundle — from the directory holding instance.md\n" +
+        "  fix: drop --knowledge, or point it at the record's own knowledge/ directory",
+    );
+  }
   // Resolved once and REPORTED: this is the last link in the provenance chain
   // (answer -> passage -> document -> generation -> commit -> reviewed source).
   // Leaving it silent is how every adopter shipped "unspecified" without
   // noticing the chain terminated one link early.
-  const sourceCommit = values["source-commit"] ?? detectSourceCommit(values.knowledge);
-  if (values.knowledge === undefined) {
-    return fail(REFUSED, "--knowledge DIR is required (the folder of Markdown to ingest)");
-  }
-  const instance = loadInstance(values.instance);
-  if (typeof instance === "number") return instance;
+  const sourceCommit = values["source-commit"] ?? detectSourceCommit(knowledgeDir);
   const dsn = resolveDsn(instance);
   if (typeof dsn === "number") return dsn;
   const provider = composeProvider(instance);
   if (typeof provider === "number") return provider;
 
-  const report = await withPool(dsn, async (pool) => {
-    // The pre-spend refusal: embedding into a database whose vector columns
-    // or persisted model disagree with the declared space wastes real money
-    // and poisons cosine — a PROVEN mismatch refuses before any embed call.
-    const space = await checkEmbeddingSpace(
-      pool,
-      instance.tenantId,
-      instance.embeddingModel,
-      instance.embeddingDim,
-    );
-    if (space.missingTables.length > 0) {
-      // The oracle's pre-spend refusal, restored (review round 2,
-      // 2026-08-19): without it a half-applied schema allocated, embedded
-      // the WHOLE corpus, and only then failed in finalize on the missing
-      // table — after the spend, unrecoverable by carry-forward.
-      throw new Error(
-        `the schema is half-applied (missing: ${space.missingTables.join(", ")}) — ` +
-          "ingesting now would embed the whole corpus and then fail in finalize, after the spend.\n" +
-          `  fix: finish applying the DDL (ksor schema --instance ... --apply), then ingest`,
+  let report: BuildReport;
+  try {
+    report = await withPool(dsn, async (pool) => {
+      // The pre-spend refusal: embedding into a database whose vector columns
+      // or persisted model disagree with the declared space wastes real money
+      // and poisons cosine — a PROVEN mismatch refuses before any embed call.
+      const space = await checkEmbeddingSpace(
+        pool,
+        instance.tenantId,
+        instance.embeddingModel,
+        instance.embeddingDim,
       );
-    }
-    if (space.reason !== null) {
-      process.stderr.write(`embedding-space check skipped: ${space.reason}\n`);
-    }
-    try {
-      return await buildGeneration(pool, instance, {
-        knowledgeDir: values.knowledge!,
-        // Provenance is recorded honestly: without --source-commit the sources
-        // rows say so rather than carrying a guessed SHA.
-        sourceCommit,
-        // NEVER flip inside the build when the caller asked for one: the
-        // governance gate below has to run against the new generation BEFORE
-        // it becomes the active one. Checking after the flip reported the
-        // problem and published anyway — a command that exits 1 with the
-        // record's active pointer already moved, which is exactly what the
-        // shrink guard does NOT do (it refuses inside the build and leaves the
-        // old generation serving). Found live against Neon, 2026-08-21.
-        flip: false,
-        provider,
-        onLog: (line) => process.stdout.write(line + "\n"),
-      });
-    } catch (exc) {
-      // The most common first-run failure deserves its remedy: the grant
-      // table IS ingest authorization (a CLI flag is not authorization).
-      if (exc instanceof Error && /row-level security/i.test(exc.message)) {
+      if (space.missingTables.length > 0) {
+        // The oracle's pre-spend refusal, restored (review round 2,
+        // 2026-08-19): without it a half-applied schema allocated, embedded
+        // the WHOLE corpus, and only then failed in finalize on the missing
+        // table — after the spend, unrecoverable by carry-forward.
         throw new Error(
-          `ingest was refused by the database's row-level security — the grant table has no row ` +
-            `authorizing this tenant.\n  why: who may WRITE a tenant's corpus is decided in the ` +
-            `database, not by a flag\n  fix: ksor grant --instance <instance.md>`,
+          `the schema is half-applied (missing: ${space.missingTables.join(", ")}) — ` +
+            "ingesting now would embed the whole corpus and then fail in finalize, after the spend.\n" +
+            `  fix: finish applying the DDL (ksor schema --instance ... --apply), then ingest`,
         );
       }
-      throw exc;
-    }
-  });
+      if (space.reason !== null) {
+        process.stderr.write(`embedding-space check skipped: ${space.reason}\n`);
+      }
+      try {
+        return await buildGeneration(pool, instance, {
+          recordRoot,
+          // Provenance is recorded honestly: without --source-commit the sources
+          // rows say so rather than carrying a guessed SHA.
+          sourceCommit,
+          // NEVER flip inside the build when the caller asked for one: the
+          // governance gate below has to run against the new generation BEFORE
+          // it becomes the active one. Checking after the flip reported the
+          // problem and published anyway — a command that exits 1 with the
+          // record's active pointer already moved, which is exactly what the
+          // shrink guard does NOT do (it refuses inside the build and leaves the
+          // old generation serving). Found live against Neon, 2026-08-21.
+          flip: false,
+          provider,
+          onLog: (line) => process.stdout.write(line + "\n"),
+          onReport: (line) => process.stderr.write(line + "\n"),
+        });
+      } catch (exc) {
+        // The most common first-run failure deserves its remedy: the grant
+        // table IS ingest authorization (a CLI flag is not authorization).
+        if (exc instanceof Error && /row-level security/i.test(exc.message)) {
+          throw new Error(
+            `ingest was refused by the database's row-level security — the grant table has no row ` +
+              `authorizing this tenant.\n  why: who may WRITE a tenant's corpus is decided in the ` +
+              `database, not by a flag\n  fix: ksor grant --instance <instance.md>`,
+          );
+        }
+        throw exc;
+      }
+    });
+  } catch (exc) {
+    // The record refused — the checker, the lock gate or the ledger baseline.
+    // Nothing was written; the slug is the first stderr line (principle 4).
+    if (exc instanceof RecordRefused) return fail(REFUSED, exc.message);
+    throw exc;
+  }
   if (report.unchanged) {
     // The record already serves these exact bytes at this commit: no
     // generation consumed, nothing embedded. Re-running ingest is the ordinary
@@ -547,7 +584,7 @@ async function ingestCommand(args: string[]): Promise<number> {
   }
   process.stdout.write(
     sourceCommit === "unspecified"
-      ? provenanceNotice(provenanceGap(values.knowledge)) + "\n"
+      ? provenanceNotice(provenanceGap(knowledgeDir)) + "\n"
       : `source: ${sourceCommit}\n`,
   );
   process.stdout.write(
@@ -589,7 +626,9 @@ async function ingestCommand(args: string[]): Promise<number> {
   // site and `pnpm check` both reporting the problem and the publishing act
   // silent (round-6 review of #43).
   const governance = await withPool(dsn, (pool) =>
-    assertGovernanceServable(pool, instance, report.generation).then(
+    assertGovernanceServable(pool, instance, report.generation, {
+      report: (line) => process.stderr.write(line + "\n"),
+    }).then(
       () => null,
       (error: unknown) => (error instanceof Error ? error.message : String(error)),
     ),
@@ -643,56 +682,6 @@ async function ingestCommand(args: string[]): Promise<number> {
     process.stdout.write("ready; flip withheld (pass --flip to activate)\n");
   }
   return 0;
-}
-
-/**
- * Does this project actually READ the manifest we just wrote?
- *
- * A scaffold is adopter-owned (decision 4), so upgrading the CLI does not touch
- * their `system/site` or their `package.json`. A project scaffolded before the
- * manifest existed has neither the build step that exports it nor the staging
- * code that reads it — so a takedown was imposed, the CLI's own remedy line was
- * followed exactly, the site was rebuilt, and the withdrawn document was still
- * in `out/docs/` and `llms.txt` while the MCP door on the same database refused
- * it. Decision 19 says a surface that refuses must refuse on BOTH surfaces, and
- * the upgrade path broke that silently (round-7 review of #43, reproduced).
- *
- * Detecting it is cheap and the export is the only place that can: it is the
- * moment the operator is looking, and it knows both ends.
- */
-function manifestConsumerWarnings(instancePath: string, exportPath: string): string[] {
-  const root = dirname(resolve(instancePath));
-  const out: string[] = [];
-  const readIf = (rel: string): string | null => {
-    try {
-      return readFileSync(join(root, rel), "utf8");
-    } catch {
-      return null;
-    }
-  };
-
-  const manifestName = basename(exportPath);
-  const pkg = readIf("package.json");
-  if (pkg !== null && !/takedown[^"]*--export|export-denylist/.test(pkg)) {
-    out.push(
-      `  WARNING: this project's package.json never runs the export, so a plain \`pnpm build\`\n` +
-        `  publishes the site WITHOUT it. Add to "scripts":\n` +
-        `    "export-denylist": "ksor takedown --instance instance.md --export ${manifestName}"\n` +
-        `  and chain it: "build": "pnpm export-denylist && pnpm -C system/site build"\n`,
-    );
-  }
-
-  const staging = readIf(join("system", "site", "lib", "stage-knowledge.ts"));
-  if (staging !== null && !staging.includes(manifestName)) {
-    out.push(
-      `  WARNING: this project's system/site/lib/stage-knowledge.ts does not read\n` +
-        `  ${manifestName}, so the site will publish withdrawn documents no matter how often\n` +
-        `  you export. The site is yours (it is copied into your repo, not linked), so an\n` +
-        `  upgrade does not update it: re-scaffold that file from a current \`ksor init\`,\n` +
-        `  or port the denylist read into it.\n`,
-    );
-  }
-  return out;
 }
 
 function parseGeneration(raw: string | undefined): number | null {
@@ -754,10 +743,16 @@ async function calibrateCommand(args: string[]): Promise<number> {
       ? null
       : parseQueriesFile(readFileSync(values["ooc-file"], "utf8"));
 
-  const report = await withPool(dsn, (pool) =>
+  const report = await withPool(dsn, async (pool) =>
     runCalibration(pool, {
       tenantId: instance.tenantId,
       corpusId: instance.corpusId,
+      // The floor is a property of the RECORD, not of one caller's tier, so
+      // calibration measures the widest viewer there is: `public` plus every
+      // audience the ingested policy registers. Named rather than left to the
+      // `*` sentinel, because the sentinel is a scope no door ever binds and a
+      // floor must be measured on a set the door can actually serve.
+      viewer: await widestViewer(pool, instance),
       provider,
       generation: parseGeneration(values.generation),
       queries,
@@ -769,7 +764,7 @@ async function calibrateCommand(args: string[]): Promise<number> {
         values["min-chars"] === undefined ? undefined : intFlag("--min-chars", values["min-chars"]),
     }),
   );
-  process.stdout.write(renderReport(report) + "\n");
+  process.stdout.write(renderReport(report, GATE_PREDICATE_DIGEST) + "\n");
   const advice = overlapAdvice(report);
   if (advice !== null) process.stdout.write(advice);
   return 0;
@@ -810,253 +805,252 @@ async function takedownCommand(args: string[]): Promise<number> {
     options: {
       instance: { type: "string" },
       reason: { type: "string" },
-      subtree: { type: "boolean", default: false },
+      scope: { type: "string" },
+      revoke: { type: "string" },
+      removed: { type: "string" },
+      apply: { type: "boolean", default: false },
+      "file-only": { type: "boolean", default: false },
       list: { type: "boolean", default: false },
       ledger: { type: "boolean", default: false },
-      revoke: { type: "string" },
-      export: { type: "string" },
       actor: { type: "string" },
     },
   });
-  // A failed export must leave NO manifest, not a stale one. The site fails
-  // CLOSED on a missing manifest (it cannot tell "nothing denied" from "nobody
-  // asked") and fails OPEN on a stale one, which looks authoritative and can
-  // predate the very takedown being published. So the target is removed BEFORE
-  // the attempt: every path that does not write a fresh answer leaves none.
-  // The scaffold used to do this in the npm script; a governance guarantee does
-  // not belong in a shell string the adopter owns and can edit (found live,
-  // round 4 of the #43 review — an unreachable database exited 3 and left the
-  // previous run's manifest in place).
-  if (values.export !== undefined) rmSync(values.export, { force: true });
 
-  // --export runs inside `pnpm build`, so it is the ONE takedown mode that must
-  // ANSWER for a record with no database instead of refusing — a level-0
-  // project has to be able to build. It writes `source: "none"`, the shape the
-  // site reads as "no database declared, nothing can be denied", and exits 0.
-  //
-  // ONE no-database shape reaches here: the level-0 record that declares no
-  // `database:` block, which refuses during PARSING before any DSN is
-  // consulted (found live in round 4, after removing the scaffold's `|| true`
-  // made `pnpm build` fail on a freshly scaffolded record).
-  //
-  // A record that DECLARES a database and has no DSN is NOT this case and is
-  // refused below — writing `source: "none"` for it published a withdrawn
-  // document. This comment described that fail-open as legitimate for forty
-  // lines after it was closed (round-9 review of PR 43).
-  //
-  // Everything else — database configured and unreachable, permission denied,
-  // a malformed instance.md — still exits non-zero. That is precisely what the
-  // `|| true` used to swallow: the export "succeeded", wrote nothing, and the
-  // site build then refused with a remedy pointing back at the command that had
-  // just silently failed (round-3 review of #43).
-  const exportNothing = (corpusId: string, why: string): number => {
-    const manifest = denylistManifest(corpusId, [], new Date(), "none");
-    writeFileSync(values.export!, JSON.stringify(manifest, null, 2) + "\n");
-    process.stdout.write(
-      `takedown: ${why}, so this record has no database to ask. ` +
-        `Wrote source="none" (nothing denied) to ${values.export}.\n`,
-    );
-    // The consumer check is about the PROJECT, not the database: a level-0
-    // project upgrading has the same broken chain, and this is the moment the
-    // operator is looking.
-    if (values.instance !== undefined) {
-      for (const warning of manifestConsumerWarnings(values.instance, values.export!)) {
-        process.stderr.write(warning);
-      }
-    }
-    return 0;
-  };
+  const refuse = (r: VerbRefusal): number => fail(REFUSED, `${r.slug}: ${r.why}\n  fix: ${r.fix}`);
 
-  if (values.export !== undefined && values.instance !== undefined) {
-    try {
-      parseInstance(values.instance);
-    } catch (exc) {
-      if (exc instanceof NoDatabaseDeclared) {
-        return exportNothing(exc.instanceName, "instance.md declares no database: block");
-      }
-      // Any other parse failure is a real refusal — fall through to loadInstance,
-      // which reports it with its remedy.
-    }
-  }
+  const planned = planTakedown({
+    stableId: positionals[0],
+    scope: values.scope,
+    reason: values.reason,
+    revoke: values.revoke,
+    removed: values.removed,
+    apply: values.apply,
+    list: values.list,
+    ledger: values.ledger,
+  });
+  if (!planned.ok) return refuse(planned.refusal);
+  const { mode, reason } = planned;
 
-  const loaded = loadInstance(values.instance);
-  if (typeof loaded === "number") return loaded;
-  const instance = loaded;
-
-  // NOT a no-database case. A record that DECLARES a database has one; this
-  // host merely cannot reach it, and those are opposite answers. Writing
-  // `source: "none"` here published a withdrawn document: the site's `isDenied`
-  // reads only `manifest.denied` and never `source`, so file PRESENCE is the
-  // whole fail-closed gate — and this path created the file. The live shape is
-  // a Vercel build (the site is database-free by decision 11, so the DSN lives
-  // only in the serving runtime): `pnpm build` printed "nothing denied",
-  // exited 0, and shipped the withdrawn document to /docs and llms.txt
-  // (round-4 review of #43 — a hole this very branch had just opened).
-  if (values.export !== undefined && (process.env[instance.dsnEnv] ?? "") === "") {
+  // The record root is where instance.md lives, resolved through the ONE
+  // helper `build`, `migrate` and `ingest` share (build spec §1): the ledger,
+  // the policy and the bundle all hang off it.
+  const instancePath =
+    values.instance ??
+    (resolveInstanceDir(process.cwd()) === null
+      ? undefined
+      : join(resolveInstanceDir(process.cwd())!, "instance.md"));
+  if (instancePath === undefined) {
     return fail(
-      ENVIRONMENT,
-      `${instance.dsnEnv} is unset, and instance.md declares a database (named by ` +
-        `database.dsn_env)\n` +
-        "  why: a takedown lives in that database. Without it this build cannot tell 'nothing " +
-        "is denied' from 'nobody asked', and publishing a withdrawn document is the failure " +
-        "this export exists to prevent\n" +
-        `  fix: export ${instance.dsnEnv}='postgresql://...' for the build, or remove the ` +
-        "database: block if this record has no database",
+      REFUSED,
+      "--instance PATH is required (no instance.md was found at or above the working directory)",
     );
   }
+  const root = dirname(resolve(instancePath));
 
-  // Who performed the act — NAMED, never inferred.
-  //
-  // This used to fall back to $USER / $USERNAME / "operator". In CI that writes
-  // `actor: "runner"` and in a container `"root"`: a self-asserted string
-  // wearing a schema, which reads like a person and attributes nothing. The
-  // column is `NOT NULL` with the comment "NO default: unset errors loudly" —
-  // and the fallback is exactly what stopped it erroring. Product principle:
-  // honest absence, never silent weakness (review, 2026-08-21).
-  //
-  // Checked BEFORE the DSN is resolved: a missing actor is an argument error
-  // and must not depend on the environment being configured, or `--actor` is
-  // reported as "the environment cannot run ksor" (exit 3) when it is a
-  // refusal (exit 1).
-  //
-  // Only the WRITE acts need it; --list / --ledger / --export write no ledger
-  // row and are readable by anyone who can reach the database.
-  const namedActor = (values.actor ?? "").trim();
-  const requireActor = (act: string): string | number =>
-    namedActor === ""
-      ? fail(
-          REFUSED,
-          `${act} is a governance act and its ledger row must name who performed it\n` +
-            "  why: the §7 trail is the evidence that a person withdrew this document. A name " +
-            "guessed from $USER attributes nothing — it reads like a person and is whatever the " +
-            "shell happened to be (`runner` in CI, `root` in a container)\n" +
-            '  fix: pass --actor, e.g. --actor "you@example.com"',
-        )
-      : namedActor;
-
-  // The write modes are known from the ARGUMENTS alone, so the requirement is
-  // enforced here — before the DSN is resolved. Deferring it to the write site
-  // reported a missing --actor as "the environment cannot run ksor" (exit 3)
-  // when it is a refusal (exit 1).
-  if (values.export === undefined && !values.list && !values.ledger) {
-    const named = requireActor(values.revoke === undefined ? "takedown" : "takedown --revoke");
-    if (typeof named === "number") return named;
-  }
-
-  const dsn = resolveDsn(instance);
-  if (typeof dsn === "number") return dsn;
-  if (values.export !== undefined) {
-    // EXPANDED here, where the tree lives: the site has no parent_id to walk.
-    // The subtree DIRECTORIES go too, because the expanded list can only name
-    // what the active generation contains — and the site builds from disk,
-    // where a document added under a withdrawn section already exists.
-    const { rows, subtrees } = await withPool(dsn, async (pool) => ({
-      rows: await deniedStableIds(pool, instance),
-      subtrees: await deniedSubtreeDirs(pool, instance),
-    }));
-    const manifest = denylistManifest(instance.corpusId, rows, new Date(), "database", subtrees);
-    writeFileSync(values.export, JSON.stringify(manifest, null, 2) + "\n");
-    const also = subtrees.length === 0 ? "" : ` and ${subtrees.length} subtree(s)`;
-    process.stdout.write(
-      `takedown: exported ${rows.length} denial(s)${also} to ${values.export}\n`,
+  // The POLICY decides who may do this, and it is read — and enforced — before
+  // any DSN is resolved: an unauthorised actor is an argument error (exit 1),
+  // never "the environment cannot run ksor" (exit 3). The half that needs no
+  // file runs FIRST, so a missing --actor is never reported as a missing
+  // policy just because the record also has something else wrong with it.
+  if (writesLedger(mode)) {
+    const unnamed = checkActorNamed(values.actor);
+    if (unnamed !== null) return refuse(unnamed);
+    const policyPath = join(root, ".ksor", "governance.yaml");
+    const parsed = parsePolicy(
+      existsSync(policyPath) ? readFileSync(policyPath, "utf8") : null,
+      ".ksor/governance.yaml",
     );
-    for (const warning of manifestConsumerWarnings(values.instance!, values.export)) {
-      process.stderr.write(warning);
+    if (!parsed.ok) {
+      return fail(
+        REFUSED,
+        parsed.refusals
+          .map((r) => `${r.slug}: ${r.path}\n  why: ${r.why}\n  fix: ${r.fix}`)
+          .join("\n"),
+      );
     }
-    return 0;
+    const denied = authorizeActor(values.actor, parsed.policy);
+    if (denied !== null) return refuse(denied);
   }
 
-  if (values.ledger) {
-    // The §7 trail, read through the auditor role (schema 2.3). Before it, the
-    // ledger had FORCE row-level security, an INSERT policy and no reader at
-    // all — written forever, readable by nobody.
-    const rows = await withPool(dsn, (pool) => readLedger(pool, instance, 50));
-    if (rows.length === 0) {
-      process.stdout.write("ledger: no governance acts recorded for this corpus yet\n");
+  // A record that declares no `database:` is a legitimate level-0 shape, not a
+  // typo: it gets takedown through the ledger alone (record spec §5).
+  let instance: ContentInstance | null = null;
+  let declaresDatabase = true;
+  try {
+    instance = parseInstance(instancePath);
+  } catch (exc) {
+    if (exc instanceof NoDatabaseDeclared) declaresDatabase = false;
+    else {
+      const loaded = loadInstance(instancePath);
+      return typeof loaded === "number" ? loaded : REFUSED;
+    }
+  }
+
+  const ledgerPath = join(root, ".ksor", "takedowns.yaml");
+  const ledgerText = existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : null;
+  const parsedLedger = parseLedger(ledgerText, ".ksor/takedowns.yaml");
+  if (!parsedLedger.ok) {
+    return fail(
+      REFUSED,
+      parsedLedger.refusals
+        .map((r) => `${r.slug}: ${r.path}\n  why: ${r.why}\n  fix: ${r.fix}`)
+        .join("\n"),
+    );
+  }
+
+  // ── the read-only modes: no actor, no ledger write ──────────────────────
+  if (mode.kind === "list" || mode.kind === "ledger" || mode.kind === "apply") {
+    if (instance === null) {
+      if (mode.kind === "apply") {
+        process.stdout.write(
+          "takedown: instance.md declares no database, so there is nothing to apply — " +
+            "the ledger IS the record and the site reads it at its next build\n",
+        );
+        return 0;
+      }
+      return fail(
+        REFUSED,
+        `${instancePath}: instance.md declares no database: block, and --${mode.kind} reads one`,
+      );
+    }
+    const dsn = resolveDsn(instance);
+    if (typeof dsn === "number") return dsn;
+    if (mode.kind === "apply") {
+      const applied = await withPool(dsn, (pool) =>
+        runIngest(pool, instance!.tenantId, (c) => applyLedger(c, instance!, parsedLedger.ledger)),
+      );
+      process.stdout.write(
+        applied.changed === 0
+          ? "takedown: every ledger entry was already applied — nothing changed\n"
+          : `takedown: applied ${applied.changed} denial row(s) from .ksor/takedowns.yaml\n`,
+      );
+      for (const line of unmergedLines(applied.unmerged)) process.stderr.write(line + "\n");
       return 0;
     }
-    for (const r of rows) {
-      const when = r.createdAt.toISOString().replace("T", " ").slice(0, 19);
-      process.stdout.write(`${when}\t${r.action}\t${r.actor}\t${JSON.stringify(r.detail)}\n`);
+    if (mode.kind === "ledger") {
+      // The §7 trail, read through the auditor role (schema 2.3).
+      const rows = await withPool(dsn, (pool) => readLedger(pool, instance!, 50));
+      if (rows.length === 0) {
+        process.stdout.write("ledger: no governance acts recorded for this corpus yet\n");
+        return 0;
+      }
+      for (const r of rows) {
+        const when = r.createdAt.toISOString().replace("T", " ").slice(0, 19);
+        process.stdout.write(`${when}\t${r.action}\t${r.actor}\t${JSON.stringify(r.detail)}\n`);
+      }
+      return 0;
     }
-    return 0;
-  }
-
-  if (values.list) {
-    const rows = await withPool(dsn, (pool) => listTakedowns(pool, instance));
+    const rows = await withPool(dsn, (pool) => listTakedowns(pool, instance!));
     if (rows.length === 0) {
       process.stdout.write("takedown: nothing is denied in this corpus\n");
       return 0;
     }
-    for (const r of rows) {
-      process.stdout.write(`${r.stableId}\t${r.scope}\t${r.reason}\n`);
+    for (const r of rows) process.stdout.write(`${r.stableId}\t${r.scope}\t${r.reason}\n`);
+    return 0;
+  }
+
+  // ── the writing modes ───────────────────────────────────────────────────
+  const dsnEnv = instance?.dsnEnv ?? "the DSN variable";
+  const step = decideRowStep({
+    declaresDatabase,
+    dsnPresent: instance !== null && (process.env[instance.dsnEnv] ?? "") !== "",
+    dsnEnv,
+    fileOnly: values["file-only"],
+  });
+  if (!step.ok) return refuse(step.refusal);
+
+  const at = new Date().toISOString();
+  const actor = values.actor!.trim();
+  let entry: LedgerEntry;
+  if (mode.kind === "deny") {
+    const target = conceptPathOf(mode.stableId) ?? subtreeDirOf(mode.stableId)!;
+    entry = {
+      kind: "denial",
+      id: mintLedgerId(at),
+      by: actor,
+      at,
+      reason,
+      stableId: mode.stableId,
+      scope: mode.scope,
+      // What the verb SAW: a denial may precede the document it names
+      // (decision 14), and `expected` is how the checker later tells a
+      // deliberate removal from a rename that would republish.
+      expected: expectedFor(existsSync(join(root, target))),
+    };
+  } else {
+    const target = parsedLedger.ledger.entries.find((e) => e.id === mode.target);
+    if (target === undefined || target.kind !== "denial") {
+      return refuse({
+        slug: "ksor-takedown-unknown-entry",
+        why:
+          target === undefined
+            ? `\`${mode.target}\` is no entry in .ksor/takedowns.yaml`
+            : `\`${mode.target}\` is a ${target.kind} — only a denial can be revoked or recorded as removed`,
+        fix: "name the denial's entry id (the `id:` line in .ksor/takedowns.yaml)",
+      });
     }
+    entry =
+      mode.kind === "revoke"
+        ? { kind: "revocation", id: mintLedgerId(at), by: actor, at, reason, revokes: target.id }
+        : { kind: "amendment", id: mintLedgerId(at), by: actor, at, reason, amends: target.id };
+  }
+
+  // FILE FIRST, always. The entry is the record of the act; the row is a
+  // projection of it, and `--apply` can always rebuild the row from the file
+  // while nothing can rebuild the file from the row.
+  writeFileSync(ledgerPath, appendEntry(ledgerText, entry), "utf8");
+  process.stdout.write(
+    `takedown: ${describe(entry)}\n  recorded as \`${entry.id}\` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger\n`,
+  );
+
+  if (step.step === "entry-only") {
+    process.stdout.write(`  ${step.why}\n`);
     return 0;
   }
 
-  if (values.revoke !== undefined) {
-    const writer = requireActor("takedown --revoke");
-    if (typeof writer === "number") return writer;
-    const outcome = await withPool(dsn, (pool) =>
-      revokeTakedown(pool, instance, { stableId: values.revoke!, actor: writer }),
+  const dsn = resolveDsn(instance!);
+  if (typeof dsn === "number") return dsn;
+  const reparsed = parseLedger(readFileSync(ledgerPath, "utf8"), ".ksor/takedowns.yaml");
+  if (!reparsed.ok) {
+    return fail(
+      ENVIRONMENT,
+      `the ledger entry \`${entry.id}\` was written, and re-reading .ksor/takedowns.yaml refused it\n` +
+        reparsed.refusals.map((r) => `  ${r.slug}: ${r.why}`).join("\n"),
+    );
+  }
+  try {
+    const applied = await withPool(dsn, (pool) =>
+      runIngest(pool, instance!.tenantId, (c) => applyLedger(c, instance!, reparsed.ledger)),
     );
     process.stdout.write(
-      outcome.changed
-        ? `takedown: lifted — ${outcome.stableId} serves again from the next request\n`
-        : `takedown: ${outcome.stableId} was not denied; nothing to lift\n`,
+      applied.changed === 0
+        ? "  the denylist row already said exactly this — no surface changed\n"
+        : "  the row is written — no surface serves it from this request on\n",
     );
-    return 0;
-  }
-
-  const stableId = positionals[0];
-  if (stableId === undefined || stableId === "") {
+    for (const line of unmergedLines(applied.unmerged)) process.stderr.write(line + "\n");
+  } catch (exc) {
+    // The entry is on disk and the row is not: say so, and name the one command
+    // that closes the gap. Exit 3 — the act was recorded, the environment failed.
     return fail(
-      REFUSED,
-      "takedown: name the document's stable_id, or pass --list / --revoke / --export\n" +
-        "  the stable_id is what search and read report as provenance.stable_id",
+      ENVIRONMENT,
+      `the ledger entry \`${entry.id}\` is written, and the denylist row is NOT: ` +
+        `${exc instanceof Error ? exc.message : String(exc)}\n` +
+        "  why: the ledger is the record of the act and is written first, so nothing is lost — " +
+        "but until the row exists the door keeps serving what the repository says is withdrawn\n" +
+        `  fix: commit the entry, then run \`ksor takedown --instance ${instancePath} --apply\` ` +
+        "where the database is reachable (it applies every unapplied entry under its recorded actor)",
     );
   }
-  if (values.reason === undefined || values.reason.trim() === "") {
-    // A denial with no recorded reason is an unexplained hole in the record.
-    return fail(
-      REFUSED,
-      "takedown: --reason TEXT is required — a denial with no recorded reason is an " +
-        "unexplained hole in the record, and this row is the only place it is written down",
-    );
-  }
-  const writer = requireActor("takedown");
-  if (typeof writer === "number") return writer;
-  const scope = values.subtree ? "subtree" : "node";
-  const outcome = await withPool(dsn, (pool) =>
-    applyTakedown(pool, instance, {
-      stableId,
-      scope,
-      reason: values.reason!,
-      actor: writer,
-    }),
-  );
-  process.stdout.write(
-    outcome.changed
-      ? `takedown: ${outcome.stableId} denied (scope: ${scope}) — no surface serves it from now on\n`
-      : `takedown: ${outcome.stableId} was already denied with the same scope and reason\n`,
-  );
-  if (outcome.resolves === false) {
-    // Recorded, but it currently names nothing — almost always a typo, and the
-    // difference between "withdrawn" and "still serving" is the whole point.
-    process.stdout.write(
-      `  WARNING: no document in the serving generation has the stable_id ` +
-        `${JSON.stringify(outcome.stableId)}. The denial is recorded (it will apply if that id ` +
-        `ever appears), but nothing is withdrawn right now — check the id with ` +
-        `\`ksor takedown --instance ${values.instance} --list\` or the provenance.stable_id a ` +
-        `search result reports.\n`,
-    );
-  }
-  process.stdout.write(
-    "  the SITE reads a manifest, not the database: run " +
-      "`ksor takedown --instance ... --export <path>` before building it, or the human " +
-      "surface keeps publishing this document\n",
-  );
   return 0;
+}
+
+/** One line naming the act, for the operator watching. */
+function describe(entry: LedgerEntry): string {
+  if (entry.kind === "denial") {
+    return `${entry.stableId} denied (scope: ${entry.scope}, expected: ${entry.expected})`;
+  }
+  if (entry.kind === "revocation") return `revoked \`${entry.revokes}\``;
+  return `\`${entry.amends}\` amended: the document is recorded as removed`;
 }
 
 async function gcCommand(args: string[]): Promise<number> {

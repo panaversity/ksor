@@ -27,13 +27,19 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_migrate_test";
 const TENANT = "migrate-corp";
 
-const NEW_COLUMNS = [
-  "corpus_id",
-  "visibility",
-  "doc_status",
-  "owner",
-  "provenance",
-  "superseded_by",
+/** What 2.2 added and 2.5 still carries (2.5 drops `visibility` for `audience`). */
+const NEW_COLUMNS = ["corpus_id", "doc_status", "owner", "provenance", "superseded_by"];
+/** What 2.5 adds to the node row (research/okf-native.md §4.1). */
+const PROFILE_COLUMNS = [
+  "audience",
+  "sources",
+  "verified",
+  "generated",
+  "approval",
+  "deprecated",
+  "effective_from",
+  "stale_after",
+  "trust_tier",
 ];
 
 describe.runIf(adminDsn !== "")("forward migration (db)", () => {
@@ -64,12 +70,18 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
     pool = new Pool({ connectionString: dsn.toString() });
     await applySchema(pool, 1536);
 
-    // Wind the database BACK to 2.1: drop what 2.2 added and restate the
-    // version, so the migration runs against the shape an existing adopter has.
+    // Wind the database BACK to 2.1: drop what 2.2 and 2.5 added and restate
+    // the version, so the migration runs against the shape an existing adopter has.
     await pool.query(
-      `ALTER TABLE content_nodes ${NEW_COLUMNS.map((c) => `DROP COLUMN ${c}`).join(", ")}`,
+      `ALTER TABLE content_nodes ${[...NEW_COLUMNS, ...PROFILE_COLUMNS].map((c) => `DROP COLUMN ${c}`).join(", ")}`,
     );
     await pool.query("DROP INDEX IF EXISTS idx_nodes_visibility");
+    await pool.query(
+      "ALTER TABLE ingestion_runs DROP COLUMN build_id, DROP COLUMN policy, DROP COLUMN policy_sha256, DROP COLUMN ledger_ids",
+    );
+    await pool.query(
+      "ALTER TABLE takedown_denylist DROP COLUMN ledger_id, DROP COLUMN actor, DROP COLUMN applied_at, DROP COLUMN revoked_ledger_id, DROP COLUMN revoked_at",
+    );
     // …and back past 2.3 and 2.4 too, or those steps run against a database
     // that ALREADY has what they add. Every migration file is idempotent
     // (`ADD COLUMN IF NOT EXISTS`, `DROP POLICY IF EXISTS`, role guards), so
@@ -124,19 +136,88 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
     for (const c of NEW_COLUMNS) expect(before, `${c} should be absent`).not.toContain(c);
   });
 
-  it("migrates 2.1 -> the version this build requires, and records each step", async () => {
-    const required = schemaVersion();
-    expect(compareSchemaVersion("2.1", required)).toBeLessThan(0);
-
-    const report = await runMigrations(pool, "2.1", required);
+  it("migrates 2.1 -> 2.4, the last pre-profile shape, recording each step", async () => {
+    const report = await runMigrations(pool, "2.1", "2.4");
     expect(report.from).toBe("2.1");
-    expect(report.to).toBe(required);
-    // The COUNT, not "more than zero": the chain is 2.1 -> 2.2 -> 2.3 -> 2.4,
-    // and a step that quietly does nothing is the failure this walk exists to
-    // catch. Update this number when a migration is added — deliberately, so
-    // adding one is a decision and not a drift.
+    expect(report.to).toBe("2.4");
+    // The COUNT, not "more than zero": a step that quietly does nothing is the
+    // failure this walk exists to catch.
     expect(report.applied.length, `applied: ${report.applied.join(", ")}`).toBe(3);
+    expect(await version()).toBe("2.4");
+
+    // Rows in the 2.4 shape — the ones the 2.5 step must MAP, not drop: a
+    // ranked `visibility` and the three pre-profile authored statuses.
+    for (const [id, visibility, docStatus] of [
+      ["knowledge/approved-internal", "internal", "approved"],
+      ["knowledge/in-review", "public", "review"],
+      ["knowledge/superseded", null, "superseded"],
+    ] as const) {
+      await pool.query(
+        "INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, corpus_id, visibility, doc_status)" +
+          " VALUES ($1, 7, $2, 'document', $2, $2, $1, $3, $4)",
+        [TENANT, id, visibility, docStatus],
+      );
+    }
+  });
+
+  it("migrates 2.4 -> the version this build requires (decision 16: walked, not sorted)", async () => {
+    const required = schemaVersion();
+    expect(compareSchemaVersion("2.4", required)).toBeLessThan(0);
+    const report = await runMigrations(pool, "2.4", required);
+    expect(report.applied, "exactly the 2.4 -> 2.5 step").toEqual(["2.4-2.5__okf-profile.sql"]);
     expect(await version()).toBe(required);
+  });
+
+  it("2.4 -> 2.5 maps carried rows onto the profile: visibility -> audience[], the authored status set", async () => {
+    const r = await pool.query(
+      "SELECT stable_id, audience, doc_status, trust_tier FROM content_nodes WHERE tenant_id = $1 ORDER BY stable_id",
+      [TENANT],
+    );
+    const byId = new Map(r.rows.map((x: Record<string, unknown>) => [String(x.stable_id), x]));
+    expect(byId.get("knowledge/approved-internal")).toMatchObject({
+      audience: ["internal"],
+      doc_status: "stable",
+    });
+    expect(byId.get("knowledge/in-review")).toMatchObject({
+      audience: ["public"],
+      doc_status: "draft",
+    });
+    expect(byId.get("knowledge/superseded")).toMatchObject({
+      audience: null,
+      doc_status: "deprecated",
+    });
+    // A carried row's trust is what the profile calls a stable, unverified concept.
+    expect(byId.get("knowledge/approved-internal")?.["trust_tier"]).toBe(0);
+    // A row that declared no status stays NULL, and `visibility` is gone.
+    expect(byId.get("knowledge/pre-existing")?.["doc_status"]).toBeNull();
+    expect(await columns()).not.toContain("visibility");
+    await expect(
+      pool.query("UPDATE content_nodes SET doc_status = 'approved' WHERE tenant_id = $1", [TENANT]),
+      "the pre-profile status set is refused by the CHECK",
+    ).rejects.toThrow(/doc_status|check/i);
+  });
+
+  it("2.4 -> 2.5 gives the run, the ledger row and the node row the profile's columns", async () => {
+    const cols = async (table: string): Promise<string[]> =>
+      (
+        await pool.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = $1",
+          [table],
+        )
+      ).rows.map((x: { column_name: string }) => x.column_name);
+    for (const c of PROFILE_COLUMNS) expect(await columns(), c).toContain(c);
+    for (const c of ["build_id", "policy", "policy_sha256", "ledger_ids"]) {
+      expect(await cols("ingestion_runs"), c).toContain(c);
+    }
+    for (const c of ["ledger_id", "actor", "applied_at", "revoked_ledger_id", "revoked_at"]) {
+      expect(await cols("takedown_denylist"), c).toContain(c);
+    }
+    const gin = await pool.query(
+      "SELECT indexdef FROM pg_indexes WHERE tablename = 'content_nodes' AND indexname = 'idx_nodes_audience'",
+    );
+    expect(String(gin.rows[0]?.indexdef ?? ""), "the overlap predicate rides a GIN").toMatch(
+      /gin/i,
+    );
   });
 
   it("each step actually did its work — not just reported success", async () => {
@@ -147,7 +228,7 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
 
     expect(
       await has(
-        "SELECT 1 FROM information_schema.columns WHERE table_name = 'content_nodes' AND column_name = 'visibility'",
+        "SELECT 1 FROM information_schema.columns WHERE table_name = 'content_nodes' AND column_name = 'doc_status'",
         [],
       ),
       "2.1 -> 2.2 puts governance on the node row",

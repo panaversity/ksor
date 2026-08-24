@@ -38,6 +38,7 @@ import { keyRingFromEnv } from "../lib/snapshot.js";
 import { applySchema } from "../schema.js";
 import { search } from "../service.js";
 import { RETRIEVAL_BASELINE } from "./baseline.js";
+import { GATE_PREDICATE_DIGEST } from "../lib/search.js";
 import { HANDBOOK_GOLD, HANDBOOK_OOC, NAV_NEGATIVE_SLUG, type GoldKind } from "./handbook-gold.js";
 import type { ContentInstance } from "../instance.js";
 import type { ServiceContext } from "../service.js";
@@ -51,12 +52,8 @@ const DB = "ksor_retrieval_measure";
 const TENANT = "handbook-eval";
 const KS = [1, 3, 5] as const;
 
-const KNOWLEDGE = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "fixtures",
-  "handbook",
-  "knowledge",
-);
+/** The handbook fixture is a full record: instance, policy, concepts, generated index, lock. */
+const RECORD_ROOT = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "handbook");
 
 interface Scored {
   readonly q: string;
@@ -97,8 +94,9 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "",
-      audiences: [],
-      defaultVisibility: null,
+      title: TENANT,
+      description: "An eval record.",
+      toolchain: null,
       embeddingProvider: "gemini",
       embeddingModel: "gemini-embedding-001",
       embeddingDim: 1536,
@@ -106,7 +104,7 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
 
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: KNOWLEDGE,
+      recordRoot: RECORD_ROOT,
       flip: true,
       sourceCommit: "measure",
     });
@@ -185,6 +183,17 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
         `      baseline ${b.navNegativeHits}   ${delta(scored.filter((s) => s.hitNav).length, b.navNegativeHits)}`,
       `  baseline note: ${b.note}`,
     );
+    if (b.predicateDigest !== GATE_PREDICATE_DIGEST) {
+      // Reported, not gated: the floors are the guarantee and they still hold
+      // or they do not. What a reader must not do is compare these numbers to
+      // the recorded ones as if they described the same candidate set.
+      lines.push(
+        "",
+        `  PREDICATE MOVED: baseline measured through ${b.predicateDigest}, this run through ` +
+          `${GATE_PREDICATE_DIGEST} — the candidate set is not the one the line was taken on. ` +
+          "Re-record the baseline with this run's numbers and say what changed.",
+      );
+    }
 
     console.log(lines.join("\n"));
 

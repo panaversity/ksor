@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "build_id": "sha256:fixture-demo-rulebook",
+  "as_of": "2026-08-25T12:00:00Z",
+  "documents": [
+    {
+      "path": "emergencies/injuries.md",
+      "sha256": "4fded16cfe5c4c967dc960a5d79bfdd2c4320a801a321e028a7a5ff3efc009f3"
+    },
+    {
+      "path": "emergencies/overview.md",
+      "sha256": "b899ff3b120e780bd9182aa5461542a57fcac6bed5768ca8bffa2970d025cf5e"
+    },
+    {
+      "path": "emergencies/power-and-fire.md",
+      "sha256": "96e700c8d5b3fca7abe6e22bacfa61cc8458512e93e7c82fe8b53959eaf4b9d2"
+    },
+    {
+      "path": "getting-certified/badges.md",
+      "sha256": "bf206b97c10122b035b3ec5d717f0c69716c527d2aecd45647c6b889c22eb878"
+    },
+    {
+      "path": "getting-certified/guests.md",
+      "sha256": "65fcc16feec583720d18e007c2f97bd9e327744024f23d641384e3c6b588a24d"
+    },
+    {
+      "path": "getting-certified/overview.md",
+      "sha256": "11036d7a9131430cb87a301b65403c11256922ebdc239e4d084536c080ff6274"
+    },
+    {
+      "path": "machine-rules/laser-cutter.md",
+      "sha256": "9cb8c501cf9389d35cc61b80ec143d35feb6cfa914eaa3e6bdd306d9b4afb262"
+    },
+    {
+      "path": "machine-rules/overview.md",
+      "sha256": "e72bfb83c6beb3fe4e547e5b2bc376749afb6181ed3c39bd6da01a3b422f0109"
+    },
+    {
+      "path": "machine-rules/table-saw.md",
+      "sha256": "193201225977188dcad3ebc00667ae21743bf1535f2c1674148f4769010bfb1f"
+    },
+    {
+      "path": "overview.md",
+      "sha256": "03b3cecb8e5371f71ab6825c66dcaecf8ae7f1eeda3f661a5eb9f5ed831c484e"
+    }
+  ]
+}

@@ -33,9 +33,9 @@ const SERVICE = readFileSync(
   "utf8",
 );
 
-describe("every serving read narrows to the caller's audience", () => {
-  it("binds audienceScope on EACH runRead — per call, not by counting", () => {
-    // Counting `runRead(` against `audienceScope(ctx)` and comparing totals was
+describe("every serving read narrows to the caller's audience and trust floor", () => {
+  it("binds servingScope on EACH runRead — per call, not by counting", () => {
+    // Counting `runRead(` against `servingScope(ctx)` and comparing totals was
     // the old check, and totals cannot tell pairing from arithmetic: two
     // bindings on one call and none on another satisfies it exactly. Each call
     // is now inspected on its own.
@@ -52,7 +52,7 @@ describe("every serving read narrows to the caller's audience", () => {
         line: SERVICE.slice(0, at).split("\n").length,
         window: SERVICE.slice(at, calls[i + 1] ?? SERVICE.length),
       }))
-      .filter(({ window }) => !window.includes("audienceScope(ctx)"));
+      .filter(({ window }) => !window.includes("servingScope(ctx)"));
 
     expect(
       unscoped.map((u) => `service.ts:${u.line}`),

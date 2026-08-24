@@ -9,7 +9,7 @@
  * line hand-EDITED is refused too. An entry is only ever superseded by a
  * revocation or an amendment appended after it.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { z } from "zod";
 
@@ -383,3 +383,59 @@ export function denies(inForceDenials: readonly Denial[], id: string): boolean {
     return dir === "" || id === dir || id.startsWith(`${dir}/`);
   });
 }
+
+// ── writing ───────────────────────────────────────────────────────────────
+// Only `ksor takedown` writes the ledger, and it writes by APPENDING text
+// rather than re-serializing the file: re-emitting a parsed document would
+// rewrite bytes nobody changed, and an append-only file whose earlier lines
+// move on every write is not reviewable in a pull request diff.
+
+/** Entry ids are `<at>-<6 random>` (record spec §5) — sortable by the act, unique by the suffix. */
+export function mintLedgerId(at: string, random: () => string = randomSuffix): string {
+  return `${at}-${random()}`;
+}
+
+function randomSuffix(): string {
+  return randomBytes(3).toString("hex");
+}
+
+/**
+ * One entry's YAML. Every scalar is double-quoted: an id and an instant both
+ * contain `:` and would otherwise depend on the reader's resolution rules, and
+ * a reason is free text an operator typed. JSON string escapes are exactly
+ * YAML's double-quoted escapes, so `JSON.stringify` is the right quoter.
+ */
+export function renderEntry(entry: LedgerEntry): string {
+  const q = (value: string): string => JSON.stringify(value);
+  const lines: string[] = [`- id: ${q(entry.id)}`];
+  if (entry.kind === "denial") {
+    lines.push(
+      `  stable_id: ${q(entry.stableId)}`,
+      `  scope: ${entry.scope}`,
+      `  expected: ${entry.expected}`,
+    );
+  } else if (entry.kind === "revocation") {
+    lines.push(`  revokes: ${q(entry.revokes)}`);
+  } else {
+    lines.push(`  amends: ${q(entry.amends)}`, "  expected: removed");
+  }
+  lines.push(`  by: ${q(entry.by)}`, `  at: ${q(entry.at)}`);
+  if (entry.reason !== null) lines.push(`  reason: ${q(entry.reason)}`);
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * The file as it should be after appending. `text` is null when the ledger
+ * does not exist yet; a file that does not end in a newline gets one, so an
+ * append never joins itself onto someone else's last line.
+ */
+export function appendEntry(text: string | null, entry: LedgerEntry): string {
+  const rendered = renderEntry(entry);
+  if (text === null || text.trim() === "") return LEDGER_HEADER + rendered;
+  return (text.endsWith("\n") ? text : `${text}\n`) + rendered;
+}
+
+const LEDGER_HEADER =
+  "# The takedown ledger (record spec §5): append-only, written only by\n" +
+  "# `ksor takedown`, and validated by `pnpm check`, `ksor build` and ingest.\n" +
+  "# Lift a denial with a revocation entry; never delete a line.\n";

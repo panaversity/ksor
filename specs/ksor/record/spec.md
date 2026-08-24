@@ -210,18 +210,33 @@ refused exactly as the verb would refuse it.
 
 ```
 ksor takedown --actor <actor> [--instance <path>] [--scope node|subtree]
-              [--reason <text>] [--file-only] <stable_id>
+              --reason <text> [--file-only] <stable_id>
 ksor takedown --actor <actor> --revoke <id> | --removed <id> [--reason <text>]
-ksor takedown --apply [--instance <path>]
+ksor takedown [--instance <path>] (--apply | --list | --ledger)
 ```
 
-The verb refuses an unnamed actor before any DSN is resolved. Then, by what
-the instance declares: no `database:` → the entry only; `database:` and the
-DSN present → the entry, then the row, and a row failure exits `3` naming the
-entry already written and `--apply` (idempotent: apply every unapplied entry
-under its recorded actor, no `--actor` needed — ingest's step, on demand) as
-the fix; `database:` and no DSN → refused (`ksor-takedown-dsn-missing`)
-unless `--file-only`. `--export` is removed.
+The verb refuses an unnamed actor — and one `takedown_authorities` does not
+name (`ksor-takedown-unauthorised`, the same refusal the checker applies to a
+hand-appended entry) — before any DSN is resolved. Then, by what the instance
+declares: no `database:` → the entry only; `database:` and the DSN present →
+the entry, then the row, and a row failure exits `3` naming the entry already
+written and `--apply` (idempotent: apply every unapplied entry under its
+recorded actor, no `--actor` needed — ingest's step, on demand) as the fix;
+`database:` and no DSN → refused (`ksor-takedown-dsn-missing`) unless
+`--file-only`. `--reason` is REQUIRED on a denial: `takedown_denylist.reason`
+is `NOT NULL`, and the entry is the only place the withdrawal is ever
+explained. `--scope subtree` appends the `#section` anchor when the operator
+named the bare directory, and refuses one at the default scope. `--list` and
+`--ledger` read and need no actor (decision 21). `--export` is removed, with
+`.ksor-denylist.json` and the scaffold's `export-denylist` step.
+
+The verb's own argument refusals, each slug-first on stderr and outside the §6
+checker set the way the ingest slugs are: `ksor-takedown-unattributed` (no
+`--actor`), `ksor-takedown-unauthorised`, `ksor-actor-form`,
+`ksor-takedown-unspecified` (no act named), `ksor-takedown-ambiguous` (two),
+`ksor-takedown-scope`, `ksor-takedown-unreasoned`, `ksor-takedown-stable-id`,
+`ksor-takedown-unknown-entry` (`--revoke`/`--removed` naming no denial),
+`ksor-takedown-dsn-missing`.
 
 **How a row lifts.** `takedown_denylist` gains `ledger_id`, `actor`,
 `applied_at`, and nullable `revoked_ledger_id` / `revoked_at`; the `DENIED`

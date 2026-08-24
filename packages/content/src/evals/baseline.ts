@@ -23,9 +23,19 @@
  *     --disable-console-intercept packages/content/src/evals/retrieval-measure.db.test.ts
  */
 
+import { GATE_PREDICATE_DIGEST } from "../lib/search.js";
+
 export interface RetrievalBaseline {
   /** When this line was measured, and against which corpus and space. */
   readonly measuredAt: string;
+  /**
+   * The retrieval predicate the line was measured THROUGH
+   * (`GATE_PREDICATE_DIGEST`). A success@1 is a property of a candidate set,
+   * so a baseline that does not name its predicate can be compared against a
+   * run of something else and read as a regression or an improvement without
+   * either being true. The harness prints it and says when it has moved.
+   */
+  readonly predicateDigest: string;
   readonly corpus: string;
   readonly embedding: string;
   /** Floors: distinct-node success@1 by gold category. */
@@ -48,6 +58,7 @@ export interface RetrievalBaseline {
  */
 export const RETRIEVAL_BASELINE: RetrievalBaseline = {
   measuredAt: "2026-08-22",
+  predicateDigest: GATE_PREDICATE_DIGEST,
   corpus: "evals/fixtures/handbook (6 documents, 13 gold questions, 8 ooc probes)",
   embedding: "gemini-embedding-001 @ 1536",
   shortSubstantiveAt1: 9,
@@ -61,12 +72,20 @@ export const RETRIEVAL_BASELINE: RetrievalBaseline = {
     "Issue #55: `classify()` decides navigation by SHAPE rather than length. " +
     "Short substantive facts went 0/9 -> 9/9 at rank 1, the long-prose control " +
     "held at 4/4, and the link-list page was returned 0 times — so the gain is " +
-    "correctness, not permissiveness.",
+    "correctness, not permissiveness.\n" +
+    "CARRIED FORWARD, not re-measured, through the admission change that added " +
+    "the lifecycle window and the trust floor: every document in this fixture is " +
+    "`stable` with no `effective_from` or `stale_after` and no `verified`, so the " +
+    "new predicate selects exactly the candidate set the old one did and these " +
+    "floors keep their meaning. The digest is stamped so the NEXT predicate change " +
+    "cannot be carried forward silently — it will not match, and the harness says so.",
 };
 
 /** Superseded lines, newest first. Kept so a regression can be dated. */
 export const RETRIEVAL_HISTORY: readonly RetrievalBaseline[] = [
   {
+    // Measured before the digest existed; there is no honest value to stamp.
+    predicateDigest: "(pre-digest)",
     measuredAt: "2026-08-21",
     corpus: "evals/fixtures/handbook (6 documents, 13 gold questions, 8 ooc probes)",
     embedding: "gemini-embedding-001 @ 1536",

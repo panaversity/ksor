@@ -45,7 +45,11 @@ describe("ksor CLI (built artifact)", () => {
   it("a verb's --help reaches THAT verb, not the generic usage", () => {
     const result = runCli(["ingest", "--help"]);
     expect(result.status, result.stdout + result.stderr).toBe(0);
-    expect(result.stdout, "the verb's own flags").toContain("--knowledge");
+    // `--knowledge` is gone: the record root beside instance.md supplies it
+    // (record spec §1), so the verb's own flags are what is left.
+    expect(result.stdout, "the verb's own flags").toContain("--instance");
+    expect(result.stdout, "the verb's own flags").toContain("--flip");
+    expect(result.stdout, "the record root supplies it now").not.toContain("--knowledge");
   });
 
   it("a mistyped flag is REFUSED (exit 1), not reported as a broken environment", () => {
@@ -115,9 +119,9 @@ describe("ksor CLI (built artifact)", () => {
   it("names the missing flag when a corpus verb is under-specified (exit 1)", () => {
     // The exact flags the scaffold's package.json scripts pass — a rename in
     // the content CLI's parser must fail HERE, not in an adopter's project.
-    const ingest = runCli(["ingest", "--instance", "instance.md"]);
+    const ingest = runCli(["ingest"]);
     expect(ingest.status, ingest.stdout).toBe(1);
-    expect(`${ingest.stdout}${ingest.stderr}`).toContain("--knowledge");
+    expect(`${ingest.stdout}${ingest.stderr}`).toContain("--instance");
 
     for (const verb of ["calibrate", "gc", "grant"]) {
       const result = runCli([verb]);
@@ -216,162 +220,5 @@ describe("a governance act must NAME who performed it", () => {
     expect(block, "an actor guessed from the shell attributes nothing").not.toMatch(
       /process\.env\["USERNAME?"\]/,
     );
-  });
-});
-
-describe("takedown --export: answers for a record with no database, fails loudly for a broken one", () => {
-  const write = (dir: string, database: string): string => {
-    const file = path.join(dir, "instance.md");
-    writeFileSync(
-      file,
-      `---\nformat: 1\nname: acme-export\n${database}---\n\n# Record\n\nBody.\n`,
-      "utf8",
-    );
-    return file;
-  };
-  const DECLARED = "database:\n  dsn_env: KSOR_EXPORT_TEST_DSN\n";
-
-  const exportTo = (dir: string, instance: string, env: Record<string, string>) => {
-    const out = path.join(dir, ".ksor-denylist.json");
-    const result = spawnSync(
-      process.execPath,
-      [distCli, "takedown", "--instance", instance, "--export", out],
-      { encoding: "utf8", env: { ...process.env, ...env } },
-    );
-    return { result, out };
-  };
-
-  it("a level-0 record (no database: block) exports source=none and exits 0", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const { result, out } = exportTo(dir, write(dir, ""), {});
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const manifest = JSON.parse(readFileSync(out, "utf8"));
-      expect(manifest.source, "a level-0 record has no database to ask").toBe("none");
-      expect(manifest.denied).toEqual([]);
-      expect(manifest.corpus_id, "the corpus id survives the refusal").toBe("acme-export");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("a declared database whose env var is UNSET refuses — it is unreachable, not absent", () => {
-    // "This record has no database" and "this host cannot reach the record's
-    // database" are opposite answers, and conflating them published a
-    // withdrawn document: the site's isDenied reads only `denied`, never
-    // `source`, so file PRESENCE is the whole fail-closed gate — and writing
-    // source="none" here created the file. The live shape is a Vercel build,
-    // where the site is database-free by design and the DSN exists only in the
-    // serving runtime (round-4 review of #43).
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const { result, out } = exportTo(dir, write(dir, DECLARED), {
-        KSOR_EXPORT_TEST_DSN: "",
-      });
-      expect(result.status, "a build must not publish while it cannot ask").not.toBe(0);
-      expect(existsSync(out), "and must leave nothing that looks like an answer").toBe(false);
-      expect(result.stderr, "the refusal names the variable and the fix").toContain(
-        "KSOR_EXPORT_TEST_DSN",
-      );
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("an UNREACHABLE database exits non-zero — the case `|| true` used to swallow", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const { result } = exportTo(dir, write(dir, DECLARED), {
-        KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
-      });
-      expect(result.status, "a build must halt, not publish an empty denylist").not.toBe(0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("warns when the project cannot CONSUME the manifest — the upgrade path", () => {
-    // A scaffold is adopter-owned (decision 4), so upgrading the CLI does not
-    // touch their system/site or their package.json. A project scaffolded
-    // before the manifest existed has neither the build step that exports it
-    // nor the staging code that reads it — so a takedown was imposed, the
-    // CLI's own remedy was followed exactly, the site rebuilt, and the
-    // withdrawn document was still in out/docs/ and llms.txt while the MCP
-    // door on the same database refused it (round-7 review of #43).
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const instance = write(dir, "");
-      writeFileSync(
-        path.join(dir, "package.json"),
-        JSON.stringify({ scripts: { build: "pnpm -C system/site build" } }),
-        "utf8",
-      );
-      const libDir = path.join(dir, "system", "site", "lib");
-      mkdirSync(libDir, { recursive: true });
-      writeFileSync(path.join(libDir, "stage-knowledge.ts"), "// no denylist read\n", "utf8");
-
-      const { result } = exportTo(dir, instance, {});
-      expect(result.status, "the export itself still succeeds").toBe(0);
-      expect(result.stderr, "the build never runs the export").toContain("package.json never runs");
-      expect(result.stderr, "and the site would not read it anyway").toContain("does not read");
-      // The warning has to be actionable, not just alarming.
-      expect(result.stderr).toContain('"export-denylist": "ksor takedown');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("stays SILENT for a project that does consume it", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const instance = write(dir, "");
-      writeFileSync(
-        path.join(dir, "package.json"),
-        JSON.stringify({
-          scripts: {
-            "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
-            build: "pnpm export-denylist && pnpm -C system/site build",
-          },
-        }),
-        "utf8",
-      );
-      const libDir = path.join(dir, "system", "site", "lib");
-      mkdirSync(libDir, { recursive: true });
-      writeFileSync(
-        path.join(libDir, "stage-knowledge.ts"),
-        'const DENYLIST_FILE = ".ksor-denylist.json";\n',
-        "utf8",
-      );
-      const { result } = exportTo(dir, instance, {});
-      expect(result.status).toBe(0);
-      expect(result.stderr, "a current scaffold must not be nagged").not.toContain("WARNING");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("a FAILED export leaves NO manifest, so the site fails closed instead of trusting a stale one", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      // First, a successful export writes one (level-0: no database to ask).
-      const instance = write(dir, "");
-      expect(exportTo(dir, instance, {}).result.status).toBe(0);
-      const out = path.join(dir, ".ksor-denylist.json");
-      expect(existsSync(out)).toBe(true);
-      // The record then grows a database, and it is unreachable. The stale
-      // answer — written when there was genuinely nothing to ask — must not
-      // survive to be published as though it still applied.
-      write(dir, DECLARED);
-      const { result } = exportTo(dir, instance, {
-        KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
-      });
-      expect(result.status).not.toBe(0);
-      expect(
-        existsSync(out),
-        "a stale manifest looks authoritative and can predate the takedown being published",
-      ).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
 });

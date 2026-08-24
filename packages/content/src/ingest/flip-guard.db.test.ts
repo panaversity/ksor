@@ -14,7 +14,7 @@
  * same path the adopter does.
  */
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ import { runContentCli } from "../commands.js";
 import { contentPool } from "../db.js";
 import { grantIngest } from "../grant.js";
 import { applySchema } from "../schema.js";
+import { profileDoc, writeRecord } from "./fixtures/record-fixture.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
@@ -36,17 +37,22 @@ let admin: pg.Pool;
 let out: string[] = [];
 
 const note = (i: number): string =>
-  `---\ntitle: Note ${i}\nstatus: approved\n---\n\n# Note ${i}\n\nA guard-fixture note, number ${i}, written past the navigation floor so it is\nindexed as prose rather than skipped as structure.\n`;
+  profileDoc({
+    title: `Note ${i}`,
+    body: `# Note ${i}\n\nA guard-fixture note, number ${i}, written past the navigation floor so it is\nindexed as prose rather than skipped as structure.\n`,
+  });
 
-/** Write a knowledge tree with `count` documents, and return its path. */
+const INSTANCE = `---\nformat: 2\nname: guard\ntitle: Guard\ndescription: The guard record.\ndatabase:\n  dsn_env: KSOR_FLIP_GUARD_DSN\nembedding:\n  provider: fake\n---\n\nThis record exists to drive the ingest command's pre-flip guards.\n`;
+
+/** Write a whole record with `count` documents, and return its instance.md path. */
 async function corpusOf(name: string, count: number): Promise<string> {
-  const dir = join(work, name, "knowledge");
-  await mkdir(dir, { recursive: true });
-  for (let i = 1; i <= count; i += 1) await writeFile(join(dir, `note-${i}.md`), note(i), "utf8");
-  return dir;
+  const docs: Record<string, string> = {};
+  for (let i = 1; i <= count; i += 1) docs[`note-${i}.md`] = note(i);
+  writeRecord(join(work, name), { name: "guard", instance: INSTANCE, docs });
+  return join(work, name, "instance.md");
 }
 
-async function ingest(knowledge: string, flip: boolean): Promise<number> {
+async function ingest(instancePath: string, flip: boolean): Promise<number> {
   out = [];
   const write = process.stdout.write.bind(process.stdout);
   process.stdout.write = ((chunk: string): boolean => {
@@ -54,14 +60,7 @@ async function ingest(knowledge: string, flip: boolean): Promise<number> {
     return true;
   }) as typeof process.stdout.write;
   try {
-    return await runContentCli([
-      "ingest",
-      "--instance",
-      join(work, "instance.md"),
-      "--knowledge",
-      knowledge,
-      ...(flip ? ["--flip"] : []),
-    ]);
+    return await runContentCli(["ingest", "--instance", instancePath, ...(flip ? ["--flip"] : [])]);
   } finally {
     process.stdout.write = write;
   }
@@ -87,11 +86,6 @@ describe.runIf(adminDsn !== "")("ksor ingest --flip refuses what serving would (
     await grantIngest(pool, "guard");
 
     work = await mkdtemp(join(tmpdir(), "ksor-flip-guard-"));
-    await writeFile(
-      join(work, "instance.md"),
-      `---\nformat: 1\nname: guard\ndatabase:\n  dsn_env: KSOR_FLIP_GUARD_DSN\nembedding:\n  provider: fake\n---\n\n# Guard\n\nThis record exists to drive the ingest command's pre-flip guards.\n`,
-      "utf8",
-    );
     process.env["KSOR_FLIP_GUARD_DSN"] = dsn;
   }, 300_000);
 

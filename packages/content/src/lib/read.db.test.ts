@@ -73,8 +73,8 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
         } = {},
       ): Promise<string> => {
         const r = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, permalink, status)
-           VALUES ($1, 1, $2, $3, 'document', $4, $5, $6, $7, $8) RETURNING node_id`,
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, permalink, status, audience, doc_status)
+           VALUES ($1, 1, $2, $3, 'document', $4, $5, $6, $7, $8, ARRAY['public'], 'stable') RETURNING node_id`,
           [
             TENANT,
             stableId,

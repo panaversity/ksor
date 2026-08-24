@@ -78,6 +78,6 @@ export {
   type ScaffoldStructure,
 } from "./hygiene.js";
 export { overlaps, mayReach } from "../lib/audience-rule.js";
-export { OVERLAP_CASES, WIDENING_CASES } from "../lib/audience-conformance.js";
+export { AUDIENCE_CASES, WIDENING_CASES } from "../lib/audience-conformance.js";
 export { admitsLifecycle, type LifecycleDoc, type Surface } from "../lib/lifecycle-rule.js";
 export { LIFECYCLE_CASES } from "../lib/lifecycle-conformance.js";

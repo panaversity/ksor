@@ -9,6 +9,7 @@ import { checkFootnotes, linkTargets, resolveLink } from "./citations.js";
 import { splitFrontmatter } from "./frontmatter.js";
 import { checkHygiene } from "./hygiene.js";
 import { generateIndexes } from "./index-file.js";
+import { parseInstanceDocument } from "./instance.js";
 import {
   checkLedgerActors,
   checkLedgerAgainstTree,
@@ -54,24 +55,6 @@ const POLICY_PATH = ".ksor/governance.yaml";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const INSTANCE_PATH = "instance.md";
 const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
-const MOVED_INSTANCE_KEYS = ["audiences", "default_visibility", "ksor"] as const;
-/** The instance's closed key set (record spec §3), nested groups included. */
-const INSTANCE_KEYS: ReadonlyMap<string, readonly string[] | null> = new Map([
-  ["format", null],
-  ["name", null],
-  ["title", null],
-  ["description", null],
-  ["toolchain", ["requires", "scaffolded"]],
-  ["site", ["url", "governance"]],
-  ["database", ["dsn_env", "tenant_id"]],
-  ["embedding", ["provider", "model", "dim"]],
-  ["retrieval", ["vector_floor", "keyword_floor"]],
-  ["budgets", ["maximum_response_characters"]],
-  ["mcp_url", null],
-  ["version", null],
-]);
-const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
-
 /** What a link may resolve to besides a concept: companions, assets, directories, indexes, the root. */
 interface LinkTargets {
   readonly concepts: ReadonlyMap<string, Concept>;
@@ -245,7 +228,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   };
 }
 
-/** Returns the instance title for the root index; refuses a pre-profile instance. */
+/** Returns the instance title for the root index; refuses a pre-profile instance (one reader: `record/instance.ts`). */
 function checkInstance(text: string | null, refusals: Refusal[]): string {
   if (text === null) {
     refusals.push({
@@ -256,88 +239,12 @@ function checkInstance(text: string | null, refusals: Refusal[]): string {
     });
     return "Index";
   }
-  const split = splitFrontmatter(text, INSTANCE_PATH);
-  if (!split.ok) {
-    refusals.push(split.refusal);
+  const parsed = parseInstanceDocument(text, INSTANCE_PATH);
+  if (!parsed.ok) {
+    refusals.push(...parsed.refusals);
     return "Index";
   }
-  const fm = split.frontmatter ?? {};
-  const moved = MOVED_INSTANCE_KEYS.filter((k) => k in fm);
-  if (fm["format"] !== 2 || moved.length > 0) {
-    refusals.push({
-      slug: "ksor-instance-format",
-      path: INSTANCE_PATH,
-      why:
-        moved.length > 0
-          ? `\`${moved.join("`, `")}\` no longer live on the instance — audiences and authority live in \`.ksor/governance.yaml\``
-          : `\`format: ${String(fm["format"])}\` is not the profile's instance (format 2)`,
-      fix: "run `ksor migrate --write`, which rewrites the instance and moves the audience model into the policy",
-    });
-    const title = fm["title"] ?? fm["name"];
-    return typeof title === "string" && title !== "" ? title : "Index";
-  }
-  const refuse = (why: string, fix: string): void => {
-    refusals.push({ slug: "ksor-instance-format", path: INSTANCE_PATH, why, fix });
-  };
-  // The key set is closed at every level: an ignored key is a setting the
-  // owner believes is in effect (a misspelled group was dropped silently, 2026-08-20).
-  for (const [key, value] of Object.entries(fm)) {
-    if (!INSTANCE_KEYS.has(key)) {
-      refuse(
-        `unknown top-level key \`${key}\` — the instance key set is closed so a key never means two things, and a misspelled key must never be silently ignored`,
-        `remove \`${key}:\` (allowed: ${[...INSTANCE_KEYS.keys()].join(", ")}); the record's own prose belongs in the body`,
-      );
-      continue;
-    }
-    const nested = INSTANCE_KEYS.get(key) ?? null;
-    if (nested === null) continue;
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      refuse(
-        `\`${key}:\` is not a block mapping — a group written inline or as a scalar is not read as a group, so every setting inside it is dropped`,
-        `write it as an indented block:\n      ${key}:\n        <key>: <value>`,
-      );
-      continue;
-    }
-    for (const sub of Object.keys(value)) {
-      if (!nested.includes(sub)) {
-        refuse(
-          `unknown key under \`${key}\`: \`${sub}\``,
-          `remove \`${sub}:\` (allowed under ${key}: ${nested.join(", ")})`,
-        );
-      }
-    }
-    if (key === "site") {
-      const governance = (value as Record<string, unknown>)["governance"];
-      if (governance !== undefined && typeof governance !== "boolean") {
-        refuse(
-          `\`site.governance\` is ${JSON.stringify(governance)} — it must be true or false; it decides whether pages show the governance each document declares, and a value nobody can read is a setting the owner believes is in effect`,
-          "write `governance: false` to keep pages plain, or remove the key (the default shows them)",
-        );
-      }
-    }
-  }
-  const name = fm["name"];
-  if (typeof name !== "string" || name === "") {
-    refuse(
-      "`name` is required — the machine identity citations and llms.txt use (the one sanctioned identity key)",
-      "add `name: <this-record>` (ascii lowercase letters, digits and hyphens)",
-    );
-  } else if (!INSTANCE_NAME.test(name)) {
-    refuse(
-      `\`name: ${name}\` does not match ${INSTANCE_NAME.source} — the name is every surface's identity, and the grammar that binds it at init binds it forever`,
-      "use ascii lowercase letters, digits and hyphens",
-    );
-  }
-  for (const key of ["title", "description"] as const) {
-    if (typeof fm[key] !== "string" || fm[key] === "") {
-      refuse(
-        `\`${key}\` is required — ${key === "title" ? "the display title every page leads with and the root index's heading" : "one sentence that seeds llms.txt and server.json"}`,
-        `add \`${key}:\` to the frontmatter`,
-      );
-    }
-  }
-  const title = fm["title"];
-  return typeof title === "string" && title !== "" ? title : "Index";
+  return parsed.instance.title;
 }
 
 function checkLinks(

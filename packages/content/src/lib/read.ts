@@ -15,7 +15,7 @@
 
 import type pg from "pg";
 
-import { AUDIENCE_ALLOWED, audienceAllowed } from "./audience.js";
+import { admitted, ADMITTED, ADMITTED_CTE, admittedCte } from "./admit.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
@@ -54,10 +54,23 @@ live AS (
 // when a row says so — the shared `denied` set from takedown.js, bound on every
 // resolution + outline arm (search.ts and calibrate/run.ts bind the same seam).
 
+/**
+ * Admission (`lib/admit.ts`) decided on the LIVE generation, not the pinned
+ * one — the same reasoning as the `now` join above and for the same three
+ * guarantees now instead of one: a pin exists so a citation keeps resolving to
+ * the same bytes, never so a document that has since been restricted,
+ * deprecated, expired or de-verified goes on reading in full for the token's
+ * life. Outline judges on the generation it walks, which is the generation its
+ * rows describe.
+ */
+const ADMITTED_LIVE_CTE = admittedCte("admitted_live", "live");
+const ADMITTED_LIVE = admitted("now", "admitted_live");
+
 /** Candidates by LEAF slug ($4), each with its full root path (for suffix disambiguation). */
 export const NODE_BY_SLUG_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
+${ADMITTED_LIVE_CTE},
 -- The walk exists to BUILD PATHS, so it does not gate by audience; the
 -- RESOLVED node does, below. Gating every ancestor made an internal parent
 -- prune its public children, so a document that search had just returned --
@@ -87,7 +100,7 @@ JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
 JOIN live ON TRUE
 JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
                       AND now.stable_id = self.stable_id
-WHERE n.slug = $4 AND ${DENY} AND ${audienceAllowed("now")}
+WHERE n.slug = $4 AND ${DENY} AND ${ADMITTED_LIVE}
 ORDER BY n.path`;
 
 export const ALIAS_SQL: string = `
@@ -103,14 +116,14 @@ WHERE a.tenant_id = $1 AND a.alias_slug = $4`;
  * resolution as well).
  */
 export const NODE_BY_STABLE_ID_SQL: string = `
-WITH RECURSIVE ${GEN}, ${DENIED_CTE}
+WITH RECURSIVE ${GEN}, ${DENIED_CTE}, ${ADMITTED_LIVE_CTE}
 SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
 FROM content_nodes n JOIN g ON n.generation = g.gen
 JOIN live ON TRUE
 JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
                       AND now.stable_id = n.stable_id
 WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}
-  AND ${audienceAllowed("now")}`;
+  AND ${ADMITTED_LIVE}`;
 
 export const DOCUMENT_CHUNKS_SQL: string = `
 WITH ${GEN}
@@ -158,6 +171,7 @@ SELECT path, climbed FROM up WHERE parent_id IS NULL ORDER BY path LIMIT 1`;
 export const OUTLINE_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
+${ADMITTED_CTE},
 walk AS (
     SELECT n.node_id, n.parent_id, n.slug, n.kind, n.title, n.position, n.stable_id,
            n.generation, n.permalink, 0 AS depth, ARRAY[n.position] AS sort_key,
@@ -202,7 +216,7 @@ SELECT w.slug, w.kind, w.title, w.heading_path,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'
-           AND ${audienceAllowed("ch")}
+           AND ${admitted("ch")}
            AND ch.node_id NOT IN (SELECT node_id FROM denied)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
@@ -217,7 +231,7 @@ JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
 -- computed next_offset from the post-strip count, so every later page started
 -- one row early and repeated its predecessor's last row (round-9 review of
 -- PR 43).
-WHERE ${DENY} AND ${AUDIENCE_ALLOWED} AND ($4::uuid IS NULL OR w.depth > 0)
+WHERE ${DENY} AND ${ADMITTED} AND ($4::uuid IS NULL OR w.depth > 0)
 ORDER BY w.sort_key
 LIMIT $6 OFFSET $7`;
 

@@ -26,7 +26,9 @@ import {
   checkEmbeddingSpace,
   contentPool,
   contentPoolMin,
-  visibleTiers,
+  parseViewer,
+  servingPolicy,
+  validateViewer,
   embedQueryVlit,
   EmbeddingSpaceMismatch,
   keyRingFromEnv,
@@ -230,12 +232,13 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // Trimmed, as the site trims it: a mounted secret with a trailing newline
   // otherwise refuses at boot naming a tier that looks identical to a declared
   // one (round-2 review of #43).
-  const audience = (process.env["KSOR_AUDIENCE"] ?? "").trim() || null;
-  visibleTiers(
-    { audiences: instance.audiences, defaultVisibility: instance.defaultVisibility },
-    audience,
-  );
-  if (audience !== null) console.error(bootLine("audience", audience));
+  // The viewer is a LIST (record spec §2.4), validated against the registry the
+  // ACTIVE generation was ingested with — the policy lives on the run row, not
+  // in a file the container carries. A record with no generation yet has no
+  // registry: only `[public]` can be served, which is what `[]` validates.
+  const policy = await servingPolicy(pool, instance);
+  const viewer = validateViewer(policy?.registry ?? [], parseViewer(process.env["KSOR_AUDIENCE"]));
+  console.error(bootLine("audience", viewer.join(",")));
 
   // Prewarm is OPT-IN (KSOR_CONTENT_POOL_MIN, default 0). `min` alone cannot
   // do this — pg-pool never opens connections eagerly — so the dial is honoured
@@ -259,11 +262,11 @@ export async function compose(instancePath: string, version: string): Promise<Co
     actor: currentActor,
     // Which half of the record this door serves. The SAME variable the site's
     // per-audience build reads, so one record cannot mean two things across the
-    // two surfaces. Unset = the least-privileged tier: a door that cannot
-    // establish who is asking must not hand out the restricted half (before
-    // schema 2.2 it handed out ALL of it, because ingest dropped `visibility:`
-    // and the door had nothing to filter on — review 2026-08-20).
-    audience,
+    // two surfaces. Unset = `[public]`: a door that cannot establish who is
+    // asking must not hand out the restricted half (before schema 2.2 it handed
+    // out ALL of it, because ingest dropped `visibility:` and the door had
+    // nothing to filter on — review 2026-08-20).
+    viewer,
   };
   // Resolved at boot, before the door opens: a bad gateway file must refuse
   // loudly rather than serve a surface nobody asked for.

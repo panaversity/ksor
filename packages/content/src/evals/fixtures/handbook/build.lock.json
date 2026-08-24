@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "build_id": "sha256:fixture-handbook",
+  "as_of": "2026-08-25T12:00:00Z",
+  "documents": [
+    {
+      "path": "expense-limits.md",
+      "sha256": "de9ec0a81e2ad193ec715485f6076708ccafe0814e939ef12effebcf5828429d"
+    },
+    {
+      "path": "incidents.md",
+      "sha256": "f2a9ed5151bcb872ff62da97158365b7ab655359e6c86b785ef4396720132806"
+    },
+    {
+      "path": "notice-periods.md",
+      "sha256": "4d3206927740da4f9b4d8289a650850f2f1ee69cf3f67c392f92f53120d55d66"
+    },
+    {
+      "path": "overview.md",
+      "sha256": "9b87916fbcf256d7ccaab596d7e3ad636a869426b930b537c19790af8e4edf08"
+    },
+    {
+      "path": "probation.md",
+      "sha256": "52ecf02c65e0004a3e8f118a954eefe7e7c134f674a3e8717e611b46c12d8b8b"
+    },
+    {
+      "path": "travel.md",
+      "sha256": "8dea9fc1dd9a560241b422b07227d28ea0357eb07ab8e8c580d2ad6a313e3cb8"
+    }
+  ]
+}

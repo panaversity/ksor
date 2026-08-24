@@ -43,7 +43,14 @@ that REFUSES every serve (search and read alike) until a number is pasted —
 a corpus that intends to gate must not serve ungated or on a guess. Floors
 are calibrated per corpus per embedding space by the converted calibrate
 method, human-ratified into instance.md, measurement and door recorded
-beside the number. **The config layer fails closed on the same principle
+beside the number. A floor is a threshold inside ONE retrieval predicate, so
+`ksor calibrate` also writes `retrieval.floor_digest:` — the digest of the
+predicate it measured through. A declared number whose digest is not the
+serving predicate's, ABSENT included, enters the same
+declared-but-uncalibrated refusal, and `gate` on the wire reads
+`uncalibrated` rather than `off`: a number that no longer describes the set
+it gates is not a rung on the ladder, and `off` would tell an agent this
+record cannot abstain. **The config layer fails closed on the same principle
 as the gate**: unknown top-level keys are refused, never dropped, so a
 misspelled `retreival:` cannot silently disable the gate.
 
@@ -125,7 +132,18 @@ not behavior), behavioural evals as a CI gate, and the `.mcp.json` scaffold
 rung.
 The "declared-but-uncalibrated refuses" invariant is now REPRESENTABLE and
 enforced (`retrieval.vector_floor: uncalibrated` refuses every serve —
-resolved 2026-08-19), so the grammar is no longer a two-state gap.
+resolved 2026-08-19), so the grammar is no longer a two-state gap. It also
+covers a floor that WAS measured but not through this predicate
+(`retrieval.floor_digest`, 2026-08-25).
+
+**What an arm admits** (record spec §2.4/§2.5, decision 26): the audience
+overlap, the lifecycle window and the trust floor compose into one admitted
+set bound beside the takedown denial in search's two arms, read, outline and
+the calibration sampler. A section declares no governance of its own and is
+admitted iff a descendant is visible, by a recursive `parent_id` walk. The
+caller's trust floor is `ServiceContext.minTrustTier` (0 unverified, 1
+machine-confirmed, 2 human-reviewed; absent = 0); exposing it as a
+`min_trust_tier` tool parameter is the door's work and is not wired yet.
 
 ## Out of scope
 

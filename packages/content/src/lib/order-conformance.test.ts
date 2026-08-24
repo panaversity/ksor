@@ -1,6 +1,6 @@
 /**
  * Reading order is ONE rule (decision 18). This file asserts the kernel half:
- * the rule itself against every row of the decision table, and then the tree
+ * the rule itself against every row of the decision table, and then the record
  * adapter — the code that decides what the MCP door's `outline` reports —
  * against the same rows, so a surface that drifts fails on the ROW it broke.
  *
@@ -10,32 +10,43 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildManifestFromTree, type TreeDir } from "../ingest/adapters/plain-tree.js";
+import { buildManifestFromRecord } from "../ingest/adapters/plain-tree.js";
+import { checkRecord, type RecordFiles } from "../record/check.js";
 import { ORDER_CASES, type OrderCase } from "./order-conformance.js";
 import { compareSiblings, orderValue, tieKey, UNORDERED } from "./order-rule.js";
 
-/** One entry's frontmatter, written the way an author writes it. */
+const POLICY = `version: "0.1"\napproval_authorities:\n  - actors: [human:cfo]\ntakedown_authorities:\n  actors: [human:ciso]\n`;
+const INSTANCE = `---\nformat: 2\nname: acme\ntitle: Acme\ndescription: D.\n---\n`;
+
+/**
+ * One entry's frontmatter, written the way an author writes it. A STRING order
+ * is emitted quoted: `order: 2` is a YAML number, so writing a string
+ * unquoted would silently turn the "a numeric string is an order" row into the
+ * number row and assert nothing about strings at all.
+ */
 function docText(order: unknown): string {
-  const declared = order === undefined ? "" : `\norder: ${String(order)}`;
-  // Bodies must be long enough to be content rather than navigation, but the
-  // order rule never reads them — any prose does.
-  return `---\ntitle: T${declared}\nstatus: draft\n---\n\nBody text for an ordering fixture.\n`;
+  const declared =
+    order === undefined
+      ? ""
+      : `\norder: ${typeof order === "string" ? JSON.stringify(order) : String(order)}`;
+  return `---\ntype: Document\ntitle: T\ndescription: D.\nstatus: draft${declared}\nksor:\n  audience: [public]\n---\n\nBody text for an ordering fixture.\n`;
 }
 
-function treeFor(kase: OrderCase): TreeDir {
-  return {
-    kind: "dir",
-    name: "knowledge",
-    entries: kase.entries.map((e) =>
-      e.file.endsWith(".md")
-        ? ({ kind: "file", name: e.file, text: docText(e.order) } as const)
-        : ({
-            kind: "dir",
-            name: e.file,
-            entries: [{ kind: "file", name: "index.md", text: docText(e.order) }],
-          } as const),
-    ),
-  };
+/** A directory entry is a folder holding ONE concept that carries the order; a document entry is itself. */
+function recordFor(kase: OrderCase): RecordFiles {
+  const files = new Map<string, string>([
+    ["instance.md", INSTANCE],
+    [".ksor/governance.yaml", POLICY],
+  ]);
+  const dirs: string[] = [];
+  for (const e of kase.entries) {
+    if (e.file.endsWith(".md")) files.set(`knowledge/${e.file}`, docText(e.order));
+    else {
+      dirs.push(`knowledge/${e.file}`);
+      files.set(`knowledge/${e.file}/only.md`, docText(e.order));
+    }
+  }
+  return { files, dirs };
 }
 
 describe("the reading-order rule, row by row", () => {
@@ -48,19 +59,55 @@ describe("the reading-order rule, row by row", () => {
   });
 });
 
+/** The profile declares `order` a number: a non-numeric one is REFUSED upstream, never sorted. */
+const numeric = (kase: OrderCase): boolean =>
+  kase.entries.every((e) => e.order === undefined || typeof e.order === "number");
+
+/**
+ * A path is an identity, so the profile refuses one that is not portable —
+ * uppercase collides on a case-insensitive filesystem. A case where the tie
+ * key is the only thing separating two names therefore cannot occur in a
+ * conformant record; the RULE still binds both implementations, so the case
+ * stays in the table and is asserted through the adapter below.
+ */
+const portable = (kase: OrderCase): boolean =>
+  kase.entries.every((e) => /^[a-z0-9][a-z0-9.-]*$/.test(e.file));
+
 describe("the MCP door's outline follows that rule — the adapter's own sort", () => {
-  it.each(ORDER_CASES)("$name", (kase) => {
-    const { manifest } = buildManifestFromTree(treeFor(kase), {
+  it("a non-numeric order never reaches the adapter: the checker refuses it by name", () => {
+    for (const kase of ORDER_CASES.filter((k) => !numeric(k))) {
+      const slugs = checkRecord(recordFor(kase), { mode: "build" }).refusals.map((r) => r.slug);
+      expect(slugs, kase.name).toContain("ksor-frontmatter-invalid");
+    }
+  });
+
+  it("an unportable name never reaches a record: the checker refuses it by name", () => {
+    const cases = ORDER_CASES.filter((k) => numeric(k) && !portable(k));
+    expect(cases.length, "the table lost its unportable case").toBeGreaterThan(0);
+    for (const kase of cases) {
+      const slugs = checkRecord(recordFor(kase), { mode: "build" }).refusals.map((r) => r.slug);
+      expect(slugs, kase.name).toContain("ksor-name-unportable");
+    }
+  });
+
+  it.each(ORDER_CASES.filter(numeric))("$name", (kase) => {
+    const record = recordFor(kase);
+    const check = checkRecord(record, { mode: "build" });
+    if (portable(kase)) {
+      expect(check.refusals, "the fixture must pass the checker").toEqual([]);
+    }
+    const { manifest } = buildManifestFromRecord(check, record.dirs, {
       corpusId: "c",
       sourceCommit: "0".repeat(40),
-      onSkip: () => {},
     });
-    // One node per sibling: a document is `knowledge/<stem>`, a directory is
-    // `knowledge/<name>/index` — both carry the sibling rank in `position`.
+    // One root node per sibling: a document is `knowledge/<stem>`, a directory
+    // is `knowledge/<name>#section` — both carry the sibling rank in `position`.
     const stems = kase.entries.map((e) => e.file.replace(/\.mdx?$/, ""));
     const nodeFor = (stem: string): { position: number } => {
       const node = manifest.nodes.find(
-        (n) => n.stable_id === `knowledge/${stem}` || n.stable_id === `knowledge/${stem}/index`,
+        (n) =>
+          n.parent === null &&
+          (n.stable_id === `knowledge/${stem}` || n.stable_id === `knowledge/${stem}#section`),
       );
       if (node === undefined) {
         throw new Error(
@@ -71,11 +118,7 @@ describe("the MCP door's outline follows that rule — the adapter's own sort", 
       }
       return node;
     };
-    const seen = [...stems]
-      .sort((a, b) => nodeFor(a).position - nodeFor(b).position)
-      .map((stem) => stem);
-    // Positions must be a permutation of 1..n — a tie would make the sort above
-    // depend on input order rather than on the rule.
+    const seen = [...stems].sort((a, b) => nodeFor(a).position - nodeFor(b).position);
     const positions = stems.map((s) => nodeFor(s).position).sort((a, b) => a - b);
     expect(positions, "sibling positions must be distinct and dense").toEqual(
       stems.map((_, i) => i + 1),
