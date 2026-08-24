@@ -147,8 +147,11 @@ describe("the emitted check.mjs judges the conformance fixture exactly as the ke
     const elsewhere: Record<string, string> = {
       // A symlink cannot be written from a text map; the torture suite makes one.
       "ksor-symlink": "checker-torture.integration.test.ts",
-      // `ksor migrate` only; the record checker never raises it.
-      "ksor-migrate-underivable": "the migrate verb",
+      // `ksor migrate` only; the record checker never raises it. Reached in
+      // migrate.integration.test.ts ("what it refuses to invent") and in
+      // migrate/rules.test.ts, which cover a missing title, a missing
+      // description, an underivable `generated.at` and an unattributed denial.
+      "ksor-migrate-underivable": "migrate.integration.test.ts",
     };
     const uncovered = REFUSAL_SLUGS.filter((s) => !covered.has(s) && elsewhere[s] === undefined);
     expect(uncovered, `slugs with no fixture record: ${uncovered.join(", ")}`).toEqual([]);

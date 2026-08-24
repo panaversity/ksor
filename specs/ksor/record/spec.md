@@ -151,10 +151,12 @@ a duplicate key, a second document marker or a non-mapping is
 frontmatter (then `ksor-missing-key`).
 
 **2.7 Unknown keys** are preserved and never refused (OKF §11) — except
-`id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`
-and `sor_id` at the top level of a concept, refused by name with the
-migration hint, because each is a pre-profile key whose silent survival would
-mean silent loss of governance.
+`id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`,
+`superseded_by` and `sor_id` at the top level of a concept, refused by name
+with the migration hint, because each is a pre-profile key whose silent
+survival would mean silent loss of governance. `superseded_by` is on that list
+for the same reason as the rest: the profile reads `ksor.superseded_by`, so a
+top-level one announces a successor no surface shows.
 
 ## 3 · The instance document
 

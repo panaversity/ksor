@@ -9,8 +9,6 @@
  * asks for `--attribute`, because a governance act may never name an actor the
  * tool guessed (decision 21).
  */
-import { createHash } from "node:crypto";
-
 import { contentPool, parseInstance, runAuditRead, runRead } from "@panaversity/ksor-content";
 
 export interface DbDenial {
@@ -66,15 +64,4 @@ export async function readDbDenials(
   } finally {
     await pool.end();
   }
-}
-
-/**
- * A ledger id is `<at>-<6>` (record spec §5). The verb's six characters are
- * random; migrate's are a digest of the row it is transcribing, so the same
- * database produces the same ledger twice and the diff an owner reviews is
- * stable between runs.
- */
-export function ledgerIdFor(stableId: string, at: string): string {
-  const digest = createHash("sha256").update(`${stableId}\n${at}`).digest("hex").slice(0, 6);
-  return `${at}-${digest}`;
 }

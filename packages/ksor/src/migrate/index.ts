@@ -32,7 +32,8 @@ import {
 } from "@panaversity/ksor-content/record";
 
 import { exitCodes } from "../index.js";
-import { readDbDenials, ledgerIdFor, type DbDenial } from "./denials.js";
+import { readDbDenials, type DbDenial } from "./denials.js";
+import { renderLedger, toLedgerEntries, type LedgerDenial } from "./ledger-out.js";
 import { renderDiff, type FileChange } from "./diff.js";
 import {
   migrateConcept,
@@ -333,15 +334,6 @@ function generatedAtOf(root: string, rel: string, override: string | null): stri
   return at === "" ? null : at;
 }
 
-interface LedgerDenial {
-  readonly id: string;
-  readonly stableId: string;
-  readonly scope: "node" | "subtree";
-  readonly by: string;
-  readonly at: string;
-  readonly reason: string;
-}
-
 /** Reads the database's denylist, or refuses; an empty list when the record declares none. */
 async function collectDenials(
   root: string,
@@ -377,63 +369,9 @@ async function collectDenials(
     return [];
   }
   io.err(`read ${rows.length} denylist row(s) from ${dsnEnv}\n`);
-  const out: LedgerDenial[] = [];
-  for (const row of rows) {
-    const attributed = attributions.get(row.stableId);
-    const by = attributed ?? row.actor;
-    if (by === null || by === undefined) {
-      refusals.push({
-        slug: "ksor-migrate-underivable",
-        path: ".ksor/takedowns.yaml",
-        why: `the denial of \`${row.stableId}\` has no \`takedown_applied\` row naming who imposed it, and a ledger entry may never name an actor the tool guessed`,
-        fix: `pass --attribute ${row.stableId}=human:<id> naming the person who denied it`,
-      });
-      continue;
-    }
-    // A denied `<dir>/index` or `<dir>/README` names a document that is about
-    // to stop existing; re-point it at what replaces it (§1.8).
-    const repointed = repoint(row.stableId, row.scope);
-    out.push({
-      id: ledgerIdFor(repointed, row.at),
-      stableId: repointed,
-      scope: row.scope,
-      by,
-      at: row.at,
-      reason:
-        (row.reason === "" ? "migrated from the denylist" : row.reason) +
-        (attributed === undefined ? "" : ` (actor asserted by --attribute during ksor migrate)`),
-    });
-  }
-  return out;
-}
-
-function repoint(stableId: string, scope: "node" | "subtree"): string {
-  const m = /^(.*)\/(index|README)$/.exec(stableId);
-  if (m === null) return stableId;
-  return scope === "subtree" ? `${m[1]}#section` : `${m[1]}/overview`;
-}
-
-function renderLedger(denials: readonly LedgerDenial[], conceptIds: ReadonlySet<string>): string {
-  const lines = [
-    "# The takedown ledger — append-only, written by `ksor takedown` (record spec §5).",
-    "# These entries were transcribed from the database's denylist by `ksor migrate`.",
-  ];
-  for (const d of denials) {
-    const present =
-      d.scope === "subtree" || conceptIds.has(d.stableId.slice("knowledge/".length))
-        ? "present"
-        : "removed";
-    lines.push(
-      `- id: ${JSON.stringify(d.id)}`,
-      `  stable_id: ${JSON.stringify(d.stableId)}`,
-      `  scope: ${d.scope}`,
-      `  expected: ${present}`,
-      `  by: ${JSON.stringify(d.by)}`,
-      `  at: ${JSON.stringify(d.at)}`,
-      `  reason: ${JSON.stringify(d.reason)}`,
-    );
-  }
-  return `${lines.join("\n")}\n`;
+  const outcome = toLedgerEntries(rows, attributions);
+  refusals.push(...outcome.refusals);
+  return outcome.entries;
 }
 
 interface PolicyInput {

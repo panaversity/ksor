@@ -35,6 +35,11 @@ export const LEGACY_KEYS = [
   "owner",
   "effective",
   "superseded",
+  // The pre-profile supersession pointer. It is NOT harmless to preserve as an
+  // unknown key (§2.7): the profile reads `ksor.superseded_by`, so a top-level
+  // one announces a successor no surface shows and no reader follows — the
+  // silent loss of governance this list exists to prevent.
+  "superseded_by",
   "sor_id",
 ] as const;
 
