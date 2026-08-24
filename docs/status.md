@@ -2,7 +2,7 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-23.
+updated: 2026-08-25.
 
 ## Published package
 
@@ -32,6 +32,21 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### The record module, landed and unwired (unreleased, branch `okf-native-spec`)
+
+`packages/content/src/record/` holds the OKF-native record's foundation
+(`specs/ksor/record/spec.md`; decision 26): the YAML frontmatter splitter,
+the concept profile as a zod schema, the Governance Policy reader with KSP
+4.2.5 scope resolution, the takedown ledger reader with its four rules, the
+OKF §8 index generator with a golden, footnote and link reading, the overlap,
+widening and lifecycle rules with their decision tables, and `checkRecord`,
+which composes them over an in-memory tree. It is exported from the kernel
+package and **nothing in the CLI calls it yet**: `ksor build` still exits
+`2`, `ksor ingest` still runs the pre-profile adapter, the emitted `check.mjs`
+is still the scaffold's line scanner, and the SQL predicate and the site still
+enforce the RANKED audience model — the overlap tables sit beside the ranked
+one until the serving predicate and staging convert in the same release.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
