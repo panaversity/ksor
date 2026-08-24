@@ -141,7 +141,16 @@ and a request, which is disclosed (`LIFECYCLE_CASES` pins the row).
 | `stable`, past `stale_after`      | yes, badge "past its review date"                    | no               |
 | `deprecated`                      | yes, with its successor                              | no               |
 
-**2.6 Unknown keys** are preserved and never refused (OKF §11) — except
+**2.6 The fence.** Frontmatter is the YAML between a `---` first line and
+the next `---` line (trailing blanks tolerated on both, BOM and CR/CRLF
+normalised first); that closing line is found by a line walk, so a
+frontmatter may not contain a bare `---` line — not even inside a block
+scalar. One YAML document, plain data only: an unknown or non-plain `!!tag`,
+a duplicate key, a second document marker or a non-mapping is
+`ksor-frontmatter-invalid`. No fence at all is a document with no
+frontmatter (then `ksor-missing-key`).
+
+**2.7 Unknown keys** are preserved and never refused (OKF §11) — except
 `id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`
 and `sor_id` at the top level of a concept, refused by name with the
 migration hint, because each is a pre-profile key whose silent survival would
@@ -245,7 +254,7 @@ when the path **reappears** (`ksor-takedown-readded`).
 
 ## 6 · The checker
 
-One rule set, in `packages/content/src/check/`, run by `ksor build` and
+One rule set, in `packages/content/src/record/`, run by `ksor build` and
 `ksor ingest`, and **built** — a second tsdown entry with
 `noExternal: ['yaml']` and a banner carrying the parser's ISC notice — into
 the emitted `check.mjs` in both skill copies at package-build time, gitignored
@@ -253,7 +262,9 @@ in the templates like `schema/`, with a drift test running the §7 fixture
 through the kernel rules and the emitted file. `pnpm check` is read-only and
 refuses a stale index; `ksor build` generates the indexes in memory, checks,
 and writes only on success. Refusals, each with a stable slug, why, and the
-fix: `ksor-missing-key` (`type`/`title`/`description`/`status`),
+fix: `ksor-frontmatter-invalid` (§2.6 — no closing fence, unparsable YAML,
+duplicate key, non-plain tag, second document, non-mapping),
+`ksor-missing-key` (`type`/`title`/`description`/`status`),
 `ksor-status-unknown`, `ksor-audience-missing`, `ksor-audience-unregistered`,
 `ksor-stable-ungenerated`, `ksor-stable-unapproved`,
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,

@@ -86,3 +86,64 @@ describe("splitFrontmatter", () => {
     expect(r).toEqual({ ok: true, frontmatter: null, body: "\n---\ntitle: A\n---\n" });
   });
 });
+
+describe("splitFrontmatter — hostile inputs (from review)", () => {
+  it("a U+2028 inside a scalar is not a line break: the fence scanner must agree with YAML 1.2", () => {
+    // JS `m`-flag `^`/`$` treat U+2028 as a line terminator; YAML 1.2 does not. A regex
+    // scanner cut the frontmatter mid-line and published the real fence as body.
+    const r = splitFrontmatter("---\ntitle: 'a ---  rest'\n---\nbody", "k");
+    expect(r).toEqual({ ok: true, frontmatter: { title: "a ---  rest" }, body: "body" });
+  });
+
+  it("the opening fence tolerates trailing whitespace exactly as the closing one does", () => {
+    const r = splitFrontmatter("---  \nksor:\n  audience: [internal]\n---\nbody", "k");
+    expect(r.ok && r.frontmatter).toEqual({ ksor: { audience: ["internal"] } });
+  });
+
+  it("a lone CR is a checkout artefact too, normalised like CRLF", () => {
+    const r = splitFrontmatter("---\r\ntitle: a\r---\rbody", "k");
+    expect(r).toEqual({ ok: true, frontmatter: { title: "a" }, body: "body" });
+  });
+
+  it("a `---` line inside a block scalar closes the fence — the profile forbids one there (spec §2)", () => {
+    // A line scan is the contract: the first fence line ends the block, whatever YAML thinks.
+    const r = splitFrontmatter("---\ntitle: |\n  a\n---\n  b\n---\nbody", "k");
+    expect(r).toEqual({ ok: true, frontmatter: { title: "a\n" }, body: "  b\n---\nbody" });
+  });
+
+  it("an alias bomb is refused without the parser's class name in the sentence", () => {
+    const bomb = ["a: &a [x,x,x,x,x,x,x,x,x,x]"];
+    for (let i = 1; i < 8; i++) {
+      const prev = String.fromCharCode(96 + i);
+      const next = String.fromCharCode(97 + i);
+      bomb.push(`${next}: &${next} [${Array(10).fill(`*${prev}`).join(",")}]`);
+    }
+    const r = splitFrontmatter(`---\n${bomb.join("\n")}\n---\n`, "k");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusal.why).not.toMatch(/Error:/);
+  });
+
+  it("a second document marker is refused in the author's words, not the library's", () => {
+    const r = splitFrontmatter("---\ntitle: a\n...\ntitle: b\n---\n", "k");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusal.why).not.toMatch(/parseAllDocuments/);
+    expect(r.refusal.why).toMatch(/second document/);
+  });
+
+  it("a tagged value that is not plain data (`!!binary`) is refused, with no process warning", () => {
+    const r = splitFrontmatter("---\ntitle: !!binary aGk=\n---\n", "k");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusal.slug).toBe("ksor-frontmatter-invalid");
+    expect(r.refusal.why).toMatch(/tag/);
+  });
+
+  it("an unknown tag is a refusal, not a warning on stderr", () => {
+    const r = splitFrontmatter("---\ntitle: !!js/function 'x'\n---\n", "k");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusal.why).toMatch(/tag/);
+  });
+});
