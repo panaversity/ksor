@@ -5,58 +5,100 @@
 // test the shipped artifact, not the CLI that copies it).
 //
 // The module is deliberately import-free so it can be unit-tested here without
-// a site install; everything that needs the Fumadocs loader (resolving a
-// successor pointer to its route) lives outside it.
-// Contract: specs/ksor/site-governance/spec.md
+// a site install; everything that needs the Fumadocs loader lives outside it.
+// Vocabulary: the profile's (record spec §2) — `draft | stable | deprecated`,
+// `ksor.owner`, `sources`, `ksor.superseded_by` as a concept id.
 import { describe, expect, it } from "vitest";
 
 import {
   agentFrontmatter,
-  agentIndexSuffix,
-  caveatStatus,
+  badgeLabel,
+  badgeTone,
+  conceptIdOfPath,
+  dayOf,
   governanceVisible,
   isCalendarDate,
   predecessorsOf,
   readGovernance,
   resolveSuccessorUrl,
   sourceHref,
+  stampLines,
+  trustTierOf,
   type DocumentGovernance,
+  type Stamps,
 } from "../templates/scaffold/system/site/lib/governance.js";
 
 const WHERE = "knowledge/policy.md";
 
+const STAMPED: Stamps = {
+  build_id: "sha256:abc",
+  source_commit: "0123abc",
+  dirty: false,
+  ksor_version: "0.1.0",
+  unstamped: false,
+};
+const DEV: Stamps = {
+  build_id: null,
+  source_commit: null,
+  dirty: false,
+  ksor_version: null,
+  unstamped: true,
+};
+
 describe("readGovernance", () => {
-  it("projects every declared key", () => {
+  it("projects every declared key of the profile", () => {
     expect(
       readGovernance(
         {
+          type: "Policy",
           title: "Refund policy",
-          status: "approved",
-          owner: "Finance",
-          provenance: ["Board minutes 2026-03-11", "Terms of service v4"],
-          effective: "2026-04-01",
-          superseded_by: "./refund-policy-v5.md",
+          status: "stable",
+          sources: [
+            { id: "fin-2024", resource: "https://example.com/fin.pdf", title: "Finance handbook" },
+            { resource: "scope: board minutes 2026-03-11" },
+          ],
+          verified: [{ by: "human:kim", at: "2026-08-21T14:00:00Z" }],
+          stale_after: "2027-08-21T00:00:00Z",
+          ksor: {
+            audience: ["public"],
+            owner: "team:finance",
+            approval: { by: "human:cfo", at: "2026-08-22T10:00:00Z" },
+            effective_from: "2026-09-01T00:00:00Z",
+            superseded_by: "policies/refund-policy-v5",
+          },
         },
         WHERE,
       ),
     ).toEqual({
-      status: "approved",
-      owner: "Finance",
-      provenance: ["Board minutes 2026-03-11", "Terms of service v4"],
-      effective: "2026-04-01",
-      supersededBy: "./refund-policy-v5.md",
+      status: "stable",
+      type: "Policy",
+      owner: "team:finance",
+      sources: [
+        { id: "fin-2024", resource: "https://example.com/fin.pdf", title: "Finance handbook" },
+        { id: null, resource: "scope: board minutes 2026-03-11", title: null },
+      ],
+      effectiveFrom: "2026-09-01T00:00:00Z",
+      staleAfter: "2027-08-21T00:00:00Z",
+      supersededBy: "policies/refund-policy-v5",
+      approval: { by: "human:cfo", at: "2026-08-22T10:00:00Z" },
+      deprecated: null,
+      verified: [{ by: "human:kim", at: "2026-08-21T14:00:00Z" }],
     });
   });
 
   it("infers nothing: an undeclared key yields null, never a placeholder", () => {
     const governance = readGovernance({ title: "Note", status: "draft" }, WHERE);
-
     expect(governance).toEqual({
       status: "draft",
+      type: null,
       owner: null,
-      provenance: [],
-      effective: null,
+      sources: [],
+      effectiveFrom: null,
+      staleAfter: null,
       supersededBy: null,
+      approval: null,
+      deprecated: null,
+      verified: [],
     });
     // The negative promise, asserted as a value and not as an absence: an
     // invented governance value reads as governed, which is worse than a
@@ -64,159 +106,249 @@ describe("readGovernance", () => {
     expect(JSON.stringify(governance)).not.toMatch(/unknown|none|n\/a|tbd/i);
   });
 
-  it("treats blank and whitespace-only values as undeclared", () => {
+  it("treats blank and whitespace-only values as undeclared, and trims the rest", () => {
     expect(
       readGovernance(
-        { status: "draft", owner: "   ", effective: "", provenance: ["", "  "] },
+        {
+          status: " stable ",
+          ksor: { owner: "   ", effective_from: "" },
+          sources: [{ resource: " " }],
+        },
         WHERE,
       ),
-    ).toEqual({
-      status: "draft",
-      owner: null,
-      provenance: [],
-      effective: null,
-      supersededBy: null,
-    });
+    ).toMatchObject({ status: "stable", owner: null, effectiveFrom: null, sources: [] });
   });
 
-  it("trims declared values", () => {
-    expect(readGovernance({ status: " approved ", owner: " Finance " }, WHERE)).toMatchObject({
-      status: "approved",
-      owner: "Finance",
-    });
-  });
-
-  it("keeps a single provenance entry as one entry", () => {
-    // provenance is a LIST so a citation can point at exactly one source; one
-    // entry is still a list, never a bare string collapsed into prose.
+  it("accepts a bare verified mapping as a one-element list (OKF §5.2)", () => {
     expect(
-      readGovernance({ status: "draft", provenance: ["ISO 27001 §A.9"] }, WHERE),
-    ).toMatchObject({ provenance: ["ISO 27001 §A.9"] });
+      readGovernance(
+        { status: "stable", verified: { by: "process:nightly", at: "2026-08-21T00:00:00Z" } },
+        WHERE,
+      ),
+    ).toMatchObject({ verified: [{ by: "process:nightly", at: "2026-08-21T00:00:00Z" }] });
   });
 
-  it("survives a provenance the checker would have refused", () => {
-    // `pnpm check` refuses a scalar provenance, but a shell that crashes on
-    // one turns a checker finding into an unexplained build failure.
-    expect(readGovernance({ status: "draft", provenance: "Board minutes" }, WHERE)).toMatchObject({
-      provenance: [],
+  it("survives a sources list the checker would have refused", () => {
+    // A shell that crashes on a malformed key turns a checker finding into an
+    // unexplained build failure, hiding the message `pnpm check` prints.
+    expect(readGovernance({ status: "draft", sources: "Board minutes" }, WHERE)).toMatchObject({
+      sources: [],
+    });
+    expect(
+      readGovernance({ status: "draft", sources: [{ title: "no resource" }] }, WHERE),
+    ).toMatchObject({
+      sources: [],
     });
   });
 
-  it("renders a YAML date as a date, not as an object", () => {
-    // Unquoted `effective: 2026-04-01` parses to a Date; rendering it raw
-    // would print a locale- and timezone-dependent string into the record.
+  it("renders a YAML instant parsed as a Date as ISO, not as an object", () => {
+    // The collection's YAML parses an unquoted instant to a Date; rendering it
+    // raw would print a locale- and timezone-dependent string into the record.
     expect(
-      readGovernance({ status: "approved", effective: new Date("2026-04-01T00:00:00Z") }, WHERE),
-    ).toMatchObject({ effective: "2026-04-01" });
+      readGovernance(
+        { status: "stable", ksor: { effective_from: new Date("2026-09-01T00:00:00Z") } },
+        WHERE,
+      ),
+    ).toMatchObject({ effectiveFrom: "2026-09-01T00:00:00.000Z" });
   });
 
-  it("refuses a dangling supersession by name", () => {
-    // The checker already refuses this; the shell refuses it too, because the
-    // failure mode is serving a document that says it was replaced and cannot
-    // say by what.
-    expect(() => readGovernance({ status: "superseded" }, WHERE)).toThrowError(
-      /knowledge\/policy\.md.*superseded_by/s,
+  it("refuses an unattributed deprecation by name", () => {
+    // The checker refuses this; the shell refuses it too, because the failure
+    // mode is serving a document that says it was withdrawn by nobody.
+    expect(() => readGovernance({ status: "deprecated" }, WHERE)).toThrowError(
+      /knowledge\/policy\.md.*ksor\.deprecated/s,
     );
-  });
-
-  it("carries a successor pointer declared without a superseded status", () => {
-    expect(readGovernance({ status: "approved", superseded_by: "./v5.md" }, WHERE)).toMatchObject({
-      supersededBy: "./v5.md",
-    });
+    expect(
+      readGovernance(
+        {
+          status: "deprecated",
+          ksor: { deprecated: { by: "human:cfo", at: "2026-08-10T00:00:00Z" } },
+        },
+        WHERE,
+      ),
+    ).toMatchObject({ deprecated: { by: "human:cfo", at: "2026-08-10T00:00:00Z" } });
   });
 
   it("renders no status when the document declares none", () => {
-    // status is required and `pnpm check` enforces it; an absent one is a
-    // checker finding, not a reason to break an adopter's preview build.
     expect(readGovernance({ title: "Note" }, WHERE)).toMatchObject({ status: null });
   });
 });
 
-describe("resolveSuccessorUrl", () => {
-  // The record, as the loader reports it: source path (page.path) -> route.
+describe("trustTierOf — record spec §2.3", () => {
+  it("none → unverified; machine only → machine-confirmed; any human → human-reviewed", () => {
+    expect(trustTierOf([])).toBe("unverified");
+    expect(trustTierOf([{ by: "process:nightly", at: "x" }])).toBe("machine-confirmed");
+    expect(trustTierOf([{ by: "claude-code/1.0", at: "x" }])).toBe("machine-confirmed");
+    expect(
+      trustTierOf([
+        { by: "process:nightly", at: "x" },
+        { by: "human:kim", at: "x" },
+      ]),
+    ).toBe("human-reviewed");
+  });
+});
+
+describe("resolveSuccessorUrl — a concept id against this build's pages", () => {
   const PAGES = [
     { path: "refund-policy.md", url: "/docs/refund-policy" },
     { path: "refund-policy-v5.md", url: "/docs/refund-policy-v5" },
-    { path: "terms.md", url: "/docs/terms" },
-    { path: "legal.md", url: "/docs/legal" },
     { path: "legal/terms.md", url: "/docs/legal/terms" },
-    { path: "handbook/index.md", url: "/docs/handbook" },
-    { path: "handbook/terms.md", url: "/docs/handbook/terms" },
   ];
 
-  it("resolves a sibling pointer to the successor's route", () => {
-    expect(resolveSuccessorUrl("./refund-policy-v5.md", "refund-policy.md", PAGES)).toBe(
-      "/docs/refund-policy-v5",
-    );
-  });
-
-  it("resolves a pointer written without the ./ prefix", () => {
-    expect(resolveSuccessorUrl("refund-policy-v5.md", "refund-policy.md", PAGES)).toBe(
-      "/docs/refund-policy-v5",
-    );
-  });
-
-  it("walks up out of a folder", () => {
-    expect(resolveSuccessorUrl("../refund-policy-v5.md", "legal/terms.md", PAGES)).toBe(
-      "/docs/refund-policy-v5",
-    );
-  });
-
-  it("descends into a folder", () => {
-    expect(resolveSuccessorUrl("./legal/terms.md", "refund-policy.md", PAGES)).toBe(
-      "/docs/legal/terms",
-    );
-  });
-
-  it("maps a folder index to the folder's own route", () => {
-    expect(resolveSuccessorUrl("./handbook/index.md", "refund-policy.md", PAGES)).toBe(
-      "/docs/handbook",
-    );
-  });
-
-  // The pair that a route alone cannot tell apart, and the reason this
-  // resolves against the SOURCE PATH: /docs/legal and /docs/handbook look
-  // identical as routes, but `./terms.md` means a different document in each.
-  it("reads a sibling pointer from a FILE as a sibling, even when a same-named folder child exists", () => {
-    // knowledge/legal.md is a file, so ./terms.md is knowledge/terms.md —
-    // NOT knowledge/legal/terms.md, which also exists.
-    expect(resolveSuccessorUrl("./terms.md", "legal.md", PAGES)).toBe("/docs/terms");
-  });
-
-  it("reads a sibling pointer from a FOLDER INDEX as its folder's child", () => {
-    // knowledge/handbook/index.md is inside the folder, so ./terms.md is
-    // knowledge/handbook/terms.md.
-    expect(resolveSuccessorUrl("./terms.md", "handbook/index.md", PAGES)).toBe(
-      "/docs/handbook/terms",
-    );
+  it("resolves a bundle-relative id to the successor's route, `.md` optional", () => {
+    expect(resolveSuccessorUrl("refund-policy-v5", PAGES)).toBe("/docs/refund-policy-v5");
+    expect(resolveSuccessorUrl("refund-policy-v5.md", PAGES)).toBe("/docs/refund-policy-v5");
+    expect(resolveSuccessorUrl("legal/terms", PAGES)).toBe("/docs/legal/terms");
   });
 
   it("carries an anchor through", () => {
-    expect(resolveSuccessorUrl("./refund-policy-v5.md#scope", "refund-policy.md", PAGES)).toBe(
+    expect(resolveSuccessorUrl("refund-policy-v5#scope", PAGES)).toBe(
       "/docs/refund-policy-v5#scope",
     );
   });
 
-  it("yields null rather than a dead link when the document is not in this build", () => {
-    // `pnpm check` proves the target exists in the record, but a per-audience
+  it("yields null rather than a dead link when the successor is not in this build", () => {
+    // The checker proves the target exists in the record, but a per-viewer
     // build stages a SUBSET — the successor may legitimately be absent here.
-    expect(resolveSuccessorUrl("./nowhere.md", "refund-policy.md", PAGES)).toBeNull();
+    expect(resolveSuccessorUrl("nowhere", PAGES)).toBeNull();
   });
 
-  it("yields null for a pointer that leaves the record", () => {
-    expect(resolveSuccessorUrl("https://example.com/v5.md", "refund-policy.md", PAGES)).toBeNull();
-    expect(resolveSuccessorUrl("/terms.md", "refund-policy.md", PAGES)).toBeNull();
+  it("yields null for a pointer that is not a concept id", () => {
+    expect(resolveSuccessorUrl("https://example.com/v5.md", PAGES)).toBeNull();
+    expect(resolveSuccessorUrl("/refund-policy-v5", PAGES)).toBeNull();
+    expect(resolveSuccessorUrl("./refund-policy-v5.md", PAGES)).toBeNull();
   });
 
-  it("tolerates a windows-shaped source path", () => {
-    expect(resolveSuccessorUrl("./terms.md", "legal\\notes.md", PAGES)).toBe("/docs/legal/terms");
+  it("reads a windows-shaped page path as the same id", () => {
+    expect(conceptIdOfPath("legal\\terms.md")).toBe("legal/terms");
+    expect(
+      resolveSuccessorUrl("legal/terms", [{ path: "legal\\terms.md", url: "/docs/legal/terms" }]),
+    ).toBe("/docs/legal/terms");
+  });
+});
+
+describe("predecessorsOf — the other direction, derived", () => {
+  const PAGES = [
+    { path: "v4.md", url: "/docs/v4" },
+    { path: "v5.md", url: "/docs/v5" },
+    { path: "other.md", url: "/docs/other" },
+  ];
+  it("lists every document whose successor is this page", () => {
+    expect(
+      predecessorsOf("/docs/v5", PAGES, [
+        { path: "v4.md", supersededBy: "v5" },
+        { path: "other.md", supersededBy: null },
+      ]),
+    ).toEqual(["/docs/v4"]);
+  });
+  it("never lists the page itself", () => {
+    expect(predecessorsOf("/docs/v5", PAGES, [{ path: "v5.md", supersededBy: "v5" }])).toEqual([]);
+  });
+});
+
+describe("the badge vocabulary — one word per §2.5 state, everywhere", () => {
+  it("labels every badge and nothing for a current document", () => {
+    expect(badgeLabel(null)).toBeNull();
+    expect(badgeLabel("draft")).toBe("draft");
+    expect(badgeLabel("deprecated")).toBe("deprecated");
+    expect(badgeLabel("effective-from")).toBe("not yet effective");
+    expect(badgeLabel("stale")).toBe("past its review date");
+  });
+  it("colours only the withdrawn state", () => {
+    expect(badgeTone("deprecated")).toBe("ksor-withdrawn");
+    for (const badge of ["draft", "effective-from", "stale", null] as const) {
+      expect(badgeTone(badge)).toBe("");
+    }
+  });
+});
+
+describe("agentFrontmatter — the twin's and llms-full.txt's governance block", () => {
+  const STABLE: DocumentGovernance = {
+    status: "stable",
+    type: "Policy",
+    owner: "team:finance",
+    sources: [{ id: "fin", resource: "https://example.com/fin.pdf", title: "Finance: 2024" }],
+    effectiveFrom: "2026-09-01T00:00:00Z",
+    staleAfter: null,
+    supersededBy: null,
+    approval: { by: "human:cfo", at: "2026-08-22T10:00:00Z" },
+    deprecated: null,
+    verified: [],
+  };
+
+  it("emits the governance as frontmatter, then the stamps (R14)", () => {
+    expect(agentFrontmatter(STABLE, STAMPED)).toBe(
+      [
+        "---",
+        "status: stable",
+        "type: Policy",
+        "owner: team:finance",
+        "effective_from: 2026-09-01T00:00:00Z",
+        "approval: { by: human:cfo, at: 2026-08-22T10:00:00Z }",
+        "trust_tier: unverified",
+        "sources:",
+        '  - { id: fin, resource: https://example.com/fin.pdf, title: "Finance: 2024" }',
+        "build_id: sha256:abc",
+        "source_commit: 0123abc",
+        "ksor_version: 0.1.0",
+        "---",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("says dirty when the lock does, and says unstamped in development", () => {
+    expect(stampLines({ ...STAMPED, dirty: true })).toEqual([
+      "build_id: sha256:abc",
+      "source_commit: 0123abc",
+      "dirty: true",
+      "ksor_version: 0.1.0",
+    ]);
+    expect(stampLines(DEV)).toEqual(["build_id: null", "unstamped: true"]);
+    expect(agentFrontmatter({ ...STABLE, sources: [] }, DEV)).toContain("\nunstamped: true\n");
+  });
+
+  it("emits nothing the document did not declare", () => {
+    const bare = agentFrontmatter(
+      { ...STABLE, type: null, owner: null, sources: [], effectiveFrom: null, approval: null },
+      STAMPED,
+    );
+    expect(bare).not.toContain("owner:");
+    expect(bare).not.toContain("sources:");
+    expect(bare).not.toContain("approval:");
+    expect(bare).toContain("status: stable");
+  });
+});
+
+describe("sourceHref", () => {
+  it("links http(s) resources and nothing else", () => {
+    expect(sourceHref("https://example.com/x")).toBe("https://example.com/x");
+    expect(sourceHref("http://example.com/x")).toBe("http://example.com/x");
+    expect(sourceHref("javascript:alert(1)")).toBeNull();
+    expect(sourceHref("data:text/html,x")).toBeNull();
+    expect(sourceHref("mailto:x@example.com")).toBeNull();
+    expect(sourceHref("/policies/handbook.md")).toBeNull();
+    expect(sourceHref("scope: board minutes")).toBeNull();
+    expect(sourceHref("https://")).toBeNull();
+  });
+});
+
+describe("dates", () => {
+  it("isCalendarDate accepts a real day and refuses a shaped one", () => {
+    expect(isCalendarDate("2026-04-01")).toBe(true);
+    expect(isCalendarDate("2024-02-29")).toBe(true);
+    expect(isCalendarDate("2026-06-31")).toBe(false);
+    expect(isCalendarDate("2026-13-45")).toBe(false);
+    expect(isCalendarDate("2026-4-1")).toBe(false);
+  });
+  it("dayOf takes the calendar day of an instant", () => {
+    expect(dayOf("2026-09-01T00:00:00Z")).toBe("2026-09-01");
+    expect(dayOf("2026-09-01")).toBe("2026-09-01");
   });
 });
 
 describe("governanceVisible", () => {
   it("defaults to on when instance.md says nothing", () => {
-    // Purely additive: every record written before this key existed keeps
-    // rendering its governance.
     expect(governanceVisible({ format: 2, name: "acme" })).toBe(true);
   });
 
@@ -224,15 +356,9 @@ describe("governanceVisible", () => {
     expect(governanceVisible({ site: { url: "https://acme.example" } })).toBe(true);
   });
 
-  it("turns off on an explicit false", () => {
+  it("turns off on an explicit false, stays on for an explicit true", () => {
     expect(governanceVisible({ site: { governance: false } })).toBe(false);
-  });
-
-  it("stays on for an explicit true", () => {
     expect(governanceVisible({ site: { governance: true } })).toBe(true);
-  });
-
-  it("reads it beside its sibling keys", () => {
     expect(governanceVisible({ site: { url: "https://acme.example", governance: false } })).toBe(
       false,
     );
@@ -256,306 +382,5 @@ describe("governanceVisible", () => {
   it("a site: key that is not a mapping is ignored, never read as a switch", () => {
     expect(governanceVisible({ site: "https://acme.example" })).toBe(true);
     expect(governanceVisible({ site: ["governance"] })).toBe(true);
-  });
-});
-
-describe("readGovernance — YAML types that are not strings", () => {
-  it("shows a number rather than dropping it", () => {
-    // `effective: 2026` types as a NUMBER, and used to vanish from the page
-    // entirely — the record declared it and the page said nothing. The checker
-    // refuses it now; this is the honest fallback if one slips through.
-    expect(readGovernance({ status: "approved", effective: 2026 }, "k.md")).toMatchObject({
-      effective: "2026",
-    });
-  });
-
-  it("still drops a value with no readable text", () => {
-    expect(
-      readGovernance({ status: "approved", effective: Number.NaN, owner: {} }, "k.md"),
-    ).toMatchObject({ effective: null, owner: null });
-  });
-});
-
-describe("isCalendarDate", () => {
-  it("accepts a real day", () => {
-    expect(isCalendarDate("2026-04-01")).toBe(true);
-    expect(isCalendarDate("2024-02-29")).toBe(true); // a real leap day
-  });
-
-  it("rejects a date-SHAPED string that is not a day", () => {
-    // These reach the renderer through the checker's own remedy — it refuses
-    // them unquoted and tells the author to quote them. Stamped into
-    // <time datetime> they are invalid HTML, and a consumer reading
-    // "2026-06-31" gets July 1st: the rollover the whole rule exists to stop.
-    for (const value of ["2026-06-31", "2026-13-45", "2026-02-30", "2026-00-10"]) {
-      expect(isCalendarDate(value), value).toBe(false);
-    }
-  });
-
-  it("rejects anything that is not a plain date at all", () => {
-    for (const value of ["Q1 2026", "2026-4-1", "2026", "", "2026-04-01T00:00:00Z"]) {
-      expect(isCalendarDate(value), value).toBe(false);
-    }
-  });
-});
-
-// The AGENT surface's half of the same projection. The page gained a
-// supersession notice; llms.txt and llms-full.txt kept serving the withdrawn
-// document as ordinary prose, so an agent reading the record answered from a
-// policy the reader was warned about (measured on shipped bytes,
-// research/site-design.md F1). These two functions are what close that.
-describe("agentIndexSuffix — the compact index line", () => {
-  const g = (over: Partial<DocumentGovernance> = {}): DocumentGovernance => ({
-    status: "approved",
-    owner: null,
-    provenance: [],
-    effective: null,
-    supersededBy: null,
-    ...over,
-  });
-
-  it("says nothing for an approved document", () => {
-    // The index is one line per document; a marker on every line is noise, and
-    // "approved" is what an unmarked entry already means.
-    expect(agentIndexSuffix(g(), null)).toBe("");
-  });
-
-  it("marks a caveat status in the shape an agent can match", () => {
-    expect(agentIndexSuffix(g({ status: "draft" }), null)).toBe(" — DRAFT");
-    expect(agentIndexSuffix(g({ status: "review" }), null)).toBe(" — REVIEW");
-  });
-
-  it("names the successor by its RESOLVED route, never the raw pointer", () => {
-    // `./refund-policy-v5.md` is meaningless to a consumer that never sees the
-    // record's file tree — it needs the address it can actually fetch.
-    expect(
-      agentIndexSuffix(
-        g({ status: "superseded", supersededBy: "./refund-policy-v5.md" }),
-        "/docs/refund-policy-v5",
-      ),
-    ).toBe(" — SUPERSEDED, replaced by /docs/refund-policy-v5");
-  });
-
-  it("still says SUPERSEDED when the successor is outside this build", () => {
-    // A per-audience build stages a subset, so the successor may be absent.
-    // Dropping the warning with it would serve the withdrawn document clean.
-    expect(agentIndexSuffix(g({ status: "superseded", supersededBy: "./x.md" }), null)).toBe(
-      " — SUPERSEDED",
-    );
-  });
-
-  it("carries an undeclared status without inventing one", () => {
-    expect(agentIndexSuffix(g({ status: null }), null)).toBe("");
-  });
-});
-
-describe("agentFrontmatter — the full corpus block", () => {
-  const g = (over: Partial<DocumentGovernance> = {}): DocumentGovernance => ({
-    status: "approved",
-    owner: null,
-    provenance: [],
-    effective: null,
-    supersededBy: null,
-    ...over,
-  });
-
-  it("emits the status even when it is approved", () => {
-    // The opposite call to the page's. A reader assumes a document in a record
-    // is current; a consumer assumes nothing, and silence is what caused F1.
-    expect(agentFrontmatter(g(), null)).toBe("---\nstatus: approved\n---\n");
-  });
-
-  it("emits every declared key, successor resolved", () => {
-    expect(
-      agentFrontmatter(
-        g({
-          status: "superseded",
-          owner: "Finance",
-          effective: "2026-01-15",
-          provenance: ["Board minutes 2026-01-11", "Terms of service v4"],
-          supersededBy: "./refund-policy-v5.md",
-        }),
-        "/docs/refund-policy-v5",
-      ),
-    ).toBe(
-      [
-        "---",
-        "status: superseded",
-        "owner: Finance",
-        "effective: 2026-01-15",
-        "superseded_by: /docs/refund-policy-v5",
-        "provenance:",
-        "  - Board minutes 2026-01-11",
-        "  - Terms of service v4",
-        "---",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  it("omits an undeclared key rather than emitting an empty one", () => {
-    // The page's negative promise, kept here: a placeholder reads as governed.
-    const block = agentFrontmatter(g({ owner: "Finance" }), null);
-    expect(block).toBe("---\nstatus: approved\nowner: Finance\n---\n");
-    expect(block).not.toContain("effective");
-    expect(block).not.toContain("provenance");
-  });
-
-  it("quotes a value that would not survive a YAML round trip", () => {
-    // The record's own rule: an unquoted colon breaks the parse. A consumer
-    // parsing this block must get back what the record said.
-    expect(agentFrontmatter(g({ owner: "Finance: payments" }), null)).toContain(
-      'owner: "Finance: payments"',
-    );
-  });
-
-  it("emits nothing at all when the document declares no governance", () => {
-    expect(
-      agentFrontmatter(
-        { status: null, owner: null, provenance: [], effective: null, supersededBy: null },
-        null,
-      ),
-    ).toBe("");
-  });
-});
-
-// A provenance entry that IS a source URL should be followable. Measured on a
-// built scaffold: 0 of 3 entries were links, so an intranet URL rendered as
-// dead grey text (research/site-design.md F5). Provenance is load-bearing —
-// a source nobody can open is weaker than the record makes it.
-describe("sourceHref", () => {
-  it("links an entry that is nothing but an http(s) URL", () => {
-    expect(sourceHref("https://intranet.example.com/finance/policy-4-2")).toBe(
-      "https://intranet.example.com/finance/policy-4-2",
-    );
-    expect(sourceHref("http://wiki.internal/policy")).toBe("http://wiki.internal/policy");
-  });
-
-  it("trims surrounding whitespace before deciding", () => {
-    expect(sourceHref("  https://x.test/y  ")).toBe("https://x.test/y");
-  });
-
-  it("leaves a citation alone — the common case", () => {
-    // The record's own house style: "Finance policy manual §4.2, approved
-    // 2025-11-03". Nothing to open, and turning part of it into a link would
-    // invent a destination.
-    expect(sourceHref("Finance policy manual §4.2, approved 2025-11-03")).toBeNull();
-    expect(sourceHref("Board resolution 2025-19")).toBeNull();
-  });
-
-  it("refuses an entry that merely CONTAINS a URL", () => {
-    // Linkifying inside prose would have to guess where the URL ends, and the
-    // whole entry is the citation — not the fragment inside it.
-    expect(sourceHref("See https://x.test/y for the signed copy")).toBeNull();
-  });
-
-  it("refuses every scheme that is not http(s)", () => {
-    // `provenance` is AUTHORED content. A javascript: or data: URL rendered
-    // into an href would execute on click — the record must never be able to
-    // put a script in the page that serves it.
-    for (const hostile of [
-      "javascript:alert(1)",
-      "JavaScript:alert(1)",
-      "data:text/html,<script>alert(1)</script>",
-      "vbscript:msgbox(1)",
-      "file:///etc/passwd",
-    ]) {
-      expect(sourceHref(hostile), hostile).toBeNull();
-    }
-    // …and the merely-unsupported ones, which are citations, not links.
-    expect(sourceHref("mailto:records@example.com")).toBeNull();
-    expect(sourceHref("ftp://archive.example.com/policy.pdf")).toBeNull();
-  });
-
-  it("refuses a malformed URL rather than emitting a broken href", () => {
-    expect(sourceHref("https://")).toBeNull();
-    expect(sourceHref("")).toBeNull();
-    expect(sourceHref("   ")).toBeNull();
-  });
-});
-
-// ONE definition of "worth showing", shared by the page chip, the agent index
-// and the record listings. It lived in two places (the component's
-// ASSUMED_STATUS and agentIndexSuffix) and a third was about to be written.
-describe("caveatStatus", () => {
-  it("is silent on approved — what a reader already assumes of a record", () => {
-    expect(caveatStatus("approved")).toBeNull();
-  });
-
-  it("names the three states that are caveats", () => {
-    expect(caveatStatus("draft")).toBe("draft");
-    expect(caveatStatus("review")).toBe("review");
-    expect(caveatStatus("superseded")).toBe("superseded");
-  });
-
-  it("is silent when the document declares nothing", () => {
-    expect(caveatStatus(null)).toBeNull();
-  });
-
-  it("passes an unrecognized state through rather than swallowing it", () => {
-    // `pnpm check` holds status to a closed set, so this is a record that
-    // skipped the checker. Showing what it wrote beats hiding it.
-    expect(caveatStatus("retired")).toBe("retired");
-  });
-});
-
-// Supersession ran one way: a withdrawn document names its successor, and the
-// successor said nothing about what it replaced. RFC has carried both
-// directions since 1969 — "Obsoletes:" on the new, "Obsoleted by:" on the old —
-// so a reader on the current policy can reach the history the record kept
-// (research/site-design.md F4).
-describe("predecessorsOf", () => {
-  const pages = [
-    { path: "policies/purchase-approval.md", url: "/docs/policies/purchase-approval" },
-    { path: "policies/purchase-approval-2019.md", url: "/docs/policies/purchase-approval-2019" },
-    { path: "policies/purchase-approval-2015.md", url: "/docs/policies/purchase-approval-2015" },
-    { path: "unrelated.md", url: "/docs/unrelated" },
-  ];
-  const withPointer = (path: string, pointer: string | null) => ({ path, supersededBy: pointer });
-
-  it("finds the document this one replaced", () => {
-    const found = predecessorsOf("/docs/policies/purchase-approval", pages, [
-      withPointer("policies/purchase-approval-2019.md", "./purchase-approval.md"),
-    ]);
-    expect(found).toEqual(["/docs/policies/purchase-approval-2019"]);
-  });
-
-  it("finds every predecessor, in the order the record lists them", () => {
-    // A document may replace more than one — two policies merged into one.
-    const found = predecessorsOf("/docs/policies/purchase-approval", pages, [
-      withPointer("policies/purchase-approval-2019.md", "./purchase-approval.md"),
-      withPointer("policies/purchase-approval-2015.md", "./purchase-approval.md"),
-    ]);
-    expect(found).toEqual([
-      "/docs/policies/purchase-approval-2019",
-      "/docs/policies/purchase-approval-2015",
-    ]);
-  });
-
-  it("ignores a document that points somewhere else", () => {
-    expect(
-      predecessorsOf("/docs/policies/purchase-approval", pages, [
-        withPointer("policies/purchase-approval-2019.md", "./purchase-approval-2015.md"),
-      ]),
-    ).toEqual([]);
-  });
-
-  it("ignores documents that declare no pointer at all — the common case", () => {
-    expect(
-      predecessorsOf("/docs/policies/purchase-approval", pages, [
-        withPointer("unrelated.md", null),
-      ]),
-    ).toEqual([]);
-  });
-
-  it("never reports the document as replacing itself", () => {
-    // `pnpm check` refuses a self-supersession, so this is defense in depth
-    // against a record that skipped the checker — it would otherwise render
-    // "Replaces: <this page>" on the page you are reading.
-    expect(
-      predecessorsOf("/docs/policies/purchase-approval", pages, [
-        withPointer("policies/purchase-approval.md", "./purchase-approval.md"),
-      ]),
-    ).toEqual([]);
   });
 });

@@ -1,52 +1,80 @@
 // What the record says about a document, projected for rendering.
 //
-// `knowledge/` documents carry a governance vocabulary that `pnpm check`
-// enforces — status, owner, provenance, effective, superseded_by — and until
-// this module existed the site parsed four of those keys and threw them away.
+// A concept carries the profile's governance (record spec §2) — status, type,
+// `ksor.owner`, `sources`, `ksor.effective_from`, `stale_after`,
+// `ksor.superseded_by`, the approval and the verifications — and this module
+// is the one projection of those keys the pages and the agent surfaces share.
 // Provenance is load-bearing: a reader has to be able to see who stands behind
 // a document and where it came from, or the site is showing them prose while
 // the agent surface answers with citations.
 //
 // Import-free on purpose: this is the pure half, so it is unit-tested directly
 // (packages/ksor/src/site-governance.test.ts) without a site install. Anything
-// needing the Fumadocs loader — resolving a successor pointer to its route —
-// lives outside it.
-//
-// Contract: specs/ksor/site-governance/spec.md
+// needing the Fumadocs loader — resolving a successor to its route — lives
+// outside it.
+
+import type { LifecycleBadge } from "./lifecycle-rule";
+
+export interface Source {
+  readonly id: string | null;
+  readonly title: string | null;
+  /** A URL, a bundle path, or a scope descriptor (OKF §5.1). */
+  readonly resource: string;
+}
+
+export interface Act {
+  readonly by: string;
+  /** The instant as the record wrote it. */
+  readonly at: string;
+}
 
 export interface DocumentGovernance {
-  /** `draft` | `review` | `approved` | `superseded`. Required by the checker; null only when a document skipped it. */
+  /** `draft` | `stable` | `deprecated` (record spec §2.2). Null only when a document skipped it. */
   readonly status: string | null;
-  /** Who stands behind this document. */
+  readonly type: string | null;
+  /** Who stands behind this document: `ksor.owner`. */
   readonly owner: string | null;
   /** One entry per source — a citation must be able to point at exactly one of them. */
-  readonly provenance: readonly string[];
-  /** When it took effect, as an ISO date. */
-  readonly effective: string | null;
-  /** The successor's pointer as the document declares it, e.g. `./refund-policy-v5.md`. */
+  readonly sources: readonly Source[];
+  /** `ksor.effective_from`, as the record wrote it. */
+  readonly effectiveFrom: string | null;
+  readonly staleAfter: string | null;
+  /** The successor's concept id, e.g. `policies/purchase-approval-v2`. */
   readonly supersededBy: string | null;
+  readonly approval: Act | null;
+  readonly deprecated: Act | null;
+  readonly verified: readonly Act[];
 }
 
 /**
- * A declared value, or null. Blank and whitespace-only count as undeclared: a
+ * A declared scalar, or null. Blank and whitespace-only count as undeclared: a
  * key an author started and left empty is not a governance fact.
  *
- * An unquoted `effective: 2026-04-01` parses to a Date, so dates normalize to
- * their ISO day here — rendering the object would print a locale- and
+ * An unquoted instant parses to a Date in the collection's YAML, so dates
+ * normalize to ISO here — rendering the object would print a locale- and
  * timezone-dependent string into the record.
  */
 function declared(value: unknown): string | null {
-  // A bare `effective: 2026` types as a NUMBER in YAML and used to disappear
-  // from the page entirely — the record declared it and the page said nothing.
-  // `pnpm check` refuses it now; showing what the author wrote is still the
-  // honest fallback for a record that skipped the checker.
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
   if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : (value.toISOString().split("T")[0] ?? null);
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
   }
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+function mapping(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function act(value: unknown): Act | null {
+  const m = mapping(value);
+  const by = declared(m["by"]);
+  const at = declared(m["at"]);
+  return by === null || at === null ? null : { by, at };
 }
 
 /**
@@ -63,93 +91,92 @@ export function readGovernance(data: unknown, where: string): DocumentGovernance
   // frontmatter, which is whatever the author wrote, and a shell that crashes
   // on a shape the checker would have named is worse than one that renders
   // what it can.
-  const record: Record<string, unknown> =
-    typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
+  const record = mapping(data);
+  const ksor = mapping(record["ksor"]);
 
   const status = declared(record["status"]);
-  const supersededBy = declared(record["superseded_by"]);
+  const supersededBy = declared(ksor["superseded_by"]);
 
-  // Defense in depth: `pnpm check` refuses this, so reaching it means the
-  // adopter skipped the checker. Failing the build is the honest outcome —
-  // the alternative is serving a document that says it was replaced and
-  // cannot say by what.
-  if (status === "superseded" && supersededBy === null) {
+  // Defense in depth: the checker refuses a deprecated concept with no
+  // attribution. Failing the build is the honest outcome — the alternative is
+  // serving a document that says it was withdrawn and cannot say who did it.
+  if (status === "deprecated" && act(ksor["deprecated"]) === null) {
     throw new Error(
-      `${where} is status: superseded with no superseded_by — a document that says it was ` +
-        "replaced must say by what, or the reader is told to stop trusting it and given nowhere " +
-        "to go. Add superseded_by: ./<successor>.md (pnpm check refuses this too).",
+      `${where} is status: deprecated with no ksor.deprecated — a document the record withdrew ` +
+        "must say who withdrew it and when, or the reader is told to stop trusting it by nobody. " +
+        "Add ksor.deprecated: { by, at } (pnpm check refuses this too).",
     );
   }
 
-  // A scalar provenance is a checker finding, not a crash: turning one into an
-  // unexplained build failure hides the real message `pnpm check` would print.
-  const raw: unknown = record["provenance"];
-  const provenance = Array.isArray(raw)
-    ? raw.map(declared).filter((entry): entry is string => entry !== null)
+  // A malformed sources list is a checker finding, not a crash: turning one
+  // into an unexplained build failure hides the real message `pnpm check` prints.
+  const raw: unknown = record["sources"];
+  const sources = Array.isArray(raw)
+    ? raw.flatMap((entry): Source[] => {
+        const m = mapping(entry);
+        const resource = declared(m["resource"]);
+        return resource === null
+          ? []
+          : [{ id: declared(m["id"]), title: declared(m["title"]), resource }];
+      })
     : [];
+  // OKF §5.2: a bare `verified` mapping is a one-element list.
+  const verifiedRaw: unknown = record["verified"];
+  const verified = (Array.isArray(verifiedRaw) ? verifiedRaw : [verifiedRaw])
+    .map(act)
+    .filter((entry): entry is Act => entry !== null);
 
   return {
     status,
-    owner: declared(record["owner"]),
-    provenance,
-    effective: declared(record["effective"]),
+    type: declared(record["type"]),
+    owner: declared(ksor["owner"]),
+    sources,
+    effectiveFrom: declared(ksor["effective_from"]),
+    staleAfter: declared(record["stale_after"]),
     supersededBy,
+    approval: act(ksor["approval"]),
+    deprecated: act(ksor["deprecated"]),
+    verified,
   };
+}
+
+/** Trust tier derives from `verified` (record spec §2.3): none, machine only, or any human. */
+export function trustTierOf(
+  verified: readonly Act[],
+): "unverified" | "machine-confirmed" | "human-reviewed" {
+  if (verified.length === 0) return "unverified";
+  return verified.some((v) => v.by.startsWith("human:")) ? "human-reviewed" : "machine-confirmed";
 }
 
 /** One document as the loader reports it: its source path, and its route. */
 export interface RecordPage {
-  /** Path under `knowledge/`, e.g. `legal.md` or `handbook/index.md`. */
+  /** Path under `knowledge/`, e.g. `legal.md` or `policies/terms.md`. */
   readonly path: string;
   /** The route it renders at, e.g. `/docs/legal`. */
   readonly url: string;
 }
 
-/** Resolve a relative pointer against the directory holding `from`. */
-function resolveFrom(from: string, relative: string): string {
-  // The source path is the authority, so it is normalized like one: Windows
-  // separators included (the loader reports whatever the filesystem gave it).
-  const segments = from.replaceAll("\\", "/").split("/").slice(0, -1);
-  for (const part of relative.split("/")) {
-    if (part === "" || part === ".") continue;
-    if (part === "..") segments.pop();
-    else segments.push(part);
-  }
-  return segments.join("/");
+/** The concept id of a page: its path without `.md`, forward slashes. */
+export function conceptIdOfPath(pagePath: string): string {
+  return pagePath.replaceAll("\\", "/").replace(/\.mdx?$/, "");
 }
 
 /**
- * The route a `superseded_by` pointer names, or null.
+ * The route a `ksor.superseded_by` pointer names, or null.
  *
- * Resolved against the document's SOURCE PATH, never against its route. A
- * route cannot tell `knowledge/legal.md` from `knowledge/handbook/index.md` —
- * both render at one path segment — yet `./terms.md` means a sibling in the
- * first and a folder child in the second. Resolving on routes had to guess,
- * and refused to link a record the checker calls well-formed (found live,
- * 2026-08-20: `legal.md` pointing at `./terms.md` beside a `legal/terms.md`
- * rendered the raw pointer instead of a link).
- *
- * Null means the successor is not in THIS build — legitimate for a
- * per-audience build, which stages a subset — and the caller then shows the
- * pointer as text. A dead link on a supersession notice is the worst outcome:
+ * The pointer is a CONCEPT ID — bundle-relative, `.md` optional (record spec
+ * §2, `ksor.superseded_by: policies/purchase-approval-v2`) — resolved against
+ * the pages in THIS build. Null means the successor is not here: legitimate
+ * for a per-viewer build, which stages a subset, and the caller then shows the
+ * pointer as text. A dead link on a deprecation notice is the worst outcome:
  * it tells the reader to stop trusting the page and then strands them.
  */
-export function resolveSuccessorUrl(
-  pointer: string,
-  currentPath: string,
-  pages: readonly RecordPage[],
-): string | null {
-  // Leaves the record: an absolute URL or a site-absolute path is not a
-  // pointer into knowledge/ at all.
-  if (pointer.includes("://") || pointer.startsWith("/")) return null;
-
+export function resolveSuccessorUrl(pointer: string, pages: readonly RecordPage[]): string | null {
+  if (pointer.includes("://") || pointer.startsWith("/") || pointer.startsWith(".")) return null;
   const [target = "", anchor] = pointer.split("#", 2);
-  if (!target.endsWith(".md")) return null;
-
-  const resolved = resolveFrom(currentPath, target);
-  const match = pages.find((page) => page.path.replaceAll("\\", "/") === resolved);
+  const id = target.replace(/\.md$/, "");
+  const match = pages.find((page) => conceptIdOfPath(page.path) === id);
   if (match === undefined) return null;
-
   return anchor === undefined ? match.url : `${match.url}#${anchor}`;
 }
 
@@ -158,9 +185,7 @@ export function resolveSuccessorUrl(
  *
  * `2026-06-31` and `2026-13-45` both match a `\d{4}-\d{2}-\d{2}` shape, and
  * stamping either into `<time datetime>` publishes a day that does not exist:
- * invalid HTML, and a consumer parsing it gets July 1st. The record's checker
- * refuses those unquoted and offers QUOTING as the escape hatch — which is
- * exactly how one reaches this function (found 2026-08-21).
+ * invalid HTML, and a consumer parsing it gets July 1st.
  */
 export function isCalendarDate(value: string): boolean {
   const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -172,6 +197,11 @@ export function isCalendarDate(value: string): boolean {
     probe.getUTCMonth() === month - 1 &&
     probe.getUTCDate() === day
   );
+}
+
+/** The calendar day of an instant, for a reader: `2026-09-01T00:00:00Z` → `2026-09-01`. */
+export function dayOf(instant: string): string {
+  return instant.split("T")[0] ?? instant;
 }
 
 /**
@@ -211,57 +241,60 @@ export function governanceVisible(instance: Readonly<Record<string, unknown>>): 
 }
 
 // ---------------------------------------------------------------------------
-// The AGENT surface's projection of the same record.
-//
-// The page shows a superseded document under an unmissable notice; llms.txt and
-// llms-full.txt used to serve that same document as ordinary prose — no status,
-// no successor, no owner — so an agent answered from a policy the reader had
-// been warned about, and could not know (measured on shipped bytes,
-// research/site-design.md F1). Two surfaces, two truths, which product
-// principle 2 forbids.
-//
-// Deliberately NOT gated on `site.governance`: that key decides what the PAGES
-// publish. The record keeps every key for the agent surface and the audit trail
-// (specs/ksor/site-governance/spec.md), so gating this on it would rebuild the
-// defect above on purpose.
+// The badge: what a human surface says beside a document the machine surfaces
+// decline (record spec §2.5). ONE vocabulary for the page chip, the sidebar,
+// the listings and the search results, so a reader picking between a document
+// and its successor sees the same word everywhere.
 
-/** What a reader already assumes of a document in a system of record. */
-const ASSUMED_STATUS = "approved";
-
-/**
- * The document's status when it is worth showing, or null.
- *
- * ONE definition, shared by every surface that shows a status — the page chip,
- * the agent index, the record listings. `approved` is silent because that is
- * what a reader already assumes of a document in a system of record, and a
- * label that appears everywhere and always says the same thing trains people to
- * skip it, including on the page where it mattered. An unrecognized state is
- * passed through rather than swallowed: `pnpm check` holds status to a closed
- * set, so reaching here with one means the record skipped the checker, and
- * showing what it wrote beats hiding it.
- */
-/**
- * The tone class a status chip wears, in every surface that renders one.
- *
- * Only a WITHDRAWN document gets a colour. `draft` and `review` are ordinary
- * states of a live document; `superseded` says the record has replaced it, and
- * before this the three were pixel-identical chips — the same hairline, the
- * same muted text — at exactly the moment a reader picks between a document
- * and its successor. One function rather than the ternary repeated at five
- * call sites, so the rule cannot drift between the sidebar and search.
- */
-export function statusTone(status: string | null): string {
-  return status === "superseded" ? "ksor-withdrawn" : "";
+/** The chip text for a badge, or null for a document every surface admits. */
+export function badgeLabel(badge: LifecycleBadge | null): string | null {
+  switch (badge) {
+    case null:
+      return null;
+    case "draft":
+      return "draft";
+    case "deprecated":
+      return "deprecated";
+    case "effective-from":
+      return "not yet effective";
+    case "stale":
+      return "past its review date";
+  }
 }
 
-export function caveatStatus(status: string | null): string | null {
-  return status === null || status === ASSUMED_STATUS ? null : status;
+/**
+ * The tone class a badge wears. Only a WITHDRAWN document gets a colour:
+ * `draft` and the two date states are ordinary states of a live document;
+ * `deprecated` says the record has replaced it, and that is the one chip a
+ * reader must not mistake for the others at the moment of choosing.
+ */
+export function badgeTone(badge: LifecycleBadge | null): string {
+  return badge === "deprecated" ? "ksor-withdrawn" : "";
+}
+
+// ---------------------------------------------------------------------------
+// The AGENT surface's projection of the same record.
+//
+// The machine surfaces admit only stable, effective, unexpired concepts, so a
+// consumer never meets a deprecated or draft document there — what it needs is
+// the governance that makes the passage citable, and the stamps that connect
+// it to one publication (R14). Deliberately NOT gated on `site.governance`:
+// that key decides what the PAGES publish; the record keeps every key for the
+// agent surface and the audit trail.
+
+/** The stamps every machine artefact carries (build spec §3). */
+export interface Stamps {
+  readonly build_id: string | null;
+  readonly source_commit: string | null;
+  readonly dirty: boolean;
+  readonly ksor_version: string | null;
+  readonly unstamped: boolean;
 }
 
 /**
  * A YAML scalar a consumer can parse back to exactly what the record said. The
- * shapes below are the ones the record's own checker refuses unquoted, for the
- * same reason: unquoted, YAML reads them as something else.
+ * shapes below are the ones a plain scalar cannot carry: unquoted, YAML reads
+ * them as something else.
  */
 function yamlScalar(value: string): string {
   const risky =
@@ -273,78 +306,65 @@ function yamlScalar(value: string): string {
   return risky ? JSON.stringify(value) : value;
 }
 
-/**
- * The suffix for one line of the compact index (`llms.txt`), or "" when the
- * document carries no caveat.
- *
- * Caveats only, unlike the full block below: the index is one line per
- * document, and a marker on every line is noise an agent learns to skip — the
- * same argument that keeps the page's status chip rare.
- *
- * `successorUrl` is the successor's RESOLVED route (the caller owns
- * resolution, including any base path), or null when it is not in this build —
- * a per-audience build stages a subset. A missing successor never suppresses
- * the SUPERSEDED marker: dropping the warning with the link would serve the
- * withdrawn document looking clean, which is the whole defect.
- */
-export function agentIndexSuffix(
-  governance: DocumentGovernance,
-  successorUrl: string | null,
-): string {
-  const status = caveatStatus(governance.status);
-  if (status === null) return "";
-  const replaced =
-    status === "superseded" && successorUrl !== null ? `, replaced by ${successorUrl}` : "";
-  return ` — ${status.toUpperCase()}${replaced}`;
+/** The stamp lines, as YAML keys — one spelling for every artefact. */
+export function stampLines(stamps: Stamps): string[] {
+  if (stamps.unstamped) return ["build_id: null", "unstamped: true"];
+  const lines = [`build_id: ${yamlScalar(stamps.build_id ?? "")}`];
+  if (stamps.source_commit !== null)
+    lines.push(`source_commit: ${yamlScalar(stamps.source_commit)}`);
+  if (stamps.dirty) lines.push("dirty: true");
+  if (stamps.ksor_version !== null) lines.push(`ksor_version: ${yamlScalar(stamps.ksor_version)}`);
+  return lines;
 }
 
 /**
- * The governance block that precedes a document's body in `llms-full.txt`,
- * written as frontmatter — the record's own grammar, so a consumer parses the
- * corpus the way the corpus is authored.
+ * The governance block that precedes a document's body in `llms-full.txt` and
+ * its markdown twin, written as frontmatter — the record's own grammar, so a
+ * consumer parses the corpus the way the corpus is authored.
  *
- * `status` is emitted even when it is `approved`, which is the opposite call to
- * the page's. A reader assumes a document in a record is current; a consumer
- * assumes nothing, and that silence is exactly what F1 was.
- *
- * Nothing is inferred: an undeclared key is absent, never an empty one, and a
- * document declaring no governance at all yields "".
+ * `status` is emitted even though every document here is `stable`, which is
+ * the opposite call to the page's. A reader assumes a document in a record is
+ * current; a consumer assumes nothing, and that silence is exactly what F1 was.
+ * Nothing is inferred: an undeclared key is absent, never an empty one.
  */
-export function agentFrontmatter(
-  governance: DocumentGovernance,
-  successorUrl: string | null,
-): string {
-  const { status, owner, effective, supersededBy, provenance } = governance;
+export function agentFrontmatter(governance: DocumentGovernance, stamps: Stamps): string {
+  const { status, type, owner, effectiveFrom, staleAfter, sources, approval, verified } =
+    governance;
   const lines: string[] = [];
   if (status !== null) lines.push(`status: ${yamlScalar(status)}`);
+  if (type !== null) lines.push(`type: ${yamlScalar(type)}`);
   if (owner !== null) lines.push(`owner: ${yamlScalar(owner)}`);
-  if (effective !== null) lines.push(`effective: ${yamlScalar(effective)}`);
-  // The resolved route, never the raw `./successor.md` pointer: a consumer that
-  // never sees the record's file tree cannot follow one.
-  if (status === "superseded" && supersededBy !== null) {
-    lines.push(`superseded_by: ${yamlScalar(successorUrl ?? supersededBy)}`);
+  if (effectiveFrom !== null) lines.push(`effective_from: ${yamlScalar(effectiveFrom)}`);
+  if (staleAfter !== null) lines.push(`stale_after: ${yamlScalar(staleAfter)}`);
+  if (approval !== null)
+    lines.push(`approval: { by: ${yamlScalar(approval.by)}, at: ${yamlScalar(approval.at)} }`);
+  lines.push(`trust_tier: ${trustTierOf(verified)}`);
+  if (sources.length > 0) {
+    lines.push("sources:");
+    for (const source of sources) {
+      const fields = [
+        source.id === null ? null : `id: ${yamlScalar(source.id)}`,
+        `resource: ${yamlScalar(source.resource)}`,
+        source.title === null ? null : `title: ${yamlScalar(source.title)}`,
+      ].filter((f): f is string => f !== null);
+      lines.push(`  - { ${fields.join(", ")} }`);
+    }
   }
-  if (provenance.length > 0) {
-    lines.push("provenance:");
-    for (const entry of provenance) lines.push(`  - ${yamlScalar(entry)}`);
-  }
-  return lines.length === 0 ? "" : `---\n${lines.join("\n")}\n---\n`;
+  lines.push(...stampLines(stamps));
+  return `---\n${lines.join("\n")}\n---\n`;
 }
 
 /**
- * The href for a provenance entry that IS a source URL, or null when the entry
- * is an ordinary citation.
+ * The href for a source that IS a URL, or null when it is a bundle path or a
+ * scope descriptor.
  *
- * Deliberately narrow in two directions. The WHOLE entry must be the URL —
- * linkifying a fragment inside "See https://x for the signed copy" would have
- * to guess where the URL ends, and the citation is the entry, not the fragment.
- * And only `http(s)` is accepted: `provenance` is AUTHORED content, so a
+ * Only `http(s)` is accepted: `resource` is AUTHORED content, so a
  * `javascript:` or `data:` entry rendered into an href would let the record
  * execute a script in the page that serves it. Other schemes (`mailto:`,
- * `ftp:`) are refused as citations rather than links — widen only with a reason.
+ * `ftp:`) are refused as links rather than widened without a reason.
  */
-export function sourceHref(entry: string): string | null {
-  const value = entry.trim();
+export function sourceHref(resource: string): string | null {
+  const value = resource.trim();
   if (value === "" || /\s/.test(value)) return null;
   let url: URL;
   try {
@@ -362,7 +382,7 @@ export function sourceHref(entry: string): string | null {
 export interface SupersessionPointer {
   /** Path under `knowledge/`, e.g. `policies/purchase-approval-2019.md`. */
   readonly path: string;
-  /** Its `superseded_by:` value, or null. */
+  /** Its `ksor.superseded_by` value, or null. */
   readonly supersededBy: string | null;
 }
 
@@ -376,8 +396,8 @@ export interface SupersessionPointer {
  * `Obsoleted by:` on the old).
  *
  * Derived, never declared — there is no new frontmatter key. Each pointer is
- * resolved through the same path-relative rule the forward notice uses, so the
- * two directions can never disagree about what points where.
+ * resolved through the same rule the forward notice uses, so the two
+ * directions can never disagree about what points where.
  */
 export function predecessorsOf(
   currentUrl: string,
@@ -388,7 +408,7 @@ export function predecessorsOf(
   const found: string[] = [];
   for (const pointer of pointers) {
     if (pointer.supersededBy === null) continue;
-    const resolved = resolveSuccessorUrl(pointer.supersededBy, pointer.path, pages);
+    const resolved = resolveSuccessorUrl(pointer.supersededBy, pages);
     if (resolved === null || resolved.split("#")[0] !== currentUrl) continue;
     // A document that supersedes itself would otherwise render "Replaces: this
     // page" on the page you are reading. `pnpm check` refuses it; this is the

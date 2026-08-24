@@ -4,18 +4,20 @@ import { DocumentActions } from "@/components/document-actions";
 import type { ReactElement } from "react";
 
 import {
-  caveatStatus,
-  statusTone,
+  badgeLabel,
+  badgeTone,
+  dayOf,
   isCalendarDate,
   sourceHref,
   type DocumentGovernance,
 } from "@/lib/governance";
+import type { LifecycleBadge } from "@/lib/lifecycle-rule";
 
 /**
  * What the record says about the document you are reading.
  *
  * The site renders the record; these render the record's governance — the
- * frontmatter `pnpm check` enforces on every document. Nothing here is
+ * profile's frontmatter `pnpm check` enforces on every concept. Nothing here is
  * authored in the site (critical rule 1) and nothing is inferred: a key the
  * document does not declare renders nothing at all.
  *
@@ -26,9 +28,9 @@ import {
  */
 
 /**
- * The successor of a superseded document: its route and the text naming it.
- * `href` is null when the pointer could not be resolved to a route, and then
- * the pointer itself is shown as text rather than as a dead link.
+ * The successor of a deprecated document: its route and the text naming it.
+ * `href` is null when the pointer could not be resolved to a route in this
+ * build, and then the pointer itself is shown as text rather than as a dead link.
  */
 export interface Successor {
   readonly href: string | null;
@@ -36,11 +38,12 @@ export interface Successor {
 }
 
 /**
- * The supersession notice. Deliberately the first thing on the page, above the
+ * The deprecation notice. Deliberately the first thing on the page, above the
  * title: a reader must not have to notice a subtle badge to learn that what
- * they are about to read has been replaced.
+ * they are about to read has been withdrawn. `successor` is null when the
+ * record deprecated the document without naming a replacement.
  */
-export function SupersededNotice({ successor }: { successor: Successor }): ReactElement {
+export function DeprecatedNotice({ successor }: { successor: Successor | null }): ReactElement {
   return (
     <aside
       // A landmark, not a note: GOV.UK ships this as role="region" with
@@ -48,7 +51,7 @@ export function SupersededNotice({ successor }: { successor: Successor }): React
       // thing on the page by landmark, rather than only meeting it in reading
       // order. role="note" is announced but not navigable.
       role="region"
-      aria-labelledby="ksor-superseded"
+      aria-labelledby="ksor-deprecated"
       // Tinted and ruled down the left edge in the CAUTION role, never
       // --color-fd-muted: the shipped light theme defines --color-fd-muted and
       // --color-fd-background as the same value, so the callout composited to
@@ -56,22 +59,29 @@ export function SupersededNotice({ successor }: { successor: Successor }): React
       // Chromium, 2026-08-20). The one thing this notice cannot be is missable.
       className="ksor-caution mb-8 rounded-lg border border-l-4 px-4 py-3 text-sm"
     >
-      <p id="ksor-superseded" className="font-medium text-fd-foreground">
-        Superseded
+      <p id="ksor-deprecated" className="font-medium text-fd-foreground">
+        Deprecated
       </p>
       <p className="mt-1 text-fd-muted-foreground">
-        This document has been replaced by{" "}
-        {successor.href === null ? (
-          <code className="break-words text-fd-foreground">{successor.label}</code>
+        {successor === null ? (
+          "The record has withdrawn this document."
         ) : (
-          <Link
-            href={successor.href}
-            className="font-medium text-fd-foreground underline underline-offset-4 transition-colors hover:text-fd-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
-          >
-            {successor.label}
-          </Link>
-        )}
-        . It is kept because the record never deletes what it replaces.
+          <>
+            This document has been replaced by{" "}
+            {successor.href === null ? (
+              <code className="break-words text-fd-foreground">{successor.label}</code>
+            ) : (
+              <Link
+                href={successor.href}
+                className="font-medium text-fd-foreground underline underline-offset-4 transition-colors hover:text-fd-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
+              >
+                {successor.label}
+              </Link>
+            )}
+            .
+          </>
+        )}{" "}
+        It is kept because the record never deletes what it replaces.
       </p>
     </aside>
   );
@@ -88,13 +98,10 @@ function Fact({
     <div className="flex items-baseline gap-2.5">
       {/* Mono, uppercase, letterspaced: these are the record's checkable facts,
           and they read as a register's column heads rather than as a form.
-
           The label is deliberately SMALLER and more letterspaced than the value
-          it introduces. Both used to be mono a single pixel apart — 11px label
-          against a 12px value — so "Owner Product Effective 2026-08-22" read as
-          one undifferentiated mono run rather than as two facts with names
-          (reported by the owner, 2026-08-22, quoting the run back verbatim).
-          The step is now 10px against 13px, and the value carries the weight. */}
+          it introduces (10px against 13px), so "Owner Product Effective
+          2026-08-22" reads as two facts with names rather than one mono run
+          (reported by the owner, 2026-08-22). */}
       <dt className="font-mono text-[0.625rem] tracking-[0.18em] text-fd-muted-foreground uppercase">
         {label}
       </dt>
@@ -105,35 +112,50 @@ function Fact({
   );
 }
 
+/** The chip a badge wears, in every listing and on the page. */
+export function BadgeChip({ badge }: { badge: LifecycleBadge }): ReactElement {
+  return (
+    <span
+      className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest uppercase ${badgeTone(badge)}`}
+    >
+      {badgeLabel(badge)}
+    </span>
+  );
+}
+
 /**
- * The one-line governance strip under the document's title: any caveat on its
- * status, who stands behind it, and when it took effect.
+ * The one-line governance strip under the document's title: the badge when
+ * the machine surfaces decline the document, who stands behind it, when it
+ * takes effect and when it is due for review.
  */
 export function GovernanceMeta({
   governance,
+  badge,
   replaces = [],
   markdownUrl,
 }: {
   governance: DocumentGovernance;
+  /** Why the machine surfaces decline this page, or null. */
+  badge: LifecycleBadge | null;
   /** Documents this one replaced — derived from the record, never declared. */
   replaces?: readonly Successor[];
-  /** The document's markdown twin, offered beside its governance. */
+  /** The document's markdown twin, offered beside its governance — only where one exists. */
   markdownUrl?: string;
 }): ReactElement | null {
-  const { owner, effective } = governance;
-  const status = caveatStatus(governance.status);
-  const bare = status === null && owner === null && effective === null && replaces.length === 0;
+  const { owner, effectiveFrom, staleAfter } = governance;
+  const bare =
+    badge === null &&
+    owner === null &&
+    effectiveFrom === null &&
+    staleAfter === null &&
+    replaces.length === 0;
   if (bare && markdownUrl === undefined) return null;
 
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
-      {status === null ? null : (
+      {badge === null ? null : (
         <Fact label="Status">
-          <span
-            className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest uppercase ${statusTone(status)}`}
-          >
-            {status}
-          </span>
+          <BadgeChip badge={badge} />
         </Fact>
       )}
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
@@ -142,7 +164,7 @@ export function GovernanceMeta({
         // successor above the title; this is the successor naming what it
         // replaced, so the history the record kept is reachable from the
         // current document instead of only from the retired one.
-        <Fact label={replaces.length === 1 ? "Replaces" : "Replaces"}>
+        <Fact label="Replaces">
           <>
             {replaces.map((entry, index) => (
               <span key={entry.href ?? `${index}-${entry.label}`}>
@@ -162,39 +184,13 @@ export function GovernanceMeta({
           </>
         </Fact>
       )}
-      {effective === null ? null : (
-        <Fact label="Effective">
-          {/* The machine attribute is stamped only for a real day on the
-              calendar. A SHAPE test was not enough: the checker's own remedy
-              for `2026-06-31` is to QUOTE it, and quoted text arrives here — so
-              a shape test published `<time dateTime="2026-06-31">`, which is
-              invalid HTML and which a consumer reads as July 1st. That is the
-              precise hazard the record's date rule exists to prevent. */}
-          {isCalendarDate(effective) ? (
-            <time dateTime={effective}>{effective}</time>
-          ) : (
-            <span>{effective}</span>
-          )}
-        </Fact>
-      )}
+      {effectiveFrom === null ? null : <Fact label="Effective from">{day(effectiveFrom)}</Fact>}
+      {staleAfter === null ? null : <Fact label="Review by">{day(staleAfter)}</Fact>}
       {markdownUrl === undefined ? null : (
         // On the governance row, not as a footnote below the sources: it is
-        // how a reader hands this document to an agent, and it was previously
-        // the smallest text on the page, last (research/site-design.md F2).
-        // ONE control rather than two: opening the markdown and copying it are
-        // different acts, but two bare controls on a row of read-only facts
-        // made the row look half clickable. It wears neither the bordered badge
-        // (that means "a status the record declares") nor the accent at rest —
-        // the page had gone blue enough that the accent had stopped meaning
-        // anything (owner, 2026-08-22).
-        // RIGHT-ALIGNED (owner, and a reversal). The 2026-08-21 finding stands
-        // on its own terms: `ms-auto` once parked this 498px from the nearest
-        // thing on a two-fact document, where it read as belonging to nothing.
-        // What changed is the column beside it — the reading time now sits at
-        // the right end of the strip directly below, so the far edge is no
-        // longer empty space but a line the eye already follows. The two form
-        // a right-hand column of things you DO, against a left-hand row of
-        // things the record DECLARES.
+        // how a reader hands this document to an agent (research/site-design.md
+        // F2). Right-aligned: a column of things you DO, against a row of
+        // things the record DECLARES (owner, 2026-08-22).
         <span className="ms-auto">
           <DocumentActions href={markdownUrl} />
         </span>
@@ -203,36 +199,54 @@ export function GovernanceMeta({
   );
 }
 
+/** An instant as a day, stamped as machine-readable only when it is a real one. */
+function day(instant: string): ReactElement {
+  const value = dayOf(instant);
+  return isCalendarDate(value) ? <time dateTime={value}>{value}</time> : <span>{value}</span>;
+}
+
 /**
- * Where the document came from.
- *
- * One entry per source, each independently visible — that is the whole point
- * of `provenance` being a list: a citation has to be able to point at exactly
- * one of them. Rendering them as prose would take that away.
+ * Where the document came from: `sources`, one entry each — that is the whole
+ * point of it being a list: a footnote has to be able to point at exactly one
+ * of them. Rendering them as prose would take that away.
  */
-export function Provenance({ entries }: { entries: readonly string[] }): ReactElement | null {
+export function Provenance({
+  entries,
+}: {
+  entries: readonly {
+    readonly id: string | null;
+    readonly title: string | null;
+    readonly resource: string;
+  }[];
+}): ReactElement | null {
   if (entries.length === 0) return null;
 
   return (
     <section className="mt-10 border-t border-fd-border pt-5 text-sm">
       <h2 className="ksor-section-label mb-2">Sources</h2>
-      {/* break-words, because a citation is often a long unbroken URL: on a
+      {/* break-words, because a source is often a long unbroken URL: on a
           phone it overflowed its row by 175px under an ancestor with
           `overflow-x: clip`, so the middle of the source was clipped away with
           no ellipsis and nothing to scroll (measured, 2026-08-20). A source
           nobody can read is not provenance. */}
       <ul className="space-y-1 break-words text-fd-muted-foreground">
         {entries.map((entry, index) => {
-          // An entry that IS a URL becomes followable; a citation stays text.
-          // `rel="noreferrer"` because the destination is authored in the
-          // record, not chosen by this site.
-          const href = sourceHref(entry);
+          // A resource that IS a URL becomes followable; a bundle path or a
+          // scope descriptor stays text. `rel="noreferrer"` because the
+          // destination is authored in the record, not chosen by this site.
+          const href = sourceHref(entry.resource);
+          const label = entry.title ?? entry.resource;
           return (
             // Position, not text: a record may cite the same source twice, and
             // duplicate keys are a console error on a governed page.
-            <li key={`${index}-${entry}`}>
+            <li key={`${index}-${entry.resource}`}>
+              {entry.id === null ? null : (
+                <span className="me-2 font-mono text-xs text-fd-muted-foreground">
+                  [^{entry.id}]
+                </span>
+              )}
               {href === null ? (
-                entry
+                label
               ) : (
                 <a
                   href={href}
@@ -240,7 +254,7 @@ export function Provenance({ entries }: { entries: readonly string[] }): ReactEl
                   rel="noreferrer"
                   className="underline underline-offset-4 transition-colors hover:text-fd-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-ring"
                 >
-                  {entry}
+                  {label}
                 </a>
               )}
             </li>

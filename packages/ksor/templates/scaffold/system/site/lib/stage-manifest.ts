@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { LifecycleBadge } from "./lifecycle-rule";
+import { parseIndex, type IndexEntry } from "../record/index-file";
 
 /**
  * What staging decided, for the surfaces that read the stage: which pages the
@@ -11,7 +12,11 @@ import type { LifecycleBadge } from "./lifecycle-rule";
  * route cannot re-derive admission with a second rule that drifts.
  */
 
-/** Where staging writes it, relative to the site directory every build runs from. */
+// Both relative to the site directory — the directory every build runs from
+// (`pnpm build` is `pnpm -C system/site build`), which is also how fumadocs
+// resolves a collection's `dir`.
+export const STAGE_DIR = "./.staged-knowledge";
+/** Where staging writes the manifest, beside the stage. */
 export const STAGE_MANIFEST = "./.staged-knowledge.json";
 
 export interface StagePage {
@@ -68,4 +73,16 @@ export function machineAdmits(pagePath: string): boolean {
 /** The page's own staging decision, or null for a path the stage does not hold. */
 export function stagePageOf(pagePath: string): StagePage | null {
   return readStageManifest().pages[pagePath.replaceAll("\\", "/")] ?? null;
+}
+
+/**
+ * The regenerated index of a bundle-relative directory (`""` for the root),
+ * parsed — or null for a directory this viewer's stage does not hold. The
+ * folder pages and the reading order read the stage's own indexes: what this
+ * viewer may see, in the generator's order, and nothing else.
+ */
+export function readStagedIndex(dir: string): IndexEntry[] | null {
+  const file = path.resolve(process.cwd(), STAGE_DIR, dir, "index.md");
+  if (!existsSync(file)) return null;
+  return parseIndex(readFileSync(file, "utf8"));
 }

@@ -9,33 +9,42 @@ import { isAttachment } from "./lib/attachment-rule";
 import { rehypeTeachingAid } from "./lib/teaching-aid-rule";
 import { knowledgeSourceDir } from "./lib/stage-knowledge";
 
-// The record lives at <repo>/knowledge — two levels up from this site.
-// Governance frontmatter (status, owner, provenance, superseded_by) is
-// tolerated on top of the default page schema so a governed document
-// always renders; `pnpm check` at the repo root is what enforces it.
+// The record lives at <repo>/knowledge — two levels up from this site. The
+// profile's governance frontmatter (record spec §2) is tolerated on top of
+// the default page schema so a governed document always renders; the record
+// checker, which staging runs, is what enforces it.
 //
-// When instance.md declares `audiences:`, the documents this build may
-// publish (and the assets they reference) are staged into a filtered copy
-// FIRST, and this is where that copy is chosen: one directory, one filter,
-// every surface downstream. See lib/stage-knowledge.ts.
+// The documents this build's viewer may see (and the assets they reference)
+// are staged into a filtered copy FIRST, for EVERY build, and this is where
+// that copy is chosen: one directory, one filter, every surface downstream.
+// See lib/stage-knowledge.ts.
 export const docs = defineDocs({
   dir: knowledgeSourceDir(),
   docs: {
-    // ONE exclusion, and it is the whole of "an attachment is not a document".
-    // The route table, the sidebar, llms.txt, llms-full.txt, /md/, the search
-    // index and the caveat map ALL read `source`, and `source` reads exactly
-    // this collection — so subtracting attachments here subtracts them from
-    // every surface at once. Doing it per-surface instead is the failure mode
-    // research/visibility.md §4-§5 is cited for; pruning the page tree is not
-    // even sufficient, because getSortedPages() deliberately re-adds what the
-    // tree dropped and the search index never consults the tree.
-    files: ["**/*.md", "**/*.mdx", "!**/*.summary.md", "!**/*.summary.mdx"],
+    // TWO exclusions, and they are the whole of "an attachment is not a
+    // document" and "an index is not a document". The route table, the
+    // sidebar, llms.txt, llms-full.txt, /md/, the search index and the badge
+    // map ALL read `source`, and `source` reads exactly this collection — so
+    // subtracting here subtracts from every surface at once. Doing it
+    // per-surface is the failure mode research/visibility.md §4-§5 is cited
+    // for; pruning the page tree is not even sufficient, because the search
+    // index never consults the tree. The regenerated `index.md` is rendered by
+    // the folder page component instead (record spec §1: no route, no twin,
+    // no llms.txt line — it carries no governance to publish under).
+    files: [
+      "**/*.md",
+      "**/*.mdx",
+      "!**/*.summary.md",
+      "!**/*.summary.mdx",
+      "!**/index.md",
+      "!**/index.mdx",
+    ],
     schema: pageSchema
       .extend({
+        type: z.string().optional(),
         status: z.string().optional(),
-        owner: z.string().optional(),
-        provenance: z.array(z.string()).optional(),
-        superseded_by: z.string().optional(),
+        order: z.number().optional(),
+        ksor: z.record(z.string(), z.any()).optional(),
       })
       .catchall(z.any()),
     postprocess: {

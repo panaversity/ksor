@@ -17,6 +17,7 @@ import { admitsLifecycle, lifecycleBadge } from "./lifecycle-rule";
 import { readLock } from "./lock";
 import { appDescription, appName, appTitle, projectRoot } from "./shared";
 import {
+  STAGE_DIR,
   STAGE_MANIFEST,
   type StageManifest,
   type StagePage,
@@ -30,10 +31,6 @@ import { inForce, isDeniedByLedger, parseLedger } from "../record/ledger";
 import { loadRecord } from "../record/load";
 import type { Refusal } from "../record/refusal";
 
-// Relative to the site directory — the directory every build runs from
-// (`pnpm build` is `pnpm -C system/site build`), which is also how fumadocs
-// resolves a collection's `dir`.
-const STAGE_DIR = "./.staged-knowledge";
 const KNOWLEDGE = "knowledge/";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const COMPANION = /\.(summary\.mdx?|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
