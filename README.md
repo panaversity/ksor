@@ -224,7 +224,7 @@ every surface.
 
 The full specification — the profile, the conformance classes, the
 governance requirements — is the **[KSoR Standard Proposal
-(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft9.md)**, an open
+(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft10.md)**, an open
 standard written so that anyone can implement a conformant KSoR. It defines
 five conformance classes — a corpus (A), a publisher (B), a retrieval layer
 (C), an agent surface (D), and exchange (E) — plus optional profiles for
