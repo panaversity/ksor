@@ -18,7 +18,7 @@ export interface LifecycleDoc {
 }
 
 /**
- * May `surface` publish `doc` at instant `at`? `drafts` is `KSOR_DRAFTS=show`,
+ * May `surface` publish `doc` at instant `at`? `drafts` is the build's drafts switch,
  * which admits drafts to HUMAN surfaces only.
  */
 export function admitsLifecycle(
