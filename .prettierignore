@@ -10,3 +10,9 @@ README.md
 # `pnpm check` refuses any drift, so a formatter must never touch them.
 packages/ksor/templates/scaffold/knowledge/**/index.md
 workbench/example-corpus/knowledge/**/index.md
+
+# The vendored OKF spec (record spec §1) is upstream's bytes, and its sha256 is
+# stamped into every build.lock.json as `okf.spec_sha256`. A formatter pass
+# rewrote emphasis markers and table padding here once — 36 bytes — leaving the
+# pin matching no artefact in the tree. A vendored artefact is never reformatted.
+specs/ksor/record/okf-SPEC.md

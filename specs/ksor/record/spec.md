@@ -14,8 +14,10 @@ is corrected in draft 10 (the list is in `research/okf-native.md` §2.15).
 OKF is pinned to `GoogleCloudPlatform/open-knowledge-format` `SPEC.md` at
 commit `ad30107c31c06aec8a7d5636e0d1058118604e6f` (2026-08-21; sha256
 `26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101`, 37,748
-bytes), vendored at `specs/ksor/record/okf-SPEC.md`; every timestamp in that
-revision is an instant.
+bytes), vendored **byte-exact** at `specs/ksor/record/okf-SPEC.md` — excluded
+from the formatter and asserted against `OKF_PIN.spec_sha256`, the digest every
+`build.lock.json` stamps, so the pin can never name bytes the tree does not
+hold; every timestamp in that revision is an instant.
 
 ## 1 · The bundle and what sits beside it
 
