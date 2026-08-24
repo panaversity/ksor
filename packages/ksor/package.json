@@ -67,6 +67,7 @@
     "hono": "4.13.2",
     "jose": "^6.2.9",
     "pg": "^8.23.0",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

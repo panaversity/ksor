@@ -14,6 +14,11 @@ catalog:
   zod: ^4.4.3
   "@standard-schema/spec": ^1.1.0
   "@types/node": ^24.13.3
+  # yaml (ISC, zero deps): the record is real YAML — the profile's `ksor:` block
+  # and the governance/ledger files cannot be read by the line scanners
+  # (research/okf-native.md §2.8; decision 26). EXACT pin: 2.9.0, published
+  # 2026-05-11, so the 48h quarantine below can never hold the install.
+  yaml: 2.9.0
 
 # Supply-chain hygiene (research/base-environment.md §2):
 # 48-hour quarantine on newly published dependency versions. npm supply-chain
