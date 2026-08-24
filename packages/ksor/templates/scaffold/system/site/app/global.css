@@ -703,6 +703,18 @@ html > body[data-scroll-locked] {
   border-bottom: 1px solid var(--color-fd-border);
 }
 
+/* And every other row carries a wash. A hairline alone is enough on a
+   two-column table; across three columns of wrapped prose the eye loses which
+   cells belong together, because the gap between rows and the gap between
+   lines INSIDE a cell are the same distance. The band is what holds a row
+   together over that distance.
+
+   Faint on purpose: it groups, it does not label. Anything stronger competes
+   with the head, which is the row that is meant to be read first. */
+#nd-page .prose tbody tr:nth-child(odd) {
+  background: color-mix(in oklab, var(--color-fd-muted) 55%, transparent);
+}
+
 #nd-page .prose tbody tr:last-child {
   border-bottom: 0;
 }
@@ -771,48 +783,15 @@ html > body[data-scroll-locked] {
   line-height: 1.7;
 }
 
-/* A block wider than the measure has to SAY it continues, and say it only
-   while it does.
-
-   The record's commands are aligned two-column text — a command, then a `#`
-   comment out to the right — and a line of that runs past a 672px column by a
-   few dozen pixels. What arrived was a comment cut mid-word with a grey OS
-   scrollbar under it, which reads as damage rather than as "there is more".
-
-   The pair of shadows is the classic scroll-shadow: the covering gradients are
-   `local`, so they ride with the content, and the shadows are `scroll`, so
-   they sit still. At the far left the covering gradient is over the left
-   shadow and hides it; scroll right and it slides away and the shadow appears.
-   No script, no measuring, and NOTHING at all on a block that fits — which is
-   most of them, and the reason this is not just a permanent fade. */
+/* Nothing here scrolls sideways any more — the rule above wraps instead — so
+   this is only the hairline a scrollbar would be if one ever appeared, in
+   place of the platform's slab. The scroll-shadow that used to live here went
+   with the overflow it announced; keeping a mechanism for a state that cannot
+   occur is a thing to read and maintain that says nothing. */
 #nd-page .prose figure.shiki .fd-scroll-container {
-  background:
-    linear-gradient(to right, var(--color-fd-muted) 40%, transparent) left center / 3rem 100%
-      no-repeat local,
-    linear-gradient(to left, var(--color-fd-muted) 40%, transparent) right center / 3rem 100%
-      no-repeat local,
-    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 14%), transparent) left center / 0.9rem 100%
-      no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 14%), transparent) right center / 0.9rem
-      100% no-repeat scroll;
-
-  /* And when it does scroll, a hairline rather than the platform's slab. */
   scrollbar-width: thin;
   scrollbar-color: var(--color-fd-border) transparent;
 }
-
-.dark #nd-page .prose figure.shiki .fd-scroll-container {
-  background:
-    linear-gradient(to right, var(--color-fd-muted) 40%, transparent) left center / 3rem 100%
-      no-repeat local,
-    linear-gradient(to left, var(--color-fd-muted) 40%, transparent) right center / 3rem 100%
-      no-repeat local,
-    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 45%), transparent) left center / 0.9rem 100%
-      no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 45%), transparent) right center / 0.9rem
-      100% no-repeat scroll;
-}
-
 /* A callout has to look like a callout. The same `bg-fd-card` trap as the code
    block above: fumadocs paints the panel with `--card`, which in this palette
    is all but the page colour, so a Note and a Warning both arrived as a white
@@ -834,6 +813,21 @@ html > body[data-scroll-locked] {
   /* The shadow was doing the work the colour now does, and lifted the panel
      off the page in a way nothing else on it does. */
   box-shadow: none;
+
+  /* THE RULE DOWN THE LEFT EDGE — the same device the verbatim block uses, so
+     "this passage is set apart" looks the same everywhere it happens, whatever
+     kind of thing is set apart. Fumadocs draws a half-pixel bar INSIDE the
+     panel instead, which is too faint to read as a marker at all.
+
+     In the kind's own colour, which for a Note — much the commonest — is the
+     accent, so the standard case is the blue line. */
+  border-left: 3px solid color-mix(in oklab, var(--callout-color) 65%, var(--color-fd-border));
+}
+
+/* And the inner bar goes, now that the edge carries it. Two rules for the same
+   job, a pixel apart, read as a mistake. */
+#nd-page .prose [style*="--callout-color"] > div[class*="w-0.5"] {
+  display: none;
 }
 
 .dark #nd-page .prose [style*="--callout-color"] {
