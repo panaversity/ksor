@@ -35,15 +35,14 @@ export function getMDXComponents(components?: MDXComponents) {
     // here or a document whose page forgot to pass one serves a 500 rather
     // than a page without an aid.
     TeachingAid: () => null,
-    // `remarkCodeTab` (source.config.ts) rewrites consecutive fenced blocks
-    // that declare `tab="…"` into these, so they have to be in the map or the
-    // build fails on an unknown component rather than at authoring time.
     // A long line is the reader's to unwrap, per block — see
     // components/code-block.tsx. Replaces fumadocs' own `pre`.
     pre: WrappableCodeBlock,
     // `rehypeEmbeds` (source.config.ts) rewrites a link titled `embed` into
-    // this, for the same reason: an unknown component fails the build.
+    // this; an unknown component fails the build, so it has to be in the map.
     Embed,
+    // `remarkCodeTab` (source.config.ts) rewrites consecutive fenced blocks
+    // that declare `tab="…"` into these, for the same reason.
     Tabs,
     Tab,
     CodeBlockTabsTrigger: BrandedTabsTrigger,

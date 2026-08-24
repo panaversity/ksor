@@ -145,6 +145,7 @@ export default defineConfig({
        * publishes this site's React component to the agent surface.
        */
       rehypeGithubAlerts,
+      /**
        * An interactive page the document points at, as a click-to-load
        * frame. Authored as an ordinary link titled `embed`, so the record
        * stays CommonMark and every other reader of it sees a link.
