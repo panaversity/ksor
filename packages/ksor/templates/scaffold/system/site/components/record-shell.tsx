@@ -41,8 +41,8 @@ export function RecordShell({ children }: { children: ReactNode }): ReactElement
         // branch that also holds the language select, icon links and theme
         // switch). Without it React logs "Each child in a list should have a
         // unique key prop" naming RecordShell, on every page. Invisible in a
-        // production build, which is why it survived: it only shows in `pnpm
-        // dev`, where the adopter meets it first.
+        // production build, which is why it survived: it only shows in the
+        // dev server, where the adopter meets it first.
         footer: (
           <div key="record-footer" className="mt-3 flex flex-col gap-2">
             {/* The record's own identity, on every page rather than only the

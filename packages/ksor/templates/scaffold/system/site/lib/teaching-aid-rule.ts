@@ -19,8 +19,8 @@
  * same MDX pipeline (source.config.ts, the `summaries` collection) and is
  * rendered with the page's own component map, which does not carry a teaching
  * aid — so marking one threw "Expected component `TeachingAid` to be defined"
- * and served a 500 for every document that has a summary. Found live in `pnpm
- * dev`, on the first page with one.
+ * and served a 500 for every document that has a summary. Found live in the
+ * dev server, on the first page with one.
  *
  * What counts as an attachment is HANDED IN rather than imported: this file
  * has to stay import-free so the repo's own tests can take it on its own (a
