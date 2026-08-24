@@ -508,6 +508,80 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     expect(after.active, "the active pointer must not move").toBe(before.active);
     expect(after.gens, "no generation was persisted").toBe(before.gens);
   }, 240_000);
+
+  it("a TOOLCHAIN change is a change: the same bytes under a different chunk policy earn a generation", async () => {
+    // The hole this closes, walked: `CHUNK_POLICY` moved v5 -> v6 with decision
+    // 22's navigation rule, adopters were told to re-run `ksor ingest` to get
+    // the re-classification, and ingest compared only bytes and governance —
+    // so it reported "unchanged", published nothing, exited 0, and the
+    // documents stayed unsearchable. The active generation is aged here rather
+    // than the constant bumped, because the state under test is "the serving
+    // generation was built by a different toolchain", however it got there.
+    const settled = await buildGeneration(pool, instance, {
+      recordRoot: FIXTURE,
+      sourceCommit: "commit-toolchain",
+      flip: true,
+      provider: fake,
+    });
+    expect(
+      (
+        await buildGeneration(pool, instance, {
+          recordRoot: FIXTURE,
+          sourceCommit: "commit-toolchain",
+          flip: true,
+          provider: fake,
+        })
+      ).unchanged,
+      "the baseline: identical bytes, identical toolchain",
+    ).toBe(true);
+
+    await runIngest(pool, TENANT, (c) =>
+      c.query("UPDATE sources SET chunk_policy = $2 WHERE tenant_id = $1 AND generation = $3", [
+        TENANT,
+        "heading-aware-1500-content-only-v0",
+        settled.generation,
+      ]),
+    );
+    const rebuilt = await buildGeneration(pool, instance, {
+      recordRoot: FIXTURE,
+      sourceCommit: "commit-toolchain",
+      flip: true,
+      provider: fake,
+    });
+    expect(rebuilt.unchanged, "a stale chunk policy must NOT report unchanged").toBe(false);
+    expect(rebuilt.generation, "and it publishes a new generation").toBeGreaterThan(
+      settled.generation,
+    );
+  }, 240_000);
+
+  it("a POLICY change is a change too — the door binds the run's policy row, not a file", async () => {
+    // The registry and the authority sets are stored on the run and the door
+    // reads them from there, so a governance edit that moves no document byte
+    // still has to reach the database. Comparing only documents would leave the
+    // door authorising against a policy the repository has already replaced.
+    const settled = await buildGeneration(pool, instance, {
+      recordRoot: FIXTURE,
+      sourceCommit: "commit-policy",
+      flip: true,
+      provider: fake,
+    });
+    await runIngest(pool, TENANT, (c) =>
+      c.query(
+        "UPDATE ingestion_runs SET policy_sha256 = 'a-policy-this-record-no-longer-has'" +
+          " WHERE tenant_id = $1 AND generation = $2",
+        [TENANT, settled.generation],
+      ),
+    );
+    const rebuilt = await buildGeneration(pool, instance, {
+      recordRoot: FIXTURE,
+      sourceCommit: "commit-policy",
+      flip: true,
+      provider: fake,
+    });
+    expect(rebuilt.unchanged, "a policy the run does not carry must NOT report unchanged").toBe(
+      false,
+    );
+  }, 240_000);
 });
 
 describe.runIf(adminDsn === "")("ingest pipeline db acceptance (gated)", () => {
