@@ -136,12 +136,8 @@ KSoR exists to solve that problem.
 
 # The KSoR Framework
 
-The architecture on this page is being proposed as an open standard — the
-**[KSoR Standard Proposal
-(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft9.md)**, a draft
-with no formal standing until it is reviewed and adopted. It defines KSoR as
-an **open, vendor-neutral knowledge infrastructure framework**, built around
-three commitments:
+KSoR is an **open, vendor-neutral knowledge infrastructure framework**,
+built around three commitments:
 
 > **One authoritative record.**  
 > **One governance boundary.**  
@@ -215,6 +211,11 @@ And the boundaries — not the products — are the standard. Postgres + pgvecto
 and Fumadocs are reference implementation choices; a conformant alternative
 may replace them. What may not vary is the governance semantics: one policy,
 every surface.
+
+The full specification — the profile, the conformance classes, the
+governance requirements — is the **[KSoR Standard Proposal
+(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft9.md)**, an open
+standard written so that anyone can implement a conformant KSoR.
 
 Which of the nine responsibilities the shipped tool implements today is
 recorded in [`docs/status.md`](docs/status.md) — always the authority, never
@@ -400,8 +401,8 @@ They are different projections of the **same governed source**.
 # The Trust Ladder
 
 Not every way of serving knowledge gives the same guarantee, and a KSoR
-refuses to pretend otherwise. The proposed standard states the trade as a
-ladder: **wider reach means weaker guarantees.**
+refuses to pretend otherwise. The trade is explicit, as a ladder: **wider
+reach means weaker guarantees.**
 
 | Rung | Channel                                                 | Reach                               | Guarantee                                                                                                                                          |
 | ---- | ------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -921,7 +922,7 @@ When someone asks:
 
 the architecture should make the answer discoverable.
 
-The proposed standard binds this responsibility to **SLSA and Sigstore**: provenance
+KSoR binds this responsibility to **SLSA and Sigstore**: provenance
 attestation proving which governed source and build produced a published
 artifact. The published `@panaversity/ksor` package already ships with npm
 provenance attached; corpus-level attestation will land with `ksor build`.
@@ -977,11 +978,11 @@ A KSoR can therefore expose representations such as:
 
 These outputs are derived from the same governed record. They do not become independent sources of truth.
 
-The proposed standard adds one more machine surface: **governed OKF exchange bundles** —
-the same representation the record itself is written in, filtered by
-governance and packaged for another knowledge system to import. Because the
-record is specified to _be_ OKF, exchange will be selection and packaging,
-not translation. This surface is specified, not yet shipped.
+One more machine surface completes the set: **governed OKF exchange
+bundles** — the same representation the record itself is written in,
+filtered by governance and packaged for another knowledge system to import.
+Because the record _is_ OKF, exchange is selection and packaging, not
+translation. (Specified; not yet shipped.)
 
 The durable asset remains the governed knowledge; each representation is replaceable.
 
@@ -1000,7 +1001,7 @@ storage, and query are outside its scope, and its own specification calls its
 trust fields "advisory signals, not access control."
 
 **KSoR is built on OKF, and therefore uses OKF for interoperability** — not
-the other way around. Under the proposed standard, the authoritative record is not
+the other way around. The authoritative record is not
 converted to OKF at the edge; it _is_ an OKF bundle, constrained by the KSoR
 Profile. KSoR invents no knowledge serialization of its own, and exchange
 between knowledge systems is governed selection and packaging of the same
@@ -1014,7 +1015,7 @@ The division of labor is exact:
   approval, audiences, takedown, governed retrieval and serving, abstention,
   publication integrity, operations.
 
-Or in the two lines the proposal reduces it to:
+Or in two lines:
 
 > **OKF makes KSoR knowledge open, portable, and interoperable.**  
 > **KSoR governance makes that knowledge institutionally authoritative and operational.**
@@ -1023,9 +1024,8 @@ Where OKF ends is where KSoR begins. A format can make knowledge portable; it
 cannot make it governed. OKF makes knowledge portable. **KSoR makes knowledge
 governable.**
 
-The standard is a draft, and the shipped scaffold does not yet emit the KSoR
-Profile — [`docs/status.md`](docs/status.md) is the authority on what runs
-today.
+The shipped scaffold does not yet emit the KSoR Profile —
+[`docs/status.md`](docs/status.md) is the authority on what runs today.
 
 ---
 
@@ -1454,11 +1454,10 @@ Organizations should be able to adapt the framework to their requirements.
 
 KSoR is under active development.
 
-The architecture is being proposed as an open standard: the **[KSoR Standard
-Proposal](research/ksor-standard-proposal-001-v0.1-draft9.md)** — a draft
-with no formal standing until it is reviewed and adopted. This repository is
-the reference implementation that proposal names, and the proposal is
-written to be implementable by others.
+The architecture is specified by the **[KSoR Standard
+Proposal](research/ksor-standard-proposal-001-v0.1-draft9.md)** (currently a
+draft). This repository is its reference implementation, and the proposal is
+written so that others can implement it too.
 
 The project is evolving from the original VSOR implementation into the more general **Knowledge System of Record** architecture.
 
