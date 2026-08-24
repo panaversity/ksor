@@ -265,6 +265,9 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     lands in the adopter's proprietary repo free of attribution
     obligations, and init never emits a LICENSE file into a repo whose
     knowledge is theirs. The grant sentence lives in the scaffolded README.
+    _Revision 2026-08-25 (decision 26): the emitted `check.mjs` will bundle
+    the `yaml` parser and carry its ISC notice in a banner; the templates
+    themselves stay MIT-0._
 11. **The content kernel converts whole; serve is the graduated rung**
     (owner, 2026-08-19). The predecessor kernel's content SoR
     (`sor-agentfactory @ b554f91`: sor-content, the sor-platform trim, the
@@ -373,6 +376,10 @@ gateway` package, serve-by-spawn) is superseded._
     without a library in between. Reversed if the vendor's REST contract starts
     changing faster than we can follow it, which the live test is what would
     tell us._
+
+    _Revision 2026-08-25 (decision 26): `yaml` 2.9.0 joins the set — ISC,
+    zero transitive dependencies, exact-pinned — for the record module; the
+    CLI carries it because it bundles `content`._
 
 13. **The content gateway's HTTP door composes the SDK's Web-standard
     transport, not a hand-rolled one** (owner-directed, 2026-08-19). The MCP
@@ -544,7 +551,10 @@ gateway` package, serve-by-spawn) is superseded._
     Extends to any guarantee two surfaces must both honour; the next one is
     takedown, which is already single-seam on the serving side. Reversed if the
     site ever can import the rule directly, which would make the table a
-    convenience rather than a guard.
+    convenience rather than a guard. _Revision 2026-08-25 (decision 26): the
+    OKF-native record makes the copied rule modules GENERATED at
+    package-build time rather than hand-kept; until that build entry lands
+    the byte-copy and its drift test stand unchanged._
 
 19. **A surface that refuses must refuse on BOTH surfaces** (2026-08-21, from
     the governance review). Product principle 2 says the site and the MCP door
@@ -817,6 +827,35 @@ gateway` package, serve-by-spawn) is superseded._
     cannot be kept green; the disclosure clause is not reversible without an
     owner decision, because silence about a weaker posture is the failure mode
     it exists to prevent.
+
+26. **The record is real YAML, read by one parser** (2026-08-25, with the
+    OKF-native record — `research/okf-native.md` §2 item 8, `specs/ksor/record/spec.md`).
+    The kernel and the scaffold read frontmatter with five hand-written line
+    scanners (`plain-tree.ts`, the site's `governance.ts` and two rule
+    modules, the emitted `check.mjs`), each a different subset of YAML, and
+    the profile's nested `ksor:` block, `.ksor/governance.yaml` and
+    `.ksor/takedowns.yaml` are shapes none of them can read — a scanner that
+    fails on a nested key fails SILENTLY, which is the visibility leak's
+    second door (decision 18). `packages/content/src/record/` reads all three
+    with `yaml` **2.9.0** (ISC, ZERO transitive dependencies, 796 KB of
+    `dist/` installed; published 2026-05-11, so the catalog's 48-hour
+    quarantine never holds it), pinned EXACTLY in the catalog, enrolled in
+    guard rule 5 for `ksor-content` and — because the CLI bundles the kernel
+    — for `@panaversity/ksor`. What the parser is allowed to hand back is
+    narrowed at the boundary (`record/frontmatter.ts`): the core schema, one
+    document, unique keys, plain data only (a `!!binary` Buffer, a
+    `!!timestamp` Date or an unknown tag is refused, never passed on), and
+    the fence found by a real-newline walk rather than a multiline regex,
+    because JS `^`/`$` break on U+2028 where YAML 1.2 does not (found in
+    review). Reversed if a scanner is shown to read every profile shape the
+    spec names, which would make the dependency weight buy nothing.
+
+    _This revises three decisions in place: decision 10 (the emitted checker
+    will carry the parser's ISC notice once `check.mjs` is built from the
+    kernel's rules, plan §2 item 8 — the templates stay MIT-0, the bundled
+    parser keeps its own licence), decision 12 (the dependency list gains
+    `yaml`), and decision 18 (the scaffold's copy of a rule becomes generated
+    at package-build time, not hand-kept; the drift test stays until it is)._
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,

@@ -167,7 +167,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
         "pg",
         "@types/pg",
         "jose",
-        // yaml: the record is real YAML (research/okf-native.md §2.8, decision
+        // yaml: the record is real YAML (research/okf-native.md §2 item 8, decision
         // 26) — the CLI bundles `content`, which reads the profile's `ksor:`
         // block, `.ksor/governance.yaml` and `.ksor/takedowns.yaml` with it.
         // ISC, zero transitive deps, pinned exactly in the catalog.
@@ -182,7 +182,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     [`${P}ksor-postgres`, new Set(["pg", "@types/pg"])],
     // yaml: the record module (src/record/) parses profile frontmatter, the
     // governance policy and the takedown ledger — real YAML, not line scanners
-    // (research/okf-native.md §2.8, decision 26).
+    // (research/okf-native.md §2 item 8, decision 26).
     [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "yaml", `${P}ksor-postgres`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
     // The ONE published kernel package (decision 12, publish revision
