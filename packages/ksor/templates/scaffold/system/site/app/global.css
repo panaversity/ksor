@@ -678,7 +678,25 @@ html > body[data-scroll-locked] {
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-fd-muted-foreground);
+  /* The record's own accent, at reading strength. The labels were grey on
+     near-white and the head did not read as a head at all — on a three-column
+     table the eye had to work out which row was the label. */
+  color: color-mix(in oklab, var(--color-fd-primary) 72%, var(--color-fd-foreground));
+  background: color-mix(in oklab, var(--color-fd-primary) 7%, var(--color-fd-muted));
+}
+
+/* The head is a band, so it is ruled off from the body rather than floating
+   above it — and the rule is the accent's, not the hairline's, so the two read
+   as one object. */
+#nd-page .prose thead {
+  border-bottom: 2px solid color-mix(in oklab, var(--color-fd-primary) 28%, var(--color-fd-border));
+}
+
+.dark #nd-page .prose thead th {
+  /* Against near-black the same 7% is almost nothing, and the same 72% ink is
+     too bright to sit under body text. */
+  color: color-mix(in oklab, var(--color-fd-primary) 60%, var(--color-fd-foreground));
+  background: color-mix(in oklab, var(--color-fd-primary) 12%, var(--color-fd-muted));
 }
 
 #nd-page .prose tbody tr {
