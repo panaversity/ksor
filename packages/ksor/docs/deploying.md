@@ -7,6 +7,11 @@ status: draft
 
 ## Before you start
 
+Commands on this page use the pnpm spelling (`pnpm build`, `pnpm serve`).
+Since 0.0.36, `ksor init` emits the scaffold for the manager that ran it —
+npm and bun included — and your scaffold's own README speaks that manager;
+translate accordingly (`npm run build`, `bun run build`).
+
 Four things must exist, and the order matters. Nothing below works without them,
 and three of the four are outside this page.
 

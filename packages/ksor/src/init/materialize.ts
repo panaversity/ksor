@@ -8,6 +8,14 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import {
+  applyProse,
+  extraFiles,
+  isSkippedFor,
+  transformManifest,
+  type PackageManager,
+} from "./manager.js";
+
 /** The exactly-two authored substitutions (spec: templates + two stamps). */
 export interface Stamps {
   readonly name: string;
@@ -56,14 +64,30 @@ export function materialize(
   templateDir: string,
   targetDir: string,
   stamps: Stamps,
+  manager: PackageManager = "pnpm",
   created: string[] = [],
 ): readonly string[] {
+  materializeTree(templateDir, targetDir, stamps, manager, created, true);
+  return created;
+}
+
+function materializeTree(
+  templateDir: string,
+  targetDir: string,
+  stamps: Stamps,
+  manager: PackageManager,
+  created: string[],
+  isRoot: boolean,
+): void {
   for (const entry of readdirSync(templateDir, { withFileTypes: true })) {
     // A dev checkout's template can be accidentally installed into (found
     // live 2026-08-18: a concurrent agent left 477 MB of node_modules there);
     // the scaffold must never inherit it. The published tarball never
     // carries one, so this guard is inert in production.
     if (entry.name === "node_modules") continue;
+    // A manager's scaffold carries only its own machinery: pnpm-workspace.yaml
+    // and the committed lockfile belong to the pnpm shape alone (issue #28).
+    if (isRoot && isSkippedFor(entry.name, manager)) continue;
     const from = path.join(templateDir, entry.name);
     const to = path.join(targetDir, EMITTED_NAMES.get(entry.name) ?? entry.name);
     if (entry.isDirectory()) {
@@ -71,11 +95,18 @@ export function materialize(
         mkdirSync(to, { recursive: true });
         created.push(to);
       }
-      materialize(from, to, stamps, created);
+      materializeTree(from, to, stamps, manager, created, false);
     } else if (isTextFile(from)) {
-      const text = readFileSync(from, "utf8")
+      const stamped = readFileSync(from, "utf8")
         .replaceAll("KSOR-STAMP-NAME", stamps.name)
         .replaceAll("KSOR-STAMP-VERSION", stamps.version);
+      // The manifest is transformed structurally; every other text file gets
+      // the prose translation (manager blocks + spellings). Both are pure
+      // functions of shipped bytes, so byte-determinism per manager holds.
+      const text =
+        isRoot && entry.name === "package.json"
+          ? transformManifest(stamped, manager)
+          : applyProse(stamped, manager);
       // Tracked before the write: a mid-write ENOSPC leaves a partial file
       // the rollback must still remove (review finding, 2026-08-18).
       created.push(to);
@@ -84,6 +115,19 @@ export function materialize(
       created.push(to);
       copyFileSync(from, to);
     }
+  }
+}
+
+/** Emit the files a manager's scaffold gains beyond the template tree. */
+export function materializeExtras(
+  targetDir: string,
+  manager: PackageManager,
+  created: string[] = [],
+): readonly string[] {
+  for (const [name, content] of extraFiles(manager)) {
+    const to = path.join(targetDir, name);
+    created.push(to);
+    writeFileSync(to, content);
   }
   return created;
 }

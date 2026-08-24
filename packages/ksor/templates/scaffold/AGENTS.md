@@ -112,7 +112,8 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 
    `provision` is separate on purpose: applying DDL and granting ingest are acts
    an operator performs, not side effects of starting a server. (It is not
-   called `setup` because `pnpm setup` is pnpm's own command and would shadow
+   called `setup` because package managers claim that word for commands of
+   their own, which would shadow
    it — the step would print "No changes to the environment were made" and do
    nothing.)
 

@@ -128,6 +128,9 @@ async function main(args: readonly string[]): Promise<number> {
         version: pkg.version,
         // Resolved from the built cli.mjs location: dist/ -> package root.
         templatesDir: fileURLToPath(new URL("../templates/scaffold", import.meta.url)),
+        // Names the manager that spawned this run (npx/pnpm dlx/bunx), so
+        // init can emit the scaffold for the adopter's own toolchain (#28).
+        userAgent: process.env.npm_config_user_agent,
       },
     );
   }
