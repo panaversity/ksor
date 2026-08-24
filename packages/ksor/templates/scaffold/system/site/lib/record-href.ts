@@ -24,10 +24,16 @@ import { resolveLink } from "../record/citations";
  * `href` as this build serves it: a route when the link names a concept of this
  * build, and the author's own text otherwise.
  *
- * Otherwise is not a failure. A per-viewer build stages a SUBSET, so a link to
- * a concept this viewer may not see must stay as written rather than become a
- * link to a page that does not exist — and the same fall-through carries
- * assets, external urls and same-page anchors untouched.
+ * Otherwise the href is handed back UNCHANGED, which is what carries assets,
+ * external urls and same-page anchors through untouched.
+ *
+ * Two cases fall through to a link this build cannot serve, and both are
+ * deliberate. A per-viewer build stages a SUBSET, so a link to a concept this
+ * viewer may not see must not be rewritten — inventing a route would publish
+ * the existence of a document the viewer was not given, which is exactly what
+ * the audience rule withholds. And a link to a concept that exists in no build
+ * is an authoring mistake the CHECKER owns: rewriting it here would hide it
+ * from the one thing that can name the file and the line.
  */
 export function recordHref(
   href: string | undefined,

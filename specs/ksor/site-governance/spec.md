@@ -7,6 +7,17 @@ evidence: panaversity/ksor#29
 
 # Site governance rendering
 
+> **Superseded in part, 2026-08-25.** This page was written against the ranked
+> `visibility:` model and the `draft | review | approved | superseded` status
+> vocabulary. The record is now the KSoR Profile of OKF: the lifecycle states
+> are `draft | stable | deprecated`, the audience is a LIST that overlaps a
+> viewer's list, and which surface may publish which state is record spec
+> §2.5's table. **`specs/ksor/record/spec.md` §2 and `specs/ksor/build/spec.md`
+> §3 are the contract**; what survives here unchanged is the _reasoning_ — why
+> the governance a document carries must be visible on the surface that serves
+> it, and why `site.governance` decides the pages and never the agent files.
+> The key-by-key tables below name pre-profile keys and are read as history.
+
 The record carries a governance vocabulary on every document and `pnpm check`
 enforces it. The site parses four of those keys and renders none of them.
 Where this spec and the code disagree, the code wins and this page is

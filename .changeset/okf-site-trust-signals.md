@@ -1,0 +1,9 @@
+---
+"@panaversity/ksor": patch
+---
+
+Show the whole trust signal on a governed page, and serve the markdown twin's frontmatter intact (`specs/ksor/record/spec.md` §2, `specs/ksor/build/spec.md` §3). A document's page now carries a **status chip on every page** — `draft`, `stable` or `deprecated`, `stable` included, because a reader who cannot see it cannot tell a governed record from a site that never said — the **trust tier** OKF names (`unverified` / `machine-confirmed` / `human-reviewed`) beside the verification that set it, the **approver and date** that make a stable document stable, and, on a withdrawn one, **who withdrew it and when**. Where the calendar keeps an otherwise current document off the machine surfaces, a second chip carries record spec §2.5's own words with the date the spec's ellipsis stands for: `effective from 2030-01-01`, `past its review date`. `unverified` is printed rather than hidden — it is the honest state of a stable, approved concept nobody has reviewed.
+
+The `/md/` twins and `llms-full.txt` now serve each concept's **own frontmatter, verbatim**, under the derived `trust_tier` and the build's `build_id` / `source_commit` / `ksor_version`. The projection they replaced flattened `ksor.owner` into a top-level `owner:` and `ksor.effective_from` into `effective_from:` — both keys record spec §2.7 refuses BY NAME as pre-profile leftovers, so every twin published a frontmatter the record's own checker would have rejected, and every unknown key §2.7 preserves was dropped on the way out. An OKF consumer now parses the profile's grammar rather than this shell's summary of it.
+
+Fixed: a withdrawn document's **search result** wore the ordinary grey chip, because the CSS that tints it still selected the pre-profile status word `superseded`. Search is where a reader chooses between two documents and where the snippet quotes the withdrawn figure.
