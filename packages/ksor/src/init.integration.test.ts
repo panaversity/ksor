@@ -587,6 +587,9 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
         ".gitattributes",
         ".github",
         ".gitignore",
+        // The Governance Policy and, once a takedown exists, the ledger —
+        // the record's root of authority beside the bundle (record spec §1).
+        ".ksor",
         "AGENTS.md",
         "CLAUDE.md",
         // The MCP door as a portable container — no host named in it

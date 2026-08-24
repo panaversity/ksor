@@ -1,5 +1,10 @@
-# scratch space for ksor verbs — everything transient lives under one roof
-.ksor/
+# ksor's working directory — build output and scratch, never the record.
+# The two governance files inside it ARE the record (the policy and the
+# takedown ledger) and are un-ignored by name: the directory form `.ksor/`
+# cannot be negated, so the glob is `.ksor/*`.
+.ksor/*
+!.ksor/governance.yaml
+!.ksor/takedowns.yaml
 
 node_modules/
 system/site/.next/
@@ -18,7 +23,3 @@ system/site/.staged-knowledge.lock
 !.env.example
 
 .DS_Store
-
-# The takedown manifest the site build reads — exported from the database,
-# never hand-edited, and re-exported on every build.
-.ksor-denylist.json

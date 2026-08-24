@@ -126,7 +126,7 @@ describe("ksor init meets the invoking package manager", () => {
     expect(m.workspaces).toEqual(["system/site", "system/gateways/*", "system/packages/*"]);
     expect(m.packageManager).toBeUndefined();
     expect(m.scripts.dev).toBe("npm --prefix system/site run dev");
-    expect(m.scripts.build).toBe("npm run export-denylist && npm --prefix system/site run build");
+    expect(m.scripts.build).toBe("ksor build && npm --prefix system/site run build");
     expect(m.scripts.provision).toBe("npm run schema && npm run grant");
 
     // The denial half of the supply-chain posture translates; the emitted file
@@ -162,7 +162,7 @@ describe("ksor init meets the invoking package manager", () => {
     // (observed live on bun 1.3.6: `run build` executed `dev`), so bun scripts
     // are cd-chains, which bun's own cross-platform shell executes on Windows.
     expect(m.scripts.dev).toBe("cd system/site && bun run dev");
-    expect(m.scripts.build).toBe("bun run export-denylist && cd system/site && bun run build");
+    expect(m.scripts.build).toBe("ksor build && cd system/site && bun run build");
 
     assertNoForeignManager(root);
     // The quarantine disclosure must survive into the bun README too — bun has

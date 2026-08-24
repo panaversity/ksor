@@ -250,16 +250,14 @@ and anything that can serve files can serve it.
   If the build image's pnpm predates the `packageManager` pin, set the
   `ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
 <!-- /ksor:pm -->
-**Once `instance.md` declares a `database:`, the BUILD needs the DSN too.**
-`pnpm build` first runs `pnpm export-denylist`, which asks the record's
-database what has been withdrawn (`ksor takedown --export`) and writes
-`.ksor-denylist.json` for the site to read. Without it the build stops:
-
-```
-KSOR_DB_URL is unset, and instance.md declares a database
-  why: a takedown lives in that database. Without it this build cannot tell
-  'nothing is denied' from 'nobody asked'
-```
+**`pnpm build` runs `ksor build` first.** It generates every `index.md`,
+runs the record checker, and writes `build.lock.json` — the committed record
+of what was published, from which commit, with which toolchain — and only
+then builds the site. A checker refusal stops the build before anything is
+written. Takedowns reach the site through `.ksor/takedowns.yaml`, the
+committed ledger (until the site half of this release lands, a record that
+declares a `database:` still writes `.ksor-denylist.json` with
+`ksor takedown --export` before the site build).
 
 That is deliberate — a site built without asking would publish a document you
 withdrew. Give the build environment the same `KSOR_DB_URL` your server uses

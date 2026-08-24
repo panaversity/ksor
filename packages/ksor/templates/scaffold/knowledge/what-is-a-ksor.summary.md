@@ -1,3 +1,7 @@
+---
+type: Summary
+---
+
 A Knowledge System of Record settles **which copy governs**. When a wiki page, a
 slide or a model's memory disagrees with it, this record wins.
 

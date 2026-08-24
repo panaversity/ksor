@@ -46,6 +46,10 @@ const REQUIRED_IN_TARBALL = [
   "templates/scaffold/package.json",
   "templates/scaffold/pnpm-lock.yaml",
   "templates/scaffold/instance.md",
+  // The Governance Policy — the root of authority (record spec §4) — and the
+  // generated root index, which a fresh scaffold's own `pnpm check` requires.
+  "templates/scaffold/.ksor/governance.yaml",
+  "templates/scaffold/knowledge/index.md",
   "templates/scaffold/vercel.json",
   // The container artifacts. Shipping these is what makes the served rung
   // deployable anywhere rather than only where we happened to test.

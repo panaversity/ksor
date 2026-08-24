@@ -5,3 +5,7 @@
 # 0.63.0, same linux runner. Exclude the prose banner file from format-checking
 # until oxfmt's markdown support stabilizes; it is documentation, not code.
 README.md
+
+# Generated OKF §8 indexes (record spec §1): `ksor build` writes them byte-exact and
+# `pnpm check` refuses any drift, so a formatter must never touch them.
+packages/ksor/templates/scaffold/knowledge/**/index.md

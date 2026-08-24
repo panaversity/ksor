@@ -1,5 +1,5 @@
 /**
- * The emitted checker — `pnpm check` in a scaffolded project. Built by tsdown
+ * The emitted checker — the scaffold's `check` script. Built by tsdown
  * into `.agents/skills/format-checker/check.mjs` (and its `.claude` twin)
  * with the record module and its parser bundled in, so an adopter's CI runs
  * it with bare `node` and no install (record spec §6). One rule set: this

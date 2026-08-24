@@ -74,13 +74,13 @@ export const WORKSPACE_GLOBS: readonly string[] = [
 const SCRIPT_BODIES: Record<Exclude<PackageManager, "pnpm">, Record<string, string>> = {
   npm: {
     dev: "npm --prefix system/site run dev",
-    build: "npm run export-denylist && npm --prefix system/site run build",
+    build: "ksor build && npm --prefix system/site run build",
     provision: "npm run schema && npm run grant",
     refresh: "npm run ingest && npm run gc",
   },
   bun: {
     dev: "cd system/site && bun run dev",
-    build: "bun run export-denylist && cd system/site && bun run build",
+    build: "ksor build && cd system/site && bun run build",
     provision: "bun run schema && bun run grant",
     refresh: "bun run ingest && bun run gc",
   },
@@ -124,7 +124,6 @@ const SCRIPT_NAMES = [
   "grant",
   "ingest",
   "gc",
-  "export-denylist",
 ] as const;
 
 function spellings(manager: Exclude<PackageManager, "pnpm">): readonly [string, string][] {
