@@ -57,6 +57,26 @@ function containScrolling(doc: Document | null): void {
   proto.__ksorContained = true;
 }
 
+/**
+ * Close the gutter a framed page leaves around itself.
+ *
+ * A page that does not reset `body { margin }` keeps the user agent's 8px, and
+ * that band shows whatever is behind the frame — so a sim painted near-black
+ * sat inside a ring of near-white. Matching the colour instead was tried and
+ * does not work: these pages paint below the body, so `html`, `body` and even
+ * the wrapper all compute to transparent (measured on the one that has the
+ * gutter), and chasing the colour down the tree would be guesswork.
+ *
+ * Zeroing it is the honest fix, and it is what six of the seven sims already
+ * do in their own stylesheet — this only makes the seventh agree. Presentation
+ * of the frame is the host's to decide; the page's content is untouched.
+ */
+function closeGutter(doc: Document | null): void {
+  const body = doc?.body;
+  if (!body) return;
+  body.style.margin = "0";
+}
+
 export function Embed({
   url,
   host,
@@ -150,6 +170,7 @@ export function Embed({
       return;
     }
     containScrolling(doc);
+    closeGutter(doc);
     const body = doc?.body;
     if (!body || typeof ResizeObserver === "undefined") return;
     watcher.current?.disconnect();
@@ -180,7 +201,22 @@ export function Embed({
         // measure. The floor is there because these pages are usually taller
         // than they are wide, and a narrow window would otherwise letterbox
         // an interactive thing down to a strip.
-        className="relative w-full overflow-hidden rounded-lg border border-fd-border bg-fd-muted"
+        className={
+          // Before the click this is a card, and it should read as one. After
+          // it, the page inside brings its own surface — and the box's does
+          // not match it: a sim painted near-black arrived ringed in
+          // near-white, on every side the page did not fill.
+          //
+          // Fitting the WIDTH to the page was tried and cannot work: these
+          // pages are responsive, so narrowing the frame made them reflow
+          // narrower still, which left a fresh gap and, on one, a scrollbar
+          // (measured). A page that does not fill the width now simply sits on
+          // the page, which is the honest arrangement — it is the record's own
+          // figure, not a screenshot in a mount.
+          loaded
+            ? "relative w-full overflow-hidden rounded-lg"
+            : "relative w-full overflow-hidden rounded-lg border border-fd-border bg-fd-muted"
+        }
         // The invitation is a card. Once the page is measured the height goes
         // on the FRAME instead and this box wraps it: put on the box, the
         // border is inside that height, so the frame came out two pixels short
