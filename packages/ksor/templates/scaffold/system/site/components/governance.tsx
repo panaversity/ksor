@@ -163,7 +163,7 @@ export function GovernanceMeta({
   replaces?: readonly Successor[];
   /** The document's markdown twin, offered beside its governance — only where one exists. */
   markdownUrl?: string;
-}): ReactElement | null {
+}): ReactElement {
   const { status, owner, effectiveFrom, staleAfter, approval, deprecated } = governance;
   const state = statusLabel(status);
   // The badge is a SECOND chip only where it says something the status does
@@ -174,17 +174,10 @@ export function GovernanceMeta({
   // …and where the badge carries the date, the fact beside it would repeat it.
   const showEffective = effectiveFrom !== null && alsoBadge !== "effective-from";
 
-  const bare =
-    state === null &&
-    alsoBadge === null &&
-    owner === null &&
-    approval === null &&
-    deprecated === null &&
-    !showEffective &&
-    staleAfter === null &&
-    replaces.length === 0;
-  if (bare && markdownUrl === undefined) return null;
-
+  // There is no "nothing to show" case any more: every concept has a trust
+  // tier, `unverified` included, and that is the whole point of printing it.
+  // The early return this replaced would have hidden the tier on exactly the
+  // documents whose tier is the only governance fact they have.
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
       {state === null && alsoBadge === null ? null : (
