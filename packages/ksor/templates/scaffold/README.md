@@ -18,8 +18,11 @@ pnpm install
 pnpm dev        # browse the knowledge at http://localhost:3000
 ```
 
+<!-- ksor:pm pnpm -->
 No pnpm? Run `npm install -g pnpm` — or `corepack enable pnpm` on Node
-versions that bundle corepack. The first `pnpm install` also fetches the
+versions that bundle corepack.
+<!-- /ksor:pm -->
+The first `pnpm install` also fetches the
 `ksor` tool (pinned in `package.json`) and writes it into your lockfile —
 commit the updated lockfile.
 
@@ -128,6 +131,7 @@ the record well-formed (`format-checker`, also `pnpm check`).
 
 ### A note on the lockfile
 
+<!-- ksor:pm pnpm -->
 The committed `pnpm-lock.yaml` covers the site. It cannot cover
 `@panaversity/ksor` itself, because the version pinned in `package.json` is
 stamped by the CLI that scaffolded this project and could not be resolved before
@@ -138,6 +142,34 @@ The deploy config already accounts for this (`vercel.json` installs with
 `--no-frozen-lockfile`), and the shipped `validate.yml` runs no install. If you
 add CI of your own, note that pnpm turns on `--frozen-lockfile` automatically
 whenever `CI` is set.
+<!-- /ksor:pm -->
+<!-- ksor:pm npm -->
+No lockfile ships with this scaffold: npm keeps ONE lock for the whole
+workspace, and the `@panaversity/ksor` version pinned in `package.json` was
+stamped by the CLI that scaffolded this project — it could not be resolved
+into a lock before it existed. Your FIRST `npm install` writes
+`package-lock.json`; run it before you push, and COMMIT the result — that
+lock is why two machines build the same site.
+
+One honest difference from the pnpm scaffold: pnpm quarantines newly
+published dependency versions for 48 hours (`minimumReleaseAge`), so a
+routine install never picks up a day-zero compromised release. npm has no
+equivalent — `.npmrc` here carries the install-script denial half of that
+posture, and this sentence is the disclosure of the half it cannot.
+<!-- /ksor:pm -->
+<!-- ksor:pm bun -->
+No lockfile ships with this scaffold: the `@panaversity/ksor` version pinned
+in `package.json` was stamped by the CLI that scaffolded this project — it
+could not be resolved into a lock before it existed. Your FIRST
+`bun install` writes `bun.lock`; run it before you push, and COMMIT the
+result — that lock is why two machines build the same site.
+
+One honest difference from the pnpm scaffold: pnpm quarantines newly
+published dependency versions for 48 hours (`minimumReleaseAge`), so a
+routine install never picks up a day-zero compromised release. bun has no
+equivalent (its default refusal of dependency install scripts covers the
+OTHER half of that posture), and this sentence is the disclosure.
+<!-- /ksor:pm -->
 
 ## The files, explained
 
@@ -158,9 +190,18 @@ different coding agent's way of finding the same working contract.
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
 | `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in. |
 | `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history.                                                                                                                                                    |
-| `package.json`                   | the surface commands — `pnpm dev` (the site) and `pnpm provision` / `pnpm refresh` / `pnpm serve` (the agent surface: set up once, publish, then serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool, and the pnpm version this project pins.                                                |
+| `package.json`                   | the surface commands — `pnpm dev` (the site) and `pnpm provision` / `pnpm refresh` / `pnpm serve` (the agent surface: set up once, publish, then serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool and the workspace layout the manifest declares.                                                |
+<!-- ksor:pm pnpm -->
 | `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
 | `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
+<!-- /ksor:pm -->
+<!-- ksor:pm npm -->
+| `.npmrc`                         | dependency install scripts are denied; the comment inside discloses the one protection this scaffold lacks (a 48-hour quarantine on new releases). |
+| `package-lock.json`              | the exact dependency versions — written by your FIRST install; commit it, it is the reason two machines build the same site. |
+<!-- /ksor:pm -->
+<!-- ksor:pm bun -->
+| `bun.lock`                       | the exact dependency versions — written by your FIRST install; commit it, it is the reason two machines build the same site. |
+<!-- /ksor:pm -->
 
 `format-checker` deliberately contains a program, `check.mjs`, and not only
 prose: rules that are only written down cannot refuse anything. `pnpm check`
@@ -181,9 +222,11 @@ and anything that can serve files can serve it.
   (never pin `system/site` as the root directory — the record lives
   outside it), build with `pnpm build`, serve `system/site/out/`. It also
   declares the MCP **door** as a second service built from the shipped
-  `Dockerfile`, so `/mcp` and the site share one domain. If the
-  build image's pnpm predates the `packageManager` pin, set the
+  `Dockerfile`, so `/mcp` and the site share one domain.
+<!-- ksor:pm pnpm -->
+  If the build image's pnpm predates the `packageManager` pin, set the
   `ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
+<!-- /ksor:pm -->
 **Once `instance.md` declares a `database:`, the BUILD needs the DSN too.**
 `pnpm build` first runs `pnpm export-denylist`, which asks the record's
 database what has been withdrawn (`ksor takedown --export`) and writes

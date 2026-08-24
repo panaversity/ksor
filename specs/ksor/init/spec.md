@@ -40,10 +40,27 @@ A parent pnpm workspace whose globs would swallow the project produces a
 warning, not a refusal.
 
 **Negative contract.** No network I/O. Never runs a package manager (the
-handoff text carries `pnpm install && pnpm dev`). Deterministic: the same
-ksor version and name produce byte-identical trees — enforced by shipping
-every emitted byte (the lockfile included) as template content in the ksor
-package. Atomic: staged in a sibling `.ksor-init-<random>/` then renamed
+handoff text carries the install/dev commands). Deterministic: the same
+ksor version, name AND invoking manager produce byte-identical trees —
+enforced by shipping every emitted byte (the lockfile included) as template
+content in the ksor package. _Revision 2026-08-24 (issue #28, owner): the
+scaffold meets the adopter's package manager. init reads
+`npm_config_user_agent` — the run that scaffolds is the run that knows the
+toolchain — and emits that manager's scaffold: `npx …` → npm, `bunx …` →
+bun, anything else (pnpm included) → pnpm, the most-protected posture. The
+emission is templates + the two stamps + a PURE manager translation:
+`ksor:pm` marker blocks in markdown, an ordered command-spelling map, a
+structured package.json transform, and per-manager machinery (pnpm keeps
+pnpm-workspace.yaml + the committed site-only lockfile; npm gains `.npmrc`
+with `ignore-scripts=true`; npm and bun declare `workspaces` in the
+manifest, ship NO lockfile — the stamped version cannot be pre-resolved into
+one — and their README says to commit the lock the first install writes).
+What npm and bun cannot give is pnpm's 48-hour release quarantine; that
+absence is DISCLOSED in the emitted scaffold, never silently dropped. bun
+scripts are cd-chains because `bun --cwd <dir> run <script>` ran the wrong
+script inside a workspace (observed live, bun 1.3.6). Each manager's shape
+is walked in CI: install, bin resolution, checker, full static build
+(`scripts/manager-acceptance.mjs`)._ Atomic: staged in a sibling `.ksor-init-<random>/` then renamed
 (`init .`: ordered writes with rollback); a failed init leaves the
 filesystem as found; stale stage dirs are reported, never deleted. Runs
 `git init` unless already inside a repository; never stages or commits. No

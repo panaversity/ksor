@@ -794,6 +794,30 @@ gateway` package, serve-by-spawn) is superseded._
     a reader who only wanted the policy never announces that to a slide host.
     Contract: `specs/ksor/slides/spec.md`. Reversed per-clause with evidence._
 
+25. **The scaffold meets the adopter's package manager** (owner, 2026-08-24,
+    issue #28). Decision 1 makes Node the one prerequisite; requiring a
+    SPECIFIC manager on top re-added the second-prerequisite tax that decision
+    exists to avoid. `ksor init` now reads `npm_config_user_agent` and emits
+    the invoking manager's scaffold — npm and bun alongside pnpm, each shape
+    proven end to end (install, bin resolution, checker, full static build)
+    before this landed and walked per-manager in CI. Unrecognized or absent
+    falls back to pnpm, the most-protected posture. Selection is detection
+    only — no `--pm` flag; the run that scaffolds is the run that knows the
+    toolchain, and a wrong guess is re-run with the other runner. The pnpm
+    scaffold is unchanged. npm and bun scaffolds declare `workspaces` in the
+    manifest, ship no lockfile (the stamped CLI version cannot be pre-resolved
+    into one — the tarball hash does not exist at template-build time; the
+    README says to COMMIT the lock the first install writes), and carry the
+    install-script denial (`.npmrc ignore-scripts=true` for npm; bun's own
+    default refusal for bun). What neither can carry is pnpm's 48-hour release
+    quarantine (`minimumReleaseAge`) — that absence is DISCLOSED in the
+    emitted scaffold (owner chose disclosure over refusing the managers):
+    honest absence, never silent weakness. This repo's own workspace stays
+    pnpm (decision 5, untouched). Reversed per-manager if a manager's walk
+    cannot be kept green; the disclosure clause is not reversible without an
+    owner decision, because silence about a weaker posture is the failure mode
+    it exists to prevent.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

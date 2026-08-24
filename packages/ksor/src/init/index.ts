@@ -12,7 +12,8 @@ import path from "node:path";
 
 import { type ExitCode, exitCodes } from "../index.js";
 import { errnoCode, isEnvironmentError } from "./errors.js";
-import { materialize } from "./materialize.js";
+import { detectManager, type PackageManager } from "./manager.js";
+import { materialize, materializeExtras } from "./materialize.js";
 import { nameProblem, suggestName } from "./name.js";
 import { findAncestorProject, findAncestorWorkspace } from "./walk.js";
 
@@ -25,6 +26,8 @@ export interface InitIo {
 export interface InitEnv {
   readonly version: string;
   readonly templatesDir: string;
+  /** `npm_config_user_agent` as the CLI received it — names the manager that ran init. */
+  readonly userAgent?: string;
 }
 
 const STAGE_PREFIX = ".ksor-init-";
@@ -114,30 +117,47 @@ function gitInit(dir: string, io: InitIo): void {
   }
 }
 
-function handoff(io: InitIo, name: string, targetWasDot: boolean): void {
+function handoff(io: InitIo, name: string, targetWasDot: boolean, manager: PackageManager): void {
   const enter = targetWasDot ? "" : `  cd ${name}\n`;
+  const run = (script: string): string =>
+    manager === "pnpm"
+      ? `pnpm ${script}`
+      : manager === "npm"
+        ? `npm run ${script}`
+        : `bun run ${script}`;
+  const install = manager === "pnpm" ? "pnpm install" : `${manager} install`;
+  // The scaffold was emitted FOR the manager that ran init, so the hint that
+  // once said "no pnpm? install it" describes a prerequisite that no longer
+  // exists: whoever is reading this just used the manager these commands need.
+  const pnpmHint =
+    manager === "pnpm"
+      ? "no pnpm? run: npm install -g pnpm — or `corepack enable pnpm` on Nodes that bundle corepack\n" +
+        "\n"
+      : "";
   io.out(
     `${name} is ready — your knowledge, your repo, yours outright.\n` +
       "\n" +
       "Next (or just tell your coding agent to take it from here):\n" +
       enter +
-      "  pnpm install\n" +
-      "  pnpm dev        # the site, live at http://localhost:3000\n" +
+      `  ${install}\n` +
+      `  ${run("dev").padEnd(15)} # the site, live at http://localhost:3000\n` +
       "\n" +
       "Then, for the agent surface (needs Postgres and a provider key):\n" +
-      "  pnpm provision  # once: uncomment `database:` in instance.md, copy\n" +
+      `  ${run("provision").padEnd(15)} # once: uncomment \`database:\` in instance.md, copy\n` +
       "                  #   .env.example to .env, then apply the schema\n" +
-      "  pnpm refresh    # PUBLISH the record — ingest knowledge/ into a generation\n" +
-      "  pnpm serve      # the MCP server, over what you just published\n" +
+      `  ${run("refresh").padEnd(15)} # PUBLISH the record — ingest knowledge/ into a generation\n` +
+      `  ${run("serve").padEnd(15)} # the MCP server, over what you just published\n` +
       "\n" +
-      "no pnpm? run: npm install -g pnpm — or `corepack enable pnpm` on Nodes that bundle corepack\n" +
-      "\n" +
+      pnpmHint +
       "Start in knowledge/ — AGENTS.md carries the working rules.\n",
   );
 }
 
 function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): number {
   const { version, templatesDir } = env;
+  // The run that scaffolds is the run that knows the toolchain (issue #28):
+  // `npx …` emits an npm scaffold, `bunx …` a bun one, everything else pnpm.
+  const manager = detectManager(env.userAgent);
 
   // A missing template tree is not something a better command can fix, so it
   // is answered before any argument is judged.
@@ -244,7 +264,8 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
     // which makes the rollback the spec promises ours to perform.
     const created: string[] = [];
     try {
-      materialize(templatesDir, targetDir, { name, version }, created);
+      materialize(templatesDir, targetDir, { name, version }, manager, created);
+      materializeExtras(targetDir, manager, created);
     } catch (error) {
       rollback(created);
       throw error;
@@ -252,7 +273,8 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
   } else {
     const stage = mkdtempSync(path.join(path.dirname(targetDir), STAGE_PREFIX));
     try {
-      materialize(templatesDir, stage, { name, version });
+      materialize(templatesDir, stage, { name, version }, manager);
+      materializeExtras(stage, manager);
     } catch (error) {
       rmSync(stage, { recursive: true, force: true });
       throw error;
@@ -297,7 +319,7 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
     const detail = error instanceof Error ? error.message : String(error);
     io.err(`note: the project was created, but a follow-up step failed: ${detail}\n`);
   }
-  handoff(io, name, isDot);
+  handoff(io, name, isDot, manager);
   return 0;
 }
 

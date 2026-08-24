@@ -18,6 +18,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { applyProse } from "./init/manager.js";
+
 // Acceptance for specs/ksor/init/spec.md, written red-first: every test here
 // exercises the BUILT artifact (dist/cli.mjs), exactly what an adopter runs.
 const distDir = fileURLToPath(new URL("../dist", import.meta.url));
@@ -67,9 +69,13 @@ function dotDir(name = "my-sor"): string {
 }
 
 function runInit(args: readonly string[], cwd: string) {
+  // Pinned to the pnpm scaffold: these acceptance clauses describe the default
+  // shape, whatever manager happens to run the test suite. The manager
+  // dimension (issue #28) is covered by init-manager.integration.test.ts.
   return spawnSync(process.execPath, [distCli, "init", ...args], {
     cwd,
     encoding: "utf8",
+    env: { ...process.env, npm_config_user_agent: "pnpm/11.22.0 npm/? node/v24" },
   });
 }
 
@@ -119,7 +125,11 @@ function treeFiles(root: string): string[] {
   return walk(root).sort();
 }
 
-/** The emitted tree is the shipped templates plus exactly the two stamps. */
+/**
+ * The emitted tree is the shipped templates plus exactly the two stamps and
+ * the manager translation (issue #28) — for pnpm that translation only strips
+ * the `ksor:pm` marker lines, so identity stays byte-exact and computable.
+ */
 function expectTemplateIdentity(projectDir: string, name: string): void {
   const templated = treeFiles(templatesDir);
   expect(treeFiles(projectDir)).toEqual(templated.map(emittedPath).sort());
@@ -127,8 +137,9 @@ function expectTemplateIdentity(projectDir: string, name: string): void {
     const stamped = readFileSync(path.join(templatesDir, rel), "utf8")
       .replaceAll("KSOR-STAMP-NAME", name)
       .replaceAll("KSOR-STAMP-VERSION", pkgVersion);
+    const expected = applyProse(stamped, "pnpm");
     const actual = readFileSync(path.join(projectDir, emittedPath(rel)), "utf8");
-    expect(actual, `stamping mismatch in ${rel}`).toBe(stamped);
+    expect(actual, `stamping mismatch in ${rel}`).toBe(expected);
   }
 }
 
@@ -287,7 +298,7 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     },
   );
 
-  it("output matches the shipped templates plus exactly the two stamps", () => {
+  it("output matches the shipped templates plus the two stamps and the manager translation", () => {
     // Two names, because a stamp that silently kept its default would pass
     // with one: only a second name proves the substitution is the variable.
     for (const name of ["my-sor", "second-record"]) {
