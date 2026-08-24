@@ -28,7 +28,7 @@ import type { RecordEntry } from "@/lib/source";
  *
  * What survives from the register is the part that was never about looks: the
  * record's serif for its own words, mono for what the record says ABOUT them —
- * who owns it, how much it holds, whether it carries a caveat — and `approved`
+ * who owns it, how much it holds, whether it carries a caveat — and `stable`
  * staying silent, because a label on every row is a label nobody reads.
  *
  * Server-rendered plain markup — it survives print, a failed bundle and

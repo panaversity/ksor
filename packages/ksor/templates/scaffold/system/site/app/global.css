@@ -262,7 +262,7 @@ html > body[data-scroll-locked] {
 /* The caution colour is a TOKEN, declared as a light/dark pair on the root
    rather than inside the one class that first used it. Every surface that has
    to say "the record withdrew this" now spends the same colour — the banner
-   over a superseded document, and the chip that marks it in the sidebar, the
+   over a deprecated document, and the chip that marks it in the sidebar, the
    listings, the front door and search. Declared in both themes deliberately:
    a colour written only on `:root` leaks into dark, because `:root` and
    `.dark` have equal specificity and whichever comes later wins. */
@@ -489,10 +489,10 @@ html > body[data-scroll-locked] {
 }
 
 /* A withdrawn document's status chip, wherever one renders. A `draft` chip and
-   a `superseded` chip were pixel-identical — the same hairline border and the
+   a `deprecated` chip were pixel-identical — the same hairline border and the
    same muted text — so the two statuses that mean the most different things
    looked the same at the moment a reader picks between two documents. The
-   colour is additive, never the whole signal: the word "superseded" is beside
+   colour is additive, never the whole signal: the word "deprecated" is beside
    it in every one of these places (GOV.UK's rule — never rely on colour alone).
    Unlayered, so it beats the Tailwind utility that sets the chip's border and
    text colour; the banner class above has always worked this way. */
@@ -519,8 +519,16 @@ html > body[data-scroll-locked] {
 }
 
 /* …and in search too, where a reader is choosing between results. The chip is
-   drawn by `content`, so the tone has to be set on the same pseudo-element. */
-[data-ksor-status="superseded"]::after {
+   drawn by `content`, so the tone has to be set on the same pseudo-element.
+
+   found live 2026-08-25: this selector still read `superseded`, the PRE-PROFILE
+   status word. Under the profile the withdrawn state is `deprecated` (record
+   spec §2.2), so it matched nothing and a withdrawn document's search row wore
+   the ordinary grey chip — on the one surface whose snippet quotes the
+   withdrawn figure, which is why the rule exists. The value here is
+   `lifecycleBadge`'s, not `status`'s; the two agree on this word and the badge
+   is what the map carries. */
+[data-ksor-status="deprecated"]::after {
   border-color: color-mix(in oklab, var(--ksor-caution) 45%, transparent);
   color: var(--ksor-caution);
 }

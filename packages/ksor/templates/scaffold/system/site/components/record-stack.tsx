@@ -117,9 +117,9 @@ export function RecordStack({
 }
 
 /**
- * A caveat status, in the same chip the record's listings use — only ever
- * `draft`, `review` or `superseded`, because a reader already assumes a
- * document in the record is current.
+ * A caveat badge, in the same chip the record's listings use — only ever a
+ * state the machine surfaces decline (record spec §2.5), because a reader
+ * already assumes a document in the record is current and stable.
  */
 function StatusChip({ badge }: { badge: LifecycleBadge }): ReactElement {
   return (

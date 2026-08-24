@@ -164,7 +164,7 @@ export function GovernanceMeta({
   /** The document's markdown twin, offered beside its governance — only where one exists. */
   markdownUrl?: string;
 }): ReactElement | null {
-  const { status, owner, effectiveFrom, staleAfter, approval } = governance;
+  const { status, owner, effectiveFrom, staleAfter, approval, deprecated } = governance;
   const state = statusLabel(status);
   // The badge is a SECOND chip only where it says something the status does
   // not: `draft` and `deprecated` are both words, and printing either twice
@@ -179,6 +179,7 @@ export function GovernanceMeta({
     alsoBadge === null &&
     owner === null &&
     approval === null &&
+    deprecated === null &&
     !showEffective &&
     staleAfter === null &&
     replaces.length === 0;
@@ -221,6 +222,19 @@ export function GovernanceMeta({
         <Fact label="Approved">
           <>
             {approval.by} · {day(approval.at)}
+          </>
+        </Fact>
+      )}
+      {/* found live 2026-08-25: a deprecated page named its successor and said
+          nothing about WHO withdrew it, though `ksor.deprecated` is required on
+          every deprecated concept (record spec §2.2) and readGovernance already
+          refuses a document that omits it. Withdrawal is the most consequential
+          act in a document's life; publishing it unattributed is exactly the
+          gap the approver fact above closes at the other end. */}
+      {deprecated === null ? null : (
+        <Fact label="Withdrawn">
+          <>
+            {deprecated.by} · {day(deprecated.at)}
           </>
         </Fact>
       )}
