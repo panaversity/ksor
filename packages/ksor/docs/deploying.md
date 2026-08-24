@@ -324,6 +324,70 @@ JavaScript runs — `curl` and every crawler see it. A component that blurs or
 collapses it is presenting, not protecting. If you build one, say so in its own
 comment, or the next reader will take it for a gate.
 
+## Naming the reader — the sign-in control
+
+The site ships an optional sign-in control. Read the section above before you
+turn it on, because the one thing it does not do is the thing its name suggests.
+
+**What it does:** signs the reader in against your authorization server and puts
+their name in the navbar. That is the whole feature.
+
+**What it does not do:** restrict anything. The site is a static export — every
+published document is a file the host hands to whoever asks, and no amount of
+browser JavaScript changes that. If the requirement is "keep people out", the
+answer is the origin gate above, and the sign-in control is not a step toward it.
+
+So the honest use is a record already behind a gate, where the reader is
+authenticated but anonymous to the page, and you want the navbar to say who they
+are and offer a way out. That is worth having. It is not access control.
+
+### Turning it on
+
+Register a **public** client — PKCE, no secret — at the same authorization
+server the door names in `KSOR_SSO_URL`, then set three variables in the
+repository-root `.env`:
+
+```sh
+NEXT_PUBLIC_KSOR_SSO_URL=https://your-sso.example.com
+NEXT_PUBLIC_KSOR_OAUTH_CLIENT_ID=your-client-id
+NEXT_PUBLIC_KSOR_OAUTH_REDIRECT_URI=https://your-site.example.com/auth/callback
+```
+
+All three or none: with any of them missing the control does not render, which
+is the default and is not an error.
+
+They are `NEXT_PUBLIC_`, so they are **inlined at build time**. Set them before
+`pnpm build`; setting them on a running site changes nothing. This also means
+they are public — which is correct, because a public client has nothing secret
+to leak, and it is the reason none of these is a secret.
+
+Two things to get exactly right at the provider:
+
+- **The redirect URI must match byte for byte**, including the scheme and any
+  trailing slash. This is the failure everyone hits first, and providers report
+  it as a generic callback mismatch.
+- **Add the site's origin to the allowed web origins** (Auth0 calls it that;
+  others call it CORS). The token exchange is a browser `fetch`, so a missing
+  origin fails as CORS, not as auth.
+
+For local work, both values are `http://localhost:3000` — and the callback is
+`http://localhost:3000/auth/callback`.
+
+Endpoints are **discovered**, not configured: the control reads
+`/.well-known/oauth-authorization-server`, then OIDC discovery. Any provider
+publishing either one works, which is why there is no vendor setting here.
+Verified against Auth0 and against a Better Auth deployment.
+
+### What it stores, and for how long
+
+The session lives in `sessionStorage` — this tab, until it closes. No refresh
+token is requested and none is stored.
+
+That is deliberate, and it is a smaller footprint than the obvious alternative.
+A token that unlocks nothing on this site should not outlive the visit; the
+blast radius should match the benefit. If you need a longer session, you need
+the gate, not a longer-lived token in a browser.
+
 ## Authorization, or the deliberate absence of it
 
 `ksor serve` **refuses to boot unauthenticated on a public bind.** There is no

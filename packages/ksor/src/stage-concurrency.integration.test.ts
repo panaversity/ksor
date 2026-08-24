@@ -106,12 +106,26 @@ function project(root: string, options: { documents: number; audiences: boolean 
     );
   }
 
+  // Copied whole, subdirectories included: the scaffold's lib gained `auth/`
+  // when sign-in landed, and a flat read broke on the directory. What this
+  // harness needs is the staging modules, but copying the tree is both simpler
+  // and immune to the next directory that appears beside them.
   let rewritten = 0;
-  for (const entry of readdirSync(LIB)) {
-    const source = readFileSync(path.join(LIB, entry), "utf8");
-    rewritten += [...source.matchAll(EXTENSIONLESS)].length;
-    writeFileSync(path.join(site, "lib", entry), source.replace(EXTENSIONLESS, "$1$2.ts$3"));
-  }
+  const copyLib = (from: string, to: string): void => {
+    mkdirSync(to, { recursive: true });
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const source = path.join(from, entry.name);
+      const target = path.join(to, entry.name);
+      if (entry.isDirectory()) {
+        copyLib(source, target);
+        continue;
+      }
+      const text = readFileSync(source, "utf8");
+      rewritten += [...text.matchAll(EXTENSIONLESS)].length;
+      writeFileSync(target, text.replace(EXTENSIONLESS, "$1$2.ts$3"));
+    }
+  };
+  copyLib(LIB, path.join(site, "lib"));
   expect(
     rewritten,
     "the harness rewrote no imports — it is not running the scaffold's lib",
