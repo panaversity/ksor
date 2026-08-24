@@ -5,6 +5,7 @@
 # KSoR
 
 **The authoritative knowledge infrastructure for AI-native organizations.**
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/panaversity/ksor)
 
 A **Knowledge System of Record (KSoR)** turns an organization's governed knowledge into infrastructure that humans, AI agents, and software can reliably operate from.
 
