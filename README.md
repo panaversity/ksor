@@ -1,27 +1,30 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — authoritative knowledge infrastructure for AI-native organizations" width="100%">
+  <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — open, vendor-neutral knowledge infrastructure for AI-native organizations" width="100%">
 </p>
 
 # KSoR
 
-**The authoritative knowledge infrastructure for AI-native organizations.**
+**Open, vendor-neutral knowledge infrastructure for AI-native organizations.**
 
-A **Knowledge System of Record (KSoR)** turns an organization's governed knowledge into infrastructure that humans, AI agents, and software can reliably operate from.
+A **Knowledge System of Record (KSoR)** is an open, vendor-neutral knowledge infrastructure framework. It gives an organization **one governed, authoritative knowledge record** and open, replaceable ways to publish, retrieve, discover, exchange, secure, verify, and observe that knowledge.
 
 Traditional Systems of Record establish what is true about the current state of a business. A KSoR establishes **what the organization knows and how it should operate**.
 
-**Govern knowledge once. Project it many ways.** KSoR makes the same institutional truth available through multiple synchronized projections:
+The framework reduces to three commitments:
 
-- a **human experience** for reading, learning, reviewing, and sharing,
-- an **agent interface** through MCP for search, retrieval, citation, reasoning, and action,
-- **machine-readable representations** such as governed Markdown and `llms.txt`, and
-- an **agent-first maintenance context** that helps coding agents validate, evolve, test, and publish the record.
+> **One authoritative record.**  
+> **One governance boundary.**  
+> **Many open projections.**
 
-All derive from the same authoritative source.
+And one operating principle:
+
+> **Govern knowledge once. Project it many ways.**
+
+Humans, AI systems, agents, and other knowledge systems reach the same institutional truth through different governed surfaces. Development tooling such as `AGENTS.md` and reusable skills can help maintain that record, but it never becomes a competing source of truth.
 
 The result is not merely a documentation site, knowledge base, vector database, RAG system, or MCP wrapper.
 
-> **KSoR is knowledge infrastructure for the AI-native organization.**
+> **KSoR is an open knowledge infrastructure framework for the AI-native organization.**
 
 ---
 
@@ -370,43 +373,51 @@ governance boundary around it, are what define a KSoR.
 
 KSoR follows a simple principle:
 
-> **Humans, AI agents, and software should not operate from different versions of organizational knowledge.**
+> **Humans, AI agents, software, and other knowledge systems should not operate from different versions of organizational knowledge.**
 
-The governed record is the authority. Human, agent, and machine-facing experiences are **projections** of that record rather than separately maintained knowledge stores.
+The governed record is the authority. Every outward surface is a projection or controlled interface over that record rather than a separately maintained knowledge store.
 
 ```text
-                         Governed Knowledge
-                              Markdown
-                                 │
-                                 ▼
-                            ┌─────────┐
-                            │  KSoR   │
-                            └────┬────┘
-                                 │
-          ┌──────────────────────┼──────────────────────┐
-          │                      │                      │
-          ▼                      ▼                      ▼
-   Human Projection       Agent Projection      Machine Projection
-   Next.js + Fumadocs          MCP              Markdown / llms.txt
-          │                      │                      │
-   Search / Browse        Search / Retrieve       Consume / Index
-   Read / Learn           Cite / Reason           Integrate / Build
-   Review / Share         Abstain / Act                 │
-          │                      │                      │
-          └──────────────────────┼──────────────────────┘
-                                 │
-                              Same Truth
+                         Governed Record
+                  Markdown + KSoR Profile of OKF
+                                │
+                                ▼
+                       GOVERNANCE BOUNDARY
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+          ▼                     ▼                     ▼
+       Humans              AI Discovery            Agents
+      Fumadocs               llms.txt                MCP
+                                                        │
+                                                        ▼
+                                                Retrieval layer
+                                              Postgres + pgvector
+                                │
+                                ▼
+                         Knowledge Exchange
+                                OKF
 ```
 
-A KSoR can also carry an **agent-first maintenance context** — for example `AGENTS.md` and reusable skills — so coding agents can work on the governed record without turning their own model context into a competing source of truth.
+OAuth/OIDC establishes identity for protected surfaces, KSoR governance controls access, SLSA/Sigstore can attest what was published, and OpenTelemetry records what the infrastructure did.
+
+These surfaces have different jobs:
+
+- **Fumadocs** serves people.
+- **`llms.txt`** helps AI systems discover the record.
+- **MCP** lets agents search, retrieve, cite, and abstain against governed knowledge.
+- **OKF** gives the authoritative record its open, portable structure and lets knowledge systems exchange governed knowledge.
+- **Postgres + pgvector** is the reference retrieval implementation behind the agent surface.
+
+A KSoR can also carry an **agent-first maintenance context** such as `AGENTS.md` and reusable skills. That context tells coding agents how to work on the governed record safely. It is development infrastructure, not a projection and not authoritative knowledge.
 
 The human experience is not maintained as a separate knowledge source.
 
 The MCP interface is not an invisible copy of the website.
 
-Machine-readable outputs are not a third knowledge store.
+Machine-readable outputs are not another knowledge store.
 
-They are different projections of the **same governed source**.
+They are different ways of reaching the **same governed source**.
 
 ---
 
@@ -713,36 +724,47 @@ off until you measure a floor with `ksor calibrate` and paste it into
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
-A scaffolded project looks like:
+KSP-001 defines the target structure below. The released scaffold is still converging on this profile, so [`docs/status.md`](docs/status.md) remains authoritative for exactly what `ksor init` emits today.
 
 ```text
 my-ksor/
 │
-├── knowledge/            ← the record: governed CommonMark, the product
-│   ├── what-is-a-ksor.md      ← the starter record ksor init seeds,
-│   ├── governance-ladder.md      yours to delete as your own arrives
+├── knowledge/                 ← authoritative governed record
+│   ├── what-is-a-ksor.md      ← concept documents: Markdown in the
+│   ├── governance-ladder.md      KSoR Profile of OKF
 │   └── surfaces/
-│       ├── index.md
 │       ├── for-people.md
 │       └── for-agents.md
 │
+├── .ksor/
+│   └── governance.yaml        ← audiences, ownership, approval,
+│                                  and takedown authority
+│
 ├── system/
-│   └── site/             ← the reference site (Next.js + Fumadocs)
+│   └── site/                  ← reference human surface (Next.js + Fumadocs)
 │
 ├── .agents/
-│   └── skills/           ← agent skills (+ byte-identical .claude/ copies)
+│   └── skills/                ← agent skills (+ byte-identical .claude/ copies)
 │
-├── AGENTS.md             ← the project constitution agents read first
-├── instance.md           ← what this KSoR is authoritative for
+├── AGENTS.md                  ← project constitution agents read first
+├── instance.md                ← what this KSoR is authoritative for
 │
 └── ...
 ```
 
+Under the KSoR Profile of OKF, `index.md` and `log.md` are reserved OKF files rather than ordinary concept documents. Publishers generate or manage those files according to the pinned OKF contract instead of using `index.md` as a normal content page.
+
 ### `knowledge/`
 
-The authoritative knowledge corpus.
+The authoritative governed record.
 
-Documents are plain Markdown so they are:
+In the KSP-001 architecture, concept documents are Markdown conforming to the **KSoR Profile of OKF**:
+
+- **Markdown** is the durable, human-readable medium.
+- **OKF** gives the record an open, portable knowledge structure.
+- **KSoR governance metadata** adds institutional authority: ownership, audience, approval, effectivity, and related controls.
+
+Documents remain:
 
 - portable,
 - diffable,
@@ -752,7 +774,50 @@ Documents are plain Markdown so they are:
 - readable by AI coding agents,
 - and independent of a proprietary database.
 
+Every concept carries an explicit `ksor.audience`. Public knowledge says `ksor.audience: [public]` rather than relying on omission. Stable concepts carry the authority and lifecycle evidence required by KSP-001.
+
 Subdirectories naturally organize the knowledge hierarchy.
+
+---
+
+### `.ksor/governance.yaml`
+
+The portable **Governance Policy** for the KSoR instance.
+
+It is the root of authority behind the governance facts carried on individual concepts. KSP-001 defines four governance families:
+
+- the **audience registry** names non-public audiences,
+- the **ownership map** defines who is accountable for knowledge by scope,
+- **approval authorities** define who may approve knowledge for publication,
+- **takedown authorities** define who may withdraw knowledge.
+
+A simplified policy can look like:
+
+```yaml
+version: "0.1"
+
+audiences:
+  finance:
+    description: Finance staff and authorized auditors
+
+ownership:
+  - scope:
+      paths: ["finance/"]
+      types: [Policy, Procedure, Control]
+    owner: team:finance-controller
+    escalation: human:cfo@example
+
+approval_authorities:
+  - scope:
+      paths: ["finance/"]
+      types: [Policy, Procedure, Control]
+    actors: [human:cfo@example]
+
+takedown_authorities:
+  actors: [human:ciso@example, human:cfo@example]
+```
+
+A conformant publisher validates the corpus against this policy before publication. Governance is therefore mechanically checkable rather than only descriptive.
 
 ---
 
@@ -1062,38 +1127,43 @@ Authority is the differentiator.
 
 ## Governance Model
 
-A production KSoR should make knowledge ownership explicit.
+A KSoR must govern both sides of authority:
 
-A simple governance lifecycle might be:
+- the **write side** determines how knowledge becomes authoritative,
+- the **read side** determines whether that knowledge may cross a serving or publication boundary.
+
+KSP-001 defines the write-side lifecycle this way:
 
 ```text
-Source
-  │
-  ▼
-Draft
-  │
-  ▼
-Review
-  │
-  ▼
-Approved
-  │
-  ▼
-Authoritative KSoR
-  │
-  ├──────────────► Human Projection
-  │
-  ├──────────────► Agent Projection
-  │
-  └──────────────► Machine Projection
-  │
-  ▼
-Superseded / Retired
+source material
+      │
+      ▼
+draft            authored by a human or agent
+      │
+      ▼
+review           under the authority of the named owner
+      │
+      ▼
+approval         granted by an authorized actor and recorded in change control
+      │
+      ▼
+stable           authoritative knowledge that may be served
+      │
+      ├── change      re-approve in the same reviewed change,
+      │               or return to draft
+      │
+      ├── deprecated  under owner or takedown authority
+      │
+      └── takedown    governed withdrawal, then removal from every current surface
 ```
 
-Organizations can impose additional controls appropriate to their domain.
+**Approval is an authority event. `stable` is the lifecycle state.** They are deliberately separate. A concept does not become authoritative merely because someone changed its status text.
 
-For regulated or high-risk knowledge, those controls may include:
+Imported knowledge enters as candidate knowledge at `draft`. External trust signals can be preserved as evidence, but they do not become local approval.
+
+The Governance Policy in `.ksor/governance.yaml` defines the audience registry, ownership rules, approval authorities, and takedown authority used to validate these events.
+
+For regulated or high-risk knowledge, organizations can add controls appropriate to their domain, including:
 
 - named knowledge owners,
 - approval requirements,
@@ -1105,7 +1175,7 @@ For regulated or high-risk knowledge, those controls may include:
 - separation of duties,
 - and audit history.
 
-KSoR provides the architectural foundation; governance policy remains the responsibility of the organization operating the KSoR.
+The organization remains responsible for its governance policy. KSoR makes that policy explicit, portable, and enforceable across every surface.
 
 ---
 
@@ -1232,7 +1302,7 @@ This is an intentional architectural property.
 
 ---
 
-## Vendor-Free by Design
+## Vendor-Neutral by Design
 
 Your KSoR should survive changes in:
 
