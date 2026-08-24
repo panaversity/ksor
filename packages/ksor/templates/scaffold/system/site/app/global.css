@@ -884,6 +884,29 @@ html > body[data-scroll-locked] {
   margin-top: 0;
 }
 
+/* A numbered list is a sequence, and its numbers should say so. The marker
+   arrived grey at regular weight, lighter than the text it counts, so a list
+   of six steps read as six paragraphs that happened to start with digits.
+
+   The accent, and only here: a number is structure, which is what this
+   record's accent is for. */
+#nd-page .prose ol > li::marker {
+  color: var(--color-fd-primary);
+  font-weight: 600;
+}
+
+/* And the TERM a list item defines. `**Heartbeat:** a schedule that…` is the
+   commonest shape in this record — a term, then what it means — and the term
+   is the thing a reader scans for.
+
+   Only the term. Bold elsewhere in the sentence stays ink, because a page
+   where every emphasis is coloured has no emphasis: the accent stops meaning
+   "this is the one to find" and starts meaning "this is bold". */
+#nd-page .prose li > strong:first-child,
+#nd-page .prose li > p:first-child > strong:first-child {
+  color: var(--color-fd-primary);
+}
+
 /* The same rule, one level in. The document's first block is not a child of
    `.prose` — it is inside the views wrapper, and inside a tab panel when the
    document has a summary — so the reset above never reached it and the top of
