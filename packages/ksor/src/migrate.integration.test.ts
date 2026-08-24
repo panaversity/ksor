@@ -10,6 +10,7 @@
  */
 import { spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -496,8 +497,31 @@ describe("ksor migrate --write-site", () => {
 });
 
 describe("the repository's own fixture corpus is a migrated record", () => {
-  it("workbench/example-corpus passes `ksor build`", () => {
-    const r = run(path.join(repoRoot, "workbench", "example-corpus"), "build");
+  const workbench = path.join(repoRoot, "workbench", "example-corpus");
+
+  // Read-only, in process: `check` mode also refuses a stale committed index,
+  // so this asserts the indexes in the repository are the ones the tree
+  // generates — without writing a byte into the working tree.
+  it("passes the record checker, committed indexes included", () => {
+    const result = checkRecord(loadRecord(workbench), { mode: "check" });
+    expect(result.refusals.map((r) => `${r.path}: ${r.slug}`)).toEqual([]);
+    expect(result.concepts.map((c) => [c.id, c.status])).toEqual([
+      ["about", "stable"],
+      ["policies/purchase-approval", "stable"],
+      ["policies/purchase-approval-2019", "deprecated"],
+    ]);
+  });
+
+  // And end to end through the verb, in a COPY: `ksor build` writes, and a
+  // test must never leave the repository dirty.
+  it("builds green through the CLI", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-workbench-"));
+    roots.push(root);
+    cpSync(workbench, root, { recursive: true });
+    const r = run(root, "build");
     expect(r.status, r.stderr + r.stdout).toBe(0);
+    for (const rel of ["knowledge/index.md", "knowledge/policies/index.md"]) {
+      expect(read(root, rel), rel).toBe(readFileSync(path.join(workbench, rel), "utf8"));
+    }
   });
 });
