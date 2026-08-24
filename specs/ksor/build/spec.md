@@ -107,7 +107,11 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   stamp, and `--strict` refuses it (`ksor-build-dirty`). Outside a
   repository the committed lock is the only ledger baseline; inside one, a
   shallow clone is refused (`ksor-ledger-unverifiable`) unless
-  `--allow-unverifiable-ledger` is explicit (record spec §5).
+  `--allow-unverifiable-ledger` is explicit (record spec §5). A repository
+  with NO COMMIT — which is what `ksor init` leaves behind — is neither:
+  there is no history for a ledger id to have disappeared from, so its
+  baseline is empty and verified and the build stamps `source_commit: null`,
+  `dirty: true`.
 - `as_of` defaults to **now** and `--as-of` pins it. Every lifecycle
   evaluation in the site build and in bundles uses the lock's `as_of`;
   staleness therefore leaves the open web on the next build, and a scheduled
