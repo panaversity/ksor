@@ -6,7 +6,7 @@
  * fenced and indented code checked as real; a document-wide span strip
  * pairing stray backticks pages apart) are ours to keep closed.
  */
-import type { Refusal } from "./refusal.js";
+import type { Refusal } from "./refusal";
 
 const FOOTNOTE_REF = /\[\^([^\]\s]+)\](?!:)/g;
 const FOOTNOTE_DEF = /^[ \t]{0,3}\[\^([^\]\s]+)\]:/gm;

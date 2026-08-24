@@ -1,17 +1,23 @@
 /**
- * The site's copy of the record module must be byte-identical to the kernel's.
+ * The site's copy of the record module must be the kernel's, exactly — up to
+ * ONE mechanical transformation, asserted rather than trusted.
  *
  * The site reads the record with the SAME rules `ksor build` and `ksor ingest`
  * run — frontmatter, the profile, the policy, the ledger, the index generator,
  * the checker — and it cannot import the kernel (decision 18: the kernel
  * package carries pg and the embedding providers). So the module is COPIED,
  * mirroring the kernel's `src/` layout (`record/` beside `lib/`) so every
- * relative import inside it resolves unchanged, and the copy is asserted here
- * rather than trusted. Decision 26 says the copy becomes generated at
- * package-build time; until then this is what keeps it one rule set.
+ * relative import inside it resolves unchanged. The one transformation: the
+ * kernel writes `./x.js` (Node ESM), and Turbopack does not map that onto
+ * `x.ts` (found live 2026-08-25: `Module not found: Can't resolve
+ * '../lib/order-rule.js'`), so the copy drops the extension — the site's own
+ * modules are extensionless for the same reason. Decision 26 says the copy
+ * becomes generated at package-build time; until then this is what keeps it
+ * one rule set.
  *
  * If this fails: copy the named file from `packages/content/src/` over the
- * site's copy. The kernel's is canonical.
+ * site's copy and drop the `.js` from its relative imports. The kernel's is
+ * canonical.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -26,6 +32,10 @@ const SITE = path.resolve(here, "..", "templates", "scaffold", "system", "site")
 
 /** Line endings are the checkout's, not the rule's (Windows CI, 2026-08-21). */
 const text = (file: string): string => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+
+/** The kernel's file as the site must carry it: relative imports without `.js`. */
+const asSiteCopy = (kernel: string): string =>
+  kernel.replace(/(from "\.{1,2}\/[^"]+?)\.js"/g, '$1"');
 
 /** Every shipped module of the record set, test files excluded. */
 const RECORD_FILES: readonly string[] = readdirSync(path.join(KERNEL, "record"))
@@ -43,11 +53,11 @@ describe("the record module is one rule set", () => {
   });
 
   for (const name of RECORD_FILES) {
-    it(`record/${name}: the site's copy matches the kernel's exactly`, () => {
+    it(`record/${name}: the site's copy is the kernel's, minus the .js import extensions`, () => {
       expect(
         text(path.join(SITE, "record", name)),
-        `system/site/record/${name} has drifted — copy packages/content/src/record/${name} over it`,
-      ).toBe(text(path.join(KERNEL, "record", name)));
+        `system/site/record/${name} has drifted — copy packages/content/src/record/${name} over it and drop the .js from its relative imports`,
+      ).toBe(asSiteCopy(text(path.join(KERNEL, "record", name))));
     });
   }
 

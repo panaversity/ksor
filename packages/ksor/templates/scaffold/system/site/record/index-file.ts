@@ -6,7 +6,7 @@
  * §2 item 4). Every projection regenerates its indexes from the tree it was
  * filtered to, so this function must be a pure function of that tree.
  */
-import { UNORDERED } from "../lib/order-rule.js";
+import { UNORDERED } from "../lib/order-rule";
 
 export interface IndexConcept {
   /** Bundle-relative id (path without `.md`). */

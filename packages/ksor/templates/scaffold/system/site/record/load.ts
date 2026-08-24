@@ -7,7 +7,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import type { RecordFiles } from "./check.js";
+import type { RecordFiles } from "./check";
 
 const CONTROL_FILES = ["instance.md", ".ksor/governance.yaml", ".ksor/takedowns.yaml"] as const;
 

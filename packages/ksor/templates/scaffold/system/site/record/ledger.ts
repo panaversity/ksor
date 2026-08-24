@@ -8,10 +8,10 @@
  */
 import { z } from "zod";
 
-import { isIndividualActor } from "./actor.js";
-import { parseInstant } from "./instant.js";
-import type { Refusal } from "./refusal.js";
-import { parseYamlFile } from "./yaml-file.js";
+import { isIndividualActor } from "./actor";
+import { parseInstant } from "./instant";
+import type { Refusal } from "./refusal";
+import { parseYamlFile } from "./yaml-file";
 
 const SLUG = "ksor-ledger-invalid";
 

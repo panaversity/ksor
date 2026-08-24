@@ -6,7 +6,7 @@
  */
 import { parseAllDocuments } from "yaml";
 
-import type { Refusal, RefusalSlug } from "./refusal.js";
+import type { Refusal, RefusalSlug } from "./refusal";
 
 export type YamlFileResult =
   | { readonly ok: true; readonly value: Readonly<Record<string, unknown>> }

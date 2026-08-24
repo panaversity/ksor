@@ -5,7 +5,7 @@
  */
 import { parseAllDocuments, YAMLParseError } from "yaml";
 
-import type { Refusal } from "./refusal.js";
+import type { Refusal } from "./refusal";
 
 export type Split =
   | {

@@ -8,9 +8,9 @@
  */
 import { z } from "zod";
 
-import { isIndividualActor } from "./actor.js";
-import { parseInstant } from "./instant.js";
-import { sortRefusals, type Refusal, type RefusalSlug } from "./refusal.js";
+import { isIndividualActor } from "./actor";
+import { parseInstant } from "./instant";
+import { sortRefusals, type Refusal, type RefusalSlug } from "./refusal";
 
 export const RESERVED_TYPES = [
   "Policy",

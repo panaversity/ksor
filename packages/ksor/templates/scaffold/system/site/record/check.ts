@@ -4,20 +4,20 @@
  * the same function judges a checkout, a staged projection and a test
  * fixture identically; `load.ts` is the one place the filesystem is touched.
  */
-import { mayReach } from "../lib/audience-rule.js";
-import { checkFootnotes, linkTargets, resolveLink } from "./citations.js";
-import { splitFrontmatter } from "./frontmatter.js";
-import { generateIndexes } from "./index-file.js";
+import { mayReach } from "../lib/audience-rule";
+import { checkFootnotes, linkTargets, resolveLink } from "./citations";
+import { splitFrontmatter } from "./frontmatter";
+import { generateIndexes } from "./index-file";
 import {
   checkLedgerActors,
   checkLedgerAgainstTree,
   checkLedgerShrank,
   parseLedger,
   type LedgerBaseline,
-} from "./ledger.js";
-import { parsePolicy, resolveApprovers, resolveOwner, type Policy } from "./policy.js";
-import { conceptIdOf, parseConcept, type Concept } from "./profile.js";
-import { sortRefusals, type Refusal } from "./refusal.js";
+} from "./ledger";
+import { parsePolicy, resolveApprovers, resolveOwner, type Policy } from "./policy";
+import { conceptIdOf, parseConcept, type Concept } from "./profile";
+import { sortRefusals, type Refusal } from "./refusal";
 
 export interface RecordFiles {
   /** Record-relative path → text, for every file the checker reads (`knowledge/**`, `.ksor/*.yaml`, `instance.md`). */

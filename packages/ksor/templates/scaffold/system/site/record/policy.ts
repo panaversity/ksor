@@ -8,9 +8,9 @@
  */
 import { z } from "zod";
 
-import { actorKind } from "./actor.js";
-import type { Refusal } from "./refusal.js";
-import { parseYamlFile } from "./yaml-file.js";
+import { actorKind } from "./actor";
+import type { Refusal } from "./refusal";
+import { parseYamlFile } from "./yaml-file";
 
 const SLUG = "ksor-policy-invalid";
 const PATH = ".ksor/governance.yaml";
