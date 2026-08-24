@@ -711,8 +711,18 @@ html > body[data-scroll-locked] {
 
    Faint on purpose: it groups, it does not label. Anything stronger competes
    with the head, which is the row that is meant to be read first. */
+#nd-page .prose tbody tr:nth-child(even) {
+  background: var(--color-fd-background);
+}
+
 #nd-page .prose tbody tr:nth-child(odd) {
-  background: color-mix(in oklab, var(--color-fd-muted) 55%, transparent);
+  background: color-mix(in oklab, var(--color-fd-border) 14%, var(--color-fd-muted));
+}
+
+.dark #nd-page .prose tbody tr:nth-child(odd) {
+  /* A step of the same SIZE reads much stronger against near-black, so the
+     dark pair takes less of the border to land at the same apparent distance. */
+  background: color-mix(in oklab, var(--color-fd-border) 8%, var(--color-fd-muted));
 }
 
 #nd-page .prose tbody tr:last-child {
