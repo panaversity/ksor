@@ -1,7 +1,13 @@
 ---
+type: Document
 title: "Rule 21: The Laser Cutter"
-position: 2
+description: "Which materials the laser cutter may cut, and which are banned for the fumes they make."
+status: stable
 order: 2
+generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }
 ---
 
 # Rule 21: The Laser Cutter

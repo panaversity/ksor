@@ -8,6 +8,7 @@ import { mayReach } from "../lib/audience-rule.js";
 import { checkFootnotes, linkTargets, resolveLink } from "./citations.js";
 import { splitFrontmatter } from "./frontmatter.js";
 import { generateIndexes } from "./index-file.js";
+import { parseInstanceDocument } from "./instance.js";
 import {
   checkLedgerActors,
   checkLedgerAgainstTree,
@@ -47,7 +48,6 @@ const POLICY_PATH = ".ksor/governance.yaml";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const INSTANCE_PATH = "instance.md";
 const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
-const MOVED_INSTANCE_KEYS = ["audiences", "default_visibility", "ksor"] as const;
 
 export function checkRecord(record: RecordFiles, options: CheckOptions): CheckResult {
   const refusals: Refusal[] = [];
@@ -190,29 +190,15 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   };
 }
 
-/** Returns the instance title for the root index; refuses a pre-profile instance. */
+/** Returns the instance title for the root index; refuses a pre-profile instance (one reader: `record/instance.ts`). */
 function checkInstance(text: string | null, refusals: Refusal[]): string {
   if (text === null) return "Index";
-  const split = splitFrontmatter(text, INSTANCE_PATH);
-  if (!split.ok) {
-    refusals.push(split.refusal);
+  const parsed = parseInstanceDocument(text, INSTANCE_PATH);
+  if (!parsed.ok) {
+    refusals.push(...parsed.refusals);
     return "Index";
   }
-  const fm = split.frontmatter ?? {};
-  const moved = MOVED_INSTANCE_KEYS.filter((k) => k in fm);
-  if (fm["format"] !== 2 || moved.length > 0) {
-    refusals.push({
-      slug: "ksor-instance-format",
-      path: INSTANCE_PATH,
-      why:
-        moved.length > 0
-          ? `\`${moved.join("`, `")}\` no longer live on the instance — audiences and authority live in \`.ksor/governance.yaml\``
-          : `\`format: ${String(fm["format"])}\` is not the profile's instance (format 2)`,
-      fix: "run `ksor migrate --write`, which rewrites the instance and moves the audience model into the policy",
-    });
-  }
-  const title = fm["title"] ?? fm["name"];
-  return typeof title === "string" && title !== "" ? title : "Index";
+  return parsed.instance.title;
 }
 
 function checkLinks(

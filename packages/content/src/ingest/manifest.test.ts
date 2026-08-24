@@ -180,20 +180,28 @@ describe("governance is part of the manifest's fingerprint", () => {
       .update(JSON.stringify(manifestToJson(m)), "utf8")
       .digest("hex");
 
-  it("a visibility change CHANGES the hash", () => {
-    const pub = sha(withGovernance({ ...NO_GOVERNANCE, visibility: "public" }));
-    const internal = sha(withGovernance({ ...NO_GOVERNANCE, visibility: "internal" }));
+  it("an audience change CHANGES the hash", () => {
+    const pub = sha(withGovernance({ ...NO_GOVERNANCE, audience: ["public"] }));
+    const internal = sha(withGovernance({ ...NO_GOVERNANCE, audience: ["internal"] }));
     expect(pub, `public and internal hashed alike: ${pub}`).not.toBe(internal);
   });
 
   it("every governance field reaches the hash", () => {
     const base = sha(withGovernance(NO_GOVERNANCE));
+    const act = { by: "human:cfo", at: "2026-08-21T09:00:00Z" };
     const variants: NodeGovernance[] = [
-      { ...NO_GOVERNANCE, visibility: "internal" },
+      { ...NO_GOVERNANCE, audience: ["internal"] },
       { ...NO_GOVERNANCE, docStatus: "draft" },
-      { ...NO_GOVERNANCE, owner: "legal@acme.test" },
-      { ...NO_GOVERNANCE, provenance: ["board minute 2026-01"] },
-      { ...NO_GOVERNANCE, supersededBy: "knowledge/policy-v2.md" },
+      { ...NO_GOVERNANCE, owner: "team:legal" },
+      { ...NO_GOVERNANCE, sources: [{ id: "s", resource: "https://x" }] },
+      { ...NO_GOVERNANCE, verified: [act] },
+      { ...NO_GOVERNANCE, generated: { by: "x/1", at: null } },
+      { ...NO_GOVERNANCE, approval: act },
+      { ...NO_GOVERNANCE, deprecated: act },
+      { ...NO_GOVERNANCE, effectiveFrom: "2026-09-01T00:00:00Z" },
+      { ...NO_GOVERNANCE, staleAfter: "2027-09-01T00:00:00Z" },
+      { ...NO_GOVERNANCE, trustTier: 2 },
+      { ...NO_GOVERNANCE, supersededBy: "knowledge/policy-v2" },
     ];
     for (const v of variants) {
       expect(sha(withGovernance(v)), `${JSON.stringify(v)} did not change the hash`).not.toBe(base);
@@ -208,11 +216,15 @@ describe("governance is part of the manifest's fingerprint", () => {
 
   it("round-trips through parseManifest byte-for-byte", () => {
     const m = withGovernance({
-      visibility: "internal",
-      docStatus: "approved",
-      owner: "legal@acme.test",
-      provenance: ["board minute 2026-01", "policy handbook §4"],
-      supersededBy: null,
+      ...NO_GOVERNANCE,
+      audience: ["internal", "board"],
+      docStatus: "stable",
+      owner: "team:legal",
+      sources: [{ id: "bm", resource: "board minute 2026-01", title: "Board minute" }],
+      verified: [{ by: "human:kim", at: "2026-08-22T10:00:00Z" }],
+      generated: { by: "x/1", at: "2026-08-20T09:00:00Z" },
+      approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+      trustTier: 2,
     });
     const once = JSON.stringify(manifestToJson(m));
     const parsed = parseManifest(once);
@@ -221,8 +233,8 @@ describe("governance is part of the manifest's fingerprint", () => {
   });
 
   it("REFUSES a malformed governance block rather than dropping it", () => {
-    // Dropping a `visibility:` serves the document at the instance default —
-    // for a restricted document, to everyone.
+    // Dropping an `audience` would serve the document to nobody — or, under an
+    // older reading, to everyone.
     const bad = (gov: unknown): string =>
       JSON.stringify({
         format: 1,
@@ -241,7 +253,11 @@ describe("governance is part of the manifest's fingerprint", () => {
         files: [{ path: "knowledge/policy.md", node: "knowledge/policy.md" }],
       });
     expect(() => parseManifest(bad("internal"))).toThrow(/must be an object/);
-    expect(() => parseManifest(bad({ visibility: 7 }))).toThrow(/non-empty string/);
-    expect(() => parseManifest(bad({ provenance: "a source" }))).toThrow(/list of strings/);
+    expect(() => parseManifest(bad({ audience: "internal" }))).toThrow(/list of non-empty strings/);
+    expect(() => parseManifest(bad({ doc_status: "approved" }))).toThrow(
+      /draft \| stable \| deprecated/,
+    );
+    expect(() => parseManifest(bad({ approval: { by: "human:cfo" } }))).toThrow(/\{ by, at \}/);
+    expect(() => parseManifest(bad({ trust_tier: 3 }))).toThrow(/0, 1 or 2/);
   });
 });

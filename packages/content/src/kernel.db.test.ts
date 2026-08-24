@@ -82,8 +82,12 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         status = "published",
       ): Promise<string> => {
         const r = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status)
-           VALUES ($1, 1, $2, 'document', $3, $4, $5) RETURNING node_id`,
+          // `audience` is what the serving predicate overlaps against; these
+          // rows are about generations, denial and windowing, so they are
+          // public — omitting it would make every one of them invisible to
+          // every viewer, which is the profile's intent, not a serving bug.
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience)
+           VALUES ($1, 1, $2, 'document', $3, $4, $5, ARRAY['public']) RETURNING node_id`,
           [TENANT, stableId, slug, slug, status],
         );
         return String(r.rows[0].node_id);
@@ -227,8 +231,9 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
-      audiences: [],
-      defaultVisibility: null,
+      title: CORPUS,
+      description: "The kernel test record.",
+      toolchain: null,
       embeddingProvider: "fake",
       embeddingModel: "fake-embed-001",
       embeddingDim: DIM,
@@ -351,8 +356,8 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   it("a snapshot pinned to a withdrawn generation refreshes instead of serving it", async () => {
     await runIngest(pool, TENANT, async (c) => {
       const r = await c.query(
-        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status)
-         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published') RETURNING node_id`,
+        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience)
+         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published', ARRAY['public']) RETURNING node_id`,
         [TENANT],
       );
       const nodeId = String(r.rows[0].node_id);
@@ -382,8 +387,9 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
-      audiences: [],
-      defaultVisibility: null,
+      title: CORPUS,
+      description: "The kernel test record.",
+      toolchain: null,
       embeddingProvider: "fake",
       embeddingModel: "fake-embed-001",
       embeddingDim: DIM,

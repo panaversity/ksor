@@ -1,29 +1,24 @@
 /**
- * The kernel's SQL predicate, asserted row-by-row against the shared table.
- *
- * `AUDIENCE_CASES` is the rule. This file proves the SQL implements it; the
- * scaffold's conformance suite proves the site's `visibleInBuild` implements
- * the same rows. Before the table existed, the two surfaces implemented the
- * rule twice and drifted four separate times, each side's own tests staying
- * green throughout because each side was internally consistent.
- *
- * The predicate is exercised THROUGH Postgres — the GUCs bound exactly as
- * `runRead` binds them — because the SQL is where the rule actually runs. A
- * TypeScript reimplementation asserted here would be a fifth place to drift.
+ * The kernel's SQL predicate, asserted row-by-row against the shared overlap
+ * table (record spec §2.4). `OVERLAP_CASES` is the rule; this file proves the
+ * SQL implements it, and `audience-overlap.test.ts` proves the TypeScript half
+ * the site copies. The predicate is exercised THROUGH Postgres — the GUC bound
+ * exactly as `runRead` binds it — because the SQL is where the rule runs; a
+ * TypeScript reimplementation asserted here would be a third place to drift.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { scopedTxn } from "@panaversity/ksor-postgres";
 import { contentPool } from "../db.js";
-import { audienceAllowed, audienceGucs } from "./audience.js";
-import { AUDIENCE_CASES } from "./audience-conformance.js";
+import { audienceAllowed, audienceGucs, WHOLE_RECORD_SCOPE } from "./audience.js";
+import { OVERLAP_CASES } from "./audience-conformance.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_audience_conformance";
 
-describe.runIf(adminDsn !== "")("the audience decision table, in SQL (db)", () => {
+describe.runIf(adminDsn !== "")("the overlap decision table, in SQL (db)", () => {
   let pool: pg.Pool;
   let admin: pg.Pool;
 
@@ -43,32 +38,47 @@ describe.runIf(adminDsn !== "")("the audience decision table, in SQL (db)", () =
     await admin?.end().catch(() => undefined);
   });
 
-  it.each(AUDIENCE_CASES)("$name", async (testCase) => {
-    const gucs = audienceGucs(
-      { audiences: testCase.audiences, defaultVisibility: testCase.defaultVisibility },
-      testCase.viewer,
-    );
-    // The document is a one-row VALUES list aliased `n`, so the predicate under
-    // test is the SAME string the serving queries splice in.
-    const sql = `SELECT ${audienceAllowed("n")} AS visible
-                   FROM (SELECT $1::text AS visibility) AS n`;
-    const visible = await scopedTxn(pool, gucs, async (client) => {
-      const r = await client.query(sql, [testCase.visibility]);
+  // The document is a one-row VALUES list aliased `n`, so the predicate under
+  // test is the SAME string the serving queries splice in.
+  const sql = `SELECT ${audienceAllowed("n")} AS visible FROM (SELECT $1::text[] AS audience) AS n`;
+
+  it.each(OVERLAP_CASES)("$name", async (c) => {
+    const visible = await scopedTxn(pool, audienceGucs(c.viewer), async (client) => {
+      const r = await client.query(sql, [c.audience]);
       return r.rows[0].visible as boolean;
     });
-    expect(
-      visible,
-      `viewer=${JSON.stringify(testCase.viewer)} document=${JSON.stringify(testCase.visibility)} ` +
-        `model=[${testCase.audiences.join(", ")}] default=${JSON.stringify(testCase.defaultVisibility)}`,
-    ).toBe(testCase.visible);
+    expect(visible, `viewer=[${c.viewer.join(", ")}] audience=[${c.audience.join(", ")}]`).toBe(
+      c.visible,
+    );
+  });
+
+  it("a NULL audience (a pre-2.5 row that declared nothing) is served to nobody", async () => {
+    const visible = await scopedTxn(pool, audienceGucs(["public"]), async (client) => {
+      const r = await client.query(sql, [null]);
+      return r.rows[0].visible as boolean | null;
+    });
+    expect(visible).not.toBe(true);
+  });
+
+  it("an UNBOUND viewer scope matches nothing — fail closed", async () => {
+    const r = await pool.query(sql, [["public"]]);
+    expect(r.rows[0].visible).not.toBe(true);
+  });
+
+  it("the whole-record scope is a stated value that admits every list", async () => {
+    const visible = await scopedTxn(pool, WHOLE_RECORD_SCOPE, async (client) => {
+      const r = await client.query(sql, [["board"]]);
+      return r.rows[0].visible as boolean;
+    });
+    expect(visible).toBe(true);
   });
 
   it("covers every case in the shared table", () => {
-    expect(AUDIENCE_CASES.length, "the table must not shrink silently").toBeGreaterThanOrEqual(15);
+    expect(OVERLAP_CASES.length, "the table must not shrink silently").toBeGreaterThanOrEqual(11);
   });
 });
 
-describe.runIf(adminDsn === "")("audience decision table (db) — gated", () => {
+describe.runIf(adminDsn === "")("overlap decision table (db) — gated", () => {
   it("skips without KSOR_DB_URL", () => {
     expect(adminDsn).toBe("");
   });

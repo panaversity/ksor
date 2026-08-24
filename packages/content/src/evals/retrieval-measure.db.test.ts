@@ -51,12 +51,8 @@ const DB = "ksor_retrieval_measure";
 const TENANT = "handbook-eval";
 const KS = [1, 3, 5] as const;
 
-const KNOWLEDGE = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "fixtures",
-  "handbook",
-  "knowledge",
-);
+/** The handbook fixture is a full record: instance, policy, concepts, generated index, lock. */
+const RECORD_ROOT = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "handbook");
 
 interface Scored {
   readonly q: string;
@@ -97,8 +93,9 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "",
-      audiences: [],
-      defaultVisibility: null,
+      title: TENANT,
+      description: "An eval record.",
+      toolchain: null,
       embeddingProvider: "gemini",
       embeddingModel: "gemini-embedding-001",
       embeddingDim: 1536,
@@ -106,7 +103,7 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
 
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: KNOWLEDGE,
+      recordRoot: RECORD_ROOT,
       flip: true,
       sourceCommit: "measure",
     });

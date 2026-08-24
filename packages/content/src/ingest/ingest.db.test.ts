@@ -9,7 +9,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { cp, mkdtemp, rm, writeFile, appendFile, mkdir } from "node:fs/promises";
+import { cp, mkdtemp, rm, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,28 +28,42 @@ import { buildGeneration } from "./build.js";
 import { checkEmbeddingSpace } from "../lib/space.js";
 import { runGc } from "./gc.js";
 import { GC_GRACE_MS, rollback } from "./generation.js";
+import {
+  instanceOf as fixtureInstance,
+  profileDoc,
+  writeIndexesAndLock,
+  writeRecord,
+} from "./fixtures/record-fixture.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
 
-const FIXTURE = fileURLToPath(new URL("./fixtures/plain-tree/demo-rulebook/docs", import.meta.url));
+/** The committed profile-shaped record: instance, policy, concepts, generated indexes, lock. */
+const FIXTURE = fileURLToPath(new URL("./fixtures/record/demo-rulebook", import.meta.url));
 
 function instanceOf(tenantId: string, corpusId: string): ContentInstance {
-  return {
-    name: corpusId,
-    corpusId,
-    tenantId,
-    dsnEnv: "KSOR_DB_URL",
-    abstain: { vectorFloor: null, keywordFloor: null },
-    textSearchConfig: "english",
-    maximumResponseCharacters: 120_000,
-    instructions: "",
-    audiences: [],
-    defaultVisibility: null,
-    embeddingProvider: "fake",
+  return fixtureInstance(tenantId, corpusId, {
     embeddingModel: FAKE_EMBED_MODEL,
     embeddingDim: DIM,
-  };
+  });
+}
+
+/** A record of `count` notes, each past the navigation floor; `present` names which survive. */
+function notesRecord(
+  root: string,
+  name: string,
+  count: number,
+  present?: (i: number) => boolean,
+): string {
+  const docs: Record<string, string> = {};
+  for (let i = 1; i <= count; i++) {
+    if (present !== undefined && !present(i)) continue;
+    docs[`note-${String(i).padStart(3, "0")}.md`] = profileDoc({
+      title: `Note ${i}`,
+      body: `# Note ${i}\n\nNote number ${i} of the ${name} corpus is wholesome and comfortably past the floor.\n`,
+    });
+  }
+  return writeRecord(root, { name, docs });
 }
 
 /**
@@ -133,14 +147,14 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
 
   it("(1) full ingest of the fixture tree with flip: generation 1 active, search finds real content", async () => {
     const report = await buildGeneration(pool, instance, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "commit-1",
       flip: true,
       provider: fake,
     });
     totalChunks = report.chunks;
     expect(report.generation, JSON.stringify(report)).toBe(1);
-    expect(report.nodes).toBe(10);
+    expect(report.nodes, "10 concepts + 3 sections").toBe(13);
     expect(report.sources).toBe(10);
     expect(report.chunks).toBeGreaterThan(0);
     expect(report.carried).toBe(0);
@@ -217,7 +231,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
   it("(2) re-ingest of the SAME tree: carry-forward copies every vector, zero new embeds, generation 2 active", async () => {
     const embedded: string[] = [];
     const report = await buildGeneration(pool, instance, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "commit-2",
       flip: true,
       provider: instrumented(fake, (texts) => embedded.push(...texts)),
@@ -238,16 +252,18 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
   }, 120_000);
 
   it("(3) one edited doc: only its chunks re-embed; everything else carries", async () => {
-    const edited = join(tmp, "gen3", "docs");
+    const edited = join(tmp, "gen3");
     await cp(FIXTURE, edited, { recursive: true });
     await appendFile(
-      join(edited, "machine-rules", "table-saw.md"),
+      join(edited, "knowledge", "machine-rules", "table-saw.md"),
       "\nNew stewards must renew the blade-guard checkout annually.\n",
       "utf8",
     );
+    // An edit without a rebuilt lock is refused (ksor-lock-stale); `ksor build` would rewrite it.
+    writeIndexesAndLock(edited, "sha256:fixture-gen3");
     const embedded: string[] = [];
     const report = await buildGeneration(pool, instance, {
-      knowledgeDir: edited,
+      recordRoot: edited,
       sourceCommit: "commit-3",
       flip: true,
       provider: instrumented(fake, (texts) => embedded.push(...texts)),
@@ -267,7 +283,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     // with the fixture corpus's rows.
     const poisonInstance = instanceOf("poison", "poison-rulebook");
     const report = await buildGeneration(pool, poisonInstance, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "poison-1",
       flip: true,
       provider: instrumented(
@@ -301,19 +317,19 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
   }, 120_000);
 
   it("(4b) ready gate tolerates: one poison chunk in a 60-doc tree is under 2% — run finalizes and flips", async () => {
-    const root = join(tmp, "tolerant", "notes");
-    await mkdir(root, { recursive: true });
+    const root = join(tmp, "tolerant");
+    const docs: Record<string, string> = {};
     for (let i = 1; i <= 60; i++) {
       const marker = i === 7 ? "poisonword" : "wholesome";
-      await writeFile(
-        join(root, `rule-${String(i).padStart(3, "0")}.md`),
-        `# Rule ${i}\n\nRule ${i} of the tolerant notes corpus is ${marker} and long enough to matter for the servable floor.\n`,
-        "utf8",
-      );
+      docs[`rule-${String(i).padStart(3, "0")}.md`] = profileDoc({
+        title: `Rule ${i}`,
+        body: `# Rule ${i}\n\nRule ${i} of the tolerant notes corpus is ${marker} and long enough to matter for the servable floor.\n`,
+      });
     }
+    writeRecord(root, { name: "tolerant-notes", docs });
     const tolerantInstance = instanceOf("tolerant", "tolerant-notes");
     const report = await buildGeneration(pool, tolerantInstance, {
-      knowledgeDir: root,
+      recordRoot: root,
       sourceCommit: "tolerant-1",
       flip: true,
       provider: instrumented(
@@ -331,18 +347,11 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
   }, 180_000);
 
   it("(5) shrink guard: a candidate that lost 70% of its nodes is READY but refused the flip; force overrides", async () => {
-    const a = join(tmp, "shrink-a", "kb");
-    const b = join(tmp, "shrink-b", "kb");
-    await mkdir(a, { recursive: true });
-    await mkdir(b, { recursive: true });
-    for (let i = 1; i <= 10; i++) {
-      const text = `# Note ${i}\n\nShrink-guard corpus note number ${i}, comfortably past the floor.\n`;
-      await writeFile(join(a, `note-${i}.md`), text, "utf8");
-      if (i <= 3) await writeFile(join(b, `note-${i}.md`), text, "utf8");
-    }
+    const a = notesRecord(join(tmp, "shrink-a"), "shrink-notes", 10);
+    const b = notesRecord(join(tmp, "shrink-b"), "shrink-notes", 10, (i) => i <= 3);
     const shrinkInstance = instanceOf("shrink", "shrink-notes");
     const first = await buildGeneration(pool, shrinkInstance, {
-      knowledgeDir: a,
+      recordRoot: a,
       sourceCommit: "shrink-1",
       flip: true,
       provider: fake,
@@ -350,7 +359,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     expect(first.flipped, JSON.stringify(first)).toBe(true);
 
     const refused = await buildGeneration(pool, shrinkInstance, {
-      knowledgeDir: b,
+      recordRoot: b,
       sourceCommit: "shrink-2",
       flip: true,
       provider: fake,
@@ -370,7 +379,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     expect(run.rows[0].state, "refused flip leaves the run ready, unserved").toBe("ready");
 
     const forced = await buildGeneration(pool, shrinkInstance, {
-      knowledgeDir: b,
+      recordRoot: b,
       sourceCommit: "shrink-3",
       flip: true,
       force: true,
@@ -456,7 +465,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     // that is a build fact, and provenance records it (test (2) pins that).
     // Assertions are relative so this can run after the sequence above.
     const baseline = await buildGeneration(pool, instance, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "commit-idempotent",
       flip: true,
       provider: fake,
@@ -476,7 +485,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     });
 
     const again = await buildGeneration(pool, instance, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "commit-idempotent",
       flip: true,
       provider: fake,
@@ -567,7 +576,7 @@ describe.runIf(adminDsn !== "")("carry-forward across an interrupted run (db)", 
     // Generation 1: built and embedded, but never flipped and never marked
     // ready — exactly what a killed `ksor ingest` leaves behind.
     const first = await buildGeneration(pool2, inst2, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "interrupted",
       flip: false,
       provider: fake2,
@@ -598,7 +607,7 @@ describe.runIf(adminDsn !== "")("carry-forward across an interrupted run (db)", 
     // is the abandoned generation.
     const embedded: string[] = [];
     const second = await buildGeneration(pool2, inst2, {
-      knowledgeDir: FIXTURE,
+      recordRoot: FIXTURE,
       sourceCommit: "rerun",
       flip: false,
       provider: instrumented(fake2, (texts) => embedded.push(...texts)),

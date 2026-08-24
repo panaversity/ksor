@@ -43,7 +43,7 @@ import {
 import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
-import { buildGeneration, flipRefusal } from "./ingest/build.js";
+import { buildGeneration, flipRefusal, RecordRefused, type BuildReport } from "./ingest/build.js";
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
@@ -62,11 +62,12 @@ Usage:
       --instance reads the dimension from instance.md; --apply (with
       --instance) provisions the instance's database, or migrates an
       existing one forward through schema/migrations/.
-  ksor ingest --instance PATH --knowledge DIR [--flip] [--source-commit SHA]
-      Build one generation from the knowledge tree: structure atomically,
-      embed resumably, finalize behind the ready gate. --flip activates it
-      (never implicit). The source commit is read from git when the tree is in
-      a repository; --source-commit overrides it.
+  ksor ingest --instance PATH [--flip] [--source-commit SHA]
+      Build one generation from the record beside instance.md: run the record
+      checker, require a fresh build.lock.json, apply the takedown ledger, then
+      structure atomically, embed resumably, finalize behind the ready gate.
+      --flip activates it (never implicit). The source commit is read from git
+      when the tree is in a repository; --source-commit overrides it.
   ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
                  [--generation N] [--per-node N] [--min-chars N]
       Measure the abstention floor for this corpus and report it. A
@@ -467,75 +468,94 @@ async function ingestCommand(args: string[]): Promise<number> {
       "source-commit": { type: "string" },
     },
   });
+  const instance = loadInstance(values.instance);
+  if (typeof instance === "number") return instance;
+  // The record root is where instance.md lives: `knowledge/`, `.ksor/` and
+  // build.lock.json resolve from it (build spec §1). `--knowledge` survives for
+  // the scaffold's scripts, but it can only ever name that one directory.
+  const recordRoot = dirname(resolve(values.instance!));
+  const knowledgeDir = join(recordRoot, "knowledge");
+  if (values.knowledge !== undefined && resolve(values.knowledge) !== knowledgeDir) {
+    return fail(
+      REFUSED,
+      `--knowledge ${values.knowledge} is not the record's knowledge/ directory (${knowledgeDir})\n` +
+        "  why: the record is read whole — instance, policy, ledger, lock and bundle — from the directory holding instance.md\n" +
+        "  fix: drop --knowledge, or point it at the record's own knowledge/ directory",
+    );
+  }
   // Resolved once and REPORTED: this is the last link in the provenance chain
   // (answer -> passage -> document -> generation -> commit -> reviewed source).
   // Leaving it silent is how every adopter shipped "unspecified" without
   // noticing the chain terminated one link early.
-  const sourceCommit = values["source-commit"] ?? detectSourceCommit(values.knowledge);
-  if (values.knowledge === undefined) {
-    return fail(REFUSED, "--knowledge DIR is required (the folder of Markdown to ingest)");
-  }
-  const instance = loadInstance(values.instance);
-  if (typeof instance === "number") return instance;
+  const sourceCommit = values["source-commit"] ?? detectSourceCommit(knowledgeDir);
   const dsn = resolveDsn(instance);
   if (typeof dsn === "number") return dsn;
   const provider = composeProvider(instance);
   if (typeof provider === "number") return provider;
 
-  const report = await withPool(dsn, async (pool) => {
-    // The pre-spend refusal: embedding into a database whose vector columns
-    // or persisted model disagree with the declared space wastes real money
-    // and poisons cosine — a PROVEN mismatch refuses before any embed call.
-    const space = await checkEmbeddingSpace(
-      pool,
-      instance.tenantId,
-      instance.embeddingModel,
-      instance.embeddingDim,
-    );
-    if (space.missingTables.length > 0) {
-      // The oracle's pre-spend refusal, restored (review round 2,
-      // 2026-08-19): without it a half-applied schema allocated, embedded
-      // the WHOLE corpus, and only then failed in finalize on the missing
-      // table — after the spend, unrecoverable by carry-forward.
-      throw new Error(
-        `the schema is half-applied (missing: ${space.missingTables.join(", ")}) — ` +
-          "ingesting now would embed the whole corpus and then fail in finalize, after the spend.\n" +
-          `  fix: finish applying the DDL (ksor schema --instance ... --apply), then ingest`,
+  let report: BuildReport;
+  try {
+    report = await withPool(dsn, async (pool) => {
+      // The pre-spend refusal: embedding into a database whose vector columns
+      // or persisted model disagree with the declared space wastes real money
+      // and poisons cosine — a PROVEN mismatch refuses before any embed call.
+      const space = await checkEmbeddingSpace(
+        pool,
+        instance.tenantId,
+        instance.embeddingModel,
+        instance.embeddingDim,
       );
-    }
-    if (space.reason !== null) {
-      process.stderr.write(`embedding-space check skipped: ${space.reason}\n`);
-    }
-    try {
-      return await buildGeneration(pool, instance, {
-        knowledgeDir: values.knowledge!,
-        // Provenance is recorded honestly: without --source-commit the sources
-        // rows say so rather than carrying a guessed SHA.
-        sourceCommit,
-        // NEVER flip inside the build when the caller asked for one: the
-        // governance gate below has to run against the new generation BEFORE
-        // it becomes the active one. Checking after the flip reported the
-        // problem and published anyway — a command that exits 1 with the
-        // record's active pointer already moved, which is exactly what the
-        // shrink guard does NOT do (it refuses inside the build and leaves the
-        // old generation serving). Found live against Neon, 2026-08-21.
-        flip: false,
-        provider,
-        onLog: (line) => process.stdout.write(line + "\n"),
-      });
-    } catch (exc) {
-      // The most common first-run failure deserves its remedy: the grant
-      // table IS ingest authorization (a CLI flag is not authorization).
-      if (exc instanceof Error && /row-level security/i.test(exc.message)) {
+      if (space.missingTables.length > 0) {
+        // The oracle's pre-spend refusal, restored (review round 2,
+        // 2026-08-19): without it a half-applied schema allocated, embedded
+        // the WHOLE corpus, and only then failed in finalize on the missing
+        // table — after the spend, unrecoverable by carry-forward.
         throw new Error(
-          `ingest was refused by the database's row-level security — the grant table has no row ` +
-            `authorizing this tenant.\n  why: who may WRITE a tenant's corpus is decided in the ` +
-            `database, not by a flag\n  fix: ksor grant --instance <instance.md>`,
+          `the schema is half-applied (missing: ${space.missingTables.join(", ")}) — ` +
+            "ingesting now would embed the whole corpus and then fail in finalize, after the spend.\n" +
+            `  fix: finish applying the DDL (ksor schema --instance ... --apply), then ingest`,
         );
       }
-      throw exc;
-    }
-  });
+      if (space.reason !== null) {
+        process.stderr.write(`embedding-space check skipped: ${space.reason}\n`);
+      }
+      try {
+        return await buildGeneration(pool, instance, {
+          recordRoot,
+          // Provenance is recorded honestly: without --source-commit the sources
+          // rows say so rather than carrying a guessed SHA.
+          sourceCommit,
+          // NEVER flip inside the build when the caller asked for one: the
+          // governance gate below has to run against the new generation BEFORE
+          // it becomes the active one. Checking after the flip reported the
+          // problem and published anyway — a command that exits 1 with the
+          // record's active pointer already moved, which is exactly what the
+          // shrink guard does NOT do (it refuses inside the build and leaves the
+          // old generation serving). Found live against Neon, 2026-08-21.
+          flip: false,
+          provider,
+          onLog: (line) => process.stdout.write(line + "\n"),
+          onReport: (line) => process.stderr.write(line + "\n"),
+        });
+      } catch (exc) {
+        // The most common first-run failure deserves its remedy: the grant
+        // table IS ingest authorization (a CLI flag is not authorization).
+        if (exc instanceof Error && /row-level security/i.test(exc.message)) {
+          throw new Error(
+            `ingest was refused by the database's row-level security — the grant table has no row ` +
+              `authorizing this tenant.\n  why: who may WRITE a tenant's corpus is decided in the ` +
+              `database, not by a flag\n  fix: ksor grant --instance <instance.md>`,
+          );
+        }
+        throw exc;
+      }
+    });
+  } catch (exc) {
+    // The record refused — the checker, the lock gate or the ledger baseline.
+    // Nothing was written; the slug is the first stderr line (principle 4).
+    if (exc instanceof RecordRefused) return fail(REFUSED, exc.message);
+    throw exc;
+  }
   if (report.unchanged) {
     // The record already serves these exact bytes at this commit: no
     // generation consumed, nothing embedded. Re-running ingest is the ordinary
@@ -547,7 +567,7 @@ async function ingestCommand(args: string[]): Promise<number> {
   }
   process.stdout.write(
     sourceCommit === "unspecified"
-      ? provenanceNotice(provenanceGap(values.knowledge)) + "\n"
+      ? provenanceNotice(provenanceGap(knowledgeDir)) + "\n"
       : `source: ${sourceCommit}\n`,
   );
   process.stdout.write(
@@ -589,7 +609,9 @@ async function ingestCommand(args: string[]): Promise<number> {
   // site and `pnpm check` both reporting the problem and the publishing act
   // silent (round-6 review of #43).
   const governance = await withPool(dsn, (pool) =>
-    assertGovernanceServable(pool, instance, report.generation).then(
+    assertGovernanceServable(pool, instance, report.generation, {
+      report: (line) => process.stderr.write(line + "\n"),
+    }).then(
       () => null,
       (error: unknown) => (error instanceof Error ? error.message : String(error)),
     ),

@@ -108,8 +108,9 @@ describe.runIf(canRun)("behavioural evals", () => {
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "",
-      audiences: [],
-      defaultVisibility: null,
+      title: TENANT,
+      description: "An eval record.",
+      toolchain: null,
       embeddingProvider: PROVIDER,
       embeddingModel: MODEL,
       embeddingDim: 1536,
@@ -117,7 +118,7 @@ describe.runIf(canRun)("behavioural evals", () => {
 
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: path.join(CORPUS, "knowledge"),
+      recordRoot: CORPUS,
       flip: true,
       sourceCommit: "eval",
     });
@@ -247,7 +248,7 @@ describe.runIf(canRun)("behavioural evals", () => {
     const provider = buildShippedProvider(PROVIDER, { apiKey: apiKey || null });
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: path.join(CORPUS, "knowledge"),
+      recordRoot: CORPUS,
       flip: false,
       sourceCommit: "eval-unpublished",
     });

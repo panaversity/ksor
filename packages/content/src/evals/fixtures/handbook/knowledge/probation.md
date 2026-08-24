@@ -1,7 +1,13 @@
 ---
+type: Document
 title: Probation
-status: approved
+description: How long probation lasts, when it is reviewed, and how it is extended.
+status: stable
 order: 1
+generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }
 ---
 
 # Probation

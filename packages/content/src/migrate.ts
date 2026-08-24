@@ -118,6 +118,18 @@ export function planMigrations(
   return plan;
 }
 
+/**
+ * A step that BREAKS older readers declares its new floor as a comment line
+ * (`-- compatible_from: 2.5`); an additive step declares nothing and the
+ * database keeps the range it already records. Without this, a migrated
+ * database claimed a 2.0 reader could still read it after 2.5 dropped the
+ * column that reader's predicate names.
+ */
+export function compatibleFromOf(sql: string): string | null {
+  const m = /^--\s*compatible_from:\s*(\d+(?:\.\d+)*)\s*$/m.exec(sql);
+  return m?.[1] ?? null;
+}
+
 export function migrationsDir(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "schema", "migrations");
 }
@@ -179,10 +191,12 @@ export async function runMigrations(
         // below 2.0 — the exact bug compareSchemaVersion is here to avoid
         // (round-3 review of #43).
         const seen = await client.query("SELECT compatible_from FROM schema_meta");
-        const compatibleFrom = seen.rows
-          .map((r: { compatible_from: string }) => String(r.compatible_from))
-          .filter((v) => v !== "")
-          .reduce((lowest, v) => (compareSchemaVersion(v, lowest) < 0 ? v : lowest), step.from);
+        const compatibleFrom =
+          compatibleFromOf(sql) ??
+          seen.rows
+            .map((r: { compatible_from: string }) => String(r.compatible_from))
+            .filter((v) => v !== "")
+            .reduce((lowest, v) => (compareSchemaVersion(v, lowest) < 0 ? v : lowest), step.from);
         const at = String(
           (current.rows[0] as { schema_version?: string } | undefined)?.schema_version ?? "",
         );

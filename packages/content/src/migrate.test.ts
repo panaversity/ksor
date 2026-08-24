@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { migrationFilename, parseMigrationName, planMigrations } from "./migrate.js";
+import {
+  compatibleFromOf,
+  migrationFilename,
+  parseMigrationName,
+  planMigrations,
+} from "./migrate.js";
 
 // A migration names BOTH ends of the step it performs — `<from>-<to>__<slug>.sql`.
 // Encoding only the target would make "2.2 never existed" and "the 2.2 migration
@@ -78,5 +83,14 @@ describe("planMigrations", () => {
     // 2.1→10.0 exists but this build only knows 2.2: applying it would put the
     // database ahead of the code that must read it.
     expect(() => planMigrations("2.1", ["2.1-10.0__jump.sql"], "2.2")).toThrow(/overshoot/i);
+  });
+});
+
+describe("compatibleFromOf", () => {
+  it("reads the floor a breaking step declares, and nothing from an additive one", () => {
+    expect(compatibleFromOf("-- 2.4 -> 2.5\n--\n-- compatible_from: 2.5\nALTER TABLE x;")).toBe(
+      "2.5",
+    );
+    expect(compatibleFromOf("ALTER TABLE x ADD COLUMN y TEXT;")).toBeNull();
   });
 });

@@ -1,16 +1,16 @@
 // Integration tier: the adapter against the REAL filesystem — the committed
-// demo-rulebook fixture vs the ORACLE-captured golden manifest, plus symlink
-// adversarial trees that cannot be committed portably (built in tmp dirs).
-// Golden captured 2026-08-19 by running the oracle's build_manifest
-// (plain_tree.py @ b554f91) over the exact committed fixture tree.
+// demo-rulebook RECORD (profile-shaped: instance, policy, generated indexes,
+// lock) vs the golden manifest, plus adversarial trees built in tmp dirs.
 //
-// The golden has never been regenerated. When ksor moved ordering to the
-// governed `order:` key (2026-08-21 — the predecessor's `position:` /
-// `sidebar_position:` are Docusaurus keys that no compliant record may declare,
-// so the door was reading keys that never appear), the FIXTURE gained `order:`
-// beside each `position:` with the same value, and the oracle's manifest still
-// reproduces exactly. That is the honest way round: the same tree, said in
-// ksor's vocabulary, still builds the predecessor's structure.
+// The golden's lineage: captured 2026-08-19 from the oracle's build_manifest
+// (plain_tree.py @ b554f91) over the oracle-shaped fixture, and REGENERATED
+// 2026-08-25 when the record moved to the KSoR Profile of OKF (decision 26),
+// because the identity model changed by decision, not by drift: every
+// directory is now the `#section` shell (the `<dir>/index` identity is
+// retired, a generated `index.md` creates no node), section prose became
+// `overview.md`, and governance is projected from the profile. What the oracle
+// fixed and this still holds is asserted below: one node per concept, one per
+// directory, positions dense per sibling set, sources for every file.
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,12 +18,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { checkRecord } from "../../record/check.js";
+import { loadRecord } from "../../record/load.js";
+import { profileDoc, writeRecord } from "../fixtures/record-fixture.js";
 import { loadManifest, manifestToJson } from "../manifest.js";
-import { buildManifest } from "./plain-tree.js";
+import { buildManifestFromRecord, type PlainTreeResult } from "./plain-tree.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FIXTURES = join(HERE, "..", "fixtures", "plain-tree");
-const DEMO_DOCS = join(FIXTURES, "demo-rulebook", "docs");
+const FIXTURES = join(HERE, "..", "fixtures", "record");
+const DEMO = join(FIXTURES, "demo-rulebook");
 const GOLDEN = join(FIXTURES, "demo-rulebook.manifest.json");
 
 const tmpDirs: string[] = [];
@@ -38,125 +41,97 @@ afterEach(async () => {
   await Promise.all(tmpDirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
+function adapt(root: string, corpusId = "c"): PlainTreeResult {
+  const record = loadRecord(root);
+  const check = checkRecord(record, { mode: "check" });
+  if (check.refusals.length > 0) throw new Error(JSON.stringify(check.refusals, null, 2));
+  return buildManifestFromRecord(check, record.dirs, { corpusId, sourceCommit: "dev" });
+}
+
 describe("demo-rulebook golden", () => {
-  it("reproduces the oracle's manifest byte-for-byte (as JSON values)", async () => {
-    const skips: string[] = [];
-    const { manifest } = await buildManifest(DEMO_DOCS, {
-      corpusId: "demo.workshop-rulebook",
-      sourceCommit: "dev",
-      onSkip: (l) => skips.push(l),
-    });
+  it("reproduces the golden manifest byte-for-byte (as JSON values)", async () => {
+    const { manifest } = adapt(DEMO, "demo.workshop-rulebook");
     const golden: unknown = JSON.parse(await readFile(GOLDEN, "utf8"));
     expect(manifestToJson(manifest)).toEqual(golden);
-    expect(skips, "unexpected skips: " + JSON.stringify(skips)).toEqual([]);
   });
 
-  it("walks sections in position order with 7 documents and 10 files", async () => {
-    const { manifest } = await buildManifest(DEMO_DOCS, { corpusId: "c", sourceCommit: "dev" });
+  it("the committed fixture passes the checker in check mode — its indexes are fresh", () => {
+    const check = checkRecord(loadRecord(DEMO), { mode: "check" });
+    expect(check.refusals).toEqual([]);
+  });
+
+  it("walks 3 sections and 10 documents, one file per document, none for an index", () => {
+    const { manifest, sources } = adapt(DEMO);
     const sections = manifest.nodes.filter((n) => n.kind === "section");
-    expect(sections.map((s) => s.slug)).toEqual([
-      "getting-certified",
-      "machine-rules",
-      "emergencies",
+    expect(sections.map((s) => s.stable_id)).toEqual([
+      "knowledge/emergencies#section",
+      "knowledge/getting-certified#section",
+      "knowledge/machine-rules#section",
     ]);
     expect(sections.map((s) => s.position)).toEqual([1, 2, 3]);
-    expect(manifest.nodes.filter((n) => n.kind === "document")).toHaveLength(7); // 6 rules + root landing
-    expect(manifest.files).toHaveLength(10); // 6 rules + 3 section indexes + root landing
+    expect(manifest.nodes.filter((n) => n.kind === "document")).toHaveLength(10);
+    expect(manifest.files).toHaveLength(10);
+    expect([...sources.keys()].some((p) => p.endsWith("index.md"))).toBe(false);
     const badges = manifest.nodes.find((n) => n.slug === "badges");
-    expect(badges?.parent).toContain("getting-certified");
+    expect(badges?.parent).toBe("knowledge/getting-certified#section");
     expect(badges?.title).toBe("Rule 10: Machine Badges");
-    expect(
-      badges?.stable_id.startsWith("docs/"),
-      "stable_id: " + JSON.stringify(badges?.stable_id),
-    ).toBe(true);
+    expect(badges?.stable_id).toBe("knowledge/getting-certified/badges");
+    expect(badges?.governance.audience).toEqual(["public"]);
+    expect(badges?.governance.docStatus).toBe("stable");
   });
 
-  it("maps every manifest path to a readable source file", async () => {
-    const { manifest, sources } = await buildManifest(DEMO_DOCS, {
-      corpusId: "c",
-      sourceCommit: "dev",
-    });
+  it("maps every manifest path to a readable source file under the record", async () => {
+    const { manifest, sources } = adapt(DEMO);
     expect([...sources.keys()].sort()).toEqual(manifest.files.map((f) => f.path).sort());
-    for (const [manifestPath, sourcePath] of sources) {
-      const text = await readFile(sourcePath, "utf8");
-      expect(text.length, `${manifestPath} -> ${sourcePath} is empty`).toBeGreaterThan(0);
+    for (const [manifestPath, rel] of sources) {
+      const text = await readFile(join(DEMO, rel), "utf8");
+      expect(text.length, `${manifestPath} -> ${rel} is empty`).toBeGreaterThan(0);
     }
   });
 
-  it("is deterministic across builds", async () => {
-    const one = await buildManifest(DEMO_DOCS, { corpusId: "c", sourceCommit: "dev" });
-    const two = await buildManifest(DEMO_DOCS, { corpusId: "c", sourceCommit: "dev" });
-    expect(manifestToJson(one.manifest)).toEqual(manifestToJson(two.manifest));
+  it("is deterministic across builds", () => {
+    expect(manifestToJson(adapt(DEMO).manifest)).toEqual(manifestToJson(adapt(DEMO).manifest));
   });
 });
 
 describe("adversarial trees", () => {
-  it("symlinks can neither walk OUT of the tree nor cycle it — skipped loudly", async () => {
+  it("symlinks are never followed — a link cannot walk OUT of the tree or cycle it", async () => {
     const tmp = await makeTmp();
     const outside = join(tmp, "outside");
     await mkdir(outside);
-    await writeFile(join(outside, "secret.md"), "# Leak\n\nnot corpus material\n", "utf8");
-    const root = join(tmp, "docs");
-    await mkdir(root);
-    await writeFile(join(root, "real.md"), "# Real\n\nbody\n", "utf8");
-    await symlink(outside, join(root, "escape"));
-    await symlink(root, join(root, "loop"));
-
-    const skips: string[] = [];
-    const { manifest, sources } = await buildManifest(root, {
-      corpusId: "c",
-      sourceCommit: "dev",
-      onSkip: (l) => skips.push(l),
+    await writeFile(
+      join(outside, "secret.md"),
+      profileDoc({ title: "Leak", body: "not corpus material" }),
+    );
+    const root = join(tmp, "rec");
+    writeRecord(root, {
+      name: "rec",
+      docs: { "real.md": profileDoc({ title: "Real", body: "body" }) },
     });
-    expect(manifest.files.map((f) => f.path)).toEqual(["docs/real.md"]);
+    await symlink(outside, join(root, "knowledge", "escape"));
+    await symlink(join(root, "knowledge"), join(root, "knowledge", "loop"));
+    await symlink(join(outside, "secret.md"), join(root, "knowledge", "linked.md"));
+
+    const { manifest, sources } = adapt(root);
+    expect(manifest.files.map((f) => f.path)).toEqual(["knowledge/real.md"]);
     expect([...sources.values()].every((p) => !p.includes("secret"))).toBe(true);
-    expect(skips.sort()).toEqual([
-      `plain-tree: skipped ${join(root, "escape")} (symlink)`,
-      `plain-tree: skipped ${join(root, "loop")} (symlink)`,
-    ]);
+    expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["knowledge/real"]);
   });
 
-  it("a symlinked index.md is never followed (skipped, section stays index-less)", async () => {
+  it("a reserved name is refused by the checker, not silently taken as a section's content", async () => {
     const tmp = await makeTmp();
-    const root = join(tmp, "docs");
-    await mkdir(join(root, "sect"), { recursive: true });
-    await writeFile(join(root, "elsewhere.txt"), "---\ntitle: Sneaky\n---\n# Nope\n", "utf8");
-    await writeFile(join(root, "sect", "child.md"), "# Child\n\nbody\n", "utf8");
-    await symlink(join(root, "elsewhere.txt"), join(root, "sect", "index.md"));
-
-    const skips: string[] = [];
-    const { manifest } = await buildManifest(root, {
-      corpusId: "c",
-      sourceCommit: "dev",
-      onSkip: (l) => skips.push(l),
+    const root = join(tmp, "rec");
+    writeRecord(root, {
+      name: "rec",
+      docs: {
+        "sect/child.md": profileDoc({ title: "Child", body: "body" }),
+        "sect/README.md": "# B\n\ntwo\n",
+      },
     });
-    const section = manifest.nodes.find((n) => n.kind === "section");
-    expect(section?.stable_id, "section: " + JSON.stringify(section)).toBe("docs/sect#section");
-    expect(section?.title).toBe("Sect"); // humanized, not the symlink target's frontmatter
-    expect(skips).toEqual([`plain-tree: skipped ${join(root, "sect", "index.md")} (symlink)`]);
-  });
-
-  it("two index files in one dir fail loud on the real filesystem too", async () => {
-    const tmp = await makeTmp();
-    const root = join(tmp, "docs");
-    await mkdir(join(root, "sect"), { recursive: true });
-    await writeFile(join(root, "sect", "index.md"), "# A\n\none\n", "utf8");
-    await writeFile(join(root, "sect", "README.md"), "# B\n\ntwo\n", "utf8");
-    await expect(buildManifest(root, { corpusId: "c", sourceCommit: "dev" })).rejects.toThrow(
-      /ambiguous section index/,
-    );
-  });
-
-  it("a missing or non-directory root fails loud", async () => {
-    const tmp = await makeTmp();
-    await expect(
-      buildManifest(join(tmp, "nope"), { corpusId: "c", sourceCommit: "dev" }),
-    ).rejects.toThrow(/is not a directory/);
-    const filePath = join(tmp, "file.md");
-    await writeFile(filePath, "# F\n", "utf8");
-    await expect(buildManifest(filePath, { corpusId: "c", sourceCommit: "dev" })).rejects.toThrow(
-      /is not a directory/,
-    );
+    const check = checkRecord(loadRecord(root), { mode: "build" });
+    expect(check.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
+      "ksor-reserved-name knowledge/sect/README.md",
+    ]);
   });
 });
 
@@ -170,48 +145,20 @@ describe("loadManifest", () => {
 });
 
 describe("study attachments are not nodes", () => {
-  /**
-   * `x.summary.md` ends in `.md`, so before the attachment rule it ingested as
-   * a document of its own: `stable_id` `<root>/x.summary`, its own visibility
-   * coalescing to the record default, and its own takedown state. That is one
-   * cause wearing four costumes — the door served a summary the site hides, at
-   * the wrong tier, undenied when the parent was withdrawn, and orphaned when
-   * the parent was gone. No id, no node, no citation.
-   */
-  it("neither a summary nor a deck becomes a document", async () => {
+  it("neither a summary nor a deck becomes a document; a document merely named like one is", async () => {
     const tmp = await makeTmp();
-    const root = join(tmp, "docs");
-    await mkdir(root);
-    await writeFile(join(root, "pay.md"), "# Pay\n\nHow pay is set.\n", "utf8");
-    await writeFile(join(root, "pay.summary.md"), "Pay is set annually.\n", "utf8");
-    await writeFile(join(root, "pay.flashcards.yaml"), "deck:\n  title: Pay\ncards: []\n", "utf8");
-
-    const { manifest } = await buildManifest(root, { corpusId: "c", sourceCommit: "dev" });
-    const ids = manifest.nodes.map((n) => n.stable_id);
-
-    expect(ids, "the parent document is still ingested").toContain("docs/pay");
-    expect(ids, "a summary must never be independently citable").not.toContain("docs/pay.summary");
-    expect(
-      ids.some((id) => id.includes("summary")),
-      `ids: ${ids.join(", ")}`,
-    ).toBe(false);
-    expect(
-      ids.some((id) => id.includes("flashcards")),
-      `ids: ${ids.join(", ")}`,
-    ).toBe(false);
-  });
-
-  it("a document merely named like one is still a document", async () => {
-    const tmp = await makeTmp();
-    const root = join(tmp, "docs");
-    await mkdir(root);
-    // No stem before the suffix, and a name that only CONTAINS the word.
-    await writeFile(join(root, "summary.md"), "# Summary\n\nA real document.\n", "utf8");
-    await writeFile(join(root, "my-summary.md"), "# Mine\n\nAlso real.\n", "utf8");
-
-    const { manifest } = await buildManifest(root, { corpusId: "c", sourceCommit: "dev" });
-    const ids = manifest.nodes.map((n) => n.stable_id);
-    expect(ids).toContain("docs/summary");
-    expect(ids).toContain("docs/my-summary");
+    const root = join(tmp, "rec");
+    writeRecord(root, {
+      name: "rec",
+      docs: {
+        "pay.md": profileDoc({ title: "Pay", body: "How pay is set." }),
+        "pay.summary.md": "---\ntype: Summary\n---\nPay is set annually.\n",
+        "pay.flashcards.yaml": "deck:\n  title: Pay\ncards: []\n",
+        "summary.md": profileDoc({ title: "Summary", body: "A real document." }),
+        "my-summary.md": profileDoc({ title: "Mine", body: "Also real." }),
+      },
+    });
+    const ids = adapt(root).manifest.nodes.map((n) => n.stable_id);
+    expect(ids.sort()).toEqual(["knowledge/my-summary", "knowledge/pay", "knowledge/summary"]);
   });
 });

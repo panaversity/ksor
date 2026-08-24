@@ -4,7 +4,6 @@ export * from "./config.js";
 export {
   parseInstance,
   parseInstanceText,
-  parseFrontmatter,
   InstanceParseError,
   NoDatabaseDeclared,
   SUPPORTED_FORMATS,
@@ -37,10 +36,12 @@ export { keywordAbstains, vectorAbstains, type AbstainConfig } from "./lib/absta
 export {
   audienceGucs,
   AudienceError,
-  visibleTiers,
+  parseViewer,
+  validateViewer,
   WHOLE_RECORD_SCOPE,
-  type AudienceModel,
+  type ViewerRefusal,
 } from "./lib/audience.js";
+export { servingPolicy, type ServingPolicy } from "./lib/policy-row.js";
 export {
   hybridSearch,
   keywordSearch,
@@ -145,7 +146,7 @@ export {
 
 // The record module (record spec; decision 26): the profile, the control
 // files and the checker `ksor build`, `ksor ingest` and the emitted checker
-// will run. Nothing in the CLI consumes it yet.
+// run. `ksor ingest` reads the record through it; `ksor build` will.
 export { splitFrontmatter, normalizeText, type Split } from "./record/frontmatter.js";
 export { REFUSAL_SLUGS, sortRefusals, type Refusal, type RefusalSlug } from "./record/refusal.js";
 export {
@@ -185,6 +186,21 @@ export {
   type CheckResult,
 } from "./record/check.js";
 export { loadRecord, resolveInstanceDir } from "./record/load.js";
+export { parseInstanceDocument, type InstanceDocument } from "./record/instance.js";
+export {
+  checkLock,
+  conceptHashes,
+  sha256OfDocument,
+  formatRefusals,
+  LOCK_PATH,
+  type IngestRefusal,
+  type IngestSlug,
+} from "./ingest/lock-gate.js";
+export { RecordRefused, policyRow } from "./ingest/build.js";
+export { buildManifestFromRecord, BUNDLE } from "./ingest/adapters/plain-tree.js";
+export { manifestToJson, type Manifest, type ManifestNode } from "./ingest/manifest.js";
+export { governanceOf, sectionGovernance, type NodeGovernance } from "./ingest/governance.js";
+export { applyLedger, foldLedger, unmergedLines } from "./ingest/ledger-apply.js";
 export { overlaps, mayReach } from "./lib/audience-rule.js";
 export { OVERLAP_CASES, WIDENING_CASES } from "./lib/audience-conformance.js";
 export { admitsLifecycle, type LifecycleDoc, type Surface } from "./lib/lifecycle-rule.js";

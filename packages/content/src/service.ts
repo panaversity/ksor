@@ -86,25 +86,21 @@ export interface ServiceContext {
   /** The verified caller, or null → audited as "anonymous". */
   readonly actor?: () => string | null;
   /**
-   * The audience tier this door serves. null = the record's least-privileged
-   * tier, which is the safe default: a door that cannot establish who is asking
-   * must not hand out the restricted half of the record. Ignored entirely when
-   * the instance declares no `audiences:` model.
+   * The viewer list this door serves (record spec §2.4) — validated against the
+   * ingested policy's registry at boot (`validateViewer`), always including
+   * `public`. Absent = `[public]`, the safe default: a door that cannot
+   * establish who is asking must not hand out the restricted half of the record.
    */
-  readonly audience?: string | null;
+  readonly viewer?: readonly string[];
 }
 
 /**
- * The audience GUCs every serving statement's predicate reads. Computed per
- * call from the instance's model and the door's tier, and folded into the same
- * transaction-local `set_config` round trip as the tenant wall — so a path
- * cannot serve without them the way it could not serve without the tenant id.
+ * The audience GUC every serving statement's predicate reads. Folded into the
+ * same transaction-local `set_config` round trip as the tenant wall — so a
+ * path cannot serve without it the way it could not serve without the tenant.
  */
 function audienceScope(ctx: ServiceContext): Readonly<Record<string, string>> {
-  return audienceGucs(
-    { audiences: ctx.instance.audiences, defaultVisibility: ctx.instance.defaultVisibility },
-    ctx.audience ?? null,
-  );
+  return audienceGucs(ctx.viewer ?? ["public"]);
 }
 
 export interface SearchHit {

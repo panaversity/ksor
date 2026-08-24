@@ -1,7 +1,13 @@
 ---
+type: Document
 title: "Rule 10: Machine Badges"
-position: 1
+description: "Which badges exist, what each permits, and how one is earned or revoked."
+status: stable
 order: 1
+generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }
 ---
 
 # Rule 10: Machine Badges

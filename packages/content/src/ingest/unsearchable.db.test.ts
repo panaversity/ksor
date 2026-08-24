@@ -16,7 +16,7 @@
  * findable by name.
  */
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,54 +27,51 @@ import { grantIngest } from "../grant.js";
 import { buildGeneration } from "./build.js";
 import { buildShippedProvider } from "../lib/providers/registry.js";
 import { applySchema } from "../schema.js";
-import type { ContentInstance } from "../instance.js";
+import { instanceOf, profileDoc, writeRecord } from "./fixtures/record-fixture.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_unsearchable";
 
 /** Navigation: a page of links, which no search should ever return. */
-const NAV = `---
-title: Handbook
-status: approved
----
-
+const NAV = profileDoc({
+  title: "Handbook",
+  body: `
 # Handbook
 
 - [Probation](probation.md)
 - [Notice periods](notice-periods.md)
 - [Expense limits](expense-limits.md)
 - [Travel](travel.md)
-`;
+`,
+});
 
 /**
  * A complete policy statement — 51 characters, and the whole answer to "how
  * long is probation". Searchable since #55; here as the control that proves
  * the report counts navigation rather than shortness.
  */
-const SHORT_FACT = `---
-title: Probation
-status: approved
----
-
+const SHORT_FACT = profileDoc({
+  title: "Probation",
+  body: `
 # Probation
 
 Six months, with a written review at three and six.
-`;
+`,
+});
 
 /** Ordinary prose, searchable under any rule — the upper control. */
-const LONG = `---
-title: Expense claims
-status: approved
----
-
+const LONG = profileDoc({
+  title: "Expense claims",
+  body: `
 # Expense claims
 
 Claims are submitted through the finance portal within thirty days of the spend,
 with a receipt attached for anything over twenty pounds. Approvals follow the
 line-manager chain, and the finance team reviews anything booked to a project
 code before it is paid out at the end of the month.
-`;
+`,
+});
 
 describe.runIf(adminDsn !== "")("ingest reports what search cannot reach (db)", () => {
   let pool: pg.Pool;
@@ -92,11 +89,12 @@ describe.runIf(adminDsn !== "")("ingest reports what search cannot reach (db)", 
     await applySchema(pool, 1536);
     await grantIngest(pool, "unsrch");
     work = await mkdtemp(join(tmpdir(), "ksor-unsrch-"));
-    const k = join(work, "knowledge");
-    await mkdir(k, { recursive: true });
-    await writeFile(join(k, "index.md"), NAV, "utf8");
-    await writeFile(join(k, "probation.md"), SHORT_FACT, "utf8");
-    await writeFile(join(k, "expenses.md"), LONG, "utf8");
+    // The link list is a CONCEPT (`handbook.md`): a generated index.md is never
+    // a node and never chunked, so it cannot be what the report names.
+    writeRecord(work, {
+      name: "unsrch",
+      docs: { "handbook.md": NAV, "probation.md": SHORT_FACT, "expenses.md": LONG },
+    });
   }, 300_000);
 
   afterAll(async () => {
@@ -107,34 +105,16 @@ describe.runIf(adminDsn !== "")("ingest reports what search cannot reach (db)", 
   });
 
   it("counts the chunks no retrieval arm will return, and names the lost documents", async () => {
-    const report = await buildGeneration(
-      pool,
-      {
-        name: "unsrch",
-        corpusId: "unsrch",
-        tenantId: "unsrch",
-        dsnEnv: "KSOR_DB_URL",
-        abstain: { vectorFloor: null, keywordFloor: null },
-        textSearchConfig: "english",
-        maximumResponseCharacters: 120_000,
-        instructions: "",
-        audiences: [],
-        defaultVisibility: null,
-        embeddingProvider: "fake",
-        embeddingModel: "fake-embed-001",
-        embeddingDim: 1536,
-      } as ContentInstance,
-      {
-        provider: buildShippedProvider("fake", { apiKey: null }),
-        knowledgeDir: join(work, "knowledge"),
-        flip: true,
-        sourceCommit: "unsrch",
-      },
-    );
+    const report = await buildGeneration(pool, instanceOf("unsrch", "unsrch"), {
+      provider: buildShippedProvider("fake", { apiKey: null }),
+      recordRoot: work,
+      flip: true,
+      sourceCommit: "unsrch",
+    });
 
     expect(report.unsearchable, "the link list's chunk is not retrievable").toBeGreaterThan(0);
     expect(
-      report.unsearchableSources.some((s) => s.includes("index")),
+      report.unsearchableSources.some((s) => s.includes("handbook")),
       `a document with NO searchable chunk must be named: ${JSON.stringify(report.unsearchableSources)}`,
     ).toBe(true);
     expect(

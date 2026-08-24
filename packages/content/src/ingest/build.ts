@@ -17,8 +17,9 @@
  */
 
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type pg from "pg";
 
 import { envFloat } from "../env.js";
@@ -44,8 +45,16 @@ import {
   type GenerationHealth,
 } from "./generation.js";
 import { manifestToJson, sourceId, topological, type Manifest } from "./manifest.js";
-import { contentHash, splitFrontmatter } from "./markdown.js";
-import { buildManifest } from "./adapters/plain-tree.js";
+import { contentHash } from "./markdown.js";
+import { buildManifestFromRecord } from "./adapters/plain-tree.js";
+import { applyLedger, unmergedLines } from "./ledger-apply.js";
+import { checkLock, formatRefusals, LOCK_PATH, type IngestRefusal } from "./lock-gate.js";
+import { checkRecord } from "../record/check.js";
+import { splitFrontmatter } from "../record/frontmatter.js";
+import { checkLedgerShrank, parseLedger, type Ledger } from "../record/ledger.js";
+import { loadRecord } from "../record/load.js";
+import type { Policy } from "../record/policy.js";
+import type { Refusal } from "../record/refusal.js";
 import { BATCH, buildPendingSql, drain, FAIL_SQL, rowsToInputs, WRITE_SQL } from "./worker.js";
 
 // The per-chunk insert columns — byte-similar to the oracle's _CHUNK_INSERT;
@@ -64,6 +73,10 @@ const CHUNK_PARAMS = 10;
  */
 function denseLength(content: string): number {
   return content.replace(/\s/g, "").length;
+}
+
+function jsonOrNull(value: unknown): string | null {
+  return value === null || value === undefined ? null : JSON.stringify(value);
 }
 
 /** 500 rows × 10 params stays far under Postgres's 65535 bind-parameter cap. */
@@ -126,9 +139,11 @@ export async function buildStructure(
     const res = await client.query(
       "INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug," +
         " title, summary, keywords, position, permalink," +
-        " corpus_id, visibility, doc_status, owner, provenance, superseded_by)" +
+        " corpus_id, audience, doc_status, owner, superseded_by," +
+        " sources, verified, generated, approval, deprecated, effective_from, stale_after, trust_tier)" +
         " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11," +
-        " $12, $13, $14, $15, $16, $17) RETURNING node_id",
+        " $12, $13::text[], $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20::jsonb, $21::jsonb," +
+        " $22::timestamptz, $23::timestamptz, $24) RETURNING node_id",
       [
         tenantId,
         generation,
@@ -141,15 +156,22 @@ export async function buildStructure(
         n.keywords.length > 0 ? [...n.keywords] : null,
         n.position,
         n.permalink, // confirmed site route or NULL — never a guessed link
-        // Governance the document declared about itself (schema 2.2). Carried
-        // onto the record so the serving door can enforce what previously only
-        // the site's build-time staging could.
+        // Governance the document declared about itself (schema 2.5, the
+        // profile). Carried onto the record so the serving door can enforce
+        // what previously only the site's build-time staging could.
         manifest.corpus_id,
-        n.governance.visibility,
+        n.governance.audience === null ? null : [...n.governance.audience],
         n.governance.docStatus,
         n.governance.owner,
-        n.governance.provenance === null ? null : JSON.stringify(n.governance.provenance),
         n.governance.supersededBy,
+        jsonOrNull(n.governance.sources),
+        jsonOrNull(n.governance.verified),
+        jsonOrNull(n.governance.generated),
+        jsonOrNull(n.governance.approval),
+        jsonOrNull(n.governance.deprecated),
+        n.governance.effectiveFrom,
+        n.governance.staleAfter,
+        n.governance.trustTier,
       ],
     );
     nodeIds.set(n.stable_id, String(res.rows[0].node_id));
@@ -178,7 +200,9 @@ export async function buildStructure(
       throw new Error(`knowledge path escapes the tree root: ${JSON.stringify(src)}`);
     }
     const raw = await readFile(target, "utf8");
-    const { body: rawBody } = splitFrontmatter(raw);
+    // ONE frontmatter reader (decision 26): the same fence walk the checker used.
+    const split = splitFrontmatter(raw, f.path);
+    const rawBody = split.ok ? split.body : raw;
     // Normalize + strip as ONE ordered unit (cleanBody): CRLF→LF first, then
     // style/presentation stripping, so the skip-gate hash and every chunk_hash
     // are line-ending-stable and served chunks reassemble the CLEANED body
@@ -342,8 +366,8 @@ export async function finalize(
 }
 
 export interface BuildGenerationOptions {
-  /** The knowledge tree the plain-tree adapter walks (any folder of Markdown). */
-  readonly knowledgeDir: string;
+  /** The record root — the directory holding `instance.md`, `knowledge/`, `.ksor/` and `build.lock.json`. */
+  readonly recordRoot: string;
   readonly sourceCommit: string;
   /** Activate the generation after a successful build; NEVER implicit. */
   readonly flip: boolean;
@@ -356,6 +380,32 @@ export interface BuildGenerationOptions {
   readonly provider: EmbeddingProvider;
   /** Progress lines; silent by default (the report carries every number). */
   readonly onLog?: (line: string) => void;
+  /** Governance REPORTS that are not refusals (`ksor-takedown-unmerged`); stderr in the CLI, silent by default. */
+  readonly onReport?: (line: string) => void;
+}
+
+/**
+ * The record refused: the checker, the lock gate or the ledger baseline said
+ * no. Thrown BEFORE anything is written, so a red ingest leaves the database
+ * as it found it; the CLI prints the refusals slug-first and exits 1.
+ */
+export class RecordRefused extends Error {
+  override readonly name: string = "RecordRefused";
+  readonly refusals: readonly (Refusal | IngestRefusal)[];
+  constructor(refusals: readonly (Refusal | IngestRefusal)[]) {
+    super(formatRefusals(refusals));
+    this.refusals = refusals;
+  }
+}
+
+/** What ingest stores on the run row about the policy: the registry and the authority sets, as a row. */
+export function policyRow(policy: Policy): Record<string, unknown> {
+  return {
+    audiences: policy.audiences,
+    approval_authorities: policy.approvalRules,
+    takedown_authorities: { actors: policy.takedownActors },
+    ownership: policy.ownership,
+  };
 }
 
 export interface BuildReport {
@@ -411,19 +461,25 @@ async function activeGenerationOf(
 
 /**
  * Do two generations hold the same corpus? Compared on the SET of
- * (stable_id, content_hash, title, position, governance) tuples — identity,
- * content, AND everything the document declares about itself — so a moved
- * document, an edited body, an added or removed file, a retitle, a reorder or a
- * governance change all count as different, while a rebuild of identical bytes
- * does not.
+ * (stable_id, content_hash, title, position, governance, TOOLCHAIN) tuples —
+ * identity, content, everything the document declares about itself, and the
+ * chunk policy and embedding model the sources were built with — so a moved
+ * document, an edited body, an added or removed file, a retitle, a reorder, a
+ * governance change or a toolchain bump all count as different, while a
+ * rebuild of identical bytes does not.
  *
  * The governance columns are in this key because they were the exact hole:
  * hashing the frontmatter-STRIPPED body meant a retitle, a reorder, or a
  * `status: draft` -> `approved` promotion changed no compared byte, so ingest
  * reported "unchanged", published nothing, and exited 0 (review 2026-08-20).
- * A `visibility:` change is a security control; deferring one silently until
+ * An audience change is a security control; deferring one silently until
  * some unrelated document's body happens to change is not a thing a system of
  * record may do.
+ *
+ * The toolchain tuple is in it because it was the NEXT hole: a `CHUNK_POLICY`
+ * bump (decision 22 moved v5 -> v6) reported "unchanged" against a generation
+ * chunked under the old policy, so the re-classification adopters were told to
+ * get by re-running `ksor ingest` never happened (research/okf-native.md §4.1).
  */
 async function sameCorpus(
   c: pg.PoolClient,
@@ -433,9 +489,11 @@ async function sameCorpus(
 ): Promise<boolean> {
   const r = await c.query(
     `WITH pair AS (
-       SELECT s.generation, n.stable_id, s.content_hash,
+       SELECT s.generation, n.stable_id, s.content_hash, s.chunk_policy, s.embedding_model,
               n.title, n.position,
-              n.visibility, n.doc_status, n.owner, n.provenance, n.superseded_by
+              n.audience, n.doc_status, n.owner, n.superseded_by,
+              n.sources, n.verified, n.generated, n.approval, n.deprecated,
+              n.effective_from, n.stale_after, n.trust_tier
          FROM sources s JOIN content_nodes n
            ON n.tenant_id = s.tenant_id AND n.generation = s.generation AND n.node_id = s.node_id
         WHERE s.tenant_id = $1 AND s.generation IN ($2, $3)
@@ -447,20 +505,59 @@ async function sameCorpus(
                AND NOT EXISTS (SELECT 1 FROM pair y WHERE y.generation = $3
                                 AND y.stable_id = x.stable_id
                                 AND y.content_hash = x.content_hash
+                                AND y.chunk_policy = x.chunk_policy
+                                AND y.embedding_model = x.embedding_model
                                 AND y.title = x.title
                                 AND y.position = x.position
                                 -- NULL-safe: a governance key going from absent
                                 -- to set (or back) must count as a change, and
                                 -- plain = would evaluate NULL and match nothing.
-                                AND y.visibility IS NOT DISTINCT FROM x.visibility
+                                AND y.audience IS NOT DISTINCT FROM x.audience
                                 AND y.doc_status IS NOT DISTINCT FROM x.doc_status
                                 AND y.owner IS NOT DISTINCT FROM x.owner
-                                AND y.provenance IS NOT DISTINCT FROM x.provenance
-                                AND y.superseded_by IS NOT DISTINCT FROM x.superseded_by)
+                                AND y.superseded_by IS NOT DISTINCT FROM x.superseded_by
+                                AND y.sources IS NOT DISTINCT FROM x.sources
+                                AND y.verified IS NOT DISTINCT FROM x.verified
+                                AND y.generated IS NOT DISTINCT FROM x.generated
+                                AND y.approval IS NOT DISTINCT FROM x.approval
+                                AND y.deprecated IS NOT DISTINCT FROM x.deprecated
+                                AND y.effective_from IS NOT DISTINCT FROM x.effective_from
+                                AND y.stale_after IS NOT DISTINCT FROM x.stale_after
+                                AND y.trust_tier IS NOT DISTINCT FROM x.trust_tier)
             ) AS same`,
     [tenantId, a, b],
   );
   return r.rows[0]?.same === true;
+}
+
+/**
+ * Was the active generation ingested against this same policy and ledger? The
+ * door binds to the RUN's policy row and the boot gate compares the denylist
+ * against the run's ledger ids, so a policy or ledger change earns a
+ * generation even when no document byte moved.
+ */
+async function sameGovernance(
+  c: pg.PoolClient,
+  tenantId: string,
+  generation: number,
+  policySha256: string,
+  ledgerIds: readonly string[],
+): Promise<boolean> {
+  const r = await c.query(
+    `SELECT policy_sha256, ledger_ids FROM ingestion_runs
+      WHERE tenant_id = $1 AND generation = $2 ORDER BY run_id DESC LIMIT 1`,
+    [tenantId, generation],
+  );
+  const row = r.rows[0] as
+    | { policy_sha256: string | null; ledger_ids: string[] | null }
+    | undefined;
+  if (row === undefined) return false;
+  const stored = row.ledger_ids ?? [];
+  return (
+    row.policy_sha256 === policySha256 &&
+    stored.length === ledgerIds.length &&
+    stored.every((id, i) => id === ledgerIds[i])
+  );
 }
 
 /** Was the active generation produced by this same source commit? */
@@ -564,16 +661,62 @@ export async function buildGeneration(
   const modelId = provider.modelId; // the persisted identity of this build's embedding space
   const tenant = instance.tenantId;
 
-  const { manifest, sources } = await buildManifest(options.knowledgeDir, {
+  // ---- the record, checked: ONE rule set (record spec §6), before any write
+  const root = resolve(options.recordRoot);
+  const record = loadRecord(root);
+  const check = checkRecord(record, { mode: "build" });
+  if (check.refusals.length > 0 || check.policy === null) throw new RecordRefused(check.refusals);
+  const policy = check.policy;
+  const lockText = existsSync(join(root, LOCK_PATH))
+    ? readFileSync(join(root, LOCK_PATH), "utf8")
+    : null;
+  const lock = checkLock(lockText, record);
+  if (!lock.ok) throw new RecordRefused([lock.refusal]);
+  const policyText = record.files.get(".ksor/governance.yaml") ?? "";
+  const policySha256 = createHash("sha256").update(policyText, "utf8").digest("hex");
+  const ledgerResult = parseLedger(
+    record.files.get(".ksor/takedowns.yaml") ?? null,
+    ".ksor/takedowns.yaml",
+  );
+  if (!ledgerResult.ok) throw new RecordRefused(ledgerResult.refusals);
+  const ledger: Ledger = ledgerResult.ledger;
+
+  const { manifest, sources } = buildManifestFromRecord(check, record.dirs, {
     corpusId: instance.corpusId,
     sourceCommit: options.sourceCommit,
-    onSkip: log,
   });
   const manifestSha256 =
     "sha256:" +
     createHash("sha256")
       .update(JSON.stringify(manifestToJson(manifest)), "utf8")
       .digest("hex");
+  const knowledgeDir = join(root, "knowledge");
+  const files = new Map([...sources].map(([path, rel]) => [path, join(root, rel)]));
+
+  // ---- the ledger: its own transaction, BEFORE the build, so a takedown
+  // reaches the row even when the corpus itself turns out unchanged.
+  const applied = await runIngest(pool, tenant, async (c) => {
+    const last = await c.query(
+      `SELECT generation, ledger_ids FROM ingestion_runs
+        WHERE tenant_id = $1 AND corpus_id = $2 AND ledger_ids IS NOT NULL
+        ORDER BY run_id DESC LIMIT 1`,
+      [tenant, instance.corpusId],
+    );
+    const baseline = last.rows[0] as { generation: unknown; ledger_ids: string[] } | undefined;
+    if (baseline !== undefined) {
+      const shrank = checkLedgerShrank(ledger.ids, [
+        {
+          source: `the last ingest (generation ${Number(baseline.generation)})`,
+          ids: baseline.ledger_ids,
+        },
+      ]);
+      if (shrank.length > 0) throw new RecordRefused(shrank);
+    }
+    return applyLedger(c, instance, ledger);
+  });
+  if (applied.changed > 0)
+    log(`ledger: ${applied.changed} denial row(s) applied from .ksor/takedowns.yaml`);
+  for (const line of unmergedLines(applied.unmerged)) (options.onReport ?? log)(line);
 
   // ---- allocate + structure + carry: ONE transaction (atomic per generation)
   let structure;
@@ -584,14 +727,18 @@ export async function buildGeneration(
         corpusId: instance.corpusId,
         sourceCommit: options.sourceCommit,
         manifestSha256,
+        buildId: lock.lock.buildId,
+        policy: policyRow(policy),
+        policySha256,
+        ledgerIds: ledger.ids,
       });
       const stats = await buildStructure(c, {
         tenantId: tenant,
         corpusId: instance.corpusId,
         generation: alloc.generation,
         manifest,
-        files: sources,
-        treeRoot: options.knowledgeDir,
+        files,
+        treeRoot: knowledgeDir,
         modelId,
       });
       // Nothing to do? Compare what we JUST wrote against what is already
@@ -609,6 +756,7 @@ export async function buildGeneration(
       if (
         active !== null &&
         (await sameCommit(c, tenant, active, options.sourceCommit)) &&
+        (await sameGovernance(c, tenant, active, policySha256, ledger.ids)) &&
         (await sameCorpus(c, tenant, active, alloc.generation))
       ) {
         throw new UnchangedCorpus(active);

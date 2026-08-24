@@ -26,7 +26,7 @@
  * re-run against it and both are caught.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -36,6 +36,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { contentPool, runRead } from "./db.js";
 import { grantIngest } from "./grant.js";
 import { buildGeneration } from "./ingest/build.js";
+import {
+  instanceOf,
+  profileDoc,
+  writeIndexesAndLock,
+  writeRecord,
+} from "./ingest/fixtures/record-fixture.js";
 import { buildShippedProvider } from "./lib/providers/registry.js";
 import { embedQueryVlit } from "./lib/query-embed.js";
 import { UnknownSlug } from "./lib/read.js";
@@ -55,14 +61,10 @@ const TENANT = "chain-corp";
 const SECRET = "ZEBRAQUARTZ";
 
 const DOCS: Record<string, string> = {
-  "public-handbook.md": `---
-title: Public handbook
-status: approved
-owner: ops@example.test
-provenance: handbook v1
-visibility: public
----
-
+  "public-handbook.md": profileDoc({
+    title: "Public handbook",
+    audience: ["public"],
+    body: `
 # Public handbook
 
 Everyone may read this handbook. It covers onboarding for new joiners, the
@@ -72,14 +74,11 @@ the onboarding section in their first week; everyone else can treat it as a
 reference and search it when a question comes up rather than reading it end to
 end.
 `,
-  "internal-salaries.md": `---
-title: Internal salaries
-status: approved
-owner: hr@example.test
-provenance: comp review 2026
-visibility: internal
----
-
+  }),
+  "internal-salaries.md": profileDoc({
+    title: "Internal salaries",
+    audience: ["internal"],
+    body: `
 # Internal salaries
 
 Band 4 engineers ${SECRET} receive between 180000 and 240000 depending on
@@ -89,30 +88,25 @@ managers preparing offers, and it is restricted to staff: the numbers here are
 not published outside the company and must not appear in any external material
 or job posting.
 `,
-  "hr/index.md": `---
-title: HR section
-status: approved
-owner: hr@example.test
-provenance: hr charter
-visibility: internal
----
-
+  }),
+  "hr/overview.md": profileDoc({
+    title: "HR section",
+    audience: ["internal"],
+    body: `
 # HR section
 
-The section itself is internal, and everything about how the HR team operates
+This overview is internal, and everything about how the HR team operates
 belongs here: who owns which policy, when each is reviewed, and where the
 signed originals are kept. It is deliberately marked internal even though some
-of the documents beneath it are public, because the section index names
-programmes that have not been announced.
+of the documents beside it are public, because it names programmes that have
+not been announced. The SECTION it lives in is a shell with no governance of
+its own, admitted to a viewer iff one of its descendants is.
 `,
-  "hr/holiday.md": `---
-title: Holiday policy
-status: approved
-owner: hr@example.test
-provenance: handbook v1
-visibility: public
----
-
+  }),
+  "hr/holiday.md": profileDoc({
+    title: "Holiday policy",
+    audience: ["public"],
+    body: `
 # Holiday policy
 
 Everyone may read the holiday policy, even though the section it lives in is
@@ -121,14 +115,11 @@ booked through the usual system and approved by a line manager. Carry-over is
 capped at five days and must be used in the first quarter. This document is
 public on purpose: it is the one people link to from outside the HR section.
 `,
-  "hr/expenses.md": `---
-title: Expense claims
-status: approved
-owner: hr@example.test
-provenance: handbook v1
-visibility: public
----
-
+  }),
+  "hr/expenses.md": profileDoc({
+    title: "Expense claims",
+    audience: ["public"],
+    body: `
 # Expense claims
 
 Claims are submitted through the finance portal within thirty days of the
@@ -137,14 +128,11 @@ follow the usual line-manager chain, and the finance team reviews anything
 booked to a project code. This document sits under the internal HR section and
 is itself public, like the holiday policy beside it.
 `,
-  "hr/grievance.md": `---
-title: Grievance procedure
-status: approved
-owner: hr@example.test
-provenance: hr charter
-visibility: public
----
-
+  }),
+  "hr/grievance.md": profileDoc({
+    title: "Grievance procedure",
+    audience: ["public"],
+    body: `
 # Grievance procedure
 
 Anyone may raise a grievance in writing to their manager or, where that is not
@@ -153,22 +141,21 @@ working days and the process is documented at each step so that both sides can
 see what was decided and when. This is public deliberately: people need to be
 able to read it before they decide whether to use it.
 `,
-  "undeclared-notes.md": `---
-title: Undeclared notes
-status: approved
-owner: ops@example.test
-provenance: notes
----
+  }),
+  "shared-notes.md": profileDoc({
+    title: "Shared notes",
+    audience: ["public", "internal"],
+    body: `
+# Shared notes
 
-# Undeclared notes
-
-This document declares no visibility at all, so it takes whatever
-default_visibility the record declares. It exists to prove that an undeclared
-document is resolved at serving time rather than at ingest, and that both tiers
-of this record can see it while default_visibility is public. The body is long
+This document names BOTH audiences, so a public viewer and an internal viewer
+each hold an identifier its list contains. It exists to prove that membership
+is a LIST on the document and rank a list on the viewer, and that a document
+for two audiences is visible to a viewer holding either. The body is long
 enough to be classified as prose rather than navigation, so search reaches it
 like any other document.
 `,
+  }),
 };
 
 describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)", () => {
@@ -177,7 +164,11 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
   let work: string;
   let instance: ContentInstance;
 
-  /** A door serving exactly one tier — the shape `compose.ts` builds. */
+  /** A door serving one viewer list — the shape `compose.ts` builds; null = an unidentified caller. */
+  const VIEWER: Record<string, readonly string[]> = {
+    public: ["public"],
+    internal: ["public", "internal"],
+  };
   const doorFor = (audience: string | null): ServiceContext => ({
     pool,
     instance,
@@ -185,7 +176,7 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
     instanceDigest: createHash("sha256").update("chain").digest("hex"),
     embedQuery: (query: string) =>
       embedQueryVlit(query, { provider: buildShippedProvider("fake", { apiKey: null }) }),
-    audience,
+    ...(audience === null ? {} : { viewer: VIEWER[audience]! }),
   });
 
   beforeAll(async () => {
@@ -200,33 +191,12 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
     await grantIngest(pool, TENANT);
 
     work = mkdtempSync(path.join(tmpdir(), "ksor-chain-"));
-    const knowledge = path.join(work, "knowledge");
-    mkdirSync(knowledge, { recursive: true });
-    for (const [name, body] of Object.entries(DOCS)) {
-      const target = path.join(knowledge, name);
-      mkdirSync(path.dirname(target), { recursive: true });
-      writeFileSync(target, body, "utf8");
-    }
-
-    instance = {
-      name: TENANT,
-      corpusId: TENANT,
-      tenantId: TENANT,
-      dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: null, keywordFloor: null },
-      textSearchConfig: "english",
-      maximumResponseCharacters: 120_000,
-      instructions: "",
-      audiences: ["public", "internal"],
-      defaultVisibility: "public",
-      embeddingProvider: "fake",
-      embeddingModel: "fake-embed-001",
-      embeddingDim: 1536,
-    } as ContentInstance;
+    writeRecord(work, { name: TENANT, audiences: ["internal"], docs: DOCS });
+    instance = instanceOf(TENANT, TENANT);
 
     await buildGeneration(pool, instance, {
       provider: buildShippedProvider("fake", { apiKey: null }),
-      knowledgeDir: knowledge,
+      recordRoot: work,
       flip: true,
       sourceCommit: "chain",
     });
@@ -239,24 +209,31 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
     if (work !== undefined) rmSync(work, { recursive: true, force: true });
   });
 
-  it("LINK 1 — ingest carries each document's declared visibility onto the node row", async () => {
+  it("LINK 1 — ingest carries each document's declared audience list onto the node row", async () => {
     // The original decision-15 bug: ingest kept four frontmatter keys and
     // dropped the rest, so `visibility` existed only in markdown.
     const rows = await runRead(pool, TENANT, async (client) =>
       (
         await client.query(
-          "SELECT slug, visibility FROM content_nodes WHERE tenant_id = $1 AND generation = " +
+          "SELECT slug, audience FROM content_nodes WHERE tenant_id = $1 AND generation = " +
             "(SELECT active_generation FROM corpora WHERE tenant_id = $1) ORDER BY slug",
           [TENANT],
         )
-      ).rows.map((r: { slug: string; visibility: string | null }) => [r.slug, r.visibility]),
+      ).rows.map((r: { slug: string; audience: string[] | null }) => [r.slug, r.audience]),
     );
-    const byslug = Object.fromEntries(rows) as Record<string, string | null>;
-    expect(byslug["public-handbook"], "declared public").toBe("public");
-    expect(byslug["internal-salaries"], "declared internal — the value that must survive").toBe(
+    const byslug = Object.fromEntries(rows) as Record<string, string[] | null>;
+    expect(byslug["public-handbook"], "declared public").toEqual(["public"]);
+    expect(byslug["internal-salaries"], "declared internal — the value that must survive").toEqual([
       "internal",
-    );
-    expect(byslug["undeclared-notes"], "declares none: NULL, resolved at serving time").toBeNull();
+    ]);
+    expect(byslug["shared-notes"], "a two-audience list survives whole").toEqual([
+      "public",
+      "internal",
+    ]);
+    expect(byslug["hr"], "a section carries the union of its descendants' lists").toEqual([
+      "internal",
+      "public",
+    ]);
   });
 
   it("LINK 2 — a PUBLIC door cannot search, read or outline the internal document", async () => {
@@ -338,31 +315,30 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
     expect(listed).toContain("public-handbook");
   });
 
-  it("an UNDECLARED document follows default_visibility on every surface", async () => {
+  it("a document for TWO audiences is visible to a viewer holding either", async () => {
     for (const tier of ["public", "internal"]) {
       const listed = (await outlineDocuments(doorFor(tier), {})).nodes.map((n) => n.slug);
-      expect(listed, `default_visibility is public, so ${tier} sees it`).toContain(
-        "undeclared-notes",
+      expect(listed, `[public, internal] overlaps the ${tier} viewer's list`).toContain(
+        "shared-notes",
       );
     }
   });
 
-  it("a PUBLIC document under an INTERNAL parent is reachable, not merely citable", async () => {
-    // `visibility:` is a property of a DOCUMENT, not of its container: the site
-    // stages per file and `AUDIENCE_CASES` is per document. The kernel's three
-    // paths disagreed about that. `search` filtered only the chunk's own node,
-    // so it returned the public child and told the agent to read that slug —
-    // while `read` and `outline` walked the tree gating EVERY ancestor, so the
-    // internal parent pruned the child and the suggested remedy failed with
-    // "no document with slug". Citable and unreachable at once, and `outline`,
-    // the fallback the error names, hid it too (round-9 review of #43).
+  it("a PUBLIC document beside an INTERNAL overview is reachable, and its section is admitted through it", async () => {
+    // Audience is a property of a DOCUMENT, not of its container: the site
+    // stages per file and `OVERLAP_CASES` is per document. The kernel's three
+    // paths once disagreed about that (round-9 review of #43). A section is a
+    // shell with no governance of its own: it carries the union of its
+    // descendants' lists, so the one predicate admits it iff a descendant is
+    // visible — the public child admits `hr`, and the internal overview stays hidden.
     const door = doorFor("public");
 
     const listed = (await outlineDocuments(door, { depth: 5 })).nodes.map((n) => n.slug);
     expect(listed, "the public child is part of the record a public caller may see").toContain(
       "holiday",
     );
-    expect(listed, "…and the internal parent is NOT").not.toContain("hr");
+    expect(listed, "…and so is the section that holds it").toContain("hr");
+    expect(listed, "…while the internal overview beside it is NOT").not.toContain("overview");
 
     const doc = await readDocument(door, "holiday");
     expect(doc.text, "and reading it returns the real document").toContain("holiday policy");
@@ -466,7 +442,9 @@ describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () 
     instanceDigest: createHash("sha256").update("pin").digest("hex"),
     embedQuery: (q: string) =>
       embedQueryVlit(q, { provider: buildShippedProvider("fake", { apiKey: null }) }),
-    audience,
+    ...(audience === null
+      ? {}
+      : { viewer: audience === "internal" ? ["public", "internal"] : ["public"] }),
   });
 
   const pinFor = (generation: number): string =>
@@ -483,12 +461,17 @@ describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () 
   const write = async (visibility: string): Promise<void> => {
     writeFileSync(
       path.join(work2, "knowledge", "layoffs.md"),
-      `---\ntitle: Layoffs\nstatus: approved\nvisibility: ${visibility}\n---\n\n` +
-        `# Layoffs\n\nThe restructuring plan ${SECRET} covers three sites and the timetable ` +
-        `for consultation, including which roles are affected and when each group is told. ` +
-        `It is the reference managers use when preparing individual conversations.\n`,
+      profileDoc({
+        title: "Layoffs",
+        audience: [visibility],
+        body:
+          `# Layoffs\n\nThe restructuring plan ${SECRET} covers three sites and the timetable ` +
+          `for consultation, including which roles are affected and when each group is told. ` +
+          `It is the reference managers use when preparing individual conversations.\n`,
+      }),
       "utf8",
     );
+    writeIndexesAndLock(work2, `sha256:${visibility}`);
   };
 
   beforeAll(async () => {
@@ -502,33 +485,23 @@ describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () 
     await applySchema(pool2, 1536);
     await grantIngest(pool2, T);
     work2 = mkdtempSync(path.join(tmpdir(), "ksor-pin-"));
-    mkdirSync(path.join(work2, "knowledge"), { recursive: true });
-    writeFileSync(
-      path.join(work2, "knowledge", "handbook.md"),
-      `---\ntitle: Handbook\nstatus: approved\nvisibility: public\n---\n\n# Handbook\n\n` +
-        `Onboarding, expenses and travel, written for everyone and left untouched by this ` +
-        `test so the control means something.\n`,
-      "utf8",
-    );
-    await write("public");
-    inst2 = {
+    writeRecord(work2, {
       name: T,
-      corpusId: T,
-      tenantId: T,
-      dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: null, keywordFloor: null },
-      textSearchConfig: "english",
-      maximumResponseCharacters: 120_000,
-      instructions: "",
-      audiences: ["public", "internal"],
-      defaultVisibility: "public",
-      embeddingProvider: "fake",
-      embeddingModel: "fake-embed-001",
-      embeddingDim: 1536,
-    } as ContentInstance;
+      audiences: ["internal"],
+      docs: {
+        "handbook.md": profileDoc({
+          title: "Handbook",
+          body:
+            `# Handbook\n\nOnboarding, expenses and travel, written for everyone and left untouched by this ` +
+            `test so the control means something.\n`,
+        }),
+      },
+    });
+    await write("public");
+    inst2 = instanceOf(T, T);
     await buildGeneration(pool2, inst2, {
       provider: buildShippedProvider("fake", { apiKey: null }),
-      knowledgeDir: path.join(work2, "knowledge"),
+      recordRoot: work2,
       flip: true,
       sourceCommit: "gen1",
     });
@@ -550,7 +523,7 @@ describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () 
     await write("internal");
     await buildGeneration(pool2, inst2, {
       provider: buildShippedProvider("fake", { apiKey: null }),
-      knowledgeDir: path.join(work2, "knowledge"),
+      recordRoot: work2,
       flip: true,
       sourceCommit: "gen2",
     });
