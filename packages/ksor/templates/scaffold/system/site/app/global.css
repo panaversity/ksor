@@ -749,6 +749,28 @@ html > body[data-scroll-locked] {
   background: var(--color-fd-muted);
 }
 
+/* A block with no language is not code — it is a passage to reproduce
+   verbatim: a prompt to type, a command to say, a message to paste. This
+   record has eight, and they arrived as walls of tight monospace, set for
+   scanning columns of code when what is in them is sentences.
+
+   The highlighter's own output is the selector, so nothing has to be authored
+   and nothing changes for the record: shiki gives every token in a HIGHLIGHTED
+   block an inline `--shiki-light`, and a plain one has none. `:has()` asks
+   that question directly.
+
+   Prose leading, because the lines are sentences; and the accent down the left
+   edge, which is what the rest of this site uses to mark structure — here it
+   says "reproduce this exactly", which is the one thing these blocks have in
+   common. */
+#nd-page .prose figure.shiki:not(:has(code span[style*="--shiki-light"])) {
+  border-left: 3px solid color-mix(in oklab, var(--color-fd-primary) 55%, var(--color-fd-border));
+}
+
+#nd-page .prose figure.shiki:not(:has(code span[style*="--shiki-light"])) code {
+  line-height: 1.7;
+}
+
 /* A block wider than the measure has to SAY it continues, and say it only
    while it does.
 
