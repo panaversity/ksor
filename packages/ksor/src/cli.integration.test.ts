@@ -56,9 +56,9 @@ describe("ksor CLI (built artifact)", () => {
   });
 
   it("names the verb it refuses to fake", () => {
-    const result = runCli(["build"]);
+    const result = runCli(["dev"]);
     expect(result.status).toBe(2);
-    expect(result.stdout).toContain("ksor build: designed but not implemented");
+    expect(result.stdout).toContain("ksor dev: designed but not implemented");
   });
 
   it("refuses an unknown verb with exit 1 and a stable error slug", () => {

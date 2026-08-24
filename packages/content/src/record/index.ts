@@ -7,6 +7,7 @@
  * package root carried pg-pool into an adopter's `pnpm check`).
  */
 export { splitFrontmatter, normalizeText, type Split } from "./frontmatter.js";
+export { parseInstant } from "./instant.js";
 export {
   REFUSAL_SLUGS,
   sortRefusals,
