@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { LIFECYCLE_CASES } from "./lifecycle-conformance.js";
-import { admitsLifecycle } from "./lifecycle-rule.js";
+import { admitsLifecycle, lifecycleBadge } from "./lifecycle-rule.js";
 
 describe("admitsLifecycle — record spec §2.5, one row of LIFECYCLE_CASES at a time", () => {
   for (const c of LIFECYCLE_CASES) {
     it(c.name, () => {
       expect(admitsLifecycle(c.doc, "human", c.at, c.drafts)).toBe(c.human);
       expect(admitsLifecycle(c.doc, "machine", c.at, c.drafts)).toBe(c.machine);
+      // The badge is the human surface's account of WHY the machine surface
+      // declined: exactly one word, or none when both surfaces agree.
+      expect(lifecycleBadge(c.doc, c.at)).toBe(c.badge);
     });
   }
 

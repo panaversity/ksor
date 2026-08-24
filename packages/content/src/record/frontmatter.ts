@@ -134,3 +134,20 @@ function firstNonPlain(value: unknown, at: string): string | null {
 function refuse(path: string, why: string, fix: string): Split {
   return { ok: false, refusal: { slug: SLUG, path, why, fix } };
 }
+
+/**
+ * The document's frontmatter as the file holds it — the bytes between the
+ * fences, unparsed — or null when it has none or an unclosed one.
+ *
+ * The markdown twin serves this INTACT rather than a re-serialisation of the
+ * parsed object: the profile preserves unknown keys (record spec §2.6), and
+ * anything this codebase re-emits can only carry the keys it thought of. It
+ * reads the block `splitFrontmatter` already found, so there is exactly one
+ * walk deciding where a fence ends — a second one that disagreed would
+ * publish a different document from the one the checker read.
+ */
+export function frontmatterText(text: string): string | null {
+  const split = splitFrontmatter(text, "(twin)");
+  if (!split.ok || split.frontmatter === null) return null;
+  return split.block;
+}

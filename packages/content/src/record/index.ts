@@ -6,7 +6,7 @@
  * exactly this and not the kernel behind it (the first build that took the
  * package root carried pg-pool into an adopter's `pnpm check`).
  */
-export { splitFrontmatter, normalizeText, type Split } from "./frontmatter.js";
+export { splitFrontmatter, frontmatterText, normalizeText, type Split } from "./frontmatter.js";
 export { parseInstant } from "./instant.js";
 export {
   REFUSAL_SLUGS,
@@ -78,6 +78,9 @@ export {
   type ScaffoldStructure,
 } from "./hygiene.js";
 export { overlaps, mayReach } from "../lib/audience-rule.js";
-export { AUDIENCE_CASES, WIDENING_CASES } from "../lib/audience-conformance.js";
 export { admitsLifecycle, type LifecycleDoc, type Surface } from "../lib/lifecycle-rule.js";
-export { LIFECYCLE_CASES } from "../lib/lifecycle-conformance.js";
+// The decision TABLES are not re-exported here. This barrel is what the site
+// copies and what the emitted checker bundles, and a table is a test fixture:
+// shipping it would put the spec's rows in an adopter's site bundle. Tests
+// import them from `../lib/*-conformance.js`, and the package index exports
+// them for the suites in packages/ksor.

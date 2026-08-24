@@ -372,3 +372,31 @@ describe("writing the ledger", () => {
     expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
 });
+
+describe("denies — the site's denial predicate, on the same in-force set", () => {
+  it("a node denial matches exactly its concept, and nothing beside it", () => {
+    const live = inForce(ledgerOf(DENIAL));
+    expect(denies(live, "policies/old-threshold")).toBe(true);
+    expect(denies(live, "policies/old-threshold-v2")).toBe(false);
+  });
+
+  it("a subtree denial covers every descendant by directory, never by prefix", () => {
+    const live = inForce(ledgerOf(SUBTREE));
+    expect(denies(live, "policies/old-threshold")).toBe(true);
+    expect(denies(live, "policies/deep/er")).toBe(true);
+    expect(denies(live, "policies-archive/x")).toBe(false);
+    // A concept named exactly for the directory cannot exist in a conformant
+    // record (the route collision is refused), and the unreachable case denies.
+    expect(denies(live, "policies")).toBe(true);
+  });
+
+  it("a revoked denial denies nothing; a removed one still does", () => {
+    expect(denies(inForce(ledgerOf(DENIAL + REVOCATION)), "policies/old-threshold")).toBe(false);
+    expect(denies(inForce(ledgerOf(DENIAL + AMENDMENT)), "policies/old-threshold")).toBe(true);
+  });
+
+  it("the root section denies the whole bundle", () => {
+    const root = SUBTREE.replace("knowledge/policies#section", "knowledge/#section");
+    expect(denies(inForce(ledgerOf(root)), "anything/at/all")).toBe(true);
+  });
+});

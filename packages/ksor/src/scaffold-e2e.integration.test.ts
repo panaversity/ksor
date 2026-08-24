@@ -745,68 +745,103 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     }
   }, 300_000);
 
+  /**
+   * A stable, approved concept in the profile's shape (record spec §2), with
+   * whatever extra governance the case needs. Every document these clauses
+   * write is legal profile content: a site that renders something no adopter
+   * could author proves nothing.
+   */
+  const concept = (options: {
+    title: string;
+    description: string;
+    body: string;
+    order?: number;
+    extra?: string;
+    ksor?: string;
+    status?: string;
+  }): string => {
+    const { title, description, body, order, extra = "", ksor = "", status = "stable" } = options;
+    return `---
+type: Document
+title: ${title}
+description: ${description}
+status: ${status}
+${order === undefined ? "" : `order: ${order}\n`}generated: { by: "ksor-test/1.0", at: 2026-08-01T00:00:00Z }
+${extra}ksor:
+  audience: [public]
+${status === "stable" ? '  approval: { by: "human:kim", at: 2026-08-02T00:00:00Z }\n' : ""}${ksor}---
+
+${body}
+`;
+  };
+
+  const write = (name: string, text: string): void =>
+    writeFileSync(path.join(project, "knowledge", `${name}.md`), text);
+
+  /** The visible text of a built page's article, tags and scripts stripped. */
+  const visible = (route: string): string => {
+    const html = readFileSync(
+      path.join(project, "system", "site", "out", route, "index.html"),
+      "utf8",
+    );
+    const article = html.slice(html.indexOf("<article"));
+    return article
+      .replace(/<script[\s\S]*?<\/script>/g, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ");
+  };
+
+  const built = (rel: string): string =>
+    readFileSync(path.join(project, "system", "site", "out", rel), "utf8");
+
   it("renders each document's declared governance, and infers nothing", () => {
-    const doc = (name: string, frontmatter: string, body: string): void =>
-      writeFileSync(
-        path.join(project, "knowledge", `${name}.md`),
-        `---\n${frontmatter}\n---\n\n${body}\n`,
-      );
-
-    doc(
+    write(
       "refund-policy",
-      [
-        "title: Refund policy",
-        "status: superseded",
-        "order: 2",
-        "owner: Finance",
-        "effective: 2026-01-15",
-        "provenance:",
-        "  - Board minutes 2026-01-11",
-        "  - Terms of service v4",
-        "  - https://intranet.example.com/legal/refunds-v4",
-        "superseded_by: ./refund-policy-v5.md",
-      ].join("\n"),
-      "Refunds are issued within 30 days of purchase.",
+      concept({
+        title: "Refund policy",
+        description: "The refund rules that ran until 2026.",
+        status: "deprecated",
+        order: 2,
+        ksor: `  owner: team:finance
+  superseded_by: refund-policy-v5
+  deprecated: { by: "human:ciso", at: 2026-08-10T00:00:00Z }
+`,
+        extra: `sources:
+  - { id: board-2026, resource: "scope: board minutes 2026-01-11", title: Board minutes }
+  - { id: refunds-v4, resource: https://intranet.example.com/legal/refunds-v4, title: Terms of service v4 }
+`,
+        body: "Refunds are issued within 30 days of purchase. [^board-2026]\n\n[^board-2026]: Board minutes, §2.",
+      }),
     );
-    doc(
+    write(
       "refund-policy-v5",
-      ["title: Refund policy v5", "status: approved", "order: 3", "owner: Finance"].join("\n"),
-      "Refunds are issued within 60 days of purchase.",
+      concept({
+        title: "Refund policy v5",
+        description: "How long a buyer has to send something back.",
+        order: 3,
+        ksor: "  owner: team:finance\n",
+        extra: 'verified:\n  - { by: "human:kim", at: 2026-08-19T14:00:00Z }\n',
+        body: "Refunds are issued within 60 days of purchase.",
+      }),
     );
-    // A document declaring the bare minimum. The scaffold used to ship one
-    // (example.md, title+status+order only) and the "infers nothing"
-    // assertions below leaned on it; the starter record now seeds five
-    // documents that all declare an owner, so the fixture the assertion
-    // needs is written here instead of borrowed from the shipped corpus.
-    doc(
+    // A concept declaring the FLOOR and nothing else. For a document that gets
+    // a PAGE the floor is `type`, `title`, `description`, `status`,
+    // `ksor.audience` plus — because it is stable — `generated` and
+    // `ksor.approval` (record spec §2.2); a draft has no page in a build at
+    // all, so it cannot carry these assertions. Written here rather than
+    // borrowed from the starter, which declares more.
+    write(
       "bare-note",
-      ["title: A bare note", "status: draft", "order: 12"].join("\n"),
-      "Declares only title, status and order.",
+      concept({
+        title: "A bare note",
+        description: "Declares the floor and nothing else.",
+        order: 12,
+        body: "Declares only the keys the profile requires.",
+      }),
     );
 
-    // The fixtures must be legal record content, or this suite proves the site
-    // renders something no adopter could write.
-    const check = spawnSync(
-      process.execPath,
-      [path.join(project, ".agents", "skills", "format-checker", "check.mjs")],
-      { cwd: project, encoding: "utf8" },
-    );
-    expect(check.status, `${check.stdout}${check.stderr}`).toBe(0);
-
-    const built = buildScaffold(project);
-    expect(built.status, `${built.stdout}${built.stderr}`.slice(-2000)).toBe(0);
-
-    const visible = (route: string): string => {
-      const html = readFileSync(
-        path.join(project, "system", "site", "out", route, "index.html"),
-        "utf8",
-      );
-      const article = html.slice(html.indexOf("<article"));
-      return article
-        .replace(/<script[\s\S]*?<\/script>/g, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ");
-    };
+    const build = buildScaffold(project);
+    expect(build.status, `${build.stdout}${build.stderr}`.slice(-2000)).toBe(0);
 
     // Scoped to the notice ELEMENT, never to the whole page: the sidebar and
     // the prev/next pager both carry the successor's title and href, so a
@@ -822,37 +857,41 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       // user must be able to reach the most consequential thing on the page by
       // landmark, which a note is not (GOV.UK's own pattern).
       const found = /<aside[^>]*role="region"[\s\S]*?<\/aside>/.exec(html);
-      expect(found, `no supersession notice in ${route}`).not.toBeNull();
+      expect(found, `no deprecation notice in ${route}`).not.toBeNull();
       return found?.[0] ?? "";
     };
 
-    const supersededNotice = noticeIn("docs/refund-policy");
-    expect(supersededNotice, "the notice is labelled for landmark navigation").toContain(
-      'aria-labelledby="ksor-superseded"',
+    const notice = noticeIn("docs/refund-policy");
+    expect(notice, "the notice is labelled for landmark navigation").toContain(
+      'aria-labelledby="ksor-deprecated"',
     );
-    expect(supersededNotice).toContain("Superseded");
-    expect(supersededNotice).toContain("replaced by");
-    expect(supersededNotice).toContain("Refund policy v5");
+    expect(notice).toContain("Deprecated");
+    expect(notice).toContain("replaced by");
+    // Named by its TITLE, not by the concept id — the notice is for a reader.
+    expect(notice).toContain("Refund policy v5");
     // The link must be IN the notice, not merely somewhere on the page.
-    expect(supersededNotice).toMatch(/href="\/docs\/refund-policy-v5\/?"/);
+    expect(notice).toMatch(/href="\/docs\/refund-policy-v5\/?"/);
 
-    const superseded = visible("docs/refund-policy");
-    expect(superseded).toMatch(/Status superseded/);
-    expect(superseded).toMatch(/Owner Finance/);
-    expect(superseded).toMatch(/Effective 2026-01-15/);
-    // provenance is a LIST so a citation can point at exactly one entry: both
+    // The strip: the record's own word for where the document stands, the
+    // trust tier OKF names, and every attribution the record declares.
+    const withdrawn = visible("docs/refund-policy");
+    expect(withdrawn).toMatch(/Status deprecated/);
+    expect(withdrawn).toMatch(/Trust unverified/);
+    expect(withdrawn).toMatch(/Owner team:finance/);
+    // Who withdrew it, and when: `ksor.deprecated` is required on every
+    // deprecated concept, and a withdrawal nobody signed is a withdrawal by
+    // nobody.
+    expect(withdrawn).toMatch(/Withdrawn human:ciso · 2026-08-10/);
+    // sources is a LIST so a footnote can point at exactly one entry: both
     // survive to the page, separately.
-    expect(superseded).toContain("Board minutes 2026-01-11");
-    expect(superseded).toContain("Terms of service v4");
+    expect(withdrawn).toContain("Board minutes");
+    expect(withdrawn).toContain("Terms of service v4");
 
-    // A source that IS a URL is followable; a citation stays text. Provenance
-    // is load-bearing, and a source nobody can open is weaker than the record
-    // makes it (research/site-design.md F5, measured at 0 of 3 links).
+    // A source that IS a URL is followable; a scope descriptor stays text.
+    // Provenance is load-bearing, and a source nobody can open is weaker than
+    // the record makes it (research/site-design.md F5).
     const sourcesHtml = (route: string): string => {
-      const html = readFileSync(
-        path.join(project, "system", "site", "out", route, "index.html"),
-        "utf8",
-      );
+      const html = built(path.join(route, "index.html"));
       const at = html.indexOf("Sources");
       expect(at, `no Sources section in ${route}`).toBeGreaterThan(-1);
       return html.slice(at);
@@ -861,310 +900,350 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     expect(refundSources).toMatch(
       /<a[^>]+href="https:\/\/intranet\.example\.com\/legal\/refunds-v4"[^>]*>/,
     );
-    // …and the citation beside it is NOT wrapped in an anchor.
-    expect(refundSources).toMatch(/<li[^>]*>Board minutes 2026-01-11<\/li>/);
+    // …and the scope descriptor beside it is NOT wrapped in an anchor.
+    expect(refundSources).toMatch(/<li[^>]*>(?:(?!<a ).)*?Board minutes<\/li>/s);
 
-    // …and the route it points at was really built.
-    expect(
-      readFileSync(
-        path.join(project, "system", "site", "out", "docs", "refund-policy-v5", "index.html"),
-        "utf8",
-      ),
-    ).toContain("Refund policy v5");
-
-    // A page lists what the record holds below it, with a caveat status on the
-    // card — so a reader choosing between two documents sees that one was
-    // withdrawn BEFORE opening it. Before this the folder page ended at its own
-    // sentence and the home page linked to one of five documents
-    // (research/site-design.md F2/F3/F5).
-    const listingIn = (route: string): string => {
-      const html = readFileSync(
-        path.join(project, "system", "site", "out", route, "index.html"),
-        "utf8",
-      );
-      const at = html.indexOf("In this section");
-      return at === -1 ? "" : html.slice(at);
-    };
-    const anyPageHtml = readFileSync(
-      path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
-      "utf8",
-    );
-    // SEARCH results carry the status too. The dialog runs in the browser over
+    // SEARCH results carry the badge too. The dialog runs in the browser over
     // a static index with no field for it, so the map travels in the document;
     // asserting it here proves the bytes a reader's browser receives, which is
     // the closest a static check gets to the dialog itself.
+    const anyPageHtml = built(path.join("docs", "refund-policy", "index.html"));
     const statusMap = /id="ksor-statuses">([^<]*)</.exec(anyPageHtml)?.[1];
     expect(statusMap, `no status map in the page: ${anyPageHtml.slice(0, 200)}`).toBeDefined();
     const parsed = JSON.parse(statusMap ?? "{}") as Record<string, string>;
-    expect(parsed["/docs/refund-policy"], "the withdrawn document is marked").toBe("superseded");
-    // An approved document contributes nothing: a record with no caveats ships
-    // an empty map, and every row renders as the shipped dialog renders it.
+    expect(parsed["/docs/refund-policy"], "the withdrawn document is marked").toBe("deprecated");
+    // A stable, effective document contributes nothing: a record with no
+    // caveats ships an empty map, and every row renders as the shipped dialog
+    // renders it.
     expect(parsed["/docs/refund-policy-v5"]).toBeUndefined();
-
-    // Every document is also emitted as MARKDOWN at a path-derived address, and
-    // the page advertises it: an agent handed a document URL used to have to
-    // scrape a React app to reach text the record holds verbatim
-    // (research/site-design.md F2).
-    const markdown = readFileSync(
-      path.join(project, "system", "site", "out", "md", "refund-policy.md"),
-      "utf8",
+    // …and the CSS that tints the withdrawn row keys on the same word the map
+    // carries. It read `superseded` — the pre-profile status — until
+    // 2026-08-25, so the chip rendered in the ordinary grey on the one surface
+    // whose snippet quotes the withdrawn figure.
+    // found live 2026-08-25: the stylesheet is emitted under
+    // `_next/static/chunks/`, not `_next/static/css/` — a hard-coded directory
+    // made this assertion throw ENOENT rather than fail. Walk for it.
+    const css = walkOut(path.join(project, "system", "site", "out"))
+      .filter((file) => file.endsWith(".css"))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    expect(css, "the withdrawn search chip has no tone rule").toContain(
+      "[data-ksor-status=deprecated]",
     );
+
+    // The markdown twin carries the record's OWN frontmatter, intact — the
+    // concept as the profile describes it, nested `ksor:` and all. A projection
+    // that flattened `ksor.owner` to a top-level `owner:` published a
+    // frontmatter record spec §2.7 refuses by name.
+    const markdown = built(path.join("md", "refund-policy-v5.md"));
     expect(markdown, "the markdown twin carries the body").toContain(
-      "Refunds are issued within 30 days",
+      "Refunds are issued within 60 days",
     );
-    // …and its governance, exactly as llms-full.txt does — a consumer reading
-    // ONE document still learns it was withdrawn.
-    expect(markdown).toContain("status: superseded");
-    expect(markdown).toContain("superseded_by: /docs/refund-policy-v5");
+    expect(markdown).toContain("status: stable");
+    expect(markdown).toContain("ksor:\n  audience: [public]");
+    expect(markdown).toContain("  owner: team:finance");
+    expect(markdown, "a top-level owner: is a pre-profile key").not.toMatch(/^owner:/m);
+    // …plus the two keys the BUILD adds: the derived tier and the R14 stamps.
+    expect(markdown).toContain("trust_tier: human-reviewed");
+    expect(markdown).toMatch(/^build_id: sha256:/m);
     expect(
-      readFileSync(
-        path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
-        "utf8",
-      ),
+      built(path.join("docs", "refund-policy-v5", "index.html")),
       "the page advertises its markdown twin",
-    ).toContain('rel="alternate" type="text/markdown" href="/md/refund-policy.md"');
-
-    // The SIDEBAR carries a caveat status too — it is where a reader chooses,
-    // and two documents that differ only in whether one was withdrawn were
-    // identical rows there (research/site-design.md F3).
-    const anyDocHtml = readFileSync(
-      path.join(project, "system", "site", "out", "docs", "refund-policy", "index.html"),
-      "utf8",
+    ).toContain('rel="alternate" type="text/markdown" href="/md/refund-policy-v5.md"');
+    // A deprecated concept is on no machine surface, so it has NO twin — and
+    // the page must not advertise one (build spec §3).
+    expect(existsSync(path.join(project, "system", "site", "out", "md", "refund-policy.md"))).toBe(
+      false,
     );
-    const sidebar = anyDocHtml.slice(0, anyDocHtml.indexOf("<article"));
-    expect(sidebar, "the sidebar marks a withdrawn document").toContain("superseded");
-    expect(sidebar, "…and a draft one").toContain("draft");
-
-    const sectionListing = listingIn("docs/refund-policy-v5");
-    // refund-policy-v5 is a leaf, so it lists nothing at all.
-    expect(sectionListing, "a leaf document must not grow an empty listing").toBe("");
-
-    const homeHtml = readFileSync(
-      path.join(project, "system", "site", "out", "index.html"),
-      "utf8",
+    expect(built(path.join("docs", "refund-policy", "index.html"))).not.toContain(
+      'rel="alternate"',
     );
-    // The record is ON the front door, but as BYTES rather than as a list of
-    // links: the hero panel renders the same index `/llms.txt` serves, so the
-    // withdrawn policy and its replacement are both visible there. That is
-    // asserted below against the built llms.txt, byte for byte, which is a
-    // stronger check than the markup assertions this replaced — those matched a
-    // heading that moved twice in one day (owner removed the contents list and
-    // the addresses, 2026-08-22).
-    // …and the framework's own marketing copy is gone from the adopter's page:
-    // critical rule 1 says the site never contains authored content.
-    expect(homeHtml).not.toContain("Knowledge you can govern");
-    // …and the record's own authority sentence stands in its place: the first
-    // paragraph of instance.md, which is also what `ksor serve` hands the MCP
-    // server as its instructions, so both surfaces open on one sentence.
-    expect(homeHtml, "the home page publishes the record's own purpose").toContain(
-      "authoritative for",
+    // Every page describes the record, twin or no twin.
+    expect(built(path.join("docs", "refund-policy", "index.html"))).toContain(
+      'rel="describedby" href="/llms.txt"',
     );
-    // The machine identity, on the page that introduces the record: the slug
-    // is what a citation carries, so it belongs where an agent's operator can
-    // read it without opening a file.
-    expect(homeHtml, "the home page names the instance slug").toContain("walkthrough");
 
-    // The front door shows the RECORD, not a drawing of the idea of one
-    // (owner, 2026-08-22: four abstract illustrations rejected — "none of them
-    // is suitable for KSoR"). A stock diagram is the one thing on this page
-    // that can never be true of the adopter's corpus; these three assertions
-    // are what makes the picture the corpus:
-    //   the document `Open the record` opens, set as the leading card…
-    expect(homeHtml, "the front door names the document it opens on").toContain(
-      "What a Knowledge System of Record is",
+    // The SIDEBAR carries the badge too — it is where a reader chooses, and two
+    // documents that differ only in whether one was withdrawn were identical
+    // rows there (research/site-design.md F3).
+    const sidebar = anyPageHtml.slice(0, anyPageHtml.indexOf("<article"));
+    expect(sidebar, "the sidebar marks a withdrawn document").toContain("deprecated");
+
+    // llms-full.txt serves one block per MACHINE-admitted document, and the
+    // withdrawn one is not among them.
+    const full = built("llms-full.txt");
+    expect(full).toContain("# Refund policy v5 (");
+    expect(full, "a deprecated concept must not reach llms-full.txt").not.toContain(
+      "# Refund policy (",
     );
-    //   …the entries of the record standing behind it, which is the next
-    //   THREE in governed order — this fixture's `refund-policy` (order 2)
-    //   among them, carrying its withdrawal where a reader chooses. Asserting
-    //   a deeper entry would be asserting the stack's depth, not that the
-    //   record reaches the page.
-    expect(homeHtml, "the front door shows the record's next entries").toContain("Refund policy");
-    //   …under the label that ties the leading card to the button, which is
-    //   the one string only this design emits (the two assertions above would
-    //   also pass on the old cover, which named the first document in a meta
-    //   line — they stay as regression guards, this one is the new contract).
-    expect(homeHtml, "the record stands on the front door as the record").toContain("Opens here");
-    // The count is COMPUTED from the record, so it is asserted as a value and
-    // rendered as one text node — `{n} documents` renders as `3<!-- -->
-    // documents` and would never match (the React-splits-interpolation trap).
-    // Five seeded by `ksor init` plus the three this test writes.
-    expect(homeHtml, "the front door counts the record it is showing").toContain("8 documents");
-    // The agent addresses came OFF the front door (owner, 2026-08-22): no URLs
-    // on the home page. Discoverability is unharmed and still asserted below —
-    // `/llms.txt` sits where every agent looks for it, `/llms-full.txt` and the
-    // per-document `.md` twins are published and advertised by each document's
-    // `rel="alternate"`, and the record's index is visible on this page as the
-    // BYTES in the hero panel rather than as a list of links.
 
-    // The front door stands ALONE — no sidebar, no document chrome (owner,
-    // 2026-08-22). It wore the full docs shell for part of that day, on the
-    // reasoning that a system of record should show the record immediately;
-    // the call is that a landing page should land, and `Open the record` is
-    // the door. Asserted, because "the home page grew a sidebar again" is
-    // exactly the kind of drift a shell refactor causes silently.
-    expect(homeHtml, "the home page is a landing page, not a document page").not.toContain(
-      'id="nd-sidebar"',
+    // The successor names what it replaced, derived from the record with no new
+    // frontmatter key (research/site-design.md F4).
+    const successor = visible("docs/refund-policy-v5");
+    expect(successor).toMatch(/Status stable/);
+    expect(successor).toMatch(/Trust human-reviewed human:kim · 2026-08-19/);
+    expect(successor).toMatch(/Approved human:kim · 2026-08-02/);
+    expect(successor, "the successor names what it replaced").toMatch(/Replaces Refund policy/);
+    expect(built(path.join("docs", "refund-policy-v5", "index.html")), "…and links to it").toMatch(
+      /href="\/docs\/refund-policy\/?"/,
     );
-    // The AGENT surface carries the same governance, or the record has two
-    // truths (research/site-design.md F1): before this, llms.txt listed a
-    // withdrawn policy and its replacement as adjacent entries told apart only
-    // by their titles, and llms-full.txt served the withdrawn body as clean
-    // prose. Asserted on the built files, not on the projection.
-    const agentFile = (name: string): string =>
-      readFileSync(path.join(project, "system", "site", "out", name), "utf8");
-
-    // The front page is identity and one action now — the bytes panel that
-    // used to carry the record's index came off with the addresses (owner,
-    // 2026-08-22), because the illustration says the same thing the panel said.
-    // What the home page must still carry is asserted above: the record's slug,
-    // its authority sentence, and no framework marketing. The index itself is
-    // asserted against the built llms.txt just below, where it always mattered
-    // more.
-
-    // ONE document's block, never "from this heading to the end of the file":
-    // the loose form swallows every document after it, so an assertion that a
-    // bare document emits no `owner:` passed on the NEXT document's owner
-    // (caught by this suite on its first run, 2026-08-21 — the same class as
-    // the page-wide notice assertion two screens up).
-    const blockFor = (full: string, heading: string): string => {
-      const from = full.indexOf(heading);
-      expect(from, `no ${heading} in llms-full.txt`).toBeGreaterThanOrEqual(0);
-      const next = full.indexOf("\n# ", from + heading.length);
-      return next === -1 ? full.slice(from) : full.slice(from, next);
-    };
-
-    const index = agentFile("llms.txt");
-    const supersededLine = index
-      .split("\n")
-      .find((line) => line.includes("(/docs/refund-policy)")) as string;
-    expect(supersededLine, `llms.txt:\n${index}`).toBeDefined();
-    expect(supersededLine).toContain("SUPERSEDED");
-    // The RESOLVED route — a consumer never sees the record's file tree, so
-    // `./refund-policy-v5.md` would be a reference it cannot follow.
-    expect(supersededLine).toContain("replaced by /docs/refund-policy-v5");
-    expect(supersededLine).not.toContain(".md");
-    // Caveats only: the successor is approved, so its line stays clean.
-    const successorLine = index
-      .split("\n")
-      .find((line) => line.includes("(/docs/refund-policy-v5)")) as string;
-    expect(successorLine).not.toContain("SUPERSEDED");
-    expect(successorLine).not.toContain("APPROVED");
-    // …and the draft the scaffold ships is marked, because draft is a caveat.
-    expect(index.split("\n").find((line) => line.includes("(/docs/bare-note)"))).toContain("DRAFT");
-
-    const full = agentFile("llms-full.txt");
-    const withdrawnBlock = blockFor(full, "# Refund policy (");
-    expect(withdrawnBlock, `llms-full.txt:\n${full.slice(0, 400)}`).toContain("status: superseded");
-    expect(withdrawnBlock).toContain("superseded_by: /docs/refund-policy-v5");
-    expect(withdrawnBlock).toContain("owner: Finance");
-    expect(withdrawnBlock).toContain("effective: 2026-01-15");
-    expect(withdrawnBlock).toContain("  - Board minutes 2026-01-11");
-    expect(withdrawnBlock).toContain("  - Terms of service v4");
-    // The body still follows the block, byte-faithful.
-    expect(withdrawnBlock).toContain("Refunds are issued within 30 days");
-    // Nothing inferred here either: a document declaring only title+status
-    // gets exactly one key.
-    const bareBlock = blockFor(full, "# A bare note (");
-    expect(bareBlock).toContain("status: draft");
-    expect(bareBlock).not.toContain("owner:");
-    expect(bareBlock).not.toContain("provenance:");
-
-    // An approved document carries no status chip: that is what a reader
-    // already assumes, and a label that never varies stops being read. What
-    // the author DID declare still shows.
-    const approved = visible("docs/refund-policy-v5");
-    expect(approved).toMatch(/Owner Finance/);
-    expect(approved).not.toContain("Status");
-    // Supersession runs BOTH ways: the withdrawn document names its successor
-    // above the title, and the successor names what it replaced — derived from
-    // the record, with no new frontmatter key (research/site-design.md F4).
-    expect(approved, "the successor names what it replaced").toMatch(/Replaces Refund policy/);
-    expect(
-      readFileSync(
-        path.join(project, "system", "site", "out", "docs", "refund-policy-v5", "index.html"),
-        "utf8",
-      ),
-      "…and links to it",
-    ).toMatch(/href="\/docs\/refund-policy\/?"/);
     // The withdrawn document must NOT claim to replace anything here.
-    expect(superseded).not.toContain("Replaces");
+    expect(withdrawn).not.toContain("Replaces");
 
-    // Nothing inferred: a document declaring only title/status/order renders
-    // its status and NO other governance furniture — never an "unknown"
-    // owner, which would read as governed.
+    // Nothing inferred: a document declaring the floor renders its status, its
+    // tier and the approval that makes it stable, and NO other governance
+    // furniture — never an "unknown" owner, which would read as governed.
     const bare = visible("docs/bare-note");
-    expect(bare).toMatch(/Status draft/);
+    expect(bare).toMatch(/Status stable/);
+    expect(bare).toMatch(/Trust unverified/);
+    expect(bare).toMatch(/Approved human:kim/);
     expect(bare).not.toContain("Owner");
     expect(bare).not.toContain("Sources");
-    expect(bare).not.toContain("Superseded");
+    expect(bare).not.toContain("Withdrawn");
+    expect(bare).not.toContain("Replaces");
+    expect(bare).not.toContain("Effective from");
+    expect(bare).not.toContain("Review by");
+  }, 420_000);
 
+  it("resolves a successor pointer to the concept it names, not to a folder of the same name", () => {
     // Regression (found live, 2026-08-20): a route cannot tell a FILE from a
     // FOLDER INDEX, so resolving the successor pointer on routes had to guess
     // and refused to link a record `pnpm check` calls well-formed. Here
-    // `knowledge/legal.md` points at its sibling `./terms.md` while a
+    // `knowledge/legal.md` points at its sibling `terms` while a
     // `knowledge/legal/terms.md` also exists — the link must go to the sibling.
-    doc("terms", ["title: Terms", "status: approved", "order: 8"].join("\n"), "The sibling.");
+    write(
+      "terms",
+      concept({ title: "Terms", description: "The sibling.", order: 8, body: "The sibling." }),
+    );
     mkdirSync(path.join(project, "knowledge", "legal"), { recursive: true });
     writeFileSync(
       path.join(project, "knowledge", "legal", "terms.md"),
-      "---\ntitle: Legal terms\nstatus: approved\norder: 9\n---\n\nA same-named folder child.\n",
+      concept({
+        title: "Legal terms",
+        description: "A same-named folder child.",
+        order: 9,
+        body: "A same-named folder child.",
+      }),
     );
-    doc(
+    write(
       "legal",
-      ["title: Legal", "status: superseded", "order: 7", "superseded_by: ./terms.md"].join("\n"),
-      "Points at its sibling.",
+      concept({
+        title: "Legal",
+        description: "Points at its sibling.",
+        status: "deprecated",
+        order: 7,
+        ksor: `  superseded_by: terms
+  deprecated: { by: "human:ciso", at: 2026-08-10T00:00:00Z }
+`,
+        body: "Points at its sibling.",
+      }),
     );
 
-    const withFolder = buildScaffold(project);
-    expect(withFolder.status, `${withFolder.stdout}${withFolder.stderr}`.slice(-2000)).toBe(0);
-    const legalNotice = noticeIn("docs/legal");
-    expect(legalNotice).toMatch(/href="\/docs\/terms\/?"/);
-    expect(legalNotice).toContain("Terms");
+    const result = buildScaffold(project);
+    expect(result.status, `${result.stdout}${result.stderr}`.slice(-2000)).toBe(0);
+    const html = built(path.join("docs", "legal", "index.html"));
+    const notice = /<aside[^>]*role="region"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? "";
+    expect(notice).toMatch(/href="\/docs\/terms\/?"/);
+    expect(notice).toContain("Terms");
     // …and never the raw pointer, which is what the route-based resolver showed.
-    expect(legalNotice).not.toContain("./terms.md");
+    expect(notice).not.toContain("superseded_by");
+  }, 420_000);
 
-    // `site: governance: false` — the record still declares owner and sources
-    // (the agent surface and the audit trail want them); the published page
-    // just stays plain. The SUPERSESSION NOTICE survives it: that is a
-    // correctness warning, not decoration.
+  it("site.governance: false keeps the pages plain and the agent surface governed", () => {
+    // The record still declares owner, approval and sources — the agent surface
+    // and the audit trail want them; the published page just stays plain. The
+    // DEPRECATION NOTICE survives it: that is a correctness warning, not
+    // decoration, and a reader handed a replaced document with no word of its
+    // successor has been misled.
     const instanceMd = path.join(project, "instance.md");
     const original = readFileSync(instanceMd, "utf8");
-    writeFileSync(
-      instanceMd,
-      // `toolchain:` is where the old `ksor:` stamp went (record spec §3).
-      original.replace("\ntoolchain:\n", "\nsite:\n  governance: false\ntoolchain:\n"),
-    );
-    const checkOff = spawnSync(
-      process.execPath,
-      [path.join(project, ".agents", "skills", "format-checker", "check.mjs")],
-      { cwd: project, encoding: "utf8" },
-    );
-    expect(checkOff.status, `${checkOff.stdout}${checkOff.stderr}`).toBe(0);
+    try {
+      writeFileSync(instanceMd, original.replace(/^---\n/, "---\nsite:\n  governance: false\n"));
+      // The key is in the instance's closed set, so the emitted checker takes
+      // it — a record cannot be made unbuildable by turning the badges off.
+      const checkOff = spawnSync(
+        process.execPath,
+        [path.join(project, ".agents", "skills", "format-checker", "check.mjs")],
+        { cwd: project, encoding: "utf8" },
+      );
+      expect(checkOff.status, `${checkOff.stdout}${checkOff.stderr}`).toBe(0);
+      const rebuilt = buildScaffold(project);
+      expect(rebuilt.status, `${rebuilt.stdout}${rebuilt.stderr}`.slice(-2000)).toBe(0);
 
-    const rebuilt = buildScaffold(project);
-    expect(rebuilt.status, `${rebuilt.stdout}${rebuilt.stderr}`.slice(-2000)).toBe(0);
+      const plain = visible("docs/refund-policy");
+      expect(plain).not.toContain("Owner team:finance");
+      expect(plain).not.toContain("Trust");
+      expect(plain).not.toContain("Sources");
+      expect(plain).not.toContain("Board minutes");
+      expect(plain).toContain("Deprecated");
+      expect(plain).toContain("Refund policy v5");
 
-    const plain = visible("docs/refund-policy");
-    expect(plain).not.toContain("Owner Finance");
-    expect(plain).not.toContain("Sources");
-    expect(plain).not.toContain("Board minutes 2026-01-11");
-    expect(plain).toContain("Superseded");
-    expect(plain).toContain("Refund policy v5");
+      // …and `site.governance` never reaches the AGENT surface. That key
+      // decides what the PAGES publish; the record keeps every key for the
+      // agent surface and the audit trail, so suppressing it here would rebuild
+      // the very defect this test exists to catch, on purpose.
+      expect(built(path.join("md", "refund-policy-v5.md"))).toContain("owner: team:finance");
+      expect(built("llms-full.txt")).toContain("trust_tier: human-reviewed");
+    } finally {
+      writeFileSync(instanceMd, original);
+    }
+  }, 420_000);
 
-    // …and `site.governance` never reaches the AGENT surface. That key decides
-    // what the PAGES publish; the record keeps every key for the agent surface
-    // and the audit trail, so suppressing it here would rebuild the very defect
-    // this test exists to catch, on purpose.
-    const indexOff = agentFile("llms.txt");
-    expect(indexOff.split("\n").find((line) => line.includes("(/docs/refund-policy)"))).toContain(
-      "SUPERSEDED",
-    );
-    const fullOff = agentFile("llms-full.txt");
-    expect(blockFor(fullOff, "# Refund policy (")).toContain("owner: Finance");
+  /**
+   * Build spec §4 acceptance 4, item by item: what a `[public]` site build
+   * must and must not contain. Written as ONE clause because the acceptance is
+   * one build — splitting it would pay for four static exports to assert what
+   * one export says.
+   */
+  it("acceptance 4: stamps present, no draft anywhere, every declined state on its page and off llms.txt", () => {
+    const knowledge = path.join(project, "knowledge");
+    const scratch = ["acc-current", "acc-draft", "acc-deprecated", "acc-future", "acc-stale"];
+    try {
+      write(
+        "acc-current",
+        concept({
+          title: "Acceptance current",
+          description: "The one document every surface admits.",
+          order: 20,
+          body: "CURRENTBODY, admitted everywhere.",
+        }),
+      );
+      write(
+        "acc-draft",
+        concept({
+          title: "Acceptance draft ACCDRAFTTITLE",
+          description: "ACCDRAFTDESC still being written.",
+          status: "draft",
+          order: 21,
+          body: "ACCDRAFTBODY.",
+        }),
+      );
+      write(
+        "acc-deprecated",
+        concept({
+          title: "Acceptance deprecated",
+          description: "Replaced by the current one.",
+          status: "deprecated",
+          order: 22,
+          ksor: `  superseded_by: acc-current
+  deprecated: { by: "human:ciso", at: 2026-08-10T00:00:00Z }
+`,
+          body: "DEPRECATEDBODY.",
+        }),
+      );
+      write(
+        "acc-future",
+        concept({
+          title: "Acceptance not yet effective",
+          description: "Takes effect in 2030.",
+          order: 23,
+          ksor: "  effective_from: 2030-01-01T00:00:00Z\n",
+          body: "FUTUREBODY.",
+        }),
+      );
+      write(
+        "acc-stale",
+        concept({
+          title: "Acceptance past review",
+          description: "Nobody has reviewed it since 2019.",
+          order: 24,
+          extra: "stale_after: 2020-01-01T00:00:00Z\n",
+          body: "STALEBODY.",
+        }),
+      );
 
-    writeFileSync(instanceMd, original);
+      const result = buildScaffold(project);
+      expect(result.status, `${result.stdout}${result.stderr}`.slice(-2000)).toBe(0);
+
+      // (a) llms.txt, llms-full.txt, /md/index.md and server.json carry the
+      // lock's stamps (R14).
+      const llms = built("llms.txt");
+      for (const [name, text] of [
+        ["llms.txt", llms],
+        ["llms-full.txt", built("llms-full.txt")],
+        ["md/index.md", built(path.join("md", "index.md"))],
+        [".well-known/mcp/server.json", built(path.join(".well-known", "mcp", "server.json"))],
+      ] as const) {
+        expect(text, `${name} carries no build_id`).toMatch(/build_id["\s:-]+"?sha256:[0-9a-f]/);
+        expect(text, `${name} carries no ksor_version`).toMatch(/ksor_version/);
+        expect(text, `${name} carries no source_commit`).toMatch(/source_commit/);
+      }
+      // llms.txt opens on the record's OWN name and sentence, not the shell's.
+      expect(llms.split("\n")[0]).toMatch(/^# .+/);
+      // server.json keeps its own `version`, which is the record's — the stamps
+      // live under `_meta` so a validating client still accepts the document.
+      const server = JSON.parse(built(path.join(".well-known", "mcp", "server.json"))) as {
+        version: string;
+      };
+      expect(server.version).toMatch(/^\d+\.\d+\.\d+/);
+      // …and the record root is the ONE index with a twin, carrying okf_version.
+      expect(built(path.join(".well-known", "mcp", "server.json"))).not.toContain("okf_version");
+      expect(built(path.join("md", "index.md"))).toMatch(/^okf_version: "0.2"$/m);
+
+      // (b) no draft appears in any page, sidebar entry, search entry or
+      // machine artefact — asserted on the BYTES of the whole export, which is
+      // the only form of "anywhere" that cannot be gamed by checking three
+      // files.
+      const out = path.join(project, "system", "site", "out");
+      for (const canary of ["ACCDRAFTTITLE", "ACCDRAFTDESC", "ACCDRAFTBODY"]) {
+        const hits = walkOut(out).filter((f) => readFileSync(f).includes(Buffer.from(canary)));
+        expect(hits, `the draft canary "${canary}" reached: ${hits.join(", ")}`).toEqual([]);
+      }
+      expect(existsSync(path.join(out, "docs", "acc-draft"))).toBe(false);
+      // The control: the current document IS there, so the sweep above is not
+      // passing over a build that rendered nothing.
+      expect(
+        walkOut(out).filter((f) => readFileSync(f).includes(Buffer.from("CURRENTBODY"))).length,
+      ).toBeGreaterThan(0);
+
+      // (c) a deprecated concept's page names its successor and is absent from
+      // llms.txt.
+      const deprecated = built(path.join("docs", "acc-deprecated", "index.html"));
+      expect(deprecated).toContain("Acceptance current");
+      expect(deprecated).toMatch(/href="\/docs\/acc-current\/?"/);
+      expect(llms).not.toContain("/docs/acc-deprecated");
+
+      // (d) a not-yet-effective and a stale stable concept render with their
+      // badges and are absent from llms.txt. The badge is §2.5's own words,
+      // and the effectivity one carries the date the ellipsis stands for.
+      expect(visible("docs/acc-future")).toMatch(/Status stable effective from 2030-01-01/);
+      expect(visible("docs/acc-stale")).toMatch(/Status stable past its review date/);
+      expect(llms).not.toContain("/docs/acc-future");
+      expect(llms).not.toContain("/docs/acc-stale");
+      // …and neither has a twin, because a twin is a machine surface.
+      expect(existsSync(path.join(out, "md", "acc-future.md"))).toBe(false);
+      expect(existsSync(path.join(out, "md", "acc-stale.md"))).toBe(false);
+
+      // (e) KSOR_DRAFTS=show is a PREVIEW, and a static site's pages are
+      // open-web artefacts: it says so to every crawler rather than letting a
+      // draft be indexed under the record's name (build spec §3). The draft
+      // reaches the human surfaces and NOTHING else — no twin, no llms.txt
+      // line — which is the half a `robots` tag cannot enforce.
+      const preview = buildScaffold(project, { KSOR_DRAFTS: "show" });
+      expect(preview.status, `${preview.stdout}${preview.stderr}`.slice(-2000)).toBe(0);
+      const draftPage = built(path.join("docs", "acc-draft", "index.html"));
+      expect(draftPage).toMatch(/<meta name="robots" content="noindex/);
+      expect(visible("docs/acc-draft")).toMatch(/Status draft/);
+      expect(built("llms.txt")).not.toContain("ACCDRAFTTITLE");
+      expect(existsSync(path.join(out, "md", "acc-draft.md"))).toBe(false);
+      // …and the ordinary build carries no such tag, or every record would be
+      // published unindexable.
+      const republished = buildScaffold(project);
+      expect(republished.status, `${republished.stdout}${republished.stderr}`.slice(-2000)).toBe(0);
+      expect(built(path.join("docs", "acc-current", "index.html"))).not.toContain('name="robots"');
+    } finally {
+      for (const name of scratch) rmSync(path.join(knowledge, `${name}.md`), { force: true });
+    }
   }, 420_000);
 });
+
+/** Every file under a built export, as absolute paths. */
+function walkOut(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const p = path.join(dir, entry.name);
+    return entry.isDirectory() ? walkOut(p) : [p];
+  });
+}
 
 describe.runIf(!enabled)("scaffold e2e (gated)", () => {
   it("skipped — set KSOR_E2E=1 to run the full scaffold walkthrough", () => {

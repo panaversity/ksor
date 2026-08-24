@@ -468,35 +468,45 @@ either stops being true.
   a `----`-closed frontmatter block).
 
 - **Governance rendering on the site**
-  (`specs/ksor/site-governance/spec.md`, issue #29) — the record enforces
-  `status` / `owner` / `provenance` / `effective` / `superseded_by` on every
-  document, and the site rendered none of them. Now each document shows the
-  governance it declares: owner and effective date under the title, one entry
-  per `provenance` source at the foot, a status chip **only when the status is
-  a caveat** (`draft` / `review` / `superseded` — an `approved` document shows
-  none, because that is what a reader already assumes and a label that never
-  varies stops being read), and — above the title,
-  where it cannot be missed — a supersession notice naming the successor and
-  linking to its route. This closed a correctness gap, not only a cosmetic
-  one: a `status: superseded` document was served looking identical to an
-  approved one, with the successor pointer the checker demands swallowed.
-  Nothing is inferred — an undeclared key renders nothing, never a placeholder
-  that would read as governed. All server-rendered, so it survives print, a
-  failed bundle and JavaScript off (verified live in both themes). The
+  (`specs/ksor/site-governance/spec.md`, issue #29; rewritten onto the KSoR
+  Profile of OKF, `specs/ksor/record/spec.md` §2, in the OKF-native change) —
+  the record carries a governance vocabulary on every concept and the site
+  rendered none of it. Now each document's page shows what the record says
+  about it and who said it: a **status chip on every page** (`draft` /
+  `stable` / `deprecated` — including `stable`, because a reader who cannot
+  see it cannot tell a governed record from a site that never said), the
+  **trust tier** OKF names (`unverified` / `machine-confirmed` /
+  `human-reviewed`) with the verification that set it, the **approver** and
+  date that make a `stable` document stable, the **owner**, the **withdrawal**
+  and date on a deprecated one, `Replaces` derived from the record in the
+  other direction, `Effective from` / `Review by`, one entry per `sources`
+  entry at the foot with a URL followable and a scope descriptor left as text,
+  and — above the title, where it cannot be missed — a deprecation notice
+  naming the successor and linking to its route. Where the calendar keeps an
+  otherwise current document off the machine surfaces, a second chip carries
+  record spec §2.5's own words: `effective from <date>` and `past its review
+date`. The same badge marks the row in the sidebar, in every listing and in
+  the search results, where the snippet would otherwise quote a withdrawn
+  figure. Nothing is inferred — an undeclared key renders nothing, never a
+  placeholder that would read as governed. All server-rendered, so it survives
+  print, a failed bundle and JavaScript off (verified live in both themes).
   Publication is the owner's call: `site: governance: false` in instance.md
-  leaves the pages plain while the record keeps every key for the agent
-  surface and the audit trail — and it never hides the supersession notice.
-  `pnpm check` and the build both refuse a value that is not `true`/`false`.
-  The **agent files carry the same governance**: `llms.txt` marks a caveat
-  status and names the route that replaced a superseded document, and
-  `llms-full.txt` restores each document's keys as frontmatter above its body.
-  Without that half, a build warned a reader about a withdrawn policy and handed
-  an agent the same policy as clean prose — one source, two truths (measured on
-  shipped bytes, `research/site-design.md` F1). `site: governance: false` is a
-  decision about the PAGES and never reaches those files.
+  leaves the pages plain while the record keeps every key for the agent surface
+  and the audit trail — and it never hides the deprecation notice. The build
+  refuses a value that is not `true`/`false`.
+  The **agent files carry the same record**: `llms.txt`, `llms-full.txt`, every
+  `/md/` twin and `/.well-known/mcp/server.json` carry the build's `build_id`,
+  `source_commit` and `ksor_version`, and each twin serves the concept's own
+  frontmatter INTACT — nested `ksor:` and all — under the derived `trust_tier`
+  and those stamps, so an OKF consumer parses the profile's grammar rather than
+  this shell's summary of it. A deprecated, not-yet-effective or stale concept
+  is on none of those files at all (record spec §2.5), which is the profile's
+  answer to the one-source-two-truths defect the caveat markers used to patch
+  (`research/site-design.md` F1). `site: governance: false` is a decision about
+  the PAGES and never reaches those files.
   Fumadocs shell only: bound there rather than as a surface-contract clause
   (owner, 2026-08-20), so a project that swaps shells loses it until its shell
-  adds it. Released in 0.0.21.
+  adds it. First released in 0.0.21, on the ranked model.
 
 - **The deploy story** — the scaffold ships `vercel.json` answering
   Vercel's setup interview (repo root, static export), and the scaffolded

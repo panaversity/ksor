@@ -375,6 +375,11 @@ function changedFields(before: LedgerEntry, after: LedgerEntry): string[] {
  * `knowledge/#section`, covers everything). Resolved at use, never expanded
  * at write time, for the reason decision 14 records: a subtree denial must
  * also cover a descendant a later change adds.
+ *
+ * `id === dir` is covered too. In a conformant record it cannot arise — a
+ * `policies.md` beside a `policies/` is a refused route collision — but a
+ * denial that covers one document too many is recoverable and one that covers
+ * one too few is a leak, so the unreachable case denies.
  */
 export function denies(inForceDenials: readonly Denial[], id: string): boolean {
   return inForceDenials.some((d) => {

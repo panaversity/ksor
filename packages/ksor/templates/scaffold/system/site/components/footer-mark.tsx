@@ -13,10 +13,11 @@ import { audienceNotice } from "@/lib/audience";
  * carry the shape of a disclosure.
  */
 export function FooterMark(): ReactElement {
-  if (audienceNotice === null) return <BuiltWith />;
+  const notice = audienceNotice();
+  if (notice === null) return <BuiltWith />;
   return (
     <>
-      <BuiltWith /> &middot; <span className="text-fd-muted-foreground">{audienceNotice}</span>
+      <BuiltWith /> &middot; <span className="text-fd-muted-foreground">{notice}</span>
     </>
   );
 }

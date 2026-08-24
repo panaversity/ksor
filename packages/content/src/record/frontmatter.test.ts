@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { splitFrontmatter } from "./frontmatter.js";
+import { frontmatterText, splitFrontmatter } from "./frontmatter.js";
 
 describe("splitFrontmatter", () => {
   it("returns null frontmatter and the whole text when there is no fence", () => {
@@ -172,5 +172,40 @@ describe("splitFrontmatter — hostile inputs (from review)", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.refusal.why).toMatch(/tag/);
+  });
+});
+
+describe("frontmatterText — the bytes the twin republishes", () => {
+  it("hands back the block between the fences, unparsed", () => {
+    // Verbatim: comments, key order, flow mappings and quoting all survive,
+    // because the markdown twin is the record's own bytes (build spec §3) and
+    // record spec §2.7 keeps keys this codebase never thought of.
+    const block = [
+      "type: Policy # reserved",
+      'title: "Purchase: approval"',
+      "ksor:",
+      "  audience: [public]",
+      "  house_convention: kept",
+    ].join("\n");
+    expect(frontmatterText(`---\n${block}\n---\n\nBody.\n`)).toBe(block);
+  });
+
+  it("agrees with splitFrontmatter about where the fence ends", () => {
+    // One walk, one answer: a second definition that disagreed would publish a
+    // different document from the one the checker read.
+    const text = "---\ntitle: Hi\n---\nnot: frontmatter\n---\nmore\n";
+    expect(frontmatterText(text)).toBe("title: Hi");
+    const split = splitFrontmatter(text, "k");
+    expect(split.ok && split.body).toBe("not: frontmatter\n---\nmore\n");
+  });
+
+  it("is null for a document with no fence, and for one whose fence never closes", () => {
+    expect(frontmatterText("# Hello\n")).toBeNull();
+    expect(frontmatterText("---\ntitle: Hi\n")).toBeNull();
+    expect(frontmatterText("---\n---\n\nbody\n")).toBe("");
+  });
+
+  it("normalises the checkout's line endings and an editor's BOM, like every other reader", () => {
+    expect(frontmatterText("\uFEFF---\r\ntitle: Hi\r\n---\r\n\r\nbody\r\n")).toBe("title: Hi");
   });
 });

@@ -1,39 +1,27 @@
 import { docs } from "collections/server";
 import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
-import { statusBadgesPlugin } from "fumadocs-core/source/plugins/status-badges";
 import type { Node, Root } from "fumadocs-core/page-tree";
+import type { ReactNode } from "react";
 
+import { agentFrontmatter, badgeLabel, readGovernance, stampLines } from "./governance";
+import { dirOfRoute, listingOf, readingOrder } from "./index-routes";
+import type { LifecycleBadge } from "./lifecycle-rule";
+import { appName, appTitle, appDescription, showGovernance } from "./shared";
 import {
-  agentFrontmatter,
-  agentIndexSuffix,
-  caveatStatus,
-  readGovernance,
-  resolveSuccessorUrl,
-} from "./governance";
-import { appName, showGovernance } from "./shared";
-import { renderCaveatBadge } from "@/components/sidebar-status";
-import { orderValue } from "./order-rule";
-import { sortNodes } from "./page-order";
+  readStagedIndex,
+  readStageManifest,
+  stagedFrontmatter,
+  stagePageOf,
+} from "./stage-manifest";
+import { renderBadge } from "@/components/sidebar-status";
+import { generateIndexes, humanise, type IndexEntry } from "../record/index-file";
 
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
   baseUrl: "/docs",
   source: docs.toFumadocsSource(),
-  plugins: [
-    lucideIconsPlugin(),
-    // The shell's own status plugin, which reads `status` from a document's
-    // frontmatter and puts it on the tree node. This used to be a map of
-    // statuses by url and a second walk over the tree that rewrote each row's
-    // `name` — the plugin does the walk, so the record's own key reaches the
-    // sidebar without us restating it.
-    //
-    // `renderBadge` returns null for anything that is not a caveat, which is
-    // the one rule that is OURS: a reader already assumes a document in the
-    // record is current, so `approved` shows nothing and the marker stays rare
-    // enough to be noticed where it matters.
-    statusBadgesPlugin({ renderBadge: (status) => renderCaveatBadge(status) }),
-  ],
+  plugins: [lucideIconsPlugin()],
 });
 
 // The page tree's root is named "Docs" by default — fumadocs' fallback for a
@@ -52,84 +40,154 @@ export type KnowledgePage = (typeof source)["$inferPage"];
 // every rendered link.
 export const basePath: string = process.env.KSOR_BASE_PATH ?? "";
 
-// Reading order is ONE rule, shared with the MCP door byte-for-byte — see
-// ./order-rule.ts. The site cannot import the kernel, so the rule is copied and
-// the copy is asserted; every case both surfaces must agree on is a row in the
-// kernel's ORDER_CASES table, and this half is asserted against the same rows.
-function orderOf(page: KnowledgePage): number {
-  return orderValue(page.data.order);
+/** A page's bundle-relative path with forward slashes — the manifest's key. */
+function pathOf(page: KnowledgePage): string {
+  return page.path.replaceAll("\\", "/");
 }
 
 /**
- * The page tree with every folder's children ordered by `order:` frontmatter.
- * Rebuilt on each call from a fresh clone — the loader's own tree is shared
- * state and mutating it would survive a hot reload.
+ * Every directory this viewer's stage holds an index for, root first, with
+ * its parsed index — walked from the root index's folder bullets, so a folder
+ * this viewer may not see is never even asked for.
+ */
+function stagedIndexes(): Map<string, IndexEntry[]> {
+  const out = new Map<string, IndexEntry[]>();
+  const walk = (dir: string): void => {
+    const entries = readStagedIndex(dir);
+    if (entries === null) return;
+    out.set(dir, entries);
+    for (const item of listingOf(dir, entries)) if (item.kind === "folder") walk(item.path);
+  };
+  walk("");
+  return out;
+}
+
+/**
+ * Reading order is ONE rule — the index generator's (build spec §1: concepts
+ * by `order:` then title, then folders by their first concept) — and every
+ * surface takes it from the regenerated indexes rather than restating it. A
+ * route the indexes never listed sorts last, by url.
+ */
+function positions(): Map<string, number> {
+  return new Map(readingOrder(stagedIndexes()).map((url, i) => [url, i] as const));
+}
+
+// The index of a top-level entry's own segment: "/docs/x" splits to
+// ["", "docs", "x"], so its segment is at 2 — the baseUrl's segment count.
+const BASE_SEGMENTS = "/docs".split("/").length;
+
+/** A node's own route at `depth`: a page's url, or a folder's route derived from any descendant. */
+function routeAt(node: Node, depth: number): string {
+  if (node.type === "page") return node.url;
+  if (node.type === "folder") {
+    const descendant = node.index?.url ?? firstPageUrl(node.children);
+    if (descendant !== null) {
+      return descendant
+        .split("/")
+        .slice(0, BASE_SEGMENTS + depth + 1)
+        .join("/");
+    }
+  }
+  return "";
+}
+
+function firstPageUrl(nodes: readonly Node[]): string | null {
+  for (const node of nodes) {
+    if (node.type === "page") return node.url;
+    if (node.type === "folder") {
+      const url = node.index?.url ?? firstPageUrl(node.children);
+      if (url !== null) return url;
+    }
+  }
+  return null;
+}
+
+function sortTree(
+  nodes: readonly Node[],
+  order: ReadonlyMap<string, number>,
+  depth: number,
+): Node[] {
+  const rank = (node: Node): number => order.get(routeAt(node, depth)) ?? Number.POSITIVE_INFINITY;
+  return nodes
+    .map((node): Node => {
+      if (node.type === "folder") {
+        const url = routeAt(node, depth);
+        // The folder's own page — the regenerated index rendered as a listing
+        // — so the sidebar row LINKS the folder rather than only toggling it.
+        const index: Node & { type: "page" } = { type: "page", name: node.name, url };
+        return { ...node, index, children: sortTree(node.children, order, depth + 1) };
+      }
+      if (node.type === "page") {
+        const badge = stagePageOf(pagePathByUrl().get(node.url) ?? "")?.badge ?? null;
+        return badge === null ? node : { ...node, name: withBadge(node.name, badge) };
+      }
+      return node;
+    })
+    .sort((a, b) => rank(a) - rank(b) || routeAt(a, depth).localeCompare(routeAt(b, depth)));
+}
+
+function withBadge(name: ReactNode, badge: LifecycleBadge): ReactNode {
+  return renderBadge(name, badge);
+}
+
+let urlToPath: Map<string, string> | null = null;
+function pagePathByUrl(): Map<string, string> {
+  if (urlToPath === null) {
+    urlToPath = new Map(source.getPages().map((page) => [page.url, pathOf(page)] as const));
+  }
+  return urlToPath;
+}
+
+/**
+ * The page tree in reading order, every folder linking its own page and every
+ * page carrying its badge. Rebuilt on each call from a fresh clone — the
+ * loader's own tree is shared state and mutating it would survive a hot reload.
  */
 export function getSortedPageTree(): Root {
-  const pages = source.getPages();
-  const orders = new Map(pages.map((page) => [page.url, orderOf(page)] as const));
-  // The caveat status already rides the row: `statusBadgesPlugin` above put it
-  // there while the loader built the tree, so the reader sees it before the
-  // click rather than after (research/site-design.md F3). This function is
-  // left with the one thing the shell has no opinion about — the record's
-  // governed `order:`.
   const tree = source.getPageTree();
-  return { ...tree, children: sortNodes(tree.children, orders, 0) };
-}
-
-function collectUrls(nodes: readonly Node[], urls: string[]): void {
-  for (const node of nodes) {
-    if (node.type === "page") urls.push(node.url);
-    else if (node.type === "folder") {
-      if (node.index) urls.push(node.index.url);
-      collectUrls(node.children, urls);
-    }
-  }
+  return { ...tree, children: sortTree(tree.children, positions(), 0) };
 }
 
 /**
- * Every page, in the order the sidebar shows them — the one reading order the
- * site, llms.txt and llms-full.txt all serve.
+ * Every page the human surfaces show, in the one reading order — the sidebar,
+ * the folder pages and the home page all walk this list.
  */
 export function getSortedPages(): KnowledgePage[] {
-  const urls: string[] = [];
-  collectUrls(getSortedPageTree().children, urls);
-
-  const remaining = new Map(source.getPages().map((page) => [page.url, page] as const));
-  const ordered: KnowledgePage[] = [];
-  for (const url of urls) {
-    const page = remaining.get(url);
-    if (page) {
-      ordered.push(page);
-      remaining.delete(url);
-    }
-  }
-  // A page the tree never displayed is still part of the record.
-  return [...ordered, ...remaining.values()];
+  const order = positions();
+  return [...source.getPages()].sort(
+    (a, b) =>
+      (order.get(a.url) ?? Number.POSITIVE_INFINITY) -
+        (order.get(b.url) ?? Number.POSITIVE_INFINITY) || a.url.localeCompare(b.url),
+  );
 }
 
 /**
- * One document as the full-corpus file carries it: heading, then the record's
- * own governance as frontmatter, then the body.
- *
- * The frontmatter is the point. Without it this file served a superseded
- * document as clean prose, so a consumer ingesting the corpus answered from a
- * withdrawn policy with nothing in the bytes to say so (research/site-design.md
- * F1). `pages` resolves a successor pointer to the route a consumer can
- * actually fetch.
+ * The pages the MACHINE surfaces admit — `llms.txt`, `llms-full.txt`, the
+ * twins: stable, effective, unexpired at the build's `as_of`, decided ONCE by
+ * staging and read back from its manifest (record spec §2.5). A route cannot
+ * widen this; it can only read it.
  */
-export async function getLLMText(
-  page: KnowledgePage,
-  pages: readonly KnowledgePage[] = [],
-): Promise<string> {
-  const processed = await page.data.getText("processed");
-  const governance = readGovernance(page.data, page.path);
-  const successor =
-    governance.supersededBy === null
-      ? null
-      : resolveSuccessorUrl(governance.supersededBy, page.path, pages);
-  const front = agentFrontmatter(governance, successor === null ? null : basePath + successor);
+export function getMachinePages(): KnowledgePage[] {
+  return getSortedPages().filter((page) => stagePageOf(pathOf(page))?.machine === true);
+}
 
+/**
+ * One document as the full-corpus file and its twin carry it: heading, then the
+ * record's OWN frontmatter intact under the build's stamps, then the body.
+ *
+ * The frontmatter is the point — without it a consumer ingesting the corpus had
+ * no way to tell a passage's status, owner or source, and nothing connecting it
+ * to the publication it came from (R14) — and it is served intact so that what
+ * a consumer parses is the profile's grammar rather than this shell's summary
+ * of it.
+ */
+export async function getLLMText(page: KnowledgePage): Promise<string> {
+  const processed = await page.data.getText("processed");
+  const front = agentFrontmatter(
+    stagedFrontmatter(page.path),
+    readGovernance(page.data, page.path),
+    readStageManifest().stamps,
+  );
   // found live 2026-08-21: the processed markdown arrives with its own leading
   // blank lines, so every block opened with three of them — and adding the
   // frontmatter above made it four. One blank line between each part, always.
@@ -143,8 +201,8 @@ export interface RecordEntry {
   readonly url: string;
   readonly title: string;
   readonly description: string | null;
-  /** The document's status when it is a caveat, else null. */
-  readonly status: string | null;
+  /** Why the machine surfaces decline it, when they do; else null. */
+  readonly badge: LifecycleBadge | null;
   /**
    * Who stands behind it. Null when the record declares no owner — and null
    * for every document when `site.governance` is off, because an owner is a
@@ -155,104 +213,118 @@ export interface RecordEntry {
   readonly documents: number;
 }
 
-/**
- * The record's entry for one page — what any listing needs.
- *
- * Exported because the front door leads with the document `Open the record`
- * opens, which is the first page in governed order and may sit BELOW the top
- * level, where `entriesUnder(null)` would never return it.
- */
+/** The record's entry for one page — what any listing needs. */
 export function entryFor(page: KnowledgePage): RecordEntry {
-  const data: Record<string, unknown> = page.data as unknown as Record<string, unknown>;
-  const description = typeof data["description"] === "string" ? data["description"].trim() : "";
-  const status = typeof data["status"] === "string" ? data["status"].trim() : "";
   return {
     url: page.url,
     title: page.data.title,
-    description: description === "" ? null : description,
-    status: caveatStatus(status === "" ? null : status),
+    description: page.data.description?.trim() || null,
+    badge: stagePageOf(pathOf(page))?.badge ?? null,
     owner: showGovernance ? readGovernance(page.data, page.path).owner : null,
     documents: 0,
   };
 }
 
+/** How many documents the stage holds under a bundle-relative directory. */
+function countUnder(dir: string): number {
+  const prefix = `${dir}/`;
+  return Object.keys(readStageManifest().pages).filter((p) => p.startsWith(prefix)).length;
+}
+
 /**
- * How many documents a folder holds, its own index page excluded — the index
- * IS the entry being counted, not something below it.
- *
- * By url in a set, not by adding lengths: whether a folder's index also
- * appears among its children is the loader's business, and counting it twice
- * would publish a number the record cannot support.
+ * The entries directly below a directory of the record (`""` for the root),
+ * in the governed reading order — the folder's regenerated `index.md`,
+ * rendered. A folder this viewer's stage does not hold lists nothing.
  */
-function countDocuments(folder: Extract<Node, { type: "folder" }>): number {
-  const urls = new Set<string>();
-  const walk = (nodes: readonly Node[]): void => {
-    for (const node of nodes) {
-      if (node.type === "page") urls.add(node.url);
-      else if (node.type === "folder") {
-        if (node.index) urls.add(node.index.url);
-        walk(node.children);
-      }
+export function entriesUnder(dir: string): RecordEntry[] {
+  const byUrl = new Map(source.getPages().map((page) => [page.url, page] as const));
+  return listingOf(dir, readStagedIndex(dir) ?? []).flatMap((item): RecordEntry[] => {
+    if (item.kind === "folder") {
+      return [
+        {
+          url: item.url,
+          title: item.title,
+          description: null,
+          badge: null,
+          owner: null,
+          documents: countUnder(item.path),
+        },
+      ];
     }
-  };
-  walk(folder.children);
-  if (folder.index) urls.delete(folder.index.url);
-  return urls.size;
+    const page = byUrl.get(item.url);
+    return page === undefined ? [] : [entryFor(page)];
+  });
+}
+
+/** The heading of a directory's page: the index's own H1, or its humanised name. */
+export function folderHeading(dir: string): string {
+  const entries = readStagedIndex(dir) ?? [];
+  return (
+    entries[0]?.heading || (dir === "" ? appTitle : humanise(dir.slice(dir.lastIndexOf("/") + 1)))
+  );
+}
+
+/** Every directory the stage holds an index for, as `/docs/...` slugs — the folder routes to export. */
+export function folderSlugs(): string[][] {
+  return [...stagedIndexes().keys()].map((dir) => (dir === "" ? [] : dir.split("/")));
+}
+
+/** Is this route a folder page in this viewer's stage? Returns its directory. */
+export function folderOfRoute(url: string): string | null {
+  const dir = dirOfRoute(url);
+  return dir !== null && readStagedIndex(dir) !== null ? dir : null;
+}
+
+/** The stamp block, as the text artefacts print it: one `key: value` bullet per stamp. */
+function stampBullets(): string[] {
+  return [`- name: ${appName}`, ...stampLines(readStageManifest().stamps).map((l) => `- ${l}`)];
 }
 
 /**
- * The entries directly below a node of the record, in the governed reading
- * order — or the top level when `url` is null.
+ * The record as `llms.txt` serves it: the display title, the record's own
+ * description, the stamps that connect this file to one publication, then
+ * every MACHINE-admitted document in reading order.
  *
- * A folder's own index page is not listed under itself: it IS the page doing
- * the listing. Without this, `/docs/policies` opened with a card pointing back
- * at `/docs/policies`.
- */
-export function entriesUnder(url: string | null): RecordEntry[] {
-  const byUrl = new Map(getSortedPages().map((page) => [page.url, page] as const));
-  const nodes = url === null ? getSortedPageTree().children : childrenOfFolder(url);
-  const entries: RecordEntry[] = [];
-  for (const node of nodes) {
-    const target =
-      node.type === "page" ? node.url : node.type === "folder" ? node.index?.url : null;
-    if (target === undefined || target === null || target === url) continue;
-    const page = byUrl.get(target);
-    if (page === undefined) continue;
-    entries.push(
-      node.type === "folder"
-        ? { ...entryFor(page), documents: countDocuments(node) }
-        : entryFor(page),
-    );
-  }
-  return entries;
-}
-
-/**
- * The record as `llms.txt` serves it: the instance name, then every document in
- * the governed reading order, each carrying its governance when the governance
- * is a caveat.
- *
- * Here rather than in the route, because the home page shows these same bytes
+ * Here rather than in the route, because the home page shows the same index
  * to a reader. Two spellings of the record's index would be two indexes, and
  * the one on the page would be the one nobody checked.
  */
 export function recordIndexText(): string {
-  const pages = getSortedPages();
-  const lines = pages.map((page) => {
-    const governance = readGovernance(page.data, page.path);
-    const successor =
-      governance.supersededBy === null
-        ? null
-        : resolveSuccessorUrl(governance.supersededBy, page.path, pages);
+  const lines = getMachinePages().map((page) => {
     const link = `- [${page.data.title}](${basePath}${page.url})`;
-    const described = page.data.description ? `${link}: ${page.data.description}` : link;
-    // The successor's route is prefixed like every other URL here, so the line
-    // is usable as-is on a sub-path host.
-    return (
-      described + agentIndexSuffix(governance, successor === null ? null : basePath + successor)
-    );
+    return page.data.description ? `${link}: ${page.data.description}` : link;
   });
-  return `# ${appName}\n\n${lines.join("\n")}\n`;
+  const head = [`# ${appTitle}`, ""];
+  if (appDescription !== null) head.push(`> ${appDescription.replace(/\s+/g, " ").trim()}`, "");
+  return `${[...head, ...stampBullets(), "", "## Documents", "", ...lines].join("\n")}\n`;
+}
+
+/**
+ * The record-root twin, `/md/index.md`: the index REGENERATED over the machine
+ * set with the record's own generator (OKF §8 form), under the stamps. A
+ * folder's index has no twin — its page is the listing — so this is the one
+ * index a consumer can fetch.
+ */
+export function rootIndexTwin(): string {
+  const pages = getMachinePages();
+  const dirs = new Set<string>();
+  for (const page of pages) {
+    const parts = pathOf(page).split("/").slice(0, -1);
+    for (let i = 1; i <= parts.length; i += 1) dirs.add(parts.slice(0, i).join("/"));
+  }
+  const generated = generateIndexes({
+    title: appTitle,
+    concepts: pages.map((page) => ({
+      id: pathOf(page).replace(/\.md$/, ""),
+      title: page.data.title,
+      description: page.data.description ?? "",
+      order: typeof page.data.order === "number" ? page.data.order : null,
+    })),
+    dirs: [...dirs],
+  });
+  const root = generated.get("index.md") ?? "";
+  const body = root.replace(/^---\n[\s\S]*?\n---\n\n?/, "");
+  return `---\nokf_version: "0.2"\n${stampLines(readStageManifest().stamps).join("\n")}\n---\n\n${body}`;
 }
 
 /**
@@ -268,37 +340,22 @@ export function markdownPath(url: string): string {
   return `${basePath}/md/${slug === "" ? "index" : slug}.md`;
 }
 
-/** The children of the folder whose index page is at `url`, or []. */
-function childrenOfFolder(url: string): Node[] {
-  const find = (nodes: readonly Node[]): Node[] | null => {
-    for (const node of nodes) {
-      if (node.type !== "folder") continue;
-      if (node.index?.url === url) return [...node.children];
-      const deeper = find(node.children);
-      if (deeper !== null) return deeper;
-    }
-    return null;
-  };
-  return find(getSortedPageTree().children) ?? [];
-}
-
 /**
- * Every document's caveat status, keyed by route — the small map the search
- * dialog needs on the client.
+ * Every page's badge label, keyed by route — the small map the search dialog
+ * needs on the client.
  *
  * Search was the last surface where a withdrawn document and the one that
  * replaced it looked identical, and its snippet quotes the withdrawn figure
  * (research/site-design.md F3). The dialog runs in the browser over a static
- * index that has no field for status, so the map travels to it as a prop
- * instead: a few dozen bytes per caveat document, and nothing at all for a
- * record whose documents are all approved.
+ * index that has no field for it, so the map travels as a prop instead: a few
+ * dozen bytes per badged document, and nothing at all for a record whose
+ * documents are all current.
  */
-export function caveatStatusByUrl(): Record<string, string> {
+export function badgeByUrl(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const page of source.getPages()) {
-    const raw: unknown = (page.data as unknown as Record<string, unknown>)["status"];
-    const status = caveatStatus(typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null);
-    if (status !== null) out[page.url] = status;
+    const label = badgeLabel(stagePageOf(pathOf(page))?.badge ?? null);
+    if (label !== null) out[page.url] = label;
   }
   return out;
 }
