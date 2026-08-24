@@ -10,7 +10,7 @@ when the corpus does not cover the question.
 ## Start
 
 ```bash
-npx @panaversity/ksor init my-sor
+npx @panaversity/ksor@latest init my-sor
 cd my-sor
 pnpm install
 pnpm dev        # the site, live at http://localhost:3000
@@ -72,7 +72,7 @@ Full concept, design goals, and project status:
 
 ```bash
 npm install -g @panaversity/ksor   # command installed: ksor
-npx @panaversity/ksor              # or run without installing
+npx @panaversity/ksor@latest       # or run without installing
 ```
 
 ## License
