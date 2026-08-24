@@ -84,8 +84,8 @@ Usage:
       requires), or withdraw it. Idempotent; reports the state it established.
   ksor takedown --actor ACTOR [--instance PATH] [--scope node|subtree]
                 --reason TEXT [--file-only] <stable-id>
-  ksor takedown --actor ACTOR --revoke ENTRY-ID | --removed ENTRY-ID [--reason TEXT]
-  ksor takedown [--instance PATH] (--apply | --list | --ledger)
+                --actor ACTOR (--revoke ENTRY-ID | --removed ENTRY-ID) [--reason TEXT]
+                --apply | --list | --ledger        (read or replay; no --actor)
       Withdraw a document from EVERY surface, ledger first: the act is appended
       to .ksor/takedowns.yaml — committed, append-only, read by the site — and
       then, when the record declares a database and its DSN is present, written
