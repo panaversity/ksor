@@ -1555,6 +1555,19 @@ Validate and build the deployable KSoR projections.
 ksor build
 ```
 
+### `ksor migrate`
+
+Rewrite a record written before the KSoR Profile into it: audiences expanded
+upward from the old ordered model, provenance into sources, the instance into
+format 2, authority into `.ksor/governance.yaml`. It prints a unified diff and
+changes nothing until `--write`, and refuses by name rather than invent a title,
+a description or the actor behind a takedown.
+
+```bash
+ksor migrate
+ksor migrate --write --actor human:you
+```
+
 ### `ksor serve` — implemented (the climbed rung)
 
 Expose the agent-readable KSoR interface: the MCP server over your built record,

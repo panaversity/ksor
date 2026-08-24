@@ -65,7 +65,7 @@ describe("ksor CLI (built artifact)", () => {
     const result = runCli(["frobnicate"]);
     expect(result.status).toBe(1);
     expect(result.stderr.split("\n")[0]).toBe("error: unknown-verb");
-    expect(result.stderr).toContain("init, dev, build, serve");
+    expect(result.stderr).toContain("init, dev, build, migrate, serve");
   });
 
   it("answers --help and -h with usage and exit 0 — help is not an unimplemented verb", () => {

@@ -62,14 +62,29 @@ identically by it and by `checkRecord`. **The starter is in the profile**:
 generated indexes, `surfaces/overview.md`; every manager's `build` script is
 `ksor build` then the site build, `export-denylist` gone.
 
+**`ksor migrate` runs** (research/okf-native.md §1.8): `--write`,
+`--instance`, `--actor`, `--approve-by`, `--attribute`, `--generated-at`,
+`--write-site`. It rewrites a pre-profile record into the profile — `visibility`
+expanded UPWARD through the old ordered model, `provenance` into `sources`,
+`effective` widened to midnight UTC, `review` into `draft`, `superseded` into
+`deprecated` with an attributed `ksor.deprecated` and a resolved
+`ksor.superseded_by`, `approved` into `draft` unless `--approve-by`, the
+instance into format 2 with authority moved into `.ksor/governance.yaml`, a
+reserved `index.md`/`README.md` carrying prose into `overview.md`, every
+summary companion marked `type: Summary`, and every denylist row in the
+database into the committed ledger. Without `--write` it prints a unified diff
+and changes nothing. It refuses by name (`ksor-migrate-underivable`) rather
+than author a title, a description, a `generated.at` or the actor behind a
+takedown. `workbench/example-corpus` is migrated and builds green;
+`scripts/check-corpus.mjs` no longer applies the pre-profile rules to it.
+
 **Not yet converted on this branch:** `ksor ingest` still runs the pre-profile
 adapter and `ksor serve` still reads a format-1 instance; the site still
 enforces the RANKED audience model, reads `.ksor-denylist.json`, refuses a
 summary that carries frontmatter, renders the H1 of `instance.md` as the title
 and does not exclude `index.md` from its docs collection — so a fresh scaffold
 passes `pnpm check` and `ksor build` but its site build is the site half of
-this release's work. `ksor migrate` and the rewritten `ksor takedown` are
-separate work packages.
+this release's work. The rewritten `ksor takedown` is a separate work package.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
