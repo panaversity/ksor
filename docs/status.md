@@ -59,10 +59,27 @@ until it is re-ingested. `ksor takedown` is ledger-first (record spec §5):
 the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
 `--apply`, and `--export` and `.ksor-denylist.json` are gone.
 
+**And serving now reads all of it.** `lib/lifecycle.ts` and `lib/trust.ts`
+join the audience overlap in ONE admitted set (`lib/admit.ts`), bound beside
+`DENY` in search's two arms, read, outline and the calibration sampler: a
+draft, a document before its `effective_from`, one past its `stale_after` and
+a deprecated one are absent from every machine surface (record spec §2.5),
+and a caller may name a `min_trust_tier` the arm enforces before ranking. A
+SECTION carries no governance of its own and is admitted iff a descendant is
+visible, by a recursive `parent_id` walk. `AUDIENCE_CASES` is the overlap
+table and every row of it — sections and refusals included — runs through
+real Postgres, as does every line of `LIFECYCLE_CASES`. A calibrated floor
+carries the digest of the predicate it was measured under, and one measured
+under another (or under none) enters the declared-but-uncalibrated refusal
+rather than reading as `gate: off`. The snapshot token binds the viewer list.
+
 Still to convert: `ksor build` exits `2`, the emitted `check.mjs` is still the
 scaffold's line scanner, the site still stages against the RANKED audience
-model, and `workbench/example-corpus` is still a pre-profile tree — so the
-behavioural evals that ingest it are red until `ksor migrate` rewrites it.
+model (`decideVisible` and `RANKED_AUDIENCE_CASES` exist only for it), and
+`workbench/example-corpus` is still a pre-profile tree — so the behavioural
+evals that ingest it are red until `ksor migrate` rewrites it. The door does
+not yet expose `min_trust_tier` as a tool parameter; the seam under it is
+`ServiceContext.minTrustTier`.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 

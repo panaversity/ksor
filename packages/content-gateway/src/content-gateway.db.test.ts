@@ -123,8 +123,11 @@ describe.runIf(adminDsn !== "")("gateway acceptance (HTTP, real MCP client)", ()
       );
       for (const doc of DOCS) {
         const node = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title)
-           VALUES ($1, 1, $2, 'document', $3, $4) RETURNING node_id`,
+          // `audience` and `doc_status` are what the admitted set is computed
+          // from (`lib/admit.ts`): a row carrying neither is served to nobody,
+          // which is the correct posture and would make this fixture invisible.
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, audience, doc_status)
+           VALUES ($1, 1, $2, 'document', $3, $4, ARRAY['public'], 'stable') RETURNING node_id`,
           [TENANT, doc.stableId, doc.slug, doc.title],
         );
         await c.query(
