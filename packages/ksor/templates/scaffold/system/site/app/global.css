@@ -783,11 +783,48 @@ html > body[data-scroll-locked] {
   line-height: 1.7;
 }
 
-/* Nothing here scrolls sideways any more — the rule above wraps instead — so
-   this is only the hairline a scrollbar would be if one ever appeared, in
-   place of the platform's slab. The scroll-shadow that used to live here went
-   with the overflow it announced; keeping a mechanism for a state that cannot
-   occur is a thing to read and maintain that says nothing. */
+/* Showing the whole of a long line, when the reader asks for it.
+   components/code-block.tsx puts the button on the block and sets the
+   attribute; this is what the attribute means.
+
+   `pre` is `w-max` in the shell, which sizes it to the longest line — that is
+   what makes wrapping impossible, so the width has to come back to the column
+   before `pre-wrap` can do anything. A wrapped line is then indented under its
+   own, the way a terminal marks a continuation, because otherwise a two-line
+   command reads as two commands.
+
+   Wrapping is NOT the default. It was, for one commit, and it is worse for the
+   blocks that do not need it: a yaml file rewrapped at the column reads as
+   though its indentation means something else. */
+#nd-page .prose figure.shiki[data-wrapped] pre {
+  width: 100%;
+  min-width: 0;
+}
+
+#nd-page .prose figure.shiki[data-wrapped] code > * {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* The hang, plus the gutter below — so a continuation is indented from the
+     text, not from the block's edge. */
+  padding-left: calc(1rem + 2ch);
+  text-indent: -2ch;
+}
+
+/* A block needs a gutter on both sides. Unwrapped, the shell gives one on the
+   left with `ps-*` and lets a long line run under the buttons on the right,
+   because the line can always be scrolled clear of them. Wrapped, it cannot:
+   the first line ends under the copy button with no way to move it, and the
+   left edge sits on the rule (seen live). So the wrapped state pays for its
+   own margins — a gutter left, and enough right for two 24px buttons. */
+#nd-page .prose figure.shiki[data-wrapped] code {
+  padding-inline: 0 4rem;
+}
+
+#nd-page .prose figure.shiki[data-wrapped] .fd-scroll-container {
+  padding-inline-start: 0;
+}
+
+/* And a hairline where a scrollbar appears, in place of the platform's slab. */
 #nd-page .prose figure.shiki .fd-scroll-container {
   scrollbar-width: thin;
   scrollbar-color: var(--color-fd-border) transparent;

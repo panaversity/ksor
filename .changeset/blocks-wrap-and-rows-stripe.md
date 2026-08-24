@@ -4,10 +4,11 @@
 
 Three readability changes to a document's page.
 
-A fenced block **wraps** instead of scrolling sideways — fourteen blocks in one
-real record ran past the column, one by 1,719px, and reading any of them meant
-dragging a bar while the left edge of every line went out of view. A wrapped
-line is indented under its own, the way a terminal marks a continuation.
+A long line in a code block can be **unwrapped by the reader**, with a button
+that appears only on a block that actually overflows. The record's commands run
+to hundreds of characters, and in a docs column that was a scrollbar with the
+left edge of every line going out of view. Wrapping is not the default, because
+it is worse for the blocks that do not need it.
 
 A table's rows **alternate**, faintly, so a row holds together across three
 columns of wrapped prose.
