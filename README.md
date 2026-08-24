@@ -10,7 +10,7 @@ A **Knowledge System of Record (KSoR)** turns an organization's governed knowled
 
 Traditional Systems of Record establish what is true about the current state of a business. A KSoR establishes **what the organization knows and how it should operate**.
 
-Write and govern that knowledge once. KSoR makes the same institutional truth available through multiple synchronized projections:
+**Govern knowledge once. Project it many ways.** KSoR makes the same institutional truth available through multiple synchronized projections:
 
 - a **human experience** for reading, learning, reviewing, and sharing,
 - an **agent interface** through MCP for search, retrieval, citation, reasoning, and action,
@@ -22,21 +22,6 @@ All derive from the same authoritative source.
 The result is not merely a documentation site, knowledge base, vector database, RAG system, or MCP wrapper.
 
 > **KSoR is knowledge infrastructure for the AI-native organization.**
-
----
-
-> ### ⚠️ Early-stage software — [`docs/status.md`](docs/status.md) is the authority on what works.
->
-> **`ksor init` is implemented**: one command scaffolds a complete governed knowledge
-> project — the record, a working site, and the agent kit. `ksor serve` runs the
-> MCP server over your published record, alongside the write plane that keeps it
-> current (`ksor schema`, `ksor grant`, `ksor ingest`, `ksor takedown`,
-> `ksor calibrate`, `ksor gc`) — the climbed rung, needing Postgres and a
-> provider key. Only `dev` and `build`
-> remain designed, not implemented; running them prints an honest notice and
-> exits 2. Inside a scaffolded project, `pnpm dev` and `pnpm build` work today
-> without them. See [`docs/status.md`](docs/status.md) for the exact released
-> version.
 
 ---
 
@@ -146,6 +131,94 @@ There is often no authoritative answer to:
 > **Which knowledge should the AI trust?**
 
 KSoR exists to solve that problem.
+
+---
+
+# The KSoR Framework
+
+The architecture on this page is being proposed as an open standard — the
+**[KSoR Standard Proposal
+(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft9.md)**, a draft
+with no formal standing until it is reviewed and adopted. It defines KSoR as
+an **open, vendor-neutral knowledge infrastructure framework**, built around
+three commitments:
+
+> **One authoritative record.**  
+> **One governance boundary.**  
+> **Many open projections.**
+
+The framework separates **nine responsibilities**, so that no single product
+becomes the knowledge authority. Wherever an open format, convention, or
+protocol already owns a boundary, KSoR adopts it rather than competing with
+it:
+
+| Responsibility        | Open standard / reference binding   | What it means                                                                 |
+| --------------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| Authoritative record  | Markdown in the KSoR Profile of OKF | Markdown is the durable medium; the profile gives it open, portable structure |
+| Retrieval             | Postgres + pgvector                 | structured, lexical, and semantic search over the governed record             |
+| Human publication     | Fumadocs                            | the reference human-readable site                                             |
+| AI discovery          | `llms.txt`                          | tells AI systems what knowledge exists and where machine-readable pages are   |
+| Agent interaction     | MCP                                 | search, retrieval, citation, and abstention for agents                        |
+| Knowledge exchange    | OKF                                 | the same native representation moves governed knowledge between systems       |
+| Identity              | OAuth / OIDC                        | who is asking — KSoR governance then decides what they may see                |
+| Publication integrity | SLSA / Sigstore                     | proof of which source and build produced a published artifact                 |
+| Observability         | OpenTelemetry                       | what the infrastructure did, without becoming another knowledge store         |
+
+The same model in nine lines:
+
+> **Markdown, in the KSoR Profile of OKF, is the authoritative record.**  
+> **Postgres + pgvector provide retrieval.**  
+> **Fumadocs serves humans.**  
+> **`llms.txt` lets AI discover it.**  
+> **MCP lets agents interact with it.**  
+> **The same OKF representation lets knowledge systems exchange the record.**  
+> **OAuth/OIDC establishes identity. KSoR governance controls access.**  
+> **SLSA/Sigstore proves what was published.**  
+> **OpenTelemetry tells us what happened.**
+
+Governance is deliberately not one of the nine. It is the **boundary** the
+nine are arranged around: no knowledge crosses a serving or publication
+boundary without first passing the applicable governance decision. For a
+static build that decision runs once per audience-specific build; for dynamic
+retrieval it runs per request; the policy is the same either way.
+
+```text
+                      KSoR FRAMEWORK
+      open, vendor-neutral knowledge infrastructure
+                             │
+                    AUTHORITATIVE CORE
+                     Governed Markdown
+                   (KSoR Profile of OKF)
+                             │
+                    GOVERNANCE BOUNDARY
+                             │
+      ┌──────────────┬───────┴───────┬──────────────┐
+      │              │               │              │
+      ▼              ▼               ▼              ▼
+  Human site    AI discovery   Agent surface    Exchange
+   Fumadocs       llms.txt          MCP       governed OKF
+                                     │           bundles
+                                     ▼
+                              Retrieval layer
+                            Postgres + pgvector
+```
+
+Identity (OAuth/OIDC), publication integrity (SLSA/Sigstore), and
+observability (OpenTelemetry) cut across every surface without becoming
+knowledge stores.
+
+The governance boundary is what turns a set of useful technologies into a
+Knowledge System of Record. Without it, the components above would merely
+form another knowledge stack.
+
+And the boundaries — not the products — are the standard. Postgres + pgvector
+and Fumadocs are reference implementation choices; a conformant alternative
+may replace them. What may not vary is the governance semantics: one policy,
+every surface.
+
+Which of the nine responsibilities the shipped tool implements today is
+recorded in [`docs/status.md`](docs/status.md) — always the authority, never
+inferred from this section.
 
 ---
 
@@ -273,6 +346,10 @@ They do not make something a KSoR.
 
 The defining property is **authoritative governed knowledge**.
 
+Retrieval is one responsibility of nine ([The KSoR
+Framework](#the-ksor-framework)); the record, and the governance boundary
+around it, are what define a KSoR.
+
 
 ---
 
@@ -317,6 +394,26 @@ The MCP interface is not an invisible copy of the website.
 Machine-readable outputs are not a third knowledge store.
 
 They are different projections of the **same governed source**.
+
+---
+
+# The Trust Ladder
+
+Not every way of serving knowledge gives the same guarantee, and a KSoR
+refuses to pretend otherwise. The proposed standard states the trade as a
+ladder: **wider reach means weaker guarantees.**
+
+| Rung | Channel                                                 | Reach                               | Guarantee                                                                                                                                          |
+| ---- | ------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | **Discovery** — the site, `llms.txt`, per-page Markdown | any AI system can read them         | content passed the governance filter when published; nothing after that — no citation discipline, no abstention, no freshness check at answer time |
+| 2    | **Governed interaction** — MCP                          | AI agents doing organizational work | retrieval filtered by governance before ranking, results cited and traceable to a generation, abstention enforced                                   |
+| 3    | **Computation attestation** — proposed, experimental    | specific critical numbers           | a reported value was produced by the sanctioned computation and mechanically checked, or it is not shown at all                                     |
+
+The ladder, not any single rung, is the product. It also answers an honest
+objection: a system built on citation-before-confidence can still ship a
+corpus file that is downloaded once and never checked again — because that
+file's rung is stated and its limits are not hidden. Which knowledge needs
+which rung is a decision the organization makes, not the tooling.
 
 ---
 
@@ -400,6 +497,10 @@ The more important questions are:
 
 KSoR treats those questions as fundamental.
 
+And one rule binds every surface: **no knowledge crosses a serving or
+publication boundary without first passing the applicable governance
+decision.**
+
 ---
 
 ## 7. Vendor Neutrality
@@ -407,6 +508,11 @@ KSoR treats those questions as fundamental.
 Your institutional knowledge should not belong to an AI model vendor.
 
 KSoR keeps the knowledge layer independent from the model layer.
+
+The mechanism is open standards at every boundary — OKF for the record, MCP
+for agents, OAuth/OIDC for identity, SLSA/Sigstore for provenance — with the
+reference components behind each boundary replaceable. KSoR invents no
+format and no protocol where an open one exists.
 
 The same governed knowledge should be usable from:
 
@@ -815,11 +921,18 @@ When someone asks:
 
 the architecture should make the answer discoverable.
 
+The proposed standard binds this responsibility to **SLSA and Sigstore**: provenance
+attestation proving which governed source and build produced a published
+artifact. The published `@panaversity/ksor` package already ships with npm
+provenance attached; corpus-level attestation will land with `ksor build`.
+
 ---
 
 # The Agent Projection
 
-KSoR uses the **Model Context Protocol (MCP)** as the reference interoperability boundary between governed knowledge and AI runtimes.
+KSoR uses the **Model Context Protocol (MCP)** as the agent surface: the governed interaction boundary through which agents search, retrieve, cite — and abstain.
+
+`llms.txt` helps an AI _find_ the knowledge. MCP helps an agent _work with_ it. Moving governed knowledge _between systems_ is OKF's job ([KSoR and OKF](#ksor-and-okf)).
 
 MCP is an interface to the KSoR, not the KSoR itself.
 
@@ -864,10 +977,57 @@ A KSoR can therefore expose representations such as:
 
 These outputs are derived from the same governed record. They do not become independent sources of truth.
 
+The proposed standard adds one more machine surface: **governed OKF exchange bundles** —
+the same representation the record itself is written in, filtered by
+governance and packaged for another knowledge system to import. Because the
+record is specified to _be_ OKF, exchange will be selection and packaging,
+not translation. This surface is specified, not yet shipped.
+
 The durable asset remains the governed knowledge; each representation is replaceable.
 
 ---
 
+
+# KSoR and OKF
+
+The [Open Knowledge Format
+(OKF)](https://github.com/GoogleCloudPlatform/open-knowledge-format) is an
+open format for portable knowledge, published by Google Cloud under
+Apache-2.0: Markdown documents with YAML frontmatter carrying a trust
+vocabulary — sources, verification, freshness, lifecycle — that travels with
+the content. OKF is deliberately a format and not a service. Serving,
+storage, and query are outside its scope, and its own specification calls its
+trust fields "advisory signals, not access control."
+
+**KSoR is built on OKF, and therefore uses OKF for interoperability** — not
+the other way around. Under the proposed standard, the authoritative record is not
+converted to OKF at the edge; it _is_ an OKF bundle, constrained by the KSoR
+Profile. KSoR invents no knowledge serialization of its own, and exchange
+between knowledge systems is governed selection and packaging of the same
+native representation — never translation into a proprietary exchange schema.
+
+The division of labor is exact:
+
+- **OKF describes knowledge**: representation, portable metadata, sources,
+  verification, freshness, production history.
+- **KSoR makes that knowledge authoritative and operational**: ownership,
+  approval, audiences, takedown, governed retrieval and serving, abstention,
+  publication integrity, operations.
+
+Or in the two lines the proposal reduces it to:
+
+> **OKF makes KSoR knowledge open, portable, and interoperable.**  
+> **KSoR governance makes that knowledge institutionally authoritative and operational.**
+
+Where OKF ends is where KSoR begins. A format can make knowledge portable; it
+cannot make it governed. OKF makes knowledge portable. **KSoR makes knowledge
+governable.**
+
+The standard is a draft, and the shipped scaffold does not yet emit the KSoR
+Profile — [`docs/status.md`](docs/status.md) is the authority on what runs
+today.
+
+---
 
 # KSoR and RAG
 
@@ -1260,7 +1420,8 @@ Humans must be able to see what agents are reading.
 
 ### Portable
 
-Knowledge should not be trapped inside one vendor.
+Knowledge should not be trapped inside one vendor. An open format under the
+record (OKF) and open protocols over it are how.
 
 ### Agent-readable
 
@@ -1280,7 +1441,8 @@ A deployed KSoR should be traceable to a particular corpus and version.
 
 ### Composable
 
-Multiple KSoRs should be usable together.
+Multiple KSoRs should be usable together — and exchange governed knowledge in
+the same open representation, without a proprietary conversion.
 
 ### Extensible
 
@@ -1291,6 +1453,12 @@ Organizations should be able to adapt the framework to their requirements.
 # Project Status
 
 KSoR is under active development.
+
+The architecture is being proposed as an open standard: the **[KSoR Standard
+Proposal](research/ksor-standard-proposal-001-v0.1-draft9.md)** — a draft
+with no formal standing until it is reviewed and adopted. This repository is
+the reference implementation that proposal names, and the proposal is
+written to be implementable by others.
 
 The project is evolving from the original VSOR implementation into the more general **Knowledge System of Record** architecture.
 
@@ -1482,6 +1650,12 @@ See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 > **A traditional System of Record tells an AI system what is true about the business; a Knowledge System of Record tells humans, agents, and software what the organization knows and how it should operate.**
 
 KSoR makes that knowledge **authoritative, governed, traceable, human-readable, agent-readable, machine-readable, and vendor-neutral**.
+
+And the relationship between the framework and the open format beneath it
+reduces to two lines:
+
+> **OKF makes KSoR knowledge open, portable, and interoperable.**  
+> **KSoR governance makes that knowledge institutionally authoritative and operational.**
 
 ---
 
