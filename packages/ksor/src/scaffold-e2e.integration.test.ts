@@ -610,6 +610,79 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     }
   }, 300_000);
 
+  /**
+   * The trail is DERIVED, and this is what proves it.
+   *
+   * A breadcrumb that reads correctly on the record it was written against
+   * tells you nothing — the seeded record is two levels deep, and a hard-coded
+   * two-level trail would pass every assertion in this file. So this writes a
+   * folder tree the site has never seen, four levels down, and asks for the
+   * address of a document at the bottom of it.
+   */
+  it("derives the trail from the record's own folders, however deep", () => {
+    const knowledge = path.join(project, "knowledge");
+    const nested = path.join(knowledge, "handbook", "policies", "returns");
+    const doc = (file: string, title: string, order: number): void =>
+      writeFileSync(
+        path.join(knowledge, file),
+        `---\ntitle: ${title}\nstatus: approved\norder: ${order}\n---\n\nOne line.\n`,
+      );
+
+    try {
+      mkdirSync(nested, { recursive: true });
+      doc(path.join("handbook", "index.md"), "The handbook", 20);
+      doc(path.join("handbook", "policies", "index.md"), "Policies", 1);
+      doc(path.join("handbook", "policies", "returns", "index.md"), "Returns", 1);
+      doc(path.join("handbook", "policies", "returns", "window.md"), "The thirty-day window", 1);
+
+      const built = buildScaffold(project);
+      expect(built.status, `${built.stdout}${built.stderr}`.slice(-2000)).toBe(0);
+
+      const outDir = path.join(project, "system", "site", "out");
+      const trailOn = (route: string): { steps: string[]; hrefs: string[] } => {
+        const html = readFileSync(path.join(outDir, route, "index.html"), "utf8");
+        const nav = /<nav[^>]*class="ksor-breadcrumb[^"]*"[^>]*>(?<trail>.*?)<\/nav>/s.exec(html);
+        expect(nav, `no breadcrumb on /${route}`).not.toBeNull();
+        const trail = nav?.groups?.trail ?? "";
+        return {
+          steps: [...trail.matchAll(/<(?:a|span)\b[^>]*>([^<]*?)(?:<|$)/g)]
+            .map((match) => (match[1] ?? "").trim())
+            .filter(Boolean),
+          hrefs: [...trail.matchAll(/href="([^"]+)"/g)].map((match) => match[1] ?? ""),
+        };
+      };
+
+      // Every folder between the record's front door and the document, named
+      // by its own title rather than by its directory name.
+      const deep = trailOn(path.join("docs", "handbook", "policies", "returns", "window"));
+      expect(deep.steps).toEqual(["The handbook", "Policies", "Returns", "The thirty-day window"]);
+      // …and each ancestor is a working link, the document itself is not.
+      expect(deep.hrefs).toEqual([
+        "/",
+        "/docs/handbook/",
+        "/docs/handbook/policies/",
+        "/docs/handbook/policies/returns/",
+      ]);
+      for (const href of deep.hrefs.slice(1)) {
+        expect(
+          existsSync(path.join(outDir, href.replace(/^\/|\/$/g, ""), "index.html")),
+          `breadcrumb links to ${href}, which the export does not contain`,
+        ).toBe(true);
+      }
+
+      // The trail shortens as it climbs — a fixed-depth implementation passes
+      // the case above and fails these.
+      expect(trailOn(path.join("docs", "handbook", "policies", "returns")).steps).toEqual([
+        "The handbook",
+        "Policies",
+        "Returns",
+      ]);
+      expect(trailOn(path.join("docs", "handbook")).steps).toEqual(["The handbook"]);
+    } finally {
+      rmSync(path.join(knowledge, "handbook"), { recursive: true, force: true });
+    }
+  }, 300_000);
+
   it("renders each document's declared governance, and infers nothing", () => {
     const doc = (name: string, frontmatter: string, body: string): void =>
       writeFileSync(
