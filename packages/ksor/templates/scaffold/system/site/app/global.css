@@ -731,6 +731,48 @@ html > body[data-scroll-locked] {
   background: var(--color-fd-muted);
 }
 
+/* A block wider than the measure has to SAY it continues, and say it only
+   while it does.
+
+   The record's commands are aligned two-column text — a command, then a `#`
+   comment out to the right — and a line of that runs past a 672px column by a
+   few dozen pixels. What arrived was a comment cut mid-word with a grey OS
+   scrollbar under it, which reads as damage rather than as "there is more".
+
+   The pair of shadows is the classic scroll-shadow: the covering gradients are
+   `local`, so they ride with the content, and the shadows are `scroll`, so
+   they sit still. At the far left the covering gradient is over the left
+   shadow and hides it; scroll right and it slides away and the shadow appears.
+   No script, no measuring, and NOTHING at all on a block that fits — which is
+   most of them, and the reason this is not just a permanent fade. */
+#nd-page .prose figure.shiki .fd-scroll-container {
+  background:
+    linear-gradient(to right, var(--color-fd-muted) 40%, transparent) left center / 3rem 100%
+      no-repeat local,
+    linear-gradient(to left, var(--color-fd-muted) 40%, transparent) right center / 3rem 100%
+      no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 14%), transparent) left center / 0.9rem 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 14%), transparent) right center / 0.9rem
+      100% no-repeat scroll;
+
+  /* And when it does scroll, a hairline rather than the platform's slab. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-fd-border) transparent;
+}
+
+.dark #nd-page .prose figure.shiki .fd-scroll-container {
+  background:
+    linear-gradient(to right, var(--color-fd-muted) 40%, transparent) left center / 3rem 100%
+      no-repeat local,
+    linear-gradient(to left, var(--color-fd-muted) 40%, transparent) right center / 3rem 100%
+      no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 45%), transparent) left center / 0.9rem 100%
+      no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 45%), transparent) right center / 0.9rem
+      100% no-repeat scroll;
+}
+
 /* A callout has to look like a callout. The same `bg-fd-card` trap as the code
    block above: fumadocs paints the panel with `--card`, which in this palette
    is all but the page colour, so a Note and a Warning both arrived as a white
