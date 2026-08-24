@@ -9,6 +9,7 @@ import {
   migrateSummary,
   modelOf,
   slugify,
+  stripDuplicateHeading,
   stripLeadingHeading,
   widenToInstant,
   type ConceptContext,
@@ -73,6 +74,14 @@ describe("the small derivations", () => {
   it("takes one sentence from the first prose paragraph, skipping headings and lists", () => {
     expect(firstSentence("# H\n\n- a list\n\nOne. Two.\n")).toBe("One.");
     expect(firstSentence("# H\n")).toBeNull();
+  });
+
+  it("strips a body heading only when it repeats the title", () => {
+    expect(stripDuplicateHeading("\n# About A\n\nBody.\n", "About  a")).toBe("\nBody.\n");
+    expect(stripDuplicateHeading("\n# Something else\n\nBody.\n", "About A")).toBe(
+      "\n# Something else\n\nBody.\n",
+    );
+    expect(stripDuplicateHeading("\nBody.\n", "About A")).toBe("\nBody.\n");
   });
 
   it("strips only a LEADING heading", () => {

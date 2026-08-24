@@ -106,7 +106,11 @@ export function firstSentence(body: string): string | null {
   return null;
 }
 
-/** Everything after the leading H1, so the migrated body carries no heading of its own. */
+/**
+ * Everything after the leading H1, so the migrated body carries no heading of
+ * its own. Used unconditionally on the instance (whose H1 BECOMES `title:`),
+ * and only against a duplicate on a concept — see `stripDuplicateHeading`.
+ */
 export function stripLeadingHeading(body: string): string {
   const lines = body.split("\n");
   const at = lines.findIndex((l) => /^#\s+/.test(l));
@@ -116,6 +120,23 @@ export function stripLeadingHeading(body: string): string {
   let after = at + 1;
   while (after < lines.length && lines[after]!.trim() === "") after += 1;
   return lines.slice(after).join("\n");
+}
+
+/**
+ * A leading `# ` that merely repeats the title is a DUPLICATE, not knowledge:
+ * the frontmatter `title` is the rendered page heading, so keeping both prints
+ * it twice on every migrated page. Removing a literal repetition is mechanical;
+ * a heading that says something else is content and stays.
+ */
+export function stripDuplicateHeading(body: string, title: string): string {
+  const heading = firstHeading(body);
+  if (heading === null) return body;
+  const same = (t: string): string => t.replace(/\s+/g, " ").trim().toLowerCase();
+  if (same(heading) !== same(title)) return body;
+  const stripped = stripLeadingHeading(body);
+  // The body of a fenced document starts at the newline after the fence; keep
+  // that separator, or the first paragraph butts against `---`.
+  return body.startsWith("\n") && !stripped.startsWith("\n") ? `\n${stripped}` : stripped;
 }
 
 /** Old status → profile status. `approved` needs the caller's answer about approval. */
@@ -300,7 +321,7 @@ export function migrateConcept(
   return {
     ok: true,
     outcome: {
-      text: renderDocument(doc, split.body),
+      text: renderDocument(doc, stripDuplicateHeading(split.body, title!)),
       audiences: audience.filter((a) => a !== "public"),
       changed: true,
     },
