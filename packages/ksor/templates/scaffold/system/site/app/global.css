@@ -731,6 +731,34 @@ html > body[data-scroll-locked] {
   background: var(--color-fd-muted);
 }
 
+/* A callout has to look like a callout. The same `bg-fd-card` trap as the code
+   block above: fumadocs paints the panel with `--card`, which in this palette
+   is all but the page colour, so a Note and a Warning both arrived as a white
+   box with a coloured hair down one edge — the kind was legible only in the
+   icon.
+
+   Fumadocs already puts the kind's own colour on the element as
+   `--callout-color`, so ONE rule tints every kind: a wash of that colour over
+   `--muted`, the token that means "a surface on the page". No per-kind
+   selector, and a kind added upstream is tinted without touching this.
+
+   6% in light and 10% in dark, because the same fraction reads as a different
+   amount of colour against near-white and against near-black. Kept low on
+   purpose: this is the record's own accent discipline — the tint says which
+   kind, it does not compete with the prose. */
+#nd-page .prose [style*="--callout-color"] {
+  background: color-mix(in oklab, var(--callout-color) 6%, var(--color-fd-muted));
+  border-color: color-mix(in oklab, var(--callout-color) 20%, var(--color-fd-border));
+  /* The shadow was doing the work the colour now does, and lifted the panel
+     off the page in a way nothing else on it does. */
+  box-shadow: none;
+}
+
+.dark #nd-page .prose [style*="--callout-color"] {
+  background: color-mix(in oklab, var(--callout-color) 10%, var(--color-fd-muted));
+  border-color: color-mix(in oklab, var(--callout-color) 24%, var(--color-fd-border));
+}
+
 /* Re-assert the shell's own reset, which the ramp above broke. The prose
    plugin zeroes the first block's top margin, but writes that rule as
    `.prose :where(> :first-child)`, and `:where()` contributes nothing to
