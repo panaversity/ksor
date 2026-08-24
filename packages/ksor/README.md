@@ -56,6 +56,12 @@ A quiz whose answers are guessable is refused by the build, and because ingest
 creates no node for an attachment, a quiz's answer key can never reach the
 agent surface at all.
 
+The architecture: **one governed record** — Markdown in the KSoR Profile of
+the Open Knowledge Format (OKF) — behind **one governance boundary**,
+projected through open standards: MCP for agents, `llms.txt` for AI
+discovery, OAuth/OIDC for identity, SLSA/Sigstore for publication integrity,
+OpenTelemetry for observability.
+
 Full concept, design goals, and project status:
 **<https://github.com/panaversity/ksor>**
 
