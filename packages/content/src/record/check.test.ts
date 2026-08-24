@@ -179,12 +179,12 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     expect(slugs(files)).toEqual(["ksor-link-widens knowledge/a.summary.md"]);
   });
 
-  it("an index is never a link source, and a link to a missing concept is not a widening", () => {
+  it("an index is never a link source; a link to a missing concept is dead, never a widening", () => {
     const files = {
       "knowledge/a.md": doc("A", PUBLIC, "[gone](gone.md) [idx](index.md)\n"),
       "knowledge/index.md": "[b](b.md)",
     };
-    expect(slugs(files, [], "build")).toEqual([]);
+    expect(slugs(files, [], "build")).toEqual(["ksor-link-dead knowledge/a.md"]);
   });
 
   it("ksor-supersession-strands: the successor must exist, be stable, and pass the widening rule", () => {
@@ -208,6 +208,23 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     ]);
   });
 
+  it("ksor-supersession-strands: a pointer on a concept that is not deprecated is refused", () => {
+    // The old hand-written checker refused `superseded_by` on a document whose
+    // status did not carry it; the profile keeps that (§2.2 — the key goes
+    // "with deprecated"), because on a live concept the pointer announces a
+    // replacement no surface will ever show and no reader will ever follow.
+    const withPointer = (status: string): string =>
+      doc("A", `${PUBLIC.trimEnd()}\n  superseded_by: b\n`).replace(
+        "status: stable",
+        `status: ${status}`,
+      );
+    for (const status of ["stable", "draft"]) {
+      expect(
+        slugs({ "knowledge/a.md": withPointer(status), "knowledge/b.md": doc("B", PUBLIC) }),
+      ).toEqual(["ksor-supersession-strands knowledge/a.md"]);
+    }
+  });
+
   it("the ledger: an unauthorised actor, a dangling entry, and a shrink against a baseline", () => {
     const entry = (by: string, id: string): string =>
       `- id: 2026-08-25T10:00:00Z-${id}\n  stable_id: knowledge/a\n  scope: node\n  expected: present\n  by: ${by}\n  at: 2026-08-25T10:00:00Z\n`;
@@ -228,23 +245,31 @@ describe("checkRecord — one rule set (record spec §6)", () => {
         ledgerBaselines: [
           {
             source: "build.lock.json",
-            ids: ["2026-08-25T10:00:00Z-aaaaaa", "2026-08-25T10:00:00Z-bbbbbb"],
+            entries: [
+              { id: "2026-08-25T10:00:00Z-aaaaaa", digest: null },
+              { id: "2026-08-25T10:00:00Z-bbbbbb", digest: null },
+            ],
           },
         ],
       },
     );
     expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-ledger-shrank"]);
-    expect(out.ledgerIds).toEqual(["2026-08-25T10:00:00Z-aaaaaa"]);
+    expect(out.ledgerEntries.map((e) => e.id)).toEqual(["2026-08-25T10:00:00Z-aaaaaa"]);
   });
 
   it("ksor-instance-format: the instance must say format: 2 and carry none of the moved keys", () => {
+    const a = { "knowledge/a.md": doc("A", PUBLIC) };
     const one = INSTANCE.replace("format: 2", "format: 1");
     expect(
-      checkRecord(record({ "instance.md": one }), { mode: "build" }).refusals.map((r) => r.slug),
+      checkRecord(record({ ...a, "instance.md": one }), { mode: "build" }).refusals.map(
+        (r) => r.slug,
+      ),
     ).toEqual(["ksor-instance-format"]);
     const moved = INSTANCE.replace("title: Acme", "title: Acme\naudiences: [public, internal]");
     expect(
-      checkRecord(record({ "instance.md": moved }), { mode: "build" }).refusals.map((r) => r.slug),
+      checkRecord(record({ ...a, "instance.md": moved }), { mode: "build" }).refusals.map(
+        (r) => r.slug,
+      ),
     ).toEqual(["ksor-instance-format"]);
   });
 

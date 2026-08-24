@@ -1,0 +1,11 @@
+# The Governance Policy: who has authority over this record. The intake
+# interview replaces `human:you` with real handles. `public` is implicit;
+# register a restricted audience here before any document names it:
+#   audiences:
+#     internal:
+#       description: Employees
+version: "0.1"
+approval_authorities:
+  - actors: [human:you]
+takedown_authorities:
+  actors: [human:you]

@@ -33,8 +33,11 @@ instead of their training memory. The corpus grows with each implemented verb.
   `ksor grant` (authorize a tenant for ingest), `ksor ingest` (build and publish
   a generation), `ksor takedown` (withdraw a document from EVERY surface, and
   export the manifest the site build reads), `ksor calibrate` (measure the
-  abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
-  implemented: each prints an honest notice and exits `2`.
+  abstention floor) and `ksor gc` (reap retired generations). `ksor build`
+  (check the record, generate its indexes, write `build.lock.json`) and
+  `ksor migrate` (rewrite a pre-profile record into the KSoR Profile — a diff
+  first, `--write` to apply) need no database. Only `ksor dev` remains designed, not implemented: it prints an
+  honest notice and exits `2`.
   - **[tool-surface.md](./tool-surface.md)** — shaping what agents see.
     `system/gateways/content.ts` is emitted, adopter-owned and deletable; it
     decides tool names, what the record says it covers, and how much of the

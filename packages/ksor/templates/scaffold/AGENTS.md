@@ -15,21 +15,23 @@ The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
 record; the record never references the system.
 
-Every grouped key in `instance.md` (`ksor`, `site`, `database`, `embedding`,
-`retrieval`, `budgets`) is written as an indented block, never inline on one
-line: a group written as `site: { governance: false }` is not read as a group
-at all, so every setting inside it is silently dropped. `pnpm check` refuses
-that shape, and refuses a key repeated inside a group.
-
-`instance.md` carries a closed key set — `format`, `name`, `ksor`, `site`,
-the optional pair `audiences` + `default_visibility` (the record's reader
-audiences, ordered least- to most-restricted with `public` first, and the one
-a document takes when it names none — declared together or not at all), and
-the four serve-config blocks `database` / `embedding` / `retrieval` / `budgets`
+`instance.md` (`format: 2`) carries a closed key set — `name` (the machine
+identity), `title` (the display title and the root index's heading),
+`description` (one sentence for `llms.txt` and the MCP discovery document),
+`toolchain` (the upgrade stamp), `site`, `mcp_url`, `version`, and the four
+serve-config blocks `database` / `embedding` / `retrieval` / `budgets`
 (present only once you climb to the served MCP rung — see "Serving to agents"
-below; a `pnpm dev`-only project declares none). Everything else that matters
-about the instance is the prose below the frontmatter; `pnpm check` names any
-other key rather than ignoring it.
+below; a `pnpm dev`-only project declares none). Who may read what lives in
+`.ksor/governance.yaml`, never here. The body below the frontmatter is the
+MCP server's instructions in full; `pnpm check` names any other key rather
+than ignoring it, and refuses a key repeated inside a group.
+
+Authority lives in `.ksor/governance.yaml`: the audiences a document may name
+(`public` is implicit), who may approve a document for `stable`, and who may
+take one down. Takedowns are `.ksor/takedowns.yaml`, an append-only ledger
+written by `ksor takedown` — every entry's actor is checked against the
+policy, so a line appended by hand is refused exactly as the verb would refuse
+it, and a deleted line is refused by `ksor build` against the file's history.
 
 ## Critical rules
 
@@ -379,23 +381,27 @@ in the one row that exists to record who did this. Read-only modes
 (`--list`, `--ledger`, `--export`) need nothing.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
-build** — the site reads a file, not the database, and `pnpm build` refreshes
-that file for you (`pnpm export-denylist`). So after a takedown, rebuild and
+build** — the site reads the committed ledger (`.ksor/takedowns.yaml`), not
+the database. So after a takedown, merge the ledger entry, rebuild and
 redeploy the site, or the human surface keeps publishing what the agent
-surface already refuses.
+surface already refuses. (Until the site half of this release lands, a record
+that declares a `database:` still writes `.ksor-denylist.json` with
+`ksor takedown --export` before the site build.)
 
 ## Publishing
 
 `pnpm build` emits a fully static site (`system/site/out/`) deployable to
 any host — Vercel reads the shipped `vercel.json` (deploy from the repo
 ROOT, never `system/site/`), and every other host just serves the folder.
-Once `instance.md` declares a `database:`, `pnpm build` needs `KSOR_DB_URL` as
-well: it runs `pnpm export-denylist` first, which asks the database what has
-been withdrawn and writes `.ksor-denylist.json`. Without the DSN the build
-refuses rather than publish a document someone took down.
-`KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With
-`audiences:` declared, plain `pnpm build` is always the public tier;
-`KSOR_AUDIENCE=<audience> pnpm build` builds a wider tier that belongs
+`pnpm build` runs `ksor build` first — every `index.md` regenerated, the
+record checked, `build.lock.json` written (commit it: it is the provenance
+every machine artefact stamps) — and a refusal stops the build before a byte
+is written. `ksor build --strict` additionally refuses an uncommitted input
+(`ksor-build-dirty`), which is the posture for a release.
+`KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With audiences
+registered in `.ksor/governance.yaml`, plain `pnpm build` is the `public`
+viewer; `KSOR_AUDIENCE=public,<audience> pnpm build` — a comma list, always
+including `public` — builds for a wider viewer, and that build belongs
 behind that audience's own access control, never on a public host.
 Details in README → Deploying.
 
@@ -433,22 +439,37 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 - One document per file under `knowledge/`; the path is the document's
   identity and its URL — ascii lowercase, digits, hyphens; no spaces or
   special characters; no two files differing only in case; never both
-  `foo.md` and `foo/index.md`. The `title:` carries the document's real
-  name in any language — the filename is the address, not the name.
+  `foo.md` and a folder `foo/`. The `title:` carries the document's real
+  name in any language — the filename is the address, not the name. Every
+  folder's `index.md` is GENERATED by `ksor build` (an OKF §8 index of the
+  folder) and committed — never edit one, never put prose in one; a folder's
+  own introduction is a named document inside it, such as `overview.md`.
+  `log.md` and `README.md` are reserved names.
 - The frontmatter `title` IS the rendered page heading — never repeat it as
   an `# h1` in the body, and quote any value containing a colon
   (`title: "Note: quoting"`).
-- Frontmatter: `title` and `status` (`draft | review | approved | superseded`)
-  are required. `owner` and `provenance` (a list naming real sources) are
-  strongly encouraged — they become required as this project climbs the
-  governance ladder. `description`, `visibility` (below), `order` (sidebar
-  position), `effective` (the date the document takes effect — a real
-  `YYYY-MM-DD` date and nothing else, or **quote it** to publish it as text:
-  `effective: "Q1 2026"`. Unquoted, YAML turns `2026-06-31` into July 1st and
-  `2026-04-01 09:00 +05:00` into the day before, without a word, and the page
-  publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
-  are available. No other keys; never
-  `id:` or `name:` — the path is the identity.
+- Frontmatter is the KSoR Profile of OKF (the record spec's §2). Required on
+  every document: `type` (`Document` unless the knowledge is a `Policy`,
+  `Procedure`, `Control`, `Standard`, `Definition`, `Decision Record`,
+  `Example` or `Attested Computation` — those reserved types also require
+  `sources` and `ksor.owner`), `title`, `description` (one sentence), `status`
+  (`draft | stable | deprecated`) and `ksor.audience` (a list — `[public]`, or
+  audiences registered in `.ksor/governance.yaml`; never omitted, never
+  inferred). A `stable` document carries `generated: { by, at }` and
+  `ksor.approval: { by, at }` by an actor the policy authorises, with
+  `generated.at` no later than the approval; a `deprecated` one carries
+  `ksor.deprecated: { by, at }` and usually `ksor.superseded_by: <id>`
+  (a stable document every reader of this one may read). Optional: `order`
+  (reading position), `sources` (`{ id, resource, title }`, cited in the body
+  as GFM footnotes `[^id]`), `verified` (`[{ by, at }]` — sets the trust
+  tier: none → unverified, machine actors → machine-confirmed, any `human:`
+  → human-reviewed), `stale_after`, `ksor.effective_from`. Actors are
+  `human:<id>`, `process:<id>` or `<producer>/<version>`; `team:<id>` only in
+  `ksor.owner`. Every timestamp is an ISO 8601 instant with an offset
+  (`2026-08-25T09:00:00Z`) — never a bare date. Unknown keys are preserved;
+  the pre-profile keys `visibility`, `owner`, `provenance`, `effective`,
+  `superseded`, `id`, `name` and `sor_id` are refused by name (`ksor migrate`
+  moves them).
 - **Each page says how long it takes to read**, counted from the document's own
   words when the site is built. Fenced code and frontmatter do not count toward
   it, so a short page carrying a long example is not reported as a long read.
@@ -459,12 +480,12 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   so the cost of each view is available without switching to it.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every
-  `provenance` entry separately at the foot, and — for a superseded document —
+  `sources` entry separately at the foot, and — for a deprecated document —
   carries a notice above the title naming its successor and linking to it. A
   key you leave off renders nothing at all: the site never invents a value, so
   a missing owner reads as missing rather than as unowned.
 - **The agent surface carries them too.** `llms.txt` marks a document whose
-  status is a caveat and names the route that replaced a superseded one;
+  status is a caveat and names the route that replaced a deprecated one;
   `llms-full.txt` puts the keys back as frontmatter above each document. An
   agent reading the record therefore sees what a reader sees — a withdrawn
   document is never handed over as plain prose.
@@ -477,36 +498,29 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   it is the bytes an agent is served, and editing them to match a page setting
   would make it lie. Remove the panel if you need the front page silent too. The supersession notice is the one thing it does not hide: a reader
   handed a replaced document with no word of its successor has been misled.
-- **`status` is shown only when it is a caveat.** `draft`, `review` and
-  `superseded` appear as a small label; `approved` shows nothing, because a
-  reader already assumes a document in the record is current — so the label
-  stays rare enough to be noticed on the pages where it matters.
-- `visibility:` names the one audience a document belongs to — a single value
-  from `instance.md`'s `audiences:`, never a list, and orthogonal to `status:`
-  (an approved document can be restricted, and a draft is not hidden). Leave
-  it off and the document takes `default_visibility`. Using the key WITHOUT
-  an `audiences:` block is refused on both surfaces — `pnpm build` stops with
-  `ksor-visibility-without-audiences` and `pnpm serve` refuses to boot —
-  because a document marked restricted while nothing enforces it is the one
-  shape where the frontmatter is the only trace of a restriction that is not
-  happening. Once `audiences:` is declared, `pnpm check`
-  refuses any link or `superseded_by:` pointing from a wider audience at a
-  narrower one — the leak no single build can catch, because the build that
-  publishes the link has already dropped its target.
+- **`status` is shown only when it is a caveat.** `draft` and `deprecated`
+  appear as a small label; `stable` shows nothing, because a reader already
+  assumes a document in the record is current — so the label stays rare
+  enough to be noticed on the pages where it matters.
+- `ksor.audience` lists who may read a document; a viewer holds a list that
+  always includes `public`, and the document is visible when the two overlap.
+  Every identifier but `public` must be registered in
+  `.ksor/governance.yaml` — an unregistered one is refused, because a typo
+  reads as a restriction. `pnpm check` refuses any link, `ksor.superseded_by`
+  pointer or summary that reaches a document not every reader of the source
+  may read (`ksor-link-widens`) — the leak no single build can catch, because
+  the build that publishes the link has already dropped its target.
 
   **Publication, not authorship: anyone who can clone the repository reads
   every document regardless of frontmatter; if someone must not read a
   document and can clone, the answer is a second repository.**
 
-- A replaced document is marked `status: superseded` with `superseded_by:`
-  pointing at its successor — superseded documents are never deleted. The two
-  keys are one statement, so `pnpm check` refuses each without the other: a
-  successor pointer left on a document you have set back to `approved` would
-  publish a "Superseded" banner over a live document. The pointer must name a
-  markdown document (`./<successor>.md`), exactly as it is capitalised under
-  `knowledge/`, and it must lead somewhere: a document that supersedes itself,
-  or a pair that supersede each other, sends the reader in a circle and is
-  refused.
+- A replaced document is marked `status: deprecated` with
+  `ksor.deprecated: { by, at }` (the owner or a takedown authority) and
+  `ksor.superseded_by:` naming its successor by id (`policies/refunds-v2`) —
+  deprecated documents are never deleted. The successor must exist, be
+  `stable`, and be readable by every reader of this document, or the pointer
+  strands them (`ksor-supersession-strands`).
 - Images and assets live in `knowledge/` beside the document that uses them,
   referenced by relative links. A relative link must never leave `knowledge/`.
 - **Study attachments.** A document may carry four optional companions named
@@ -522,8 +536,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 
   An attachment is **part of its document**, not a document. It has no URL of
   its own, no sidebar row, no line in `llms.txt`, and no identity an agent can
-  cite — so it carries **no frontmatter at all** (the checker refuses any), and
-  it takes its `visibility:` and any takedown from its parent. Restrict the
+  cite — so a summary's frontmatter is exactly `type: Summary` and nothing
+  else (the checker refuses any other key), and every attachment takes its
+  audience and any takedown from its parent. Restrict the
   document and its summary and deck go with it; there is no way to publish a
   summary more widely than the document it summarises. An attachment whose
   document is missing is refused, by `pnpm check` and by `pnpm build` alike.
@@ -688,12 +703,15 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   a block that fits gets no button at all.
 
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
-  source, and name the source in `provenance`.
+  source, name the source in `sources`, and cite it from the claim with a GFM
+  footnote whose label is that source's `id`.
 
 ### Structuring the record
 
-- A folder per topic; its front page is `<folder>/index.md`, and the folder
-  takes the position that page declares.
+- A folder per topic. Its `index.md` is GENERATED by `ksor build` — an OKF §8
+  map of the folder — so a folder's own introduction is a named document
+  inside it, such as `overview.md`, and the folder sorts where its
+  lowest-`order:` document does.
 - Sidebar position is the governed `order:` key: documents that declare it come
   first, ascending; the rest follow in name order.
 - One order drives every surface — the sidebar, `llms.txt`, the home page's

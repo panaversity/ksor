@@ -11,7 +11,8 @@ attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
 `ksor calibrate` and `ksor gc` all run from the one `ksor` binary. Only `dev`
-and `build` still report "designed but not implemented" and exit `2`; an
+still reports "designed but not implemented" and exits `2` (`ksor build` is
+implemented on the unreleased `okf-native-spec` branch, below); an
 unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
 slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
 docs ship inside the tarball under `docs/`.
@@ -33,20 +34,60 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
 
-### The record module, landed and unwired (unreleased, branch `okf-native-spec`)
+### The record module, `ksor build` and the emitted checker (unreleased, branch `okf-native-spec`)
 
 `packages/content/src/record/` holds the OKF-native record's foundation
 (`specs/ksor/record/spec.md`; decision 26): the YAML frontmatter splitter,
 the concept profile as a zod schema, the Governance Policy reader with KSP
 4.2.5 scope resolution, the takedown ledger reader with its four rules, the
 OKF §8 index generator with a golden, footnote and link reading, the overlap,
-widening and lifecycle rules with their decision tables, and `checkRecord`,
-which composes them over an in-memory tree. It is exported from the kernel
-package and **nothing in the CLI calls it yet**: `ksor build` still exits
-`2`, `ksor ingest` still runs the pre-profile adapter, the emitted `check.mjs`
-is still the scaffold's line scanner, and the SQL predicate and the site still
-enforce the RANKED audience model — the overlap tables sit beside the ranked
-one until the serving predicate and staging convert in the same release.
+widening and lifecycle rules with their decision tables, the hygiene rules
+ported from the scaffold's hand-written checker (portable names, file types,
+PNG integrity, dead and escaping links, the instance's closed key set), the
+`build.lock.json` schema with `build_id` composition, and `checkRecord`,
+which composes them over an in-memory tree. Exported from the kernel package
+and as the `@panaversity/ksor-content/record` subpath.
+
+**`ksor build` runs** (`specs/ksor/build/spec.md`): `--instance`, `--as-of`,
+`--strict`, `--allow-unverifiable-ledger`; generates every index in memory,
+checks, refuses with the slug first and nothing written, else writes the
+changed indexes and the lock — `source_commit` from the last commit touching
+an input, `dirty` from git status, the ledger checked for shrinkage against
+every historic version and the committed lock, a shallow clone refused.
+`--bundles` exits `2`. **The emitted `check.mjs` is generated** from the
+record module at package-build time into both skill trees (gitignored in the
+templates), read-only, refusing a stale index; a conformance fixture is judged
+identically by it and by `checkRecord`. **The starter is in the profile**:
+`instance.md` format 2, `.ksor/governance.yaml`, five `type: Document` drafts,
+generated indexes, `surfaces/overview.md`; every manager's `build` script is
+`ksor build` then the site build, `export-denylist` gone.
+
+**`ksor migrate` runs** (research/okf-native.md §1.8): `--write`,
+`--instance`, `--actor`, `--approve-by`, `--attribute`, `--generated-at`,
+`--write-site`. It rewrites a pre-profile record into the profile — `visibility`
+expanded UPWARD through the old ordered model, `provenance` into `sources`,
+`effective` widened to midnight UTC, `review` into `draft`, `superseded` into
+`deprecated` with an attributed `ksor.deprecated` and a resolved
+`ksor.superseded_by`, `approved` into `draft` unless `--approve-by`, the
+instance into format 2 with authority moved into `.ksor/governance.yaml`, a
+reserved `index.md`/`README.md` carrying prose into `overview.md`, every
+summary companion marked `type: Summary`, and every denylist row in the
+database into the committed ledger (once, into a record that has no ledger
+yet — a record that already has one has already been migrated, and `ksor
+takedown` may have appended to it since). Without `--write` it prints a
+unified diff and changes nothing. `--write-site` UPDATES the byte-copied rule
+modules where a `system/site` exists; it never creates one. It refuses by name (`ksor-migrate-underivable`) rather
+than author a title, a description, a `generated.at` or the actor behind a
+takedown. `workbench/example-corpus` is migrated and builds green;
+`scripts/check-corpus.mjs` no longer applies the pre-profile rules to it.
+
+**Not yet converted on this branch:** `ksor ingest` still runs the pre-profile
+adapter and `ksor serve` still reads a format-1 instance; the site still
+enforces the RANKED audience model, reads `.ksor-denylist.json`, refuses a
+summary that carries frontmatter, renders the H1 of `instance.md` as the title
+and does not exclude `index.md` from its docs collection — so a fresh scaffold
+passes `pnpm check` and `ksor build` but its site build is the site half of
+this release's work. The rewritten `ksor takedown` is a separate work package.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
@@ -685,13 +726,15 @@ either stops being true.
 
 ## Designed, not implemented
 
-- `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
-  own `pnpm dev` / `pnpm build` work today without them.
+- `ksor dev` — still exits `2` with an honest notice; the scaffold's own
+  `pnpm dev` works today without it. (`ksor build` is implemented on the
+  unreleased `okf-native-spec` branch, above.)
   `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
   `ksor calibrate` and `ksor gc` ARE implemented and released — the bundled
   kernel provides them from the one `ksor` binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
   `3` with a remedy when it is missing).
-- Build provenance records (`build.lock.json`) — designed with `ksor build`.
+- Build provenance records (`build.lock.json`) — written by `ksor build` on
+  the unreleased branch; not yet stamped into any surface.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
 - The agent-eval harness's RELEVANCE and CORRECTNESS classes. The

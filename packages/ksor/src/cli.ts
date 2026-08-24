@@ -12,6 +12,8 @@ import { main as runGateway } from "@panaversity/ksor-content-gateway";
 import { runContentCli } from "@panaversity/ksor-content";
 
 import { exitCodes, resolveCommand, verbs } from "./index.js";
+import { runBuild } from "./build/index.js";
+import { runMigrate } from "./migrate/index.js";
 import { runInit } from "./init/index.js";
 import { unsupportedPlatform } from "./init/platform.js";
 
@@ -34,10 +36,11 @@ const usage =
   "\n" +
   "Usage: ksor <verb>\n" +
   "\n" +
-  `Verbs (dev and build exit 2 until they ship; the rest are implemented):\n` +
+  `Verbs (dev exits 2 until it ships; the rest are implemented):\n` +
   "  init       create a new KSoR project\n" +
   "  dev        run the human surface locally, watching\n" +
-  "  build      validate and build both surfaces\n" +
+  "  build      check the record, generate its indexes, write build.lock.json\n" +
+  "  migrate    rewrite a pre-profile record into the KSoR Profile (--write applies)\n" +
   "  serve      start the MCP agent surface (reads ./instance.md)\n" +
   "  ingest     load / refresh the corpus into the database\n" +
   "  calibrate  measure the abstention floor\n" +
@@ -87,11 +90,7 @@ async function main(args: readonly string[]): Promise<number> {
   }
   if (
     wantsHelp &&
-    (helpVerb === null ||
-      helpVerb === "init" ||
-      helpVerb === "serve" ||
-      helpVerb === "dev" ||
-      helpVerb === "build")
+    (helpVerb === null || helpVerb === "init" || helpVerb === "serve" || helpVerb === "dev")
   ) {
     // Only the CORPUS verbs answer their own --help (their dispatcher prints a
     // per-verb block). Everything else answers HERE, because narrowing this to
@@ -131,6 +130,32 @@ async function main(args: readonly string[]): Promise<number> {
         // Names the manager that spawned this run (npx/pnpm dlx/bunx), so
         // init can emit the scaffold for the adopter's own toolchain (#28).
         userAgent: process.env.npm_config_user_agent,
+      },
+    );
+  }
+
+  if (verb === "build") {
+    // Database-free (decision 11): indexes, the checker, the lock. The drafts
+    // switch is read here, once, and recorded in the lock it produces.
+    return runBuild(
+      args.slice(args.indexOf("build") + 1),
+      process.cwd(),
+      { out: (text) => process.stdout.write(text), err: (text) => process.stderr.write(text) },
+      { version: pkg.version, drafts: process.env["KSOR_DRAFTS"] === "show" ? "shown" : "hidden" },
+    );
+  }
+
+  if (verb === "migrate") {
+    // Database-free unless the record declares one: the denylist rows a
+    // pre-profile record kept only in Postgres become committed ledger
+    // entries, which is the one step that needs the DSN.
+    return await runMigrate(
+      args.slice(args.indexOf("migrate") + 1),
+      process.cwd(),
+      { out: (text) => process.stdout.write(text), err: (text) => process.stderr.write(text) },
+      {
+        version: pkg.version,
+        templatesDir: fileURLToPath(new URL("../templates/scaffold", import.meta.url)),
       },
     );
   }

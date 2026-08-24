@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -C system/site dev",
-    "build": "pnpm export-denylist && pnpm -C system/site build",
-    "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
+    "build": "ksor build && pnpm -C system/site build",
     "check": "node .agents/skills/format-checker/check.mjs",
     "provision": "pnpm schema && pnpm grant",
     "serve": "ksor serve",

@@ -1,9 +1,12 @@
 ---
+type: Document
 title: The governance ladder
 description: Level 0 works immediately; a project climbs only as far as its domain needs.
 status: draft
-owner: Product
 order: 3
+generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
+ksor:
+  audience: [public]
 ---
 
 Governance here is a ladder, not a gate. Demanding the top rung of a project on

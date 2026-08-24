@@ -56,16 +56,16 @@ describe("ksor CLI (built artifact)", () => {
   });
 
   it("names the verb it refuses to fake", () => {
-    const result = runCli(["build"]);
+    const result = runCli(["dev"]);
     expect(result.status).toBe(2);
-    expect(result.stdout).toContain("ksor build: designed but not implemented");
+    expect(result.stdout).toContain("ksor dev: designed but not implemented");
   });
 
   it("refuses an unknown verb with exit 1 and a stable error slug", () => {
     const result = runCli(["frobnicate"]);
     expect(result.status).toBe(1);
     expect(result.stderr.split("\n")[0]).toBe("error: unknown-verb");
-    expect(result.stderr).toContain("init, dev, build, serve");
+    expect(result.stderr).toContain("init, dev, build, migrate, serve");
   });
 
   it("answers --help and -h with usage and exit 0 — help is not an unimplemented verb", () => {

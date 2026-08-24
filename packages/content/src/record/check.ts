@@ -7,11 +7,13 @@
 import { mayReach } from "../lib/audience-rule.js";
 import { checkFootnotes, linkTargets, resolveLink } from "./citations.js";
 import { splitFrontmatter } from "./frontmatter.js";
+import { checkHygiene } from "./hygiene.js";
 import { generateIndexes } from "./index-file.js";
 import {
   checkLedgerActors,
   checkLedgerAgainstTree,
-  checkLedgerShrank,
+  checkLedgerAppendOnly,
+  ledgerDigests,
   parseLedger,
   type LedgerBaseline,
 } from "./ledger.js";
@@ -24,12 +26,16 @@ export interface RecordFiles {
   readonly files: ReadonlyMap<string, string>;
   /** Record-relative directories under `knowledge/`, empty ones included. */
   readonly dirs: readonly string[];
+  /** Every other file under `knowledge/` (images, strays) with its bytes; OS junk excluded. */
+  readonly assets?: ReadonlyMap<string, Uint8Array>;
+  /** Symbolic links the loader met and did not follow. */
+  readonly symlinks?: readonly string[];
 }
 
 export interface CheckOptions {
   /** `check` is read-only and refuses a stale index; `build` regenerates and never does. */
   readonly mode: "check" | "build";
-  /** Id sets the ledger must still contain (git history, the committed lock). */
+  /** What the ledger must still contain, entry by entry (git history, the committed lock). */
   readonly ledgerBaselines?: readonly LedgerBaseline[];
 }
 
@@ -38,7 +44,8 @@ export interface CheckResult {
   /** Record-relative index path → bytes, generated from the tree. */
   readonly indexes: ReadonlyMap<string, string>;
   readonly concepts: readonly Concept[];
-  readonly ledgerIds: readonly string[];
+  /** `(id, digest)` per entry, in file order — what the lock records so the next build can compare text. */
+  readonly ledgerEntries: readonly { readonly id: string; readonly digest: string }[];
   readonly policy: Policy | null;
 }
 
@@ -48,6 +55,28 @@ const LEDGER_PATH = ".ksor/takedowns.yaml";
 const INSTANCE_PATH = "instance.md";
 const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 const MOVED_INSTANCE_KEYS = ["audiences", "default_visibility", "ksor"] as const;
+/** The instance's closed key set (record spec §3), nested groups included. */
+const INSTANCE_KEYS: ReadonlyMap<string, readonly string[] | null> = new Map([
+  ["format", null],
+  ["name", null],
+  ["title", null],
+  ["description", null],
+  ["toolchain", ["requires", "scaffolded"]],
+  ["site", ["url", "governance"]],
+  ["database", ["dsn_env", "tenant_id"]],
+  ["embedding", ["provider", "model", "dim"]],
+  ["retrieval", ["vector_floor", "keyword_floor"]],
+  ["budgets", ["maximum_response_characters"]],
+  ["mcp_url", null],
+  ["version", null],
+]);
+const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/** What a link may resolve to besides a concept: companions, assets, directories, indexes, the root. */
+interface LinkTargets {
+  readonly concepts: ReadonlyMap<string, Concept>;
+  readonly exists: (id: string) => boolean;
+}
 
 export function checkRecord(record: RecordFiles, options: CheckOptions): CheckResult {
   const refusals: Refusal[] = [];
@@ -58,6 +87,8 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   if (!policyResult.ok) refusals.push(...policyResult.refusals);
 
   const title = checkInstance(record.files.get(INSTANCE_PATH) ?? null, refusals);
+
+  const assets = record.assets ?? new Map<string, Uint8Array>();
 
   // ── the bundle: concepts, companions, reserved names ───────────────────
   const concepts = new Map<string, Concept>();
@@ -75,6 +106,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
       continue;
     }
     if (name === "index.md" || COMPANION.test(name) || !name.endsWith(".md")) continue;
+    // `.mdx` and every other stray are the hygiene rules' to name.
     const text = record.files.get(path) ?? "";
     const split = splitFrontmatter(text, path);
     if (!split.ok) {
@@ -89,6 +121,34 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     concepts.set(parsed.concept.id, parsed.concept);
     bodies.set(parsed.concept.id, split.body);
   }
+
+  // ── indexes ────────────────────────────────────────────────────────────
+  const dirs = record.dirs
+    .filter((d) => d.startsWith(KNOWLEDGE))
+    .map((d) => d.slice(KNOWLEDGE.length));
+  const generated = generateIndexes({
+    title,
+    concepts: [...concepts.values()].map((c) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description,
+      order: c.order,
+    })),
+    dirs,
+  });
+  const indexes = new Map([...generated].map(([p, text]) => [`${KNOWLEDGE}${p}`, text]));
+  const dirSet = new Set(record.dirs);
+  const targets: LinkTargets = {
+    concepts,
+    exists: (id) =>
+      id === "" ||
+      concepts.has(id) ||
+      record.files.has(`${KNOWLEDGE}${id}.md`) ||
+      record.files.has(`${KNOWLEDGE}${id}`) ||
+      assets.has(`${KNOWLEDGE}${id}`) ||
+      dirSet.has(`${KNOWLEDGE}${id}`) ||
+      indexes.has(`${KNOWLEDGE}${id}.md`),
+  };
 
   for (const path of paths) {
     if (!path.startsWith(KNOWLEDGE) || !COMPANION.test(path)) continue;
@@ -120,33 +180,28 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     }
     const parent = concepts.get(parentId);
     if (parent !== undefined)
-      checkLinks(path, parent.audience, split.body, parentId, concepts, refusals);
+      checkLinks(path, parent.audience, split.body, parentId, targets, refusals);
   }
+
+  refusals.push(
+    ...checkHygiene({
+      textPaths: paths.filter((p) => p.startsWith(KNOWLEDGE)),
+      assets,
+      dirs: record.dirs,
+      symlinks: record.symlinks ?? [],
+      conceptIds: new Set(concepts.keys()),
+    }),
+  );
 
   // ── rules that need the policy ─────────────────────────────────────────
   for (const concept of concepts.values()) {
     const body = bodies.get(concept.id) ?? "";
     refusals.push(...checkFootnotes(concept.path, body, concept.sourceIds));
-    checkLinks(concept.path, concept.audience, body, concept.id, concepts, refusals);
+    checkLinks(concept.path, concept.audience, body, concept.id, targets, refusals);
     checkSupersession(concept, concepts, refusals);
     if (policy !== null) checkAgainstPolicy(concept, policy, refusals);
   }
 
-  // ── indexes ────────────────────────────────────────────────────────────
-  const dirs = record.dirs
-    .filter((d) => d.startsWith(KNOWLEDGE))
-    .map((d) => d.slice(KNOWLEDGE.length));
-  const generated = generateIndexes({
-    title,
-    concepts: [...concepts.values()].map((c) => ({
-      id: c.id,
-      title: c.title,
-      description: c.description,
-      order: c.order,
-    })),
-    dirs,
-  });
-  const indexes = new Map([...generated].map(([p, text]) => [`${KNOWLEDGE}${p}`, text]));
   if (options.mode === "check") {
     const expected = new Set(indexes.keys());
     const committed = paths.filter((p) => p.startsWith(KNOWLEDGE) && p.endsWith("/index.md"));
@@ -165,12 +220,12 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
 
   // ── the ledger ─────────────────────────────────────────────────────────
   const ledgerResult = parseLedger(record.files.get(LEDGER_PATH) ?? null, LEDGER_PATH);
-  let ledgerIds: readonly string[] = [];
+  let ledgerEntries: readonly { readonly id: string; readonly digest: string }[] = [];
   if (!ledgerResult.ok) {
     refusals.push(...ledgerResult.refusals);
   } else {
     const ledger = ledgerResult.ledger;
-    ledgerIds = ledger.ids;
+    ledgerEntries = ledgerDigests(ledger);
     if (policy !== null) refusals.push(...checkLedgerActors(ledger, policy.takedownActors));
     refusals.push(
       ...checkLedgerAgainstTree(ledger, {
@@ -178,21 +233,29 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
         dirs: new Set(dirs),
       }),
     );
-    refusals.push(...checkLedgerShrank(ledger.ids, options.ledgerBaselines ?? []));
+    refusals.push(...checkLedgerAppendOnly(ledger, options.ledgerBaselines ?? []));
   }
 
   return {
     refusals: sortRefusals(refusals),
     indexes,
     concepts: [...concepts.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
-    ledgerIds,
+    ledgerEntries,
     policy,
   };
 }
 
 /** Returns the instance title for the root index; refuses a pre-profile instance. */
 function checkInstance(text: string | null, refusals: Refusal[]): string {
-  if (text === null) return "Index";
+  if (text === null) {
+    refusals.push({
+      slug: "ksor-instance-format",
+      path: INSTANCE_PATH,
+      why: "instance.md is missing — it says what this record is authoritative for; without it nothing states the record's scope and the MCP server has no instructions",
+      fix: "restore instance.md from git history, or run the intake-interview skill to write it",
+    });
+    return "Index";
+  }
   const split = splitFrontmatter(text, INSTANCE_PATH);
   if (!split.ok) {
     refusals.push(split.refusal);
@@ -210,8 +273,70 @@ function checkInstance(text: string | null, refusals: Refusal[]): string {
           : `\`format: ${String(fm["format"])}\` is not the profile's instance (format 2)`,
       fix: "run `ksor migrate --write`, which rewrites the instance and moves the audience model into the policy",
     });
+    const title = fm["title"] ?? fm["name"];
+    return typeof title === "string" && title !== "" ? title : "Index";
   }
-  const title = fm["title"] ?? fm["name"];
+  const refuse = (why: string, fix: string): void => {
+    refusals.push({ slug: "ksor-instance-format", path: INSTANCE_PATH, why, fix });
+  };
+  // The key set is closed at every level: an ignored key is a setting the
+  // owner believes is in effect (a misspelled group was dropped silently, 2026-08-20).
+  for (const [key, value] of Object.entries(fm)) {
+    if (!INSTANCE_KEYS.has(key)) {
+      refuse(
+        `unknown top-level key \`${key}\` — the instance key set is closed so a key never means two things, and a misspelled key must never be silently ignored`,
+        `remove \`${key}:\` (allowed: ${[...INSTANCE_KEYS.keys()].join(", ")}); the record's own prose belongs in the body`,
+      );
+      continue;
+    }
+    const nested = INSTANCE_KEYS.get(key) ?? null;
+    if (nested === null) continue;
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      refuse(
+        `\`${key}:\` is not a block mapping — a group written inline or as a scalar is not read as a group, so every setting inside it is dropped`,
+        `write it as an indented block:\n      ${key}:\n        <key>: <value>`,
+      );
+      continue;
+    }
+    for (const sub of Object.keys(value)) {
+      if (!nested.includes(sub)) {
+        refuse(
+          `unknown key under \`${key}\`: \`${sub}\``,
+          `remove \`${sub}:\` (allowed under ${key}: ${nested.join(", ")})`,
+        );
+      }
+    }
+    if (key === "site") {
+      const governance = (value as Record<string, unknown>)["governance"];
+      if (governance !== undefined && typeof governance !== "boolean") {
+        refuse(
+          `\`site.governance\` is ${JSON.stringify(governance)} — it must be true or false; it decides whether pages show the governance each document declares, and a value nobody can read is a setting the owner believes is in effect`,
+          "write `governance: false` to keep pages plain, or remove the key (the default shows them)",
+        );
+      }
+    }
+  }
+  const name = fm["name"];
+  if (typeof name !== "string" || name === "") {
+    refuse(
+      "`name` is required — the machine identity citations and llms.txt use (the one sanctioned identity key)",
+      "add `name: <this-record>` (ascii lowercase letters, digits and hyphens)",
+    );
+  } else if (!INSTANCE_NAME.test(name)) {
+    refuse(
+      `\`name: ${name}\` does not match ${INSTANCE_NAME.source} — the name is every surface's identity, and the grammar that binds it at init binds it forever`,
+      "use ascii lowercase letters, digits and hyphens",
+    );
+  }
+  for (const key of ["title", "description"] as const) {
+    if (typeof fm[key] !== "string" || fm[key] === "") {
+      refuse(
+        `\`${key}\` is required — ${key === "title" ? "the display title every page leads with and the root index's heading" : "one sentence that seeds llms.txt and server.json"}`,
+        `add \`${key}:\` to the frontmatter`,
+      );
+    }
+  }
+  const title = fm["title"];
   return typeof title === "string" && title !== "" ? title : "Index";
 }
 
@@ -220,15 +345,35 @@ function checkLinks(
   audience: readonly string[],
   body: string,
   sourceId: string,
-  concepts: ReadonlyMap<string, Concept>,
+  targets: LinkTargets,
   refusals: Refusal[],
 ): void {
   const seen = new Set<string>();
   for (const target of linkTargets(body)) {
     const id = resolveLink(sourceId, target);
-    if (id === null || seen.has(id)) continue;
+    if (id === null) {
+      if (seen.has(target)) continue;
+      seen.add(target);
+      refusals.push({
+        slug: "ksor-link-escapes",
+        path,
+        why: `\`${target}\` leaves the record — the record must survive without the system, and an outward link breaks the walk-away promise`,
+        fix: "move the file into knowledge/ beside the document, or use an absolute URL",
+      });
+      continue;
+    }
+    if (seen.has(id)) continue;
     seen.add(id);
-    const found = concepts.get(id);
+    if (!targets.exists(id)) {
+      refusals.push({
+        slug: "ksor-link-dead",
+        path,
+        why: `dead link \`${target}\` — nothing at \`knowledge/${id}\`; a record with dead internal links serves different truths by path`,
+        fix: "fix the path (it resolves against this document's directory, or against knowledge/ when it starts with `/`) or remove the link",
+      });
+      continue;
+    }
+    const found = targets.concepts.get(id);
     if (found === undefined || mayReach(audience, found.audience)) continue;
     refusals.push({
       slug: "ksor-link-widens",
@@ -244,7 +389,20 @@ function checkSupersession(
   concepts: ReadonlyMap<string, Concept>,
   refusals: Refusal[],
 ): void {
-  if (concept.status !== "deprecated" || concept.supersededBy === null) return;
+  if (concept.supersededBy === null) return;
+  if (concept.status !== "deprecated") {
+    // The key goes "with deprecated" (§2.2). On a live concept it announces a
+    // replacement no surface shows and no reader follows — the old checker
+    // refused it, and a silent acceptance would be a governance claim nothing
+    // enforces.
+    refusals.push({
+      slug: "ksor-supersession-strands",
+      path: concept.path,
+      why: `\`ksor.superseded_by: ${concept.supersededBy}\` on a \`${concept.status}\` concept — supersession is what \`deprecated\` means, so no surface will show this pointer and no reader will follow it`,
+      fix: "set `status: deprecated` with `ksor.deprecated: { by, at }`, or drop the pointer",
+    });
+    return;
+  }
   const target = concepts.get(concept.supersededBy);
   const reason =
     target === undefined

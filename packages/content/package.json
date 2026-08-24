@@ -15,6 +15,11 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
+    },
+    "./record": {
+      "types": "./dist/record/index.d.mts",
+      "import": "./dist/record/index.mjs",
+      "default": "./dist/record/index.mjs"
     }
   },
   "scripts": {

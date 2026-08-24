@@ -11,6 +11,8 @@ export type Split =
   | {
       readonly ok: true;
       readonly frontmatter: Readonly<Record<string, unknown>> | null;
+      /** The YAML between the fences, byte-exact and comments intact — what `ksor migrate` rewrites. */
+      readonly block: string;
       readonly body: string;
     }
   | { readonly ok: false; readonly refusal: Refusal };
@@ -39,7 +41,7 @@ export function splitFrontmatter(text: string, path: string): Split {
   const normalized = normalizeText(text);
   const lines = normalized.split("\n");
   if (!FENCE.test(lines[0] ?? "")) {
-    return { ok: true, frontmatter: null, body: normalized };
+    return { ok: true, frontmatter: null, block: "", body: normalized };
   }
   const closeAt = lines.findIndex((line, i) => i > 0 && FENCE.test(line));
   if (closeAt === -1) {
@@ -77,7 +79,7 @@ export function splitFrontmatter(text: string, path: string): Split {
       "fix the YAML — a stray colon, an unclosed bracket, a duplicated key, tab indentation or an unknown `!!tag` are the usual causes",
     );
   }
-  if (value === null || value === undefined) return { ok: true, frontmatter: {}, body };
+  if (value === null || value === undefined) return { ok: true, frontmatter: {}, block, body };
   if (!isPlainMapping(value)) {
     return refuse(
       path,
@@ -93,7 +95,7 @@ export function splitFrontmatter(text: string, path: string): Split {
       "write strings, numbers, booleans, lists and mappings only; timestamps stay quoted strings",
     );
   }
-  return { ok: true, frontmatter: value, body };
+  return { ok: true, frontmatter: value, block, body };
 }
 
 /** The message as an author reads it: the first line, minus any `SomeError:` class prefix. */

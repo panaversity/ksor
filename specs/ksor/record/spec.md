@@ -14,8 +14,10 @@ is corrected in draft 10 (the list is in `research/okf-native.md` §2.15).
 OKF is pinned to `GoogleCloudPlatform/open-knowledge-format` `SPEC.md` at
 commit `ad30107c31c06aec8a7d5636e0d1058118604e6f` (2026-08-21; sha256
 `26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101`, 37,748
-bytes), vendored at `specs/ksor/record/okf-SPEC.md`; every timestamp in that
-revision is an instant.
+bytes), vendored **byte-exact** at `specs/ksor/record/okf-SPEC.md` — excluded
+from the formatter and asserted against `OKF_PIN.spec_sha256`, the digest every
+`build.lock.json` stamps, so the pin can never name bytes the tree does not
+hold; every timestamp in that revision is an instant.
 
 ## 1 · The bundle and what sits beside it
 
@@ -151,10 +153,12 @@ a duplicate key, a second document marker or a non-mapping is
 frontmatter (then `ksor-missing-key`).
 
 **2.7 Unknown keys** are preserved and never refused (OKF §11) — except
-`id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`
-and `sor_id` at the top level of a concept, refused by name with the
-migration hint, because each is a pre-profile key whose silent survival would
-mean silent loss of governance.
+`id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`,
+`superseded_by` and `sor_id` at the top level of a concept, refused by name
+with the migration hint, because each is a pre-profile key whose silent
+survival would mean silent loss of governance. `superseded_by` is on that list
+for the same reason as the rest: the profile reads `ksor.superseded_by`, so a
+top-level one announces a successor no surface shows.
 
 ## 3 · The instance document
 
@@ -238,13 +242,18 @@ order. Direction is file → database; the door refuses at once, the site at
 its next build from the merged ledger. Change-control verification of ledger
 actors (R27 as R22) lands with approvals in plan §4.2.
 
-**Shrink, without a database.** `ksor build` compares the ledger's id set
-against the union of every version of the file reachable in history
-(`git log -p -- .ksor/takedowns.yaml`, or the merge-base with the default
-branch in CI) and against `build.lock.json`'s committed `ledger_ids`; when
-history is unavailable (a shallow clone) it refuses unless
-`--allow-unverifiable-ledger` is explicit; the scaffold's `validate.yml`
-fetches full depth.
+**Append-only, without a database.** `ksor build` and the emitted checker
+compare the ledger against every version of the file reachable in history
+(`git log -- .ksor/takedowns.yaml`) and against `build.lock.json`'s committed
+`ledger_entries`. Each baseline carries `(id, digest)` — `digest` a sha256 over
+every governing field of the entry — so a lost id is `ksor-ledger-shrank` and an
+id whose TEXT moved is `ksor-ledger-amended`. Ids alone are not enough: a
+committed denial could be RETARGETED in place, keeping its id and its actor,
+which republished the denied document and denied an innocent one with nothing
+red on any surface. A historic version that does not parse today still counts
+for shrink, with no digest. When history is unavailable (a shallow clone) it
+refuses unless `--allow-unverifiable-ledger` is explicit; the scaffold's
+`validate.yml` fetches full depth.
 
 **Dangling.** `ksor-takedown-dangling` applies to in-force (unrevoked)
 entries: a `present` `node` entry whose stable_id resolves to no concept,
@@ -277,11 +286,38 @@ timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
 `ksor-attachment-orphan`, `ksor-link-widens`, `ksor-supersession-strands`
 (a `deprecated` concept whose `ksor.superseded_by` names a concept that does
-not exist, is not `stable`, or fails the widening rule),
+not exist, is not `stable`, or fails the widening rule — and the pointer on a
+concept that is not `deprecated` at all, which the old checker refused and
+which announces a replacement no surface shows),
 `ksor-takedown-unauthorised`, `ksor-takedown-dangling`,
-`ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-invalid`,
+`ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-amended` (an
+entry whose TEXT moved under an id a baseline recorded — comparing id sets
+alone let a committed denial be retargeted in place),
+`ksor-ledger-invalid`,
 `ksor-policy-missing`, `ksor-policy-invalid`, `ksor-legacy-key` (§2.6),
-`ksor-instance-format`, `ksor-migrate-underivable` (migrate only). Viewer
+`ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
+`^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside
+the closed set at any level, a group not written as a block, a non-boolean
+`site.governance`), `ksor-migrate-underivable` (migrate only). The hygiene
+rules the scaffold's hand-written checker carried, ported so nothing it
+refused is accepted silently: `ksor-record-empty` (no concept at all),
+`ksor-symlink`, `ksor-name-unportable` (whitespace, `<>:"|?*`, a trailing dot,
+a Windows device name, uppercase, non-ASCII, a leading underscore,
+parentheses — on files and directories alike), `ksor-name-collides` (two
+paths one apart in case; a concept `x.md` beside a directory `x/`),
+`ksor-file-type` (`.mdx`, `meta.json`, a YAML that is no companion, anything
+but markdown and `png/jpg/jpeg/gif/svg/webp`), `ksor-asset-corrupt` (a PNG
+whose signature or chunk CRC fails), `ksor-attachment-near-miss` (`.yml`,
+`.json`, `.markdown` one character off a companion), `ksor-link-dead` (a
+record-internal link that resolves to no concept, companion, asset,
+directory, index or the root), `ksor-link-escapes` (a `..` that climbs out of
+`knowledge/`). Unknown frontmatter keys are NOT refused (§2.7) — the one
+deliberate loosening against the old checker's closed key set. The project
+around the record is checked by `pnpm check` alone, not by `ksor build` or
+ingest: `ksor-pointer-changed` (`CLAUDE.md` is not exactly `@AGENTS.md`),
+`ksor-skill-copy-diverged` (`.agents/skills` and `.claude/skills` differ in
+either direction), `ksor-site-holds-content` (a `.md`/`.mdx` inside
+`system/site`). Viewer
 and lock refusals (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`,
 `ksor-lock-missing`, `ksor-lock-stale`, `ksor-site-outdated`) belong to the
 site build and the door, not to the record checker (build spec §3).

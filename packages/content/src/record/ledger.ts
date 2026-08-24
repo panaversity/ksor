@@ -4,8 +4,13 @@
  * Only `ksor takedown` writes it, and that is enforced by validation rather
  * than assumed — every entry's actor is checked against the policy's
  * takedown authorities here, so a line hand-appended in a pull request is
- * refused exactly as the verb would refuse it.
+ * refused exactly as the verb would refuse it, and every entry's TEXT is
+ * checked against the versions history and the committed lock recorded, so a
+ * line hand-EDITED is refused too. An entry is only ever superseded by a
+ * revocation or an amendment appended after it.
  */
+import { createHash } from "node:crypto";
+
 import { z } from "zod";
 
 import { isIndividualActor } from "./actor.js";
@@ -250,34 +255,131 @@ export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal
   return refusals;
 }
 
-export interface LedgerBaseline {
-  readonly source: string;
-  readonly ids: readonly string[];
+export interface LedgerBaselineEntry {
+  readonly id: string;
+  /**
+   * `entryDigest` of the entry as that baseline recorded it, or null when the
+   * baseline could only read ids — a historic version of the file that does not
+   * parse today still proves the id existed, which is what shrink needs.
+   */
+  readonly digest: string | null;
+  /** The parsed entry, where the baseline has it, so a refusal can name the fields that moved. */
+  readonly entry?: LedgerEntry;
+  /** Where this version was seen — a commit sha for history; absent for the lock. */
+  readonly where?: string;
 }
 
-/** The ledger is append-only: its id set must contain every id any baseline has seen. */
-export function checkLedgerShrank(
-  ids: readonly string[],
+export interface LedgerBaseline {
+  readonly source: string;
+  readonly entries: readonly LedgerBaselineEntry[];
+}
+
+/**
+ * A sha256 over every governing field of one entry. The append-only guarantee
+ * is not about the id set: comparing ids alone let a committed denial be
+ * RETARGETED in place — same id, same actor, a different `stable_id` — which
+ * republished the denied document and denied an innocent one with nothing red
+ * on any surface (reproduced end to end, 2026-08-25). `reason` is included
+ * because the ledger is written by the verb and never edited by hand: a
+ * correction is an appended entry, not a rewritten line.
+ */
+export function entryDigest(entry: LedgerEntry): string {
+  const common = [entry.kind, entry.id, entry.by, entry.at, entry.reason ?? ""];
+  const rest =
+    entry.kind === "denial"
+      ? [entry.stableId, entry.scope, entry.expected]
+      : entry.kind === "revocation"
+        ? [entry.revokes]
+        : [entry.amends];
+  return createHash("sha256")
+    .update(JSON.stringify([...common, ...rest]))
+    .digest("hex");
+}
+
+/** The `(id, digest)` pairs a build records so the next one can compare text, not just ids. */
+export function ledgerDigests(ledger: Ledger): { id: string; digest: string }[] {
+  return ledger.entries.map((e) => ({ id: e.id, digest: entryDigest(e) }));
+}
+
+/**
+ * The ledger is append-only in two senses, and both are checked here: its id
+ * set must contain every id any baseline has seen (`ksor-ledger-shrank`), and
+ * an id a baseline recorded must still carry the same text
+ * (`ksor-ledger-amended`).
+ */
+export function checkLedgerAppendOnly(
+  ledger: Ledger,
   baselines: readonly LedgerBaseline[],
 ): Refusal[] {
-  const have = new Set(ids);
+  const path = ".ksor/takedowns.yaml";
+  const have = new Map(ledger.entries.map((e) => [e.id, e]));
   const missing = new Map<string, string[]>();
+  const refusals: Refusal[] = [];
   for (const b of baselines) {
-    for (const id of b.ids) {
-      if (!have.has(id)) missing.set(id, [...(missing.get(id) ?? []), b.source]);
+    for (const seen of b.entries) {
+      const current = have.get(seen.id);
+      if (current === undefined) {
+        missing.set(seen.id, [...(missing.get(seen.id) ?? []), b.source]);
+        continue;
+      }
+      if (seen.digest === null || seen.digest === entryDigest(current)) continue;
+      const moved = seen.entry === undefined ? [] : changedFields(seen.entry, current);
+      refusals.push({
+        slug: "ksor-ledger-amended",
+        path,
+        why:
+          `entry \`${seen.id}\` is not the entry ${b.source}${seen.where === undefined ? "" : ` (${seen.where})`} recorded` +
+          `${moved.length === 0 ? "" : ` — ${moved.join(", ")} moved`}; an entry is never edited, only superseded by a revocation or an amendment appended after it`,
+        fix: "restore the entry's text; to change what a denial covers, append a new entry with `ksor takedown` (`--revoke <id>`, or a fresh denial)",
+      });
     }
   }
-  if (missing.size === 0) return [];
-  const list = [...missing]
-    .sort()
-    .map(([id, sources]) => `\`${id}\` (seen in ${sources.join(", ")})`)
-    .join(", ");
-  return [
-    {
+  if (missing.size > 0) {
+    const list = [...missing]
+      .sort()
+      .map(([id, sources]) => `\`${id}\` (seen in ${sources.join(", ")})`)
+      .join(", ");
+    refusals.push({
       slug: "ksor-ledger-shrank",
-      path: ".ksor/takedowns.yaml",
+      path,
       why: `the ledger is append-only and lost ${list}`,
       fix: "restore the deleted entries; lift a denial with a revocation entry, never by removing a line",
-    },
-  ];
+    });
+  }
+  return refusals;
+}
+
+/** The field names whose values differ, in the entry's own vocabulary. */
+function changedFields(before: LedgerEntry, after: LedgerEntry): string[] {
+  const flat = (e: LedgerEntry): Record<string, string> => ({
+    kind: e.kind,
+    by: e.by,
+    at: e.at,
+    reason: e.reason ?? "",
+    ...(e.kind === "denial"
+      ? { stable_id: e.stableId, scope: e.scope, expected: e.expected }
+      : e.kind === "revocation"
+        ? { revokes: e.revokes }
+        : { amends: e.amends }),
+  });
+  const a = flat(before);
+  const b = flat(after);
+  const names = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...names].filter((k) => a[k] !== b[k]).sort();
+}
+
+/**
+ * Does any in-force denial cover the concept `id` (bundle-relative)? A `node`
+ * entry names exactly `knowledge/<id>`; a `subtree` entry names
+ * `knowledge/<dir>#section` and covers every id beneath `dir/` (the root,
+ * `knowledge/#section`, covers everything). Resolved at use, never expanded
+ * at write time, for the reason decision 14 records: a subtree denial must
+ * also cover a descendant a later change adds.
+ */
+export function denies(inForceDenials: readonly Denial[], id: string): boolean {
+  return inForceDenials.some((d) => {
+    if (d.scope === "node") return d.stableId === `knowledge/${id}`;
+    const dir = d.stableId.slice("knowledge/".length, -"#section".length);
+    return dir === "" || id === dir || id.startsWith(`${dir}/`);
+  });
 }

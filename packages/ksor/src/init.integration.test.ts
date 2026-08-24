@@ -587,6 +587,9 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
         ".gitattributes",
         ".github",
         ".gitignore",
+        // The Governance Policy and, once a takedown exists, the ledger —
+        // the record's root of authority beside the bundle (record spec §1).
+        ".ksor",
         "AGENTS.md",
         "CLAUDE.md",
         // The MCP door as a portable container — no host named in it
@@ -676,6 +679,39 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
     runInit(["my-sor"], dir);
     const claudeMd = path.join(dir, "my-sor", "CLAUDE.md");
     expect(readFileSync(claudeMd, "utf8").trim()).toBe("@AGENTS.md");
+  });
+
+  // `.ksor/` holds ksor's working directory AND the two files that ARE the
+  // record's governance. The directory form `.ksor/` cannot be un-ignored per
+  // file, so the glob is `.ksor/*` with the two named back in — asserted
+  // through real git, because that asymmetry is invisible by reading.
+  it("gitignores .ksor's build output while committing the policy and the ledger", () => {
+    const dir = workDir();
+    runInit(["my-sor"], dir);
+    const root = path.join(dir, "my-sor");
+    const ignored = (rel: string): boolean =>
+      spawnSync("git", ["check-ignore", "-q", "--no-index", rel], { cwd: root }).status === 0;
+    mkdirSync(path.join(root, ".ksor", "out"), { recursive: true });
+    writeFileSync(path.join(root, ".ksor", "out", "x.json"), "{}\n");
+    writeFileSync(path.join(root, ".ksor", "takedowns.yaml"), "[]\n");
+    expect(ignored(".ksor/out/x.json"), ".ksor/out is build output").toBe(true);
+    expect(ignored(".ksor/governance.yaml"), "the policy is the record").toBe(false);
+    expect(ignored(".ksor/takedowns.yaml"), "the ledger is the record").toBe(false);
+    expect(ignored("build.lock.json"), "the lock is committed provenance").toBe(false);
+  });
+
+  // Absent is EMPTY, not missing: a record with no takedown yet has no ledger
+  // file, and the checker must read that as "nothing is denied" rather than
+  // refuse. `ksor takedown` creates it on the first denial.
+  it("ships no takedown ledger, and the record checker reads its absence as an empty one", async () => {
+    const dir = workDir();
+    runInit(["my-sor"], dir);
+    const root = path.join(dir, "my-sor");
+    expect(existsSync(path.join(root, ".ksor", "takedowns.yaml"))).toBe(false);
+    const { checkRecord, loadRecord } = await import("@panaversity/ksor-content/record");
+    const result = checkRecord(loadRecord(root), { mode: "check" });
+    expect(result.refusals.map((r) => `${r.path}: ${r.slug}`)).toEqual([]);
+    expect(result.ledgerEntries).toEqual([]);
   });
 
   it("the scaffold's own format checker passes on the fresh scaffold", () => {

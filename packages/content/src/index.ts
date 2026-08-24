@@ -13,6 +13,7 @@ export {
 export {
   contentPool,
   contentPoolMin,
+  runAuditRead,
   runRead,
   runProbe,
   runAudit,
@@ -145,47 +146,6 @@ export {
 
 // The record module (record spec; decision 26): the profile, the control
 // files and the checker `ksor build`, `ksor ingest` and the emitted checker
-// will run. Nothing in the CLI consumes it yet.
-export { splitFrontmatter, normalizeText, type Split } from "./record/frontmatter.js";
-export { REFUSAL_SLUGS, sortRefusals, type Refusal, type RefusalSlug } from "./record/refusal.js";
-export {
-  parseConcept,
-  conceptIdOf,
-  RESERVED_TYPES,
-  STATUSES,
-  LEGACY_KEYS,
-  TRUST_TIERS,
-  type Concept,
-  type ConceptResult,
-  type Status,
-  type TrustTier,
-} from "./record/profile.js";
-export {
-  parsePolicy,
-  resolveApprovers,
-  resolveOwner,
-  type Policy,
-  type PolicyResult,
-} from "./record/policy.js";
-export {
-  parseLedger,
-  inForce,
-  checkLedgerActors,
-  checkLedgerAgainstTree,
-  checkLedgerShrank,
-  type Ledger,
-  type LedgerEntry,
-  type LedgerBaseline,
-} from "./record/ledger.js";
-export { generateIndexes, parseIndex, humanise, type IndexInput } from "./record/index-file.js";
-export {
-  checkRecord,
-  type RecordFiles,
-  type CheckOptions,
-  type CheckResult,
-} from "./record/check.js";
-export { loadRecord, resolveInstanceDir } from "./record/load.js";
-export { overlaps, mayReach } from "./lib/audience-rule.js";
-export { OVERLAP_CASES, WIDENING_CASES } from "./lib/audience-conformance.js";
-export { admitsLifecycle, type LifecycleDoc, type Surface } from "./lib/lifecycle-rule.js";
-export { LIFECYCLE_CASES } from "./lib/lifecycle-conformance.js";
+// run. Also exported as the `./record` subpath, which is what the emitted
+// checker bundles.
+export * from "./record/index.js";

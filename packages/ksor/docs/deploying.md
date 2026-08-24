@@ -234,17 +234,17 @@ rebinding is worth an attacker's effort only when it reaches something they coul
 not reach directly. With `KSOR_AUTH=disabled-public` the record is already served
 to anyone who types the URL, so there is nothing for rebinding to steal.
 
-### The site build needs the DSN too
+### The site build runs `ksor build` first
 
-Once `instance.md` declares a `database:` block, `pnpm build` runs
-`pnpm export-denylist` first — it asks the database what has been withdrawn and
-writes `.ksor-denylist.json`. Without `KSOR_DB_URL` the build **refuses**:
-
-```
-KSOR_DB_URL is unset, and instance.md declares a database
-  why: a takedown lives in that database. Without it this build cannot tell
-       'nothing is denied' from 'nobody asked'
-```
+`pnpm build` is `ksor build` followed by the site build. `ksor build` needs no
+database: it regenerates every `index.md`, runs the record checker, and writes
+`build.lock.json` — commit it — which every machine artefact stamps. A refusal
+stops the build before a byte is written; `--strict` also refuses an
+uncommitted input. Takedowns reach the site through the committed ledger
+(`.ksor/takedowns.yaml`); until the site half of this release lands, a record
+that declares a `database:` still writes `.ksor-denylist.json` with
+`ksor takedown --export` before the site build, and without `KSOR_DB_URL` that
+step **refuses**.
 
 That refusal is the design working. A takedown reaches the door instantly (it is
 a row) and reaches the site at its next build (it reads a file), so a site built

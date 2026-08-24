@@ -5,7 +5,7 @@ import { splitFrontmatter } from "./frontmatter.js";
 describe("splitFrontmatter", () => {
   it("returns null frontmatter and the whole text when there is no fence", () => {
     const r = splitFrontmatter("# Hello\n\nbody\n", "knowledge/x.md");
-    expect(r).toEqual({ ok: true, frontmatter: null, body: "# Hello\n\nbody\n" });
+    expect(r).toEqual({ ok: true, frontmatter: null, block: "", body: "# Hello\n\nbody\n" });
   });
 
   it("parses a mapping and hands back the body byte-exact after the closing fence", () => {
@@ -16,13 +16,19 @@ describe("splitFrontmatter", () => {
     expect(r).toEqual({
       ok: true,
       frontmatter: { title: "Hi", ksor: { audience: ["public"] } },
+      block: "title: Hi\nksor:\n  audience: [public]",
       body: "\nBody **here**\n",
     });
   });
 
   it("preserves unknown keys and nested mappings (OKF §11)", () => {
     const r = splitFrontmatter("---\nx-custom:\n  deep: [1, 2]\n---\n", "k");
-    expect(r).toEqual({ ok: true, frontmatter: { "x-custom": { deep: [1, 2] } }, body: "" });
+    expect(r).toEqual({
+      ok: true,
+      frontmatter: { "x-custom": { deep: [1, 2] } },
+      block: "x-custom:\n  deep: [1, 2]",
+      body: "",
+    });
   });
 
   it("keeps timestamps as strings — the profile parses instants itself", () => {
@@ -30,21 +36,32 @@ describe("splitFrontmatter", () => {
     expect(r).toEqual({
       ok: true,
       frontmatter: { at: "2026-08-20T09:00:00Z", d: "2026-08-20" },
+      block: "at: 2026-08-20T09:00:00Z\nd: 2026-08-20",
       body: "",
     });
   });
 
   it("strips a BOM and normalises CRLF before looking for the fence", () => {
     const r = splitFrontmatter("﻿---\r\ntitle: A\r\n---\r\nbody\r\n", "k");
-    expect(r).toEqual({ ok: true, frontmatter: { title: "A" }, body: "body\n" });
+    expect(r).toEqual({ ok: true, frontmatter: { title: "A" }, block: "title: A", body: "body\n" });
   });
 
   it("an empty block is an empty mapping, not a refusal", () => {
     expect(splitFrontmatter("---\n---\nb", "k")).toEqual({
       ok: true,
       frontmatter: {},
+      block: "",
       body: "b",
     });
+  });
+
+  // `block` is what `ksor migrate` rewrites, so it must be the author's bytes —
+  // comments and all — and not a re-serialisation of the parsed data.
+  it("hands back the block byte-exact, comments included", () => {
+    const r = splitFrontmatter("---\n# why\ntitle: A # trailing\n---\nb", "k");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.block).toBe("# why\ntitle: A # trailing");
   });
 
   it("refuses a missing closing fence with ksor-frontmatter-invalid", () => {
@@ -83,7 +100,7 @@ describe("splitFrontmatter", () => {
 
   it("a fence must open on the very first line", () => {
     const r = splitFrontmatter("\n---\ntitle: A\n---\n", "k");
-    expect(r).toEqual({ ok: true, frontmatter: null, body: "\n---\ntitle: A\n---\n" });
+    expect(r).toEqual({ ok: true, frontmatter: null, block: "", body: "\n---\ntitle: A\n---\n" });
   });
 });
 
@@ -92,7 +109,12 @@ describe("splitFrontmatter — hostile inputs (from review)", () => {
     // JS `m`-flag `^`/`$` treat U+2028 as a line terminator; YAML 1.2 does not. A regex
     // scanner cut the frontmatter mid-line and published the real fence as body.
     const r = splitFrontmatter("---\ntitle: 'a ---  rest'\n---\nbody", "k");
-    expect(r).toEqual({ ok: true, frontmatter: { title: "a ---  rest" }, body: "body" });
+    expect(r).toEqual({
+      ok: true,
+      frontmatter: { title: "a ---  rest" },
+      block: "title: 'a ---  rest'",
+      body: "body",
+    });
   });
 
   it("the opening fence tolerates trailing whitespace exactly as the closing one does", () => {
@@ -102,13 +124,18 @@ describe("splitFrontmatter — hostile inputs (from review)", () => {
 
   it("a lone CR is a checkout artefact too, normalised like CRLF", () => {
     const r = splitFrontmatter("---\r\ntitle: a\r---\rbody", "k");
-    expect(r).toEqual({ ok: true, frontmatter: { title: "a" }, body: "body" });
+    expect(r).toEqual({ ok: true, frontmatter: { title: "a" }, block: "title: a", body: "body" });
   });
 
   it("a `---` line inside a block scalar closes the fence — the profile forbids one there (spec §2)", () => {
     // A line scan is the contract: the first fence line ends the block, whatever YAML thinks.
     const r = splitFrontmatter("---\ntitle: |\n  a\n---\n  b\n---\nbody", "k");
-    expect(r).toEqual({ ok: true, frontmatter: { title: "a\n" }, body: "  b\n---\nbody" });
+    expect(r).toEqual({
+      ok: true,
+      frontmatter: { title: "a\n" },
+      block: "title: |\n  a",
+      body: "  b\n---\nbody",
+    });
   });
 
   it("an alias bomb is refused without the parser's class name in the sentence", () => {

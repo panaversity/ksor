@@ -198,8 +198,9 @@ environment reads like a person and is whatever the shell happened to be
 (`runner` under CI, `root` in a container) — worse than no name at all in the
 one row that exists to record who did this.
 
-**The site stops at its next build.** It reads `.ksor-denylist.json`, which
-`pnpm build` refreshes via `pnpm export-denylist`. So after a takedown, rebuild
-and redeploy the site, or the human surface keeps publishing what the agent
-surface already refuses. See [deploying.md](./deploying.md) for why that build
-needs `KSOR_DB_URL`.
+**The site stops at its next build.** It reads the committed ledger
+(`.ksor/takedowns.yaml`), so after a takedown, merge the entry, rebuild and
+redeploy the site, or the human surface keeps publishing what the agent
+surface already refuses. (Until the site half of this release lands, a record
+that declares a `database:` still writes `.ksor-denylist.json` with
+`ksor takedown --export` before the site build.)

@@ -7,21 +7,28 @@ claim: provenance is load-bearing — every build records the exact corpus that 
 # `ksor build` (Class B)
 
 The database-free verb that turns the record into projections, and the one
-place the governance decision runs for static output. Today it exits `2`
-("designed but not implemented"). Plan: `research/okf-native.md`; record
-contract: `specs/ksor/record/spec.md`.
+place the governance decision runs for static output. Steps 1–3 and the lock
+run (`packages/ksor/src/build/`); `--bundles` exits `2`. Plan:
+`research/okf-native.md`; record contract: `specs/ksor/record/spec.md`.
 
 ## 1 · Contract
 
 ```
-ksor build [--instance <path>] [--as-of <instant>] [--strict] [--bundles]
+ksor build [--instance <path>] [--as-of <instant>] [--strict]
+           [--allow-unverifiable-ledger] [--bundles]
 ```
 
-`--instance` defaults to the nearest ancestor `instance.md` through one
-resolution helper exported from `packages/content` and shared with
-`migrate`, `takedown` and `ingest` (enrolled in the boundary suite); none
-found is a refusal. `knowledge/`, `.ksor/` and the lock resolve from that
-directory. Needs no database, no provider key, no network.
+`--instance` (the file, or a directory at or below the root) defaults to the
+nearest ancestor `instance.md` through one resolution helper exported from
+`packages/content` and shared with `migrate`, `takedown` and `ingest`
+(enrolled in the boundary suite); none found is a refusal
+(`ksor-instance-missing`). `knowledge/`, `.ksor/` and the lock resolve from
+that directory. Needs no database, no provider key, no network. The verb's
+own refusals, outside the record checker's set: `bad-args` (an `--as-of` that
+is not an instant, an unknown flag), `ksor-instance-missing`,
+`ksor-ledger-unverifiable`, `ksor-build-dirty`, `ksor-lock-invalid` (a
+committed lock this ksor cannot parse — delete and rebuild). `--help` prints
+the contract and performs nothing.
 
 1. **Indexes, in memory.** One per directory, in OKF §8 form: the heading is
    the instance `title` at the root and the humanised directory name below
@@ -38,7 +45,10 @@ directory. Needs no database, no provider key, no network.
    the fresh indexes. Any refusal exits `1` with the slug on the first
    stderr line; nothing is written, so a red build leaves the tree as it
    found it.
-3. **Write.** Index files whose bytes changed, then `build.lock.json` (§2).
+3. **Write.** Index files whose bytes changed — and delete a committed index
+   whose directory earns none, since it would be stale forever — then
+   `build.lock.json` (§2). Stdout names every file written and the
+   `build_id`.
 4. **Bundles** (`--bundles`, plan §4.2): for `public` and each registered
    audience X, an OKF bundle at `.ksor/out/bundles/<X>/` built for the viewer
    list `[public, X]` exactly: the admitted concepts (§2), companions beside
@@ -70,7 +80,7 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   "instance_sha256": "…",
   "policy_sha256": "…",
   "ledger_sha256": "…",
-  "ledger_ids": ["…"],
+  "ledger_entries": [{ "id": "2026-08-01T00:00:00Z-a1b2c3", "digest": "…" }],
   "audiences": {
     "registry": ["internal"],
     "viewers": { "public": ["public"], "internal": ["public", "internal"] }
@@ -91,9 +101,17 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
 - `source_commit` is the last commit touching an input (`knowledge/`,
   `instance.md`, `.ksor/governance.yaml`, `.ksor/takedowns.yaml`) — not
   HEAD, so committing the lock itself does not move it; `null` when there is
-  no commit yet. `dirty` is true when an input differs from that commit; a
-  dirty lock still stamps, with `dirty` in every stamp, and `--strict`
-  refuses it (`ksor-build-dirty`).
+  no commit yet or no repository at all. `dirty` is true when an input
+  differs from that commit (an untracked input included), and always when
+  there is no commit; a dirty lock still stamps, with `dirty` in every
+  stamp, and `--strict` refuses it (`ksor-build-dirty`). Outside a
+  repository the committed lock is the only ledger baseline; inside one, a
+  shallow clone is refused (`ksor-ledger-unverifiable`) unless
+  `--allow-unverifiable-ledger` is explicit (record spec §5). A repository
+  with NO COMMIT — which is what `ksor init` leaves behind — is neither:
+  there is no history for a ledger id to have disappeared from, so its
+  baseline is empty and verified and the build stamps `source_commit: null`,
+  `dirty: true`.
 - `as_of` defaults to **now** and `--as-of` pins it. Every lifecycle
   evaluation in the site build and in bundles uses the lock's `as_of`;
   staleness therefore leaves the open web on the next build, and a scheduled
@@ -110,8 +128,15 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   a different admitted set gets a different id (R21); the lock is
   byte-identical across two runs modulo `as_of`. The product invariant's
   wording gains "+ same `as_of`" (plan §2.9).
-- `ledger_ids` is the maximal id set the build has seen, one of the two
-  baselines for `ksor-ledger-shrank` (record spec §5).
+- `ledger_entries` is one `(id, digest)` pair per ledger entry, sorted by id —
+  maximal by construction, because a build that lost an id is refused — and one
+  of the two baselines the ledger is judged against (record spec §5). The digest
+  is over the entry's governing fields, not the file's bytes, so it is one of
+  the two things that makes `ksor-ledger-amended` reachable: an id alone cannot
+  tell a committed denial from the same id RETARGETED at another document.
+  `ledger_sha256` hashes the file's bytes, or the empty string when no ledger
+  exists.
+  `as_of` is written with millisecond precision (`…T12:00:00.000Z`).
 
 Two identities, never confused in prose: `build_id` is what R14 stamps and
 what connects every projection of one publication (KSP-001's "Generation",

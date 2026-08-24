@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseConcept, RESERVED_TYPES } from "./profile.js";
+import { LEGACY_KEYS, parseConcept, RESERVED_TYPES } from "./profile.js";
 
 const P = "knowledge/policies/purchase-approval.md";
 
@@ -228,6 +228,20 @@ describe("parseConcept — the §2 concept schema", () => {
     ]);
     expect(r.refusals[0]?.fix).toMatch(/ksor migrate/);
     expect(r.refusals.map((x) => x.why).join()).toMatch(/visibility/);
+  });
+
+  // Every key on the list, one at a time — a list this rule reads from is
+  // exactly where one goes missing without a test noticing.
+  it("names every pre-profile key on the list, `superseded_by` included", () => {
+    for (const key of LEGACY_KEYS) {
+      const r = parseConcept(P, { ...STABLE, [key]: "x" });
+      expect(r.ok, key).toBe(false);
+      if (r.ok) continue;
+      expect(
+        r.refusals.filter((x) => x.slug === "ksor-legacy-key").map((x) => x.why.includes(key)),
+        key,
+      ).toContain(true);
+    }
   });
 
   it("unknown keys are preserved (OKF §11), including under ksor:", () => {

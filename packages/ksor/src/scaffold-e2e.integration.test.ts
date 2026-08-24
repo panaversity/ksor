@@ -25,6 +25,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // a REAL browser — both themes, zero console errors, zero external requests —
 // and hot-reloads a knowledge edit. Heavy (pnpm install + chromium), so gated:
 //   KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts
+//
+// NOT YET CONVERTED: the documents this suite writes still carry pre-profile
+// frontmatter (`status: approved`, a top-level `owner:`, `superseded_by:`),
+// because every assertion below is about what the SITE renders and the site
+// has not moved to the KSoR Profile yet. It converts with the site, in the
+// same work package.
 const enabled = process.env.KSOR_E2E === "1";
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
 
@@ -1125,7 +1131,8 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const original = readFileSync(instanceMd, "utf8");
     writeFileSync(
       instanceMd,
-      original.replace("\nksor:\n", "\nsite:\n  governance: false\nksor:\n"),
+      // `toolchain:` is where the old `ksor:` stamp went (record spec §3).
+      original.replace("\ntoolchain:\n", "\nsite:\n  governance: false\ntoolchain:\n"),
     );
     const checkOff = spawnSync(
       process.execPath,
