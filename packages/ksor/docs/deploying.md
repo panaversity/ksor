@@ -246,6 +246,84 @@ a row) and reaches the site at its next build (it reads a file), so a site built
 without the DSN would keep publishing what the door already refuses. Set
 `KSOR_DB_URL` on the site build as well as on the door.
 
+## Keeping people out of the site
+
+The door has auth ([authorization.md](./authorization.md)). The **site** is
+static files, so it has none — and the way to protect it is not to add code, it
+is to put something in front of it.
+
+Three requirements, three different answers. Pick the row you actually have.
+
+### "Everyone must sign in before reading anything"
+
+**Put a gate in front of the origin.** Nothing in ksor changes, and it protects
+every byte — HTML, `llms.txt`, images, the search index — because the request
+never reaches the files.
+
+| host          | what to turn on                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| Vercel        | Deployment Protection (password, or SSO on paid plans)                                               |
+| Cloudflare    | Cloudflare Access in front of the deployment                                                         |
+| anything else | an authenticating reverse proxy — nginx with `auth_request`, oauth2-proxy, Caddy with `forward_auth` |
+
+This is the strongest gate available to a static site, and the only one that
+holds against `curl`. It is coarse — whole deployment, all or nothing — which is
+exactly right when the answer is "this record is internal".
+
+**A sign-in button on the site is not an alternative to this.** The gate has
+already authenticated the reader before a page renders; a second login inside it
+would ask the same person to sign in twice, and on its own would protect
+nothing.
+
+### "Some documents are restricted, most are not"
+
+**Build per audience.** `KSOR_AUDIENCE=<tier> pnpm build` stages only what that
+tier may see, so restricted documents are **never written into the artifact** —
+enforcement by absence, which is the only kind a static host can honour. Publish
+the public artifact openly and the wider one behind the gate above.
+
+Plain `pnpm build` is always the public tier, so the safe thing is the default.
+
+### "Different readers see different documents, decided per request"
+
+Two supported answers, and a third that is yours.
+
+**Read through the door instead.** This is the one ksor is built for. The MCP
+surface already applies the audience scope **per request** and writes a
+`retrieval_log` row carrying the actor for every read — per-person governance
+with an audit trail, which a static site cannot have at any price. If the
+requirement is "who read what, and were they allowed to", that is the door, not
+the website.
+
+**Or split the record.** Content needing per-person confidentiality inside one
+tier is usually content that belongs in its own record, with its own gate. That
+is what the audience model and the second-record design anticipate.
+
+**Or fork the site — you already own it.** `system/site` is yours outright
+(decision 4). Nothing stops you removing `output: "export"` and filtering per
+request in your own repository. ksor's contract is unaffected; this is a
+directory you own, changed the way you want it.
+
+What you take on if you do:
+
+> ksor's guarantee is **enforcement by absence** — a restricted document is
+> never written into the artifact, and a conformance suite asserts that against
+> a positive control that proves the check is not blind. A request-time filter
+> is a **different** guarantee, and it becomes yours to test, because those
+> suites will no longer be testing it for you. A filter that is bypassed serves
+> the document; an absent file cannot be.
+
+That is the whole trade. It is a reasonable thing to do with your eyes open, and
+a bad thing to drift into because a login button suggested it.
+
+### What does NOT work
+
+**Hiding rendered content behind a signed-in check in the browser.** If the page
+was built with the content in it, the content is in the response before any
+JavaScript runs — `curl` and every crawler see it. A component that blurs or
+collapses it is presenting, not protecting. If you build one, say so in its own
+comment, or the next reader will take it for a gate.
+
 ## Authorization, or the deliberate absence of it
 
 `ksor serve` **refuses to boot unauthenticated on a public bind.** There is no
