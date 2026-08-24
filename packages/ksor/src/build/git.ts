@@ -44,7 +44,14 @@ export function gitFacts(root: string): GitFacts {
     };
   }
   const shallow = (run(root, ["rev-parse", "--is-shallow-repository"]) ?? "").trim() === "true";
-  const head = run(root, ["log", "-1", "--format=%H", "--", ...INPUTS]);
+  // `ksor init` runs `git init`, so a fresh scaffold IS a repository — with no
+  // commit in it. `git log` exits non-zero there, which read as "history is
+  // unreadable" and refused the first build an adopter ever runs with a message
+  // about a shallow clone (found live). A repository with no commits has no
+  // history for a ledger id to disappear from, so its baseline is empty and
+  // verified, not missing.
+  const born = run(root, ["rev-parse", "--verify", "--quiet", "HEAD"]) !== null;
+  const head = born ? run(root, ["log", "-1", "--format=%H", "--", ...INPUTS]) : "";
   const sourceCommit = head === null || head.trim() === "" ? null : head.trim();
   // Untracked counts as dirty: an input git has never seen is not in any commit.
   const status = run(root, ["status", "--porcelain", "--untracked-files=all", "--", ...INPUTS]);
@@ -54,7 +61,7 @@ export function gitFacts(root: string): GitFacts {
     shallow,
     sourceCommit,
     dirty,
-    historicLedgerIds: shallow ? null : historicIds(root),
+    historicLedgerIds: shallow ? null : born ? historicIds(root) : [],
   };
 }
 

@@ -18,9 +18,7 @@
   "audiences": {
     "registry": [],
     "viewers": {
-      "public": [
-        "public"
-      ]
+      "public": ["public"]
     }
   },
   "documents": [
@@ -28,31 +26,21 @@
       "path": "about.md",
       "sha256": "0cce39631f3ebebe5a3caf8e3fab052d55ad83efea77442ab496db16807992c1",
       "status": "stable",
-      "audience": [
-        "public"
-      ],
-      "admitted": [
-        "public"
-      ]
+      "audience": ["public"],
+      "admitted": ["public"]
     },
     {
       "path": "policies/purchase-approval.md",
       "sha256": "dd736269a05ac10891bfd2ab0555ed47859bd530f4682ab19dae12e386f93039",
       "status": "stable",
-      "audience": [
-        "public"
-      ],
-      "admitted": [
-        "public"
-      ]
+      "audience": ["public"],
+      "admitted": ["public"]
     },
     {
       "path": "policies/purchase-approval-2019.md",
       "sha256": "51322be0d40ce064d63bf686c9cae783cdf68f9e84aca0cf990c053693b7436e",
       "status": "deprecated",
-      "audience": [
-        "public"
-      ],
+      "audience": ["public"],
       "admitted": []
     }
   ],

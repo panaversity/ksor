@@ -121,6 +121,31 @@ describe("ksor build — acceptance 1: the emitted starter", () => {
    * from the generator — `ksor build` writing one here means the scaffold was
    * shipped stale.
    */
+  // `ksor init` runs `git init`, so the record is a repository with NO commit
+  // before the adopter makes one. That is not a shallow clone: there is no
+  // history for a ledger id to disappear from, so the build stamps honestly
+  // (dirty, no source_commit) instead of refusing (found live).
+  it("builds green in the repository `ksor init` leaves behind, before any commit", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-uncommitted-"));
+    roots.push(dir);
+    const init = spawnSync(process.execPath, [distCli, "init", "my-sor"], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(init.status, init.stderr).toBe(0);
+    const root = path.join(dir, "my-sor");
+    expect(git(root, "rev-parse", "--is-inside-work-tree")).toBe("true");
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+    const lock = lockOf(root);
+    expect(lock.source_commit).toBeNull();
+    expect(lock.dirty).toBe(true);
+    // And --strict still says so, by name.
+    const strict = build(root, "--as-of", AS_OF, "--strict");
+    expect(strict.status).toBe(1);
+    expect(strict.stderr.split("\n")[0]).toBe("error: ksor-build-dirty");
+  });
+
   it("builds green on a fresh `ksor init` after its first commit, writing a lock and no index", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "ksor-starter-"));
     roots.push(dir);
