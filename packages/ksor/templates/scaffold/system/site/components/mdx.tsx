@@ -1,6 +1,7 @@
 import defaultMdxComponents from "fumadocs-ui/mdx";
 
 import { WrappableCodeBlock } from "@/components/code-block";
+import { Embed } from "@/components/embed";
 import { CodeBlockTabsTrigger } from "fumadocs-ui/components/codeblock";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import type { MDXComponents } from "mdx/types";
@@ -40,6 +41,9 @@ export function getMDXComponents(components?: MDXComponents) {
     // A long line is the reader's to unwrap, per block — see
     // components/code-block.tsx. Replaces fumadocs' own `pre`.
     pre: WrappableCodeBlock,
+    // `rehypeEmbeds` (source.config.ts) rewrites a link titled `embed` into
+    // this, for the same reason: an unknown component fails the build.
+    Embed,
     Tabs,
     Tab,
     CodeBlockTabsTrigger: BrandedTabsTrigger,
