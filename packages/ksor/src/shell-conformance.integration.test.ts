@@ -2,8 +2,6 @@
 // The page.evaluate callback runs in the browser; only this file needs DOM types.
 import { spawnSync } from "node:child_process";
 import {
-  appendFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -32,9 +30,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 //   KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/shell-conformance.integration.test.ts
 const enabled = process.env.KSOR_E2E === "1";
 
-const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
-const docusaurusShell = path.join(repoRoot, "workbench", "shells", "docusaurus");
 
 // A real 4x4 PNG (sips-exported from the KSoR mark) for the asset probe.
 const TINY_PNG = Buffer.from(
@@ -47,45 +43,12 @@ interface Shell {
   readonly swap: ((project: string) => void) | null;
 }
 
-const SHELLS: readonly Shell[] = [
-  { shellName: "fumadocs", swap: null },
-  {
-    shellName: "docusaurus",
-    swap: (project) => {
-      // The swap recipe from workbench/shells/docusaurus/README.md, verbatim
-      // — filtered so a locally-run workbench shell's generated dirs never
-      // ride along (review finding, 2026-08-18).
-      const GENERATED = new Set([
-        "node_modules",
-        ".docusaurus",
-        ".generated",
-        ".staged-knowledge",
-        "out",
-      ]);
-      rmSync(path.join(project, "system", "site"), { recursive: true });
-      cpSync(docusaurusShell, path.join(project, "system", "site"), {
-        recursive: true,
-        filter: (src) => !GENERATED.has(path.basename(src)),
-      });
-      rmSync(path.join(project, "system", "site", "README.md"));
-      appendFileSync(
-        path.join(project, ".gitignore"),
-        "system/site/.docusaurus/\nsystem/site/.generated/\n",
-      );
-      const workspaceYaml = path.join(project, "pnpm-workspace.yaml");
-      // Both denials found live: core-js's postinstall prints a funding
-      // banner; @swc/core's (via @docusaurus/faster) only fetches a wasm
-      // fallback when the native optionalDependency binding is absent.
-      writeFileSync(
-        workspaceYaml,
-        readFileSync(workspaceYaml, "utf8").replace(
-          "allowBuilds:\n",
-          "allowBuilds:\n  '@swc/core': false\n  core-js: false\n",
-        ),
-      );
-    },
-  },
-];
+// ONE shell. The second (workbench/shells/docusaurus) was retired 2026-08-24
+// — decision 9 revision. The `.each(SHELLS)` shape stays because the surface
+// contract is what this suite asserts, and it is unchanged; only the number of
+// implementations it runs against is. A shell added back here restores the
+// swap proof without restructuring the suite.
+const SHELLS: readonly Shell[] = [{ shellName: "fumadocs", swap: null }];
 
 function run(command: string, args: readonly string[], cwd: string): void {
   const result = spawnSync(command, [...args], { cwd, encoding: "utf8" });

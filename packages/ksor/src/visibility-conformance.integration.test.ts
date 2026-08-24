@@ -1,14 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import {
-  appendFileSync,
-  cpSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,9 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 //   KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/visibility-conformance.integration.test.ts
 const enabled = process.env.KSOR_E2E === "1";
 
-const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
-const docusaurusShell = path.join(repoRoot, "workbench", "shells", "docusaurus");
 
 // Distinct per-surface canaries, per the issue-#10 method.
 const RESTRICTED_TITLE = "Zebra Bands CANARYTITLE9F3A";
@@ -90,41 +79,12 @@ interface Shell {
   readonly rendersAttachments: boolean;
 }
 
-const SHELLS: readonly Shell[] = [
-  { shellName: "fumadocs", swap: null, rendersAttachments: true },
-  {
-    shellName: "docusaurus",
-    rendersAttachments: false,
-    swap: (project) => {
-      // The swap recipe, as in shell-conformance (filtered copy).
-      const GENERATED = new Set([
-        "node_modules",
-        ".docusaurus",
-        ".generated",
-        ".staged-knowledge",
-        "out",
-      ]);
-      rmSync(path.join(project, "system", "site"), { recursive: true });
-      cpSync(docusaurusShell, path.join(project, "system", "site"), {
-        recursive: true,
-        filter: (src) => !GENERATED.has(path.basename(src)),
-      });
-      rmSync(path.join(project, "system", "site", "README.md"));
-      appendFileSync(
-        path.join(project, ".gitignore"),
-        "system/site/.docusaurus/\nsystem/site/.generated/\nsystem/site/.staged-knowledge/\n",
-      );
-      const workspaceYaml = path.join(project, "pnpm-workspace.yaml");
-      writeFileSync(
-        workspaceYaml,
-        readFileSync(workspaceYaml, "utf8").replace(
-          "allowBuilds:\n",
-          "allowBuilds:\n  '@swc/core': false\n  core-js: false\n",
-        ),
-      );
-    },
-  },
-];
+// ONE shell. The second (workbench/shells/docusaurus) was retired 2026-08-24
+// — decision 9 revision. The `.each(SHELLS)` shape stays because the surface
+// contract is what this suite asserts, and it is unchanged; only the number of
+// implementations it runs against is. A shell added back here restores the
+// swap proof without restructuring the suite.
+const SHELLS: readonly Shell[] = [{ shellName: "fumadocs", swap: null, rendersAttachments: true }];
 
 function run(
   command: string,

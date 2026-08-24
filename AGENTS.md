@@ -247,7 +247,32 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    is in-tree — `workbench/shells/docusaurus/` swaps in by its README
    recipe and one shell-agnostic conformance suite runs the surface
    contract against both shells in CI. `ksor init` still emits Fumadocs,
-   always; no selector was added._
+   always; no selector was added._ _Revision 2026-08-24 (owner): the
+   second shell is RETIRED — `workbench/shells/docusaurus/` is deleted and
+   the conformance suite runs one shell. The proof did its job: it was
+   built to answer "is the shell really a slot, or is the contract just a
+   description of what Fumadocs happens to do", and it answered by keeping
+   the surface contract honest through the visibility model, attachments
+   and the staging lock. What it costs now exceeds that. Every surface the
+   record grows — quizzes, decks, slides, code tabs — has to be built
+   twice or the suite goes red, and the second build is one nobody ships:
+   `ksor init` has always emitted Fumadocs and never offered a selector.
+   Maintaining a shell no adopter runs, to prove a property no adopter
+   exercises, is the "code is liability" test failing. The surface
+   contract survives unchanged and is still asserted — against one
+   implementation, which is what the other clauses of this decision
+   (adopter ownership of `system/site`, future registry-distributed
+   shells) always intended to carry. Restored by an adopter actually
+   swapping a shell, which would make the property live again rather than
+   hypothetical; the recipe lives in git history until then.
+
+   _One consequence, recorded because it is now cheaper and must stay
+   deliberate: this removes the strongest objection to reversing the
+   `output: "export"` clause, since a Docusaurus shell could never satisfy
+   a Next-server contract. That reversal is still an owner decision and
+   still contradicts `specs/ksor/visibility/spec.md`, which refuses
+   per-request filtering by name. Site auth does not authorize it._
+
 10. **Scaffold templates are MIT-0** (owner, 2026-08-18): init's output
     lands in the adopter's proprietary repo free of attribution
     obligations, and init never emits a LICENSE file into a repo whose
