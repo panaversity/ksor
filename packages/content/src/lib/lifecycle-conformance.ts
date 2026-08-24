@@ -4,7 +4,7 @@
  * `lifecycle-rule.test.ts`; the SQL half is asserted through real Postgres
  * when the serving predicate lands (research/okf-native.md §1.6).
  */
-import type { LifecycleDoc } from "./lifecycle-rule.js";
+import type { LifecycleBadge, LifecycleDoc } from "./lifecycle-rule.js";
 
 export interface LifecycleCase {
   readonly name: string;
@@ -13,6 +13,8 @@ export interface LifecycleCase {
   readonly drafts: "hidden" | "shown";
   readonly human: boolean;
   readonly machine: boolean;
+  /** What the human surface says beside a state the machine surfaces decline. */
+  readonly badge: LifecycleBadge | null;
 }
 
 const NOW = Date.parse("2026-08-25T12:00:00Z");
@@ -27,6 +29,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "shown",
     human: true,
     machine: false,
+    badge: "draft",
   },
   {
     name: "draft with drafts hidden (every build's default): nowhere",
@@ -35,6 +38,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: false,
     machine: false,
+    badge: "draft",
   },
   {
     name: "stable, effective, unexpired: both surfaces",
@@ -43,6 +47,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: true,
+    badge: null,
   },
   {
     name: "stable with no effective_from and no stale_after: both surfaces",
@@ -51,6 +56,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: true,
+    badge: null,
   },
   {
     name: "stable before effective_from: human with a badge, machine no",
@@ -59,6 +65,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: false,
+    badge: "effective-from",
   },
   {
     name: "stable past stale_after: human with a badge, machine no",
@@ -67,6 +74,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: false,
+    badge: "stale",
   },
   {
     name: "stale_after equal to as_of is already stale: the review date has arrived",
@@ -75,6 +83,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: false,
+    badge: "stale",
   },
   {
     name: "effective_from equal to as_of is effective",
@@ -83,6 +92,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: true,
+    badge: null,
   },
   {
     name: "deprecated: human with its successor, machine no",
@@ -91,6 +101,7 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: false,
+    badge: "deprecated",
   },
   // The disclosed disagreement: a build at as_of and a door request an hour
   // later read the same concept differently when a boundary lies between.
@@ -101,5 +112,6 @@ export const LIFECYCLE_CASES: readonly LifecycleCase[] = [
     drafts: "hidden",
     human: true,
     machine: false,
+    badge: "effective-from",
   },
 ];

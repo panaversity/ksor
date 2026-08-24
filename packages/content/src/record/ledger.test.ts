@@ -5,6 +5,7 @@ import {
   checkLedgerAgainstTree,
   checkLedgerShrank,
   inForce,
+  isDeniedByLedger,
   parseLedger,
   type Ledger,
 } from "./ledger.js";
@@ -202,5 +203,36 @@ describe("checkLedgerShrank", () => {
     expect(
       checkLedgerShrank(["a", "b", "c"], [{ source: "git history", ids: ["a", "b", "c"] }]),
     ).toEqual([]);
+  });
+});
+
+describe("isDeniedByLedger — the site's denial predicate over the in-force denials", () => {
+  it("a node denial matches exactly its concept, and nothing beside it", () => {
+    const live = inForce(ledgerOf(DENIAL));
+    expect(isDeniedByLedger(live, "policies/old-threshold")).toBe(true);
+    expect(isDeniedByLedger(live, "policies/old-threshold-v2")).toBe(false);
+    expect(isDeniedByLedger(live, "policies")).toBe(false);
+  });
+
+  it("a subtree denial covers every descendant by directory, never by prefix", () => {
+    const live = inForce(ledgerOf(SUBTREE));
+    expect(isDeniedByLedger(live, "policies/old-threshold")).toBe(true);
+    expect(isDeniedByLedger(live, "policies/deep/er")).toBe(true);
+    expect(isDeniedByLedger(live, "policies-archive/x")).toBe(false);
+    expect(isDeniedByLedger(live, "policies")).toBe(false);
+  });
+
+  it("a revoked denial denies nothing; a removed one still does", () => {
+    expect(isDeniedByLedger(inForce(ledgerOf(DENIAL + REVOCATION)), "policies/old-threshold")).toBe(
+      false,
+    );
+    expect(isDeniedByLedger(inForce(ledgerOf(DENIAL + AMENDMENT)), "policies/old-threshold")).toBe(
+      true,
+    );
+  });
+
+  it("the root section denies the whole bundle", () => {
+    const root = SUBTREE.replace("knowledge/policies#section", "knowledge/#section");
+    expect(isDeniedByLedger(inForce(ledgerOf(root)), "anything/at/all")).toBe(true);
   });
 });

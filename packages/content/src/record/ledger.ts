@@ -193,6 +193,23 @@ export function inForce(ledger: Ledger): readonly Denial[] {
   return [...live.values()];
 }
 
+/**
+ * Is the concept `id` (bundle-relative) denied by the in-force denials? A
+ * node denial names exactly one concept; a subtree denial names a directory's
+ * `#section` anchor and covers everything beneath that DIRECTORY — segment-
+ * wise, never a string prefix, so `policies#section` leaves `policies-archive/`
+ * alone (decision 14's reason for walking `parent_id` rather than a prefix).
+ * The one seam the site's staging and the bundle writer both use.
+ */
+export function isDeniedByLedger(denials: readonly Denial[], id: string): boolean {
+  return denials.some((d) => {
+    const target = d.stableId.slice("knowledge/".length);
+    if (d.scope === "node") return target === id;
+    const dir = target.slice(0, -"#section".length);
+    return dir === "" || id.startsWith(`${dir}/`);
+  });
+}
+
 /** Every entry — denial, revocation, amendment — must be by a takedown authority. */
 export function checkLedgerActors(ledger: Ledger, takedownActors: readonly string[]): Refusal[] {
   return ledger.entries

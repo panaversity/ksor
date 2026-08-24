@@ -34,3 +34,19 @@ export function admitsLifecycle(
   if (doc.staleAfter !== null && doc.staleAfter <= at) return false;
   return true;
 }
+
+/** The word a human surface shows for a state the machine surfaces decline. */
+export type LifecycleBadge = "draft" | "effective-from" | "stale" | "deprecated";
+
+/**
+ * Why the machine surfaces decline `doc` at `at`, in one word — or null when
+ * they admit it. Independent of `drafts`: a draft is a draft whether or not a
+ * preview happens to show it.
+ */
+export function lifecycleBadge(doc: LifecycleDoc, at: number): LifecycleBadge | null {
+  if (doc.status === "draft") return "draft";
+  if (doc.status === "deprecated") return "deprecated";
+  if (doc.effectiveFrom !== null && doc.effectiveFrom > at) return "effective-from";
+  if (doc.staleAfter !== null && doc.staleAfter <= at) return "stale";
+  return null;
+}
