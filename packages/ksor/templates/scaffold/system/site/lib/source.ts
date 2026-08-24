@@ -36,6 +36,14 @@ export const source = loader({
   ],
 });
 
+// The page tree's root is named "Docs" by default — fumadocs' fallback for a
+// directory carrying no meta.json. It names the software, not the thing a
+// reader is inside, and it is what the breadcrumb's first item says. The
+// record already has a name in instance.md, so it says that instead. Set here
+// rather than passed to the breadcrumb, because `slots` crosses a client
+// boundary and a server value cannot ride along with it — the tree can.
+source.pageTree.name = appName;
+
 export type KnowledgePage = (typeof source)["$inferPage"];
 
 // Sub-path hosting prefix, for URLs we WRITE INTO TEXT (llms.txt,

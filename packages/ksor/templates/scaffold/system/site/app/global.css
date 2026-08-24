@@ -771,3 +771,50 @@ html > body[data-scroll-locked] {
 #nd-page > [class*="@container"]:last-child {
   margin-top: auto;
 }
+
+/* The breadcrumb.
+   Sentence case in the body face, not the mono uppercase of the OWNER row
+   below it: this is a path made of document TITLES, and uppercasing a title
+   makes a long one unreadable and a short one shout. The row beneath is
+   labels, which is a different job.
+
+   Home icon, chevron separators, and the document itself carried by weight
+   rather than by colour — the shape the owner asked for, 2026-08-24. */
+.ksor-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.ksor-breadcrumb-home,
+.ksor-breadcrumb-step {
+  color: var(--color-fd-muted-foreground);
+  transition: color 0.15s ease;
+}
+
+.ksor-breadcrumb-home {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ksor-breadcrumb-home:hover,
+.ksor-breadcrumb-step:hover {
+  color: var(--color-fd-foreground);
+}
+
+.ksor-breadcrumb-sep {
+  color: var(--color-fd-muted-foreground);
+  opacity: 0.5;
+}
+
+/* You-are-here: full-strength text where the path is muted. Weight and
+   contrast do the work, not colour — an accent here competes with the title
+   directly beneath it, which is the thing the reader is meant to land on. */
+.ksor-breadcrumb-here {
+  color: var(--color-fd-foreground);
+  font-weight: 500;
+}

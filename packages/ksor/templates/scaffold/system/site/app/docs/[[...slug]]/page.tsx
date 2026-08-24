@@ -14,6 +14,7 @@ import {
 } from "@/components/governance";
 import { predecessorsOf, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
 import { showGovernance } from "@/lib/shared";
+import { RecordBreadcrumb } from "@/components/record-breadcrumb";
 import { RecordToc, TocItems } from "@/components/record-toc";
 import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
@@ -96,7 +97,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         // headings AHEAD of the reader. The observer's options are not
         // configurable and the observer is not exported, so the selection could
         // only be replaced — `slots.toc.main` is the seam for that.
+        // The breadcrumb is ours for one reason, recorded in the component:
+        // the shell's renders nothing at all on a top-level document, so the
+        // block above the title came and went as a reader moved through the
+        // record.
         slots={{
+          breadcrumb: RecordBreadcrumb,
           toc: {
             provider: TOCProvider,
             main: RecordToc,

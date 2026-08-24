@@ -135,6 +135,38 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       const linked = await fetch(`${base}${firstLink}`);
       expect(linked.status, `GET ${firstLink} from the static export`).toBe(200);
 
+      // WHERE AM I, on every document. The shell's own breadcrumb renders the
+      // folders above a page and nothing else, so a top-level document got no
+      // trail at all and the block above the title appeared and disappeared as
+      // a reader moved through the record. Asserted on BOTH shapes, because
+      // the nested one was never broken and would have stayed green alone.
+      const crumbOn = (route: string): string => {
+        const html = readFileSync(path.join(outDir, route, "index.html"), "utf8");
+        const found = /<nav[^>]*class="ksor-breadcrumb[^"]*"[^>]*>(?<trail>.*?)<\/nav>/s.exec(html);
+        expect(found, `no breadcrumb on /${route}`).not.toBeNull();
+        const trail = found?.groups?.trail ?? "";
+        // The home link is the first item and it must resolve: the record's
+        // front door is `/`, and there is no `/docs` route at all — an earlier
+        // cut linked there and served a 404 from every page's first crumb.
+        expect(trail, `no home link on /${route}`).toContain('href="/"');
+        // The document itself is the last item and is never a link to the page
+        // the reader is already on.
+        expect(trail, `no you-are-here on /${route}`).toContain('aria-current="page"');
+        // The named steps, in order. Icons carry no text and drop out.
+        return [...trail.matchAll(/<(?:a|span)\b[^>]*>([^<]+)<\/(?:a|span)>/g)]
+          .map((match) => (match[1] ?? "").trim())
+          .filter(Boolean)
+          .join(" > ");
+      };
+      // The trail ENDS IN THE DOCUMENT, so every page carries a full address
+      // and not just the folders above it.
+      expect(crumbOn(path.join("docs", "surfaces", "for-agents"))).toBe(
+        "Surfaces > The agent surface",
+      );
+      expect(crumbOn(path.join("docs", "what-is-a-ksor"))).toBe(
+        "What a Knowledge System of Record is",
+      );
+
       const backgrounds: Record<string, string> = {};
       for (const colorScheme of ["light", "dark"] as const) {
         const context = await browser.newContext({ colorScheme });
