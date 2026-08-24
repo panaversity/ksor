@@ -42,6 +42,9 @@ const RECORD_FILES: readonly string[] = readdirSync(path.join(KERNEL, "record"))
   .filter((name) => name.endsWith(".ts") && !name.includes(".test."))
   .sort();
 
+/** Pinned exactly: the record module reads YAML with it, in the site and in the kernel alike. */
+const YAML_VERSION = "2.9.0";
+
 /** The leaf rules under `lib/` the record module and the site both read. */
 const LIB_FILES = ["audience-rule.ts", "lifecycle-rule.ts"] as const;
 
@@ -81,5 +84,42 @@ describe("the record module is one rule set", () => {
         );
       }
     }
+  });
+});
+
+/**
+ * The record module parses real YAML, so the site has to CARRY a YAML parser —
+ * and an adopter's install has to be able to resolve it from the lockfile this
+ * scaffold ships. The package.json half fails loudly (the build cannot find the
+ * module); the LOCK half is the silent one, and it is the half that breaks an
+ * adopter whose CI installs frozen.
+ */
+describe("the site carries the record module's one runtime dependency", () => {
+  const SITE_MANIFEST = path.join(SITE, "package.json");
+  const LOCK = path.resolve(here, "..", "templates", "scaffold", "pnpm-lock.yaml");
+
+  it(`declares yaml at exactly ${YAML_VERSION}`, () => {
+    const manifest = JSON.parse(text(SITE_MANIFEST)) as {
+      dependencies?: Record<string, string>;
+    };
+    expect(
+      manifest.dependencies?.yaml,
+      "system/site/package.json must declare yaml — record/frontmatter.ts and record/yaml-file.ts import it",
+    ).toBe(YAML_VERSION);
+  });
+
+  it("carries that version in the committed lockfile, so a frozen install resolves", () => {
+    // The site importer's own dependency block, not merely the word appearing
+    // somewhere in a 5,000-line lock.
+    const lock = text(LOCK);
+    const importer = lock.slice(lock.indexOf("\n  system/site:") + 1);
+    // The importer ends where the next one begins: a line at exactly two
+    // spaces of indent. Cutting on "\n  " alone cuts at the first nested key.
+    const end = /\n {2}\S/.exec(importer.slice(1))?.index;
+    const block = end === undefined ? importer : importer.slice(0, end + 1);
+    expect(
+      /\n {6}yaml:\n {8}specifier: (.+)\n {8}version: (.+)\n/.exec(block)?.slice(1, 3),
+      `system/site's importer in ${path.basename(LOCK)} does not resolve yaml — run pnpm install in an emitted scaffold and commit the lock`,
+    ).toEqual([YAML_VERSION, YAML_VERSION]);
   });
 });
