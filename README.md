@@ -42,14 +42,29 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 ## Start here
 
-Node 24 or newer and pnpm (`npm install -g pnpm`). Then:
+Node 24 or newer — the only prerequisite. Run init with the package manager
+you already use; the runner you type IS the choice, and everything the
+scaffold emits — scripts, README, the agent kit — speaks that manager:
+
+**npm**
 
 ```bash
 npx @panaversity/ksor init my-knowledge-sor
-cd my-knowledge-sor
+cd my-knowledge-sor && npm install && npm run dev
+```
 
-pnpm install
-pnpm dev
+**pnpm**
+
+```bash
+pnpm dlx @panaversity/ksor init my-knowledge-sor
+cd my-knowledge-sor && pnpm install && pnpm dev
+```
+
+**bun**
+
+```bash
+bunx @panaversity/ksor init my-knowledge-sor
+cd my-knowledge-sor && bun install && bun run dev
 ```
 
 Your governed record is now live at `http://localhost:3000`, hot-reloading as
@@ -64,7 +79,9 @@ interview the agent runs with you to replace the placeholder identity in
 `instance.md` with your real one. You write knowledge in plain Markdown, in any
 language you write in; the agent handles the governance ladder around it.
 
-Two commands are worth knowing on day one:
+Two commands are worth knowing on day one — shown here and for the rest of
+this page in the pnpm spelling; your own scaffold's README speaks your
+manager (`npm run check`, `bun run build`):
 
 ```bash
 pnpm check    # the format checker — run before handing off any knowledge change
@@ -505,8 +522,9 @@ If the capitalization policy does not address the situation, the system should n
 
 ## Requirements
 
-Node.js 24 or newer, and pnpm (`npm install -g pnpm`, or `corepack enable
-pnpm` on Node versions that bundle corepack).
+Node.js 24 or newer, and the package manager you already use — pnpm, npm, or
+bun. `ksor init` emits the scaffold for whichever one runs it; nobody
+installs a second package manager to open their own knowledge base.
 
 ```bash
 node --version
@@ -517,7 +535,10 @@ node --version
 ## Create a KSoR
 
 ```bash
-npx @panaversity/ksor init my-ksor
+npx @panaversity/ksor init my-ksor        # npm  → npm install, npm run dev
+pnpm dlx @panaversity/ksor init my-ksor   # pnpm → pnpm install, pnpm dev
+bunx @panaversity/ksor init my-ksor       # bun  → bun install, bun run dev
+
 cd my-ksor
 ```
 
