@@ -447,7 +447,20 @@ function withStageLock<T>(stageDir: string, work: () => T): T {
       writeFileSync(lockFile, String(process.pid), { flag: "wx" });
       break;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      // EEXIST is "someone holds it". EPERM is the SAME THING on Windows: a
+      // create against a path whose file is in the pending-delete state — the
+      // window between another process calling `rmSync` and the filesystem
+      // actually releasing the name — raises EPERM, not EEXIST. Rethrowing it
+      // failed the build for the ordinary contended case, and only on Windows,
+      // and only sometimes: green on five CI runs of this same code and red on
+      // the next two, because it depends on landing inside a window a few
+      // milliseconds wide (2026-08-25, `Init acceptance (Windows)`).
+      //
+      // Waiting is safe for both: a holder that has died leaves a lock
+      // `lockIsAbandoned` breaks, so neither code can wait forever on a
+      // process that is gone.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "EPERM") throw error;
       if (lockIsAbandoned(lockFile)) {
         rmSync(lockFile, { force: true });
         continue;
