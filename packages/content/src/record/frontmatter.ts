@@ -21,7 +21,7 @@ const FENCE = /^---[ \t]*$/;
 
 /** An editor's byte-order mark is invisible to the author; CR and CRLF are the checkout's, not the record's. */
 export function normalizeText(text: string): string {
-  return text.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+  return text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
 }
 
 /**
