@@ -8,7 +8,15 @@
  * refusal that both implementations silently dropped would still go red.
  */
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +26,9 @@ import {
   checkScaffoldStructure,
   loadRecord,
   loadScaffoldStructure,
+  parseLock,
+  REFUSAL_SLUGS,
+  type LedgerBaseline,
 } from "@panaversity/ksor-content/record";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -59,11 +70,21 @@ function materialize(record: ConformanceRecord): string {
   };
   for (const [rel, text] of committedIndexes(record)) if (!(rel in record.files)) write(rel, text);
   for (const [rel, text] of Object.entries(record.files)) write(rel, text);
+  for (const [rel, bytes] of Object.entries(record.bytes ?? {})) {
+    mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    writeFileSync(path.join(root, rel), Uint8Array.from(bytes));
+  }
   for (const dir of record.dirs ?? []) mkdirSync(path.join(root, dir), { recursive: true });
+  if (record.lock !== undefined) write("build.lock.json", record.lock);
   write("CLAUDE.md", "@AGENTS.md\n");
   for (const tree of [".agents", ".claude"]) {
     mkdirSync(path.join(root, tree, "skills", "format-checker"), { recursive: true });
     copyFileSync(checker, path.join(root, tree, "skills", "format-checker", "check.mjs"));
+  }
+  // Last, so a fixture can break the project the defaults just made correct.
+  for (const [rel, text] of Object.entries(record.project ?? {})) {
+    if (text === null) rmSync(path.join(root, rel), { force: true });
+    else write(rel, text);
   }
   return root;
 }
@@ -83,8 +104,19 @@ function emittedSlugs(root: string): { readonly status: number | null; readonly 
   return { status: result.status, slugs: slugs.sort() };
 }
 
+/** What `check-main.ts` passes: the committed lock's id set, the only baseline a dependency-free check has. */
+function lockBaseline(root: string): LedgerBaseline[] {
+  const lockPath = path.join(root, "build.lock.json");
+  if (!existsSync(lockPath)) return [];
+  const parsed = parseLock(readFileSync(lockPath, "utf8"));
+  return parsed.ok ? [{ source: "build.lock.json", ids: parsed.lock.ledger_ids }] : [];
+}
+
 function kernelSlugs(root: string): string[] {
-  const record = checkRecord(loadRecord(root), { mode: "check" });
+  const record = checkRecord(loadRecord(root), {
+    mode: "check",
+    ledgerBaselines: lockBaseline(root),
+  });
   const structure = checkScaffoldStructure(loadScaffoldStructure(root));
   return [...record.refusals, ...structure].map((r) => `${r.slug} ${r.path}`).sort();
 }
@@ -92,6 +124,24 @@ function kernelSlugs(root: string): string[] {
 describe("the emitted check.mjs judges the conformance fixture exactly as the kernel rules do", () => {
   it("is built (run `pnpm build` first) and carries the generated banner", () => {
     expect(existsSync(checker), `${checker} is missing — run pnpm build`).toBe(true);
+  });
+
+  /**
+   * Record spec §7 item 1: one document per refusal. Without this, a rule can
+   * be ported, bundled and never once reached through the emitted binary —
+   * which is the failure the drift test exists to catch.
+   */
+  it("every refusal the record checker can raise has a fixture record", () => {
+    const covered = new Set(REFUSALS.flatMap((r) => r.expected.map((e) => e.split(" ")[0])));
+    // Each exemption names where it IS reached against the emitted checker.
+    const elsewhere: Record<string, string> = {
+      // A symlink cannot be written from a text map; the torture suite makes one.
+      "ksor-symlink": "checker-torture.integration.test.ts",
+      // `ksor migrate` only; the record checker never raises it.
+      "ksor-migrate-underivable": "the migrate verb",
+    };
+    const uncovered = REFUSAL_SLUGS.filter((s) => !covered.has(s) && elsewhere[s] === undefined);
+    expect(uncovered, `slugs with no fixture record: ${uncovered.join(", ")}`).toEqual([]);
   });
 
   it("the conformant record passes both, exit 0", () => {

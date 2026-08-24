@@ -208,6 +208,23 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     ]);
   });
 
+  it("ksor-supersession-strands: a pointer on a concept that is not deprecated is refused", () => {
+    // The old hand-written checker refused `superseded_by` on a document whose
+    // status did not carry it; the profile keeps that (§2.2 — the key goes
+    // "with deprecated"), because on a live concept the pointer announces a
+    // replacement no surface will ever show and no reader will ever follow.
+    const withPointer = (status: string): string =>
+      doc("A", `${PUBLIC.trimEnd()}\n  superseded_by: b\n`).replace(
+        "status: stable",
+        `status: ${status}`,
+      );
+    for (const status of ["stable", "draft"]) {
+      expect(
+        slugs({ "knowledge/a.md": withPointer(status), "knowledge/b.md": doc("B", PUBLIC) }),
+      ).toEqual(["ksor-supersession-strands knowledge/a.md"]);
+    }
+  });
+
   it("the ledger: an unauthorised actor, a dangling entry, and a shrink against a baseline", () => {
     const entry = (by: string, id: string): string =>
       `- id: 2026-08-25T10:00:00Z-${id}\n  stable_id: knowledge/a\n  scope: node\n  expected: present\n  by: ${by}\n  at: 2026-08-25T10:00:00Z\n`;

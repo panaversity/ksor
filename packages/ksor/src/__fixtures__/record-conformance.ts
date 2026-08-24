@@ -9,9 +9,45 @@
 export interface ConformanceRecord {
   readonly name: string;
   readonly files: Readonly<Record<string, string>>;
+  /** Record-relative binary files (assets), as bytes — the text map cannot carry them. */
+  readonly bytes?: Readonly<Record<string, readonly number[]>>;
   readonly dirs?: readonly string[];
+  /**
+   * The project AROUND the record — `CLAUDE.md`, the two skill trees,
+   * `system/site` — written after the defaults, so `null` deletes one. These
+   * are the rules only `pnpm check` runs (record spec §6).
+   */
+  readonly project?: Readonly<Record<string, string | null>>;
+  /** A committed `build.lock.json`, the one ledger baseline a dependency-free check can read. */
+  readonly lock?: string;
   /** `<slug> <path>` pairs `checkRecord` must produce in `check` mode, sorted. */
   readonly expected: readonly string[];
+}
+
+/** A parseable lock carrying `ledgerIds` and nothing else that matters (build spec §2). */
+export function lockWith(ledgerIds: readonly string[]): string {
+  const zero = "0".repeat(64);
+  return `${JSON.stringify(
+    {
+      format: 1,
+      build_id: `sha256:${zero}`,
+      ksor_version: "0.0.0",
+      okf: { version: "0.2", commit: "ad30107c", spec_sha256: "26aa5da0" },
+      source_commit: null,
+      dirty: true,
+      as_of: "2026-08-25T12:00:00.000Z",
+      drafts: "hidden",
+      instance_sha256: zero,
+      policy_sha256: zero,
+      ledger_sha256: zero,
+      ledger_ids: ledgerIds,
+      audiences: { registry: [], viewers: {} },
+      documents: [],
+      companions: [],
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 export const POLICY = `version: "0.1"
@@ -155,6 +191,13 @@ const base = (files: Record<string, string>): Record<string, string> => ({
 const frontmatter = (fm: string, body = "Body.\n"): string => `---\n${fm}---\n\n${body}`;
 const stable = `type: Document\ntitle: T\ndescription: D.\nstatus: stable\ngenerated: { by: "x/1", at: 2026-08-20T09:00:00Z }\nksor:\n  audience: [public]\n${approval}\n`;
 
+/** A PNG whose signature and IHDR length are right and whose IHDR CRC is not. */
+const CORRUPT_PNG: readonly number[] = [
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0xde, 0xad, 0xbe,
+  0xef,
+];
+
 /** One record per refusal (record spec §5–§6). `expected` is asserted in `check` mode with the valid indexes committed. */
 export const REFUSALS: readonly ConformanceRecord[] = [
   {
@@ -295,11 +338,22 @@ export const REFUSALS: readonly ConformanceRecord[] = [
   {
     name: "ksor-supersession-strands",
     files: base({
+      // The successor a public reader cannot open.
       "knowledge/policies/old-threshold.md": VALID_FILES[
         "knowledge/policies/old-threshold.md"
       ]!.replace("policies/purchase-approval", "policies/board-pay"),
+      // The pointer on a concept that is not deprecated at all.
+      "knowledge/bad.md": frontmatter(
+        stable.replace(
+          `${approval}\n`,
+          `${approval}\n  superseded_by: policies/purchase-approval\n`,
+        ),
+      ),
     }),
-    expected: ["ksor-supersession-strands knowledge/policies/old-threshold.md"],
+    expected: [
+      "ksor-supersession-strands knowledge/bad.md",
+      "ksor-supersession-strands knowledge/policies/old-threshold.md",
+    ],
   },
   {
     name: "ksor-takedown-unauthorised",
@@ -374,5 +428,49 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     name: "ksor-link-dead + ksor-link-escapes",
     files: base({ "knowledge/bad.md": frontmatter(stable, "[a](nope.md) [b](../instance.md)\n") }),
     expected: ["ksor-link-dead knowledge/bad.md", "ksor-link-escapes knowledge/bad.md"],
+  },
+  {
+    // The PNG code path: signature intact, one chunk's CRC-32 wrong. A corrupt
+    // image took a whole site down at build time naming no file (hygiene.ts).
+    name: "ksor-asset-corrupt",
+    files: base({}),
+    bytes: { "knowledge/broken.png": CORRUPT_PNG },
+    expected: ["ksor-asset-corrupt knowledge/broken.png"],
+  },
+  {
+    name: "ksor-record-empty",
+    files: { "instance.md": INSTANCE, ".ksor/governance.yaml": POLICY },
+    expected: ["ksor-record-empty knowledge/"],
+  },
+  {
+    name: "ksor-policy-missing",
+    files: { "instance.md": INSTANCE, "knowledge/a.md": frontmatter(stable) },
+    expected: ["ksor-policy-missing .ksor/governance.yaml"],
+  },
+  {
+    // The committed lock is the baseline the emitted checker reads; without a
+    // repository it is the only one, so this is the path an adopter's CI takes.
+    name: "ksor-ledger-shrank",
+    files: base({}),
+    lock: lockWith(["2026-08-24T09:00:00Z-zzzzzz"]),
+    expected: ["ksor-ledger-shrank .ksor/takedowns.yaml"],
+  },
+  {
+    name: "ksor-pointer-changed",
+    files: base({}),
+    project: { "CLAUDE.md": "@AGENTS.md\n\nAnd one more rule.\n" },
+    expected: ["ksor-pointer-changed CLAUDE.md"],
+  },
+  {
+    name: "ksor-skill-copy-diverged",
+    files: base({}),
+    project: { ".claude/skills/format-checker/SKILL.md": "only in the copy\n" },
+    expected: ["ksor-skill-copy-diverged .claude/skills/format-checker/SKILL.md"],
+  },
+  {
+    name: "ksor-site-holds-content",
+    files: base({}),
+    project: { "system/site/content/stray.mdx": "# Stray\n" },
+    expected: ["ksor-site-holds-content system/site/content/stray.mdx"],
   },
 ];

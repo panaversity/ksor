@@ -387,7 +387,20 @@ function checkSupersession(
   concepts: ReadonlyMap<string, Concept>,
   refusals: Refusal[],
 ): void {
-  if (concept.status !== "deprecated" || concept.supersededBy === null) return;
+  if (concept.supersededBy === null) return;
+  if (concept.status !== "deprecated") {
+    // The key goes "with deprecated" (§2.2). On a live concept it announces a
+    // replacement no surface shows and no reader follows — the old checker
+    // refused it, and a silent acceptance would be a governance claim nothing
+    // enforces.
+    refusals.push({
+      slug: "ksor-supersession-strands",
+      path: concept.path,
+      why: `\`ksor.superseded_by: ${concept.supersededBy}\` on a \`${concept.status}\` concept — supersession is what \`deprecated\` means, so no surface will show this pointer and no reader will follow it`,
+      fix: "set `status: deprecated` with `ksor.deprecated: { by, at }`, or drop the pointer",
+    });
+    return;
+  }
   const target = concepts.get(concept.supersededBy);
   const reason =
     target === undefined

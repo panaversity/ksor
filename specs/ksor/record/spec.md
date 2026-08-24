@@ -277,7 +277,9 @@ timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
 `ksor-attachment-orphan`, `ksor-link-widens`, `ksor-supersession-strands`
 (a `deprecated` concept whose `ksor.superseded_by` names a concept that does
-not exist, is not `stable`, or fails the widening rule),
+not exist, is not `stable`, or fails the widening rule — and the pointer on a
+concept that is not `deprecated` at all, which the old checker refused and
+which announces a replacement no surface shows),
 `ksor-takedown-unauthorised`, `ksor-takedown-dangling`,
 `ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-invalid`,
 `ksor-policy-missing`, `ksor-policy-invalid`, `ksor-legacy-key` (§2.6),
