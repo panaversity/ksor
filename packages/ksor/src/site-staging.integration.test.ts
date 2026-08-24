@@ -542,6 +542,47 @@ okf_version: "0.2"
     expect(existsSync(fixture.stage)).toBe(false);
   });
 
+  it("a record with nothing approved yet builds — the empty stage is not a refusal", () => {
+    // The emitted starter is all drafts (research/okf-native.md §1.1) and build
+    // spec §4 acceptance 4 requires it to BUILD: "a level-0 record with one
+    // draft and a committed index builds out/ with no byte of the draft's
+    // title". `ksor-audience-empty` is about a mis-scoped VIEWER, and a record
+    // nobody has approved yet is a different state with a different remedy.
+    const alt = writeRecord(path.join(work, "all-draft"));
+    for (const rel of walkFiles(path.join(alt.root, "knowledge"))) {
+      if (rel === "draft-doc.md") rmSync(path.join(alt.root, "knowledge", rel), { force: false });
+    }
+    for (const rel of walkFiles(path.join(alt.root, "knowledge"))) {
+      if (rel !== "draft-doc.md") rmSync(path.join(alt.root, "knowledge", rel));
+    }
+    // Its denials name concepts that are gone, which is its own refusal.
+    writeFileSync(path.join(alt.root, ".ksor", "takedowns.yaml"), "");
+    writeLock(alt.root);
+
+    const r = stage(alt);
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(alt.stage)).toEqual(["index.md"]);
+    expect(readFileSync(path.join(alt.stage, "index.md"), "utf8")).not.toContain("DRAFTTITLE");
+    expect(Object.keys(r.manifest.pages)).toEqual([]);
+  });
+
+  it("a viewer that admits no concept the record has is still refused — ksor-audience-empty", () => {
+    // Same emptiness, the other cause: every concept is stable and in the
+    // record, and this viewer's slice of it is empty. The message says which.
+    const alt = writeRecord(path.join(work, "viewer-empty"));
+    for (const rel of walkFiles(path.join(alt.root, "knowledge"))) {
+      if (rel !== "internal-note.md") rmSync(path.join(alt.root, "knowledge", rel));
+    }
+    writeFileSync(path.join(alt.root, ".ksor", "takedowns.yaml"), "");
+    writeLock(alt.root);
+
+    const r = stage(alt);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-audience-empty/);
+    expect(r.stderr).toContain("KSOR_AUDIENCE");
+    expect(existsSync(alt.stage), "a refused build left a stage").toBe(false);
+  });
+
   it("development needs no lock: drafts admitted and marked, stamps null and unstamped", () => {
     rmSync(path.join(fixture.root, "build.lock.json"));
     const r = stage(fixture, { NODE_ENV: "development" });
