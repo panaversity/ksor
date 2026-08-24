@@ -1454,11 +1454,6 @@ Organizations should be able to adapt the framework to their requirements.
 
 KSoR is under active development.
 
-The architecture is specified by the **[KSoR Standard
-Proposal](research/ksor-standard-proposal-001-v0.1-draft9.md)** (currently a
-draft). This repository is its reference implementation, and the proposal is
-written so that others can implement it too.
-
 The project is evolving from the original VSOR implementation into the more general **Knowledge System of Record** architecture.
 
 The predecessor (vsor) implementation — reference material for this rebuild, not its authority — already proved out several foundations that inform this package's design, including:
