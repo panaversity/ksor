@@ -1,0 +1,7 @@
+# The Governance Policy: who has authority over this record (record spec §4).
+# Written by `ksor migrate` from the actors it was given; review it before merging.
+version: "0.1"
+approval_authorities:
+  - actors: [human:mjunaidca]
+takedown_authorities:
+  actors: [human:mjunaidca]

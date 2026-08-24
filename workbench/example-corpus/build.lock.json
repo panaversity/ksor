@@ -1,0 +1,60 @@
+{
+  "format": 1,
+  "build_id": "sha256:21b24c6d264f3e74298ee8cbaa7f2417d0cc5348155fb3b5200873ba277e46e9",
+  "ksor_version": "0.0.39",
+  "okf": {
+    "version": "0.2",
+    "commit": "ad30107c31c06aec8a7d5636e0d1058118604e6f",
+    "spec_sha256": "26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101"
+  },
+  "source_commit": "a7c3a81b998539b019a34ff70d30c2af00857b72",
+  "dirty": true,
+  "as_of": "2026-08-24T22:24:45.191Z",
+  "drafts": "hidden",
+  "instance_sha256": "04952385a9e0d0350673a13053b815d429d74890528db8910877de566bae231b",
+  "policy_sha256": "41b63d4d203785563e4d821c4f30b11e06f13740ddd4f9a4e84e1ad83a60a3a5",
+  "ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "ledger_ids": [],
+  "audiences": {
+    "registry": [],
+    "viewers": {
+      "public": [
+        "public"
+      ]
+    }
+  },
+  "documents": [
+    {
+      "path": "about.md",
+      "sha256": "ebc118585af2f516212d85503550d69a8036fe214683925830ad1fd98fb5fe1d",
+      "status": "stable",
+      "audience": [
+        "public"
+      ],
+      "admitted": [
+        "public"
+      ]
+    },
+    {
+      "path": "policies/purchase-approval.md",
+      "sha256": "3ea64fab2d1f8aeaf3dda3861a842d326f3614cc35d6c70627b9ebcaac62bacf",
+      "status": "stable",
+      "audience": [
+        "public"
+      ],
+      "admitted": [
+        "public"
+      ]
+    },
+    {
+      "path": "policies/purchase-approval-2019.md",
+      "sha256": "1dd03a40df91c2a68a53db3b849f1547b82fb8dd2606beba092a0edc159054cb",
+      "status": "deprecated",
+      "audience": [
+        "public"
+      ],
+      "admitted": []
+    }
+  ],
+  "companions": []
+}

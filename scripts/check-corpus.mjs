@@ -143,10 +143,13 @@ if (corpusFlag !== -1) {
   }
   checkKnowledgeCorpus(path.resolve(dir), path.basename(dir));
 } else {
-  checkKnowledgeCorpus(
-    path.join(repoRoot, "workbench", "example-corpus"),
-    "workbench/example-corpus",
-  );
+  // workbench/example-corpus is NOT checked here any more: it is a KSoR Profile
+  // record now (record spec), and the rules above are the pre-profile ones —
+  // `title/status/owner/provenance`, a status set that no longer exists. The
+  // record checker judges it instead, through the real verb, in
+  // `packages/ksor/src/migrate.integration.test.ts` ("the repository's own
+  // fixture corpus is a migrated record"). `--corpus <dir>` still applies these
+  // rules on demand, for a corpus that has not been migrated yet.
   const productDocs = path.join(repoRoot, "packages", "ksor", "docs");
   if (existsSync(productDocs)) {
     for (const file of walkMarkdown(productDocs)) {
