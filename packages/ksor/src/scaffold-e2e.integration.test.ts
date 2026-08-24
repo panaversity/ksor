@@ -1143,6 +1143,24 @@ ${body}
       // …and neither has a twin, because a twin is a machine surface.
       expect(existsSync(path.join(out, "md", "acc-future.md"))).toBe(false);
       expect(existsSync(path.join(out, "md", "acc-stale.md"))).toBe(false);
+
+      // (e) KSOR_DRAFTS=show is a PREVIEW, and a static site's pages are
+      // open-web artefacts: it says so to every crawler rather than letting a
+      // draft be indexed under the record's name (build spec §3). The draft
+      // reaches the human surfaces and NOTHING else — no twin, no llms.txt
+      // line — which is the half a `robots` tag cannot enforce.
+      const preview = buildScaffold(project, { KSOR_DRAFTS: "show" });
+      expect(preview.status, `${preview.stdout}${preview.stderr}`.slice(-2000)).toBe(0);
+      const draftPage = built(path.join("docs", "acc-draft", "index.html"));
+      expect(draftPage).toMatch(/<meta name="robots" content="noindex/);
+      expect(visible("docs/acc-draft")).toMatch(/Status draft/);
+      expect(built("llms.txt")).not.toContain("ACCDRAFTTITLE");
+      expect(existsSync(path.join(out, "md", "acc-draft.md"))).toBe(false);
+      // …and the ordinary build carries no such tag, or every record would be
+      // published unindexable.
+      const republished = buildScaffold(project);
+      expect(republished.status, `${republished.stdout}${republished.stderr}`.slice(-2000)).toBe(0);
+      expect(built(path.join("docs", "acc-current", "index.html"))).not.toContain('name="robots"');
     } finally {
       for (const name of scratch) rmSync(path.join(knowledge, `${name}.md`), { force: true });
     }
