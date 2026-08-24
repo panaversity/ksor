@@ -14,6 +14,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -112,6 +113,15 @@ function lockBaseline(root: string): LedgerBaseline[] {
   return parsed.ok ? [{ source: "build.lock.json", ids: parsed.lock.ledger_ids }] : [];
 }
 
+/** Every record-relative text file under `root`, skipping the copied checker binaries. */
+function filesUnder(root: string, rel = ""): string[] {
+  return readdirSync(path.join(root, rel), { withFileTypes: true }).flatMap((entry) => {
+    const child = rel === "" ? entry.name : `${rel}/${entry.name}`;
+    if (entry.isDirectory()) return filesUnder(root, child);
+    return entry.name === "check.mjs" ? [] : [child];
+  });
+}
+
 function kernelSlugs(root: string): string[] {
   const record = checkRecord(loadRecord(root), {
     mode: "check",
@@ -150,6 +160,25 @@ describe("the emitted check.mjs judges the conformance fixture exactly as the ke
     expect(emitted.slugs).toEqual([]);
     expect(emitted.status).toBe(0);
     expect(kernelSlugs(root)).toEqual([]);
+  });
+
+  /**
+   * `pnpm check` is READ-ONLY: `ksor build` is the verb that regenerates an
+   * index. A checker that quietly fixed what it found would make a stale index
+   * unreportable and would edit an adopter's tree from CI.
+   */
+  it("refuses a stale index without rewriting it, and touches nothing else", () => {
+    const stale = REFUSALS.find((r) => r.name === "ksor-index-stale")!;
+    const root = materialize(stale);
+    const before = new Map(
+      filesUnder(root).map((rel) => [rel, readFileSync(path.join(root, rel), "utf8")]),
+    );
+    expect(emittedSlugs(root).slugs).toEqual(["ksor-index-stale knowledge/index.md"]);
+    const after = new Map(
+      filesUnder(root).map((rel) => [rel, readFileSync(path.join(root, rel), "utf8")]),
+    );
+    expect([...after.keys()].sort()).toEqual([...before.keys()].sort());
+    for (const [rel, text] of before) expect([rel, after.get(rel)]).toEqual([rel, text]);
   });
 
   it.each(REFUSALS.map((r) => [r.name, r] as const))(

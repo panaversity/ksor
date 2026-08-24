@@ -114,6 +114,52 @@ describe("ksor build — acceptance 1: the conformant record", () => {
   });
 });
 
+describe("ksor build — acceptance 1: the emitted starter", () => {
+  /**
+   * The record every adopter actually gets. Its indexes are COMMITTED by hand
+   * in the template, so this is the only thing that can catch them drifting
+   * from the generator — `ksor build` writing one here means the scaffold was
+   * shipped stale.
+   */
+  it("builds green on a fresh `ksor init` after its first commit, writing a lock and no index", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-starter-"));
+    roots.push(dir);
+    const init = spawnSync(process.execPath, [distCli, "init", "my-sor"], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(init.status, init.stderr).toBe(0);
+    const root = path.join(dir, "my-sor");
+    git(root, "init", "-q", "-b", "main");
+    git(root, "config", "user.email", "t@example.com");
+    git(root, "config", "user.name", "t");
+    git(root, "config", "commit.gpgsign", "false");
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "first");
+
+    const first = build(root, "--as-of", AS_OF);
+    expect(first.status, first.stderr).toBe(0);
+    // Not one index rewritten: the committed ones already are what build makes.
+    expect(first.stdout).not.toContain("wrote knowledge/");
+    expect(git(root, "status", "--porcelain", "--", "knowledge")).toBe("");
+    const lock = lockOf(root);
+    expect(lock.dirty).toBe(false);
+    expect(lock.source_commit).toBe(git(root, "rev-parse", "HEAD"));
+    // Every starter document is a draft (a tool may not record a human
+    // approval), so nothing reaches a machine surface until the owner approves.
+    expect(lock.documents.every((d) => d.status === "draft" && d.admitted.length === 0)).toBe(true);
+    expect(readFileSync(path.join(root, "knowledge/index.md"), "utf8")).toMatch(
+      /^---\nokf_version: "0.2"\n---\n/,
+    );
+    // No ledger file at all: the hash of the empty string, and no ids.
+    expect(lock.ledger_ids).toEqual([]);
+
+    const pinned = readFileSync(path.join(root, "build.lock.json"), "utf8");
+    build(root, "--as-of", AS_OF);
+    expect(readFileSync(path.join(root, "build.lock.json"), "utf8")).toBe(pinned);
+  });
+});
+
 describe("ksor build — acceptance 2: what moves build_id", () => {
   it("a description edit changes that index entry, its hash and build_id; committing the lock leaves source_commit alone", () => {
     const root = repo();

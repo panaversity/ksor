@@ -14,7 +14,8 @@ run (`packages/ksor/src/build/`); `--bundles` exits `2`. Plan:
 ## 1 · Contract
 
 ```
-ksor build [--instance <path>] [--as-of <instant>] [--strict] [--bundles]
+ksor build [--instance <path>] [--as-of <instant>] [--strict]
+           [--allow-unverifiable-ledger] [--bundles]
 ```
 
 `--instance` (the file, or a directory at or below the root) defaults to the
