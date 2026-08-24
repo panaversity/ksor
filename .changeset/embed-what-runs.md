@@ -19,4 +19,5 @@ with the document. An `https:` link works too, but many hosts send
 `X-Frame-Options: SAMEORIGIN` and a browser will refuse to frame them.
 
 Nothing is requested until a reader clicks, so a built page still makes zero
-external requests.
+external requests. A carried page is measured, so the frame is exactly as tall
+as what it holds — you never write a height into a document.

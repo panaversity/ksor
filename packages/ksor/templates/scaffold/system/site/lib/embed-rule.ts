@@ -129,6 +129,9 @@ export const EMBED_CASES: readonly EmbedCase[] = [
   { url: "https://example.org/sim", title: "Embed", embeds: false },
   { url: "https://example.org/sim", title: "embedded", embeds: false },
   { url: "https://example.org/sim", title: " embed", embeds: false },
+  // No height token: the frame measures the page it holds, so a record never
+  // carries a number that a different measure would make wrong.
+  { url: "goal-loop.sim.html", title: "embed 660", embeds: false },
   // http would be blocked as mixed content, so it stays a link that works.
   { url: "http://example.org/sim", title: EMBED_TITLE, embeds: false },
   // Neither of these is a url a frame could reach.

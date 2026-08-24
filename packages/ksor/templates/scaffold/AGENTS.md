@@ -700,6 +700,11 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   external requests — and the panel names what it is about to reach, so the
   click is informed.
 
+  **You do not state a height.** A page carried in the record is measured, so
+  the frame is exactly as tall as what it holds — on this record's own seven,
+  to the pixel. A number written into a document would be a number some other
+  measure makes wrong.
+
   **Carry the page in where you can.** A file named `<name>.sim.html`, sitting
   beside its document exactly like a figure, is published by the build and
   served from this site — so it works offline, tells nobody outside what

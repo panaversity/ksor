@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, Play } from "lucide-react";
-import { useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -35,20 +35,123 @@ export function Embed({
   readonly owned?: string;
 }): ReactElement {
   const [loaded, setLoaded] = useState(false);
+  const [height, setHeight] = useState<number | null>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
   const isOwned = owned === "true";
 
+  /**
+   * Fit the frame to the page it holds, so nothing scrolls in a box and no
+   * band of dead space sits under it.
+   *
+   * Measure the body's CHILDREN, never `documentElement.scrollHeight`. These
+   * pages set `min-height: 100vh`, and inside a frame the viewport IS the
+   * frame — so the document's scroll height is just the frame's own height
+   * echoed back, and a frame sized from it grows without bound. Watched that
+   * run away before the CSS explained it (2026-08-24). The children do not
+   * depend on the frame: measured across all seven sims of the record this was
+   * built for, each returned the same height at a 300px frame and a 1400px
+   * one.
+   *
+   * Possible at all only because a carried page is SAME-ORIGIN. A cross-origin
+   * frame refuses `contentDocument`, so it keeps the ratio box and this
+   * returns without touching anything.
+   */
+  const fit = useCallback((): void => {
+    let doc: Document | null = null;
+    try {
+      doc = frame.current?.contentDocument ?? null;
+    } catch {
+      return; // cross-origin: not ours to measure
+    }
+    const body = doc?.body;
+    if (!body) return;
+    // NOT `instanceof HTMLElement`. The elements inside a frame belong to the
+    // frame's realm, so they are instances of ITS HTMLElement and never of this
+    // one — the filter matched nothing, and the frame kept the ratio box while
+    // looking as though measuring had simply not helped (found live).
+    const blocks = [...body.children].filter(
+      (el): el is HTMLElement => typeof (el as HTMLElement).offsetHeight === "number",
+    );
+    if (blocks.length === 0) return;
+    const bottom = Math.max(...blocks.map((el) => el.offsetTop + el.offsetHeight));
+    const padding = Number.parseFloat(getComputedStyle(body).paddingBottom) || 0;
+    const measured = Math.ceil(bottom + padding);
+    // GROW-ONLY. A running page changes height every beat — measured
+    // oscillating 504 to 562 on one sim — and following it exactly would
+    // shift everything below the frame while someone is reading. The high
+    // water mark costs a little slack after a shrink and never a scrollbar.
+    if (measured > 0)
+      setHeight((current) => (current === null ? measured : Math.max(current, measured)));
+  }, []);
+
+  const watcher = useRef<ResizeObserver | null>(null);
+
+  /**
+   * Measure on load, then keep watching — these pages animate, and some add a
+   * row per beat.
+   *
+   * Set up HERE rather than in an effect on `loaded`: that effect runs the
+   * moment the click flips the state, which is before the frame's document
+   * exists, so it observed an empty `about:blank` and never fired again (found
+   * live — the frame fitted once and then ignored everything).
+   *
+   * Watch the CHILDREN, not the body. The body's own box is pinned by the
+   * page's `min-height: 100vh` to exactly the frame, so it never reports a
+   * change.
+   */
+  const handleLoad = useCallback((): void => {
+    fit();
+    let doc: Document | null = null;
+    try {
+      doc = frame.current?.contentDocument ?? null;
+    } catch {
+      return;
+    }
+    const body = doc?.body;
+    if (!body || typeof ResizeObserver === "undefined") return;
+    watcher.current?.disconnect();
+    const observer = new ResizeObserver(fit);
+    for (const child of body.children) observer.observe(child);
+    watcher.current = observer;
+  }, [fit]);
+
+  useEffect(() => () => watcher.current?.disconnect(), []);
+
   return (
-    <figure className="not-prose my-8">
+    <figure
+      className="not-prose my-8"
+      // Wider than the prose measure. A page built to be interactive is laid
+      // out for a screen, not for a 60-character column: constrained to the
+      // measure it either scrolls in a box or under-fills the height its
+      // author stated (both seen live). Centred on the column and clamped to
+      // the viewport, so it never causes a horizontal scroll.
+      style={{
+        width: "min(64rem, calc(100vw - 3rem))",
+        marginLeft: "50%",
+        transform: "translateX(-50%)",
+      }}
+    >
       <div
         // A ratio rather than a fixed height, so the frame scales with the
         // measure. The floor is there because these pages are usually taller
         // than they are wide, and a narrow window would otherwise letterbox
         // an interactive thing down to a strip.
         className="relative w-full overflow-hidden rounded-lg border border-fd-border bg-fd-muted"
-        style={{ aspectRatio: "16 / 10", minHeight: "26rem" }}
+        // The invitation is a card; the frame takes the page's own height once
+        // it has one. Until it is measured — and always, for a frame we may
+        // not measure — a ratio with a floor.
+        style={
+          !loaded
+            ? { height: "14rem" }
+            : height === null
+              ? { aspectRatio: "16 / 10", minHeight: "26rem" }
+              : { height }
+        }
       >
         {loaded ? (
           <iframe
+            ref={frame}
+            onLoad={handleLoad}
             src={url}
             title={label}
             allowFullScreen
