@@ -6,24 +6,24 @@ last_updated: 2026-08-24
 
 # KSoR Standard Proposal 001: KSoR as an Open, Vendor-Neutral Knowledge Infrastructure Framework
 
-| Field       | Value                                                                                         |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| Proposal     | KSoR Standard Proposal 001                                                                   |
-| Title        | KSoR as an Open, Vendor-Neutral Knowledge Infrastructure Framework                           |
-| Version      | 0.1                                                                                          |
-| Status       | Draft Proposal                                                                               |
-| Category     | Standards Track                                                                              |
-| Editors      | Zia Khan (Panaversity)                                                                       |
-| Created      | 2026-08-24                                                                                   |
-| Discussion   | panaversity/ksor#TBD                                                                         |
-| Licence      | Apache License 2.0                                                                           |
-| Supersedes   | Working notes on OKF conformance and the three projections. Consolidates decision draft D25. |
+| Field      | Value                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| Proposal   | KSoR Standard Proposal 001                                                                   |
+| Title      | KSoR as an Open, Vendor-Neutral Knowledge Infrastructure Framework                           |
+| Version    | 0.1                                                                                          |
+| Status     | Draft Proposal                                                                               |
+| Category   | Standards Track                                                                              |
+| Editors    | Zia Khan (Panaversity)                                                                       |
+| Created    | 2026-08-24                                                                                   |
+| Discussion | panaversity/ksor#TBD                                                                         |
+| Licence    | Apache License 2.0                                                                           |
+| Supersedes | Working notes on OKF conformance and the three projections. Consolidates decision draft D25. |
 
 ---
 
 ## Executive Brief
 
-*This section is non-normative and assumes no technical background. It exists so that leaders can evaluate the proposal without reading the specification. Implementers and reviewers can begin at the Abstract.*
+_This section is non-normative and assumes no technical background. It exists so that leaders can evaluate the proposal without reading the specification. Implementers and reviewers can begin at the Abstract._
 
 ### The problem in one story
 
@@ -69,11 +69,11 @@ Section 3 gives the reference technical bindings for these responsibilities. The
 
 Not every way of serving knowledge gives the same guarantee, and this proposal refuses to pretend otherwise.
 
-| Channel | Reach | Guarantee |
-| --- | --- | --- |
-| Open web files | Any AI system can read them | Content passed the applicable governance filter when published. Nothing after that. |
+| Channel               | Reach                               | Guarantee                                                                                                                  |
+| --------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Open web files        | Any AI system can read them         | Content passed the applicable governance filter when published. Nothing after that.                                        |
 | Governed agent access | AI agents doing organisational work | Answers are filtered, cited, and traceable, and the agent must say "the record does not contain this" instead of guessing. |
-| Attested computation | Specific critical numbers | The figure was produced by the approved calculation, mechanically checked, or it is not shown at all. |
+| Attested computation  | Specific critical numbers           | The figure was produced by the approved calculation, mechanically checked, or it is not shown at all.                      |
 
 Wider reach means weaker guarantees. Leadership decides which knowledge needs which rung.
 
@@ -142,7 +142,7 @@ Appendix B. Requirement Summary Table
 
 ## 1. Introduction
 
-*This section is non-normative.*
+_This section is non-normative._
 
 ### 1.1 Motivation
 
@@ -247,7 +247,7 @@ A complete KSoR implementation conforms to classes A through E. Partial implemen
 
 ## 3. Architecture Overview
 
-*This section is non-normative. The requirements it summarises are stated normatively in later sections.*
+_This section is non-normative. The requirements it summarises are stated normatively in later sections._
 
 ### 3.1 The framework
 
@@ -271,17 +271,17 @@ KSoR is a framework because it specifies architecture, governance semantics, con
 
 The reference architecture assigns nine responsibilities to open formats, protocols, and reference components. One binding may serve more than one responsibility. OKF is the important example: it shapes the authoritative record and also carries governed exchange between knowledge systems.
 
-| Responsibility | Reference component or binding | Architectural meaning |
-| --- | --- | --- |
-| Authoritative record | Markdown in the KSoR Profile of OKF | Markdown is the durable medium. The KSoR Profile of OKF gives the record its open, portable structure and baseline knowledge metadata. |
-| Retrieval | Postgres + pgvector | The operational retrieval projection for structured, lexical, and semantic search. |
-| Human serving | Fumadocs | The reference human-readable publication surface. |
-| AI discovery | `llms.txt` v2 | The open-web discovery surface that tells AI systems what knowledge exists and where machine-readable pages are. |
-| Agent interaction | MCP | The governed interaction boundary for search, retrieval, citation, and abstention. |
-| Knowledge exchange | OKF | The same native OKF representation, after KSoR governance filtering, moves knowledge between systems without a proprietary conversion. |
-| Identity | OAuth/OIDC | The standards-based identity boundary. KSoR governance converts identity evidence into access decisions. |
-| Publication integrity | SLSA/Sigstore | The provenance and signing boundary for proving what build produced a published artefact. |
-| Observability | OpenTelemetry | The operational evidence boundary for traces, metrics, and logs without becoming another knowledge store. |
+| Responsibility        | Reference component or binding      | Architectural meaning                                                                                                                  |
+| --------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Authoritative record  | Markdown in the KSoR Profile of OKF | Markdown is the durable medium. The KSoR Profile of OKF gives the record its open, portable structure and baseline knowledge metadata. |
+| Retrieval             | Postgres + pgvector                 | The operational retrieval projection for structured, lexical, and semantic search.                                                     |
+| Human serving         | Fumadocs                            | The reference human-readable publication surface.                                                                                      |
+| AI discovery          | `llms.txt` v2                       | The open-web discovery surface that tells AI systems what knowledge exists and where machine-readable pages are.                       |
+| Agent interaction     | MCP                                 | The governed interaction boundary for search, retrieval, citation, and abstention.                                                     |
+| Knowledge exchange    | OKF                                 | The same native OKF representation, after KSoR governance filtering, moves knowledge between systems without a proprietary conversion. |
+| Identity              | OAuth/OIDC                          | The standards-based identity boundary. KSoR governance converts identity evidence into access decisions.                               |
+| Publication integrity | SLSA/Sigstore                       | The provenance and signing boundary for proving what build produced a published artefact.                                              |
+| Observability         | OpenTelemetry                       | The operational evidence boundary for traces, metrics, and logs without becoming another knowledge store.                              |
 
 The same model can be remembered in nine lines:
 
@@ -356,7 +356,7 @@ This is what turns a set of useful technologies into a Knowledge System of Recor
 
 **4.1.4** The canonical direction of data flow MUST be from the record, through governance, to projections. An implementation MUST NOT treat any database, index, or serving layer as the source from which the record is exported.
 
-*Note (non-normative).* Postgres may disappear, the site framework may change, an embedding model may be swapped, and the governed Markdown remains usable. This property is the foundation of vendor neutrality.
+_Note (non-normative)._ Postgres may disappear, the site framework may change, an embedding model may be swapped, and the governed Markdown remains usable. This property is the foundation of vendor neutrality.
 
 ### 4.2 The KSoR Profile of OKF
 
@@ -396,20 +396,20 @@ Attested Computation
 
 The profile adopts the OKF v0.2 trust vocabulary without modification [okf-v02]:
 
-| Governance concern | OKF field |
-| --- | --- |
-| Lifecycle                         | `status: draft \| stable \| deprecated`                           |
-| Provenance and per-claim citation | `sources`, with footnotes keyed to source ids                     |
-| Review evidence                   | `verified: [{ by, at }]`                                          |
+| Governance concern                | OKF field                                                            |
+| --------------------------------- | -------------------------------------------------------------------- |
+| Lifecycle                         | `status: draft \| stable \| deprecated`                              |
+| Provenance and per-claim citation | `sources`, with footnotes keyed to source ids                        |
+| Review evidence                   | `verified: [{ by, at }]`                                             |
 | Review period                     | `stale_after` (`YYYY-MM-DD` date, stale when `today >= stale_after`) |
-| Production history                | `generated: { by, at }`                                           |
-| Sanctioned computation            | `type: Attested Computation`, with `executor` and `attester`      |
+| Production history                | `generated: { by, at }`                                              |
+| Sanctioned computation            | `type: Attested Computation`, with `executor` and `attester`         |
 
 **4.2.3.1** Trust tiers MUST be derived from `verified` as follows: absent means unverified, machine actors only means machine-confirmed, any `human:<id>` actor means human-reviewed.
 
 **4.2.3.2** Trust tiers are advisory quality filters. They MUST NOT be used as access control. Access control is governed by audience policy (Sections 8.1 and 9).
 
-*Compatibility note (non-normative).* KSP-001 version 0.1 follows the immutable OKF v0.2 specification revision identified by [okf-spec]. Upstream reference code and later edits on moving branches are informative until a KSP revision adopts them. In that pinned revision, `stale_after` is a `YYYY-MM-DD` date and staleness is evaluated as `today >= stale_after`.
+_Compatibility note (non-normative)._ KSP-001 version 0.1 follows the immutable OKF v0.2 specification revision identified by [okf-spec]. Upstream reference code and later edits on moving branches are informative until a KSP revision adopts them. In that pinned revision, `stale_after` is a `YYYY-MM-DD` date and staleness is evaluated as `today >= stale_after`.
 
 #### 4.2.4 The `ksor` Governance Extension
 
@@ -421,7 +421,6 @@ ksor:
   audience: [finance, audit]
   approval: { by: "human:cfo@example", at: 2026-08-20T14:00:00Z }
   effective_from: 2026-09-01T00:00:00Z
-
 ```
 
 **4.2.4.1** `ksor.owner` names the party accountable for the concept. It uses the OKF actor convention (`human:<id>`, `process:<id>`, or `<producer>/<version>`), which this profile extends with `team:<id>` for accountable groups, a form OKF itself uses in examples but does not define. Every concept of a reserved type MUST carry `ksor.owner`.
@@ -432,7 +431,7 @@ ksor:
 
 **4.2.4.4** `ksor.effective_from` is an optional ISO 8601 instant before which the concept, although approved, is not yet in force. Retrieval and serving surfaces MUST NOT treat the concept as currently applicable before this instant. Human surfaces MAY display it as approved-but-not-yet-effective, while open-web discovery SHOULD exclude it until it becomes effective.
 
-*Note (non-normative).* This extension is what answers the fair question "if OKF already provides sources, verification, status, and freshness, what does KSoR add to the record itself?" OKF supplies the open, portable knowledge representation. KSoR adds institutional authority and governed operation. The `ksor` block makes the record accountable to the organisation that uses it.
+_Note (non-normative)._ This extension is what answers the fair question "if OKF already provides sources, verification, status, and freshness, what does KSoR add to the record itself?" OKF supplies the open, portable knowledge representation. KSoR adds institutional authority and governed operation. The `ksor` block makes the record accountable to the organisation that uses it.
 
 #### 4.2.5 The Governance Policy
 
@@ -488,11 +487,11 @@ For **approval authorities**, only rules at the highest specificity are effectiv
 
 **4.2.6.1** Implementations MUST isolate OKF parsing and serialisation behind an adapter. Internal storage schemas, agent surface contracts, and site templates MUST NOT depend directly on OKF field names.
 
-*Note (non-normative).* OKF is young and has already renamed fields between versions (`timestamp` became `generated.at`). The adapter boundary means a specification change costs an adapter update, not a migration.
+_Note (non-normative)._ OKF is young and has already renamed fields between versions (`timestamp` became `generated.at`). The adapter boundary means a specification change costs an adapter update, not a migration.
 
 ### 4.3 The Write-Side Lifecycle
 
-*This subsection is a non-normative summary. The binding rules are R22 to R27.*
+_This subsection is a non-normative summary. The binding rules are R22 to R27._
 
 The read side of this proposal asks whether knowledge may leave the record. The write side asks whether authority ever entered it. Both are needed, because every disclosure requirement guards only what the authoring rules made trustworthy in the first place.
 
@@ -534,7 +533,7 @@ Candidate knowledge from imports enters this lifecycle at draft, stripped of ext
 
 **5.4** Abstention decisions MUST be computed from the governed, filtered result set, not from the unfiltered corpus.
 
-*Note (non-normative).* In the reference implementation, frontmatter is parsed into Postgres columns at build time and the predicates run as SQL before pgvector similarity:
+_Note (non-normative)._ In the reference implementation, frontmatter is parsed into Postgres columns at build time and the predicates run as SQL before pgvector similarity:
 
 ```sql
 WHERE status = 'stable'
@@ -563,7 +562,7 @@ This is the operational meaning of OKF's design intent: frontmatter exists so a 
 
 **6.1.3** The human surface MUST NOT hold content absent from the record, and MUST NOT apply a visibility policy different from the canonical governance decision (R3, R4).
 
-*Note (non-normative).* The reference implementation uses Fumadocs. Any documentation framework satisfying these requirements may be substituted.
+_Note (non-normative)._ The reference implementation uses Fumadocs. Any documentation framework satisfying these requirements may be substituted.
 
 ### 6.2 The Discovery Surface (`llms.txt` v2)
 
@@ -583,7 +582,7 @@ This is the operational meaning of OKF's design intent: frontmatter exists so a 
 
 **6.2.5** Every discovery artefact MUST carry the generation identifier, corpus commit hash, and implementation version (R14).
 
-*Note (non-normative).* Publication-side support for this convention is widespread, including in the reference site framework [fumadocs-llms], and v2 reflects the shift from speculation to routine agent use: agents view or search the index, then follow links to LLM-friendly content. The dependable value remains strongest for agents directed at the site. Implementers should treat broad crawler ingestion as upside, not as the design justification.
+_Note (non-normative)._ Publication-side support for this convention is widespread, including in the reference site framework [fumadocs-llms], and v2 reflects the shift from speculation to routine agent use: agents view or search the index, then follow links to LLM-friendly content. The dependable value remains strongest for agents directed at the site. Implementers should treat broad crawler ingestion as upside, not as the design justification.
 
 ### 6.3 The Agent Surface (MCP)
 
@@ -597,7 +596,7 @@ This is the operational meaning of OKF's design intent: frontmatter exists so a 
 
 **6.3.5** The agent surface MUST NOT maintain knowledge state of its own. It is an interaction boundary, not a store.
 
-*Note (non-normative).* The distinction between the two machine surfaces is deliberate. `llms.txt` helps an AI find the knowledge. MCP helps an agent work with the knowledge.
+_Note (non-normative)._ The distinction between the two machine surfaces is deliberate. `llms.txt` helps an AI find the knowledge. MCP helps an agent work with the knowledge.
 
 ### 6.4 The Exchange Surface (OKF)
 
@@ -625,7 +624,7 @@ This section is normative in one specific sense: a conformant implementation MUS
 
 **7.2** Approval and verification are distinct and MUST NOT be conflated (R17).
 
-*Note (non-normative).* Each rung trades reach for guarantees. The ladder, not any single rung, is the product. The ladder also answers the obvious objection honestly: a system built on citation before confidence can still ship a corpus file that is downloaded once and never checked again, because the file's rung is stated and its limits are not hidden.
+_Note (non-normative)._ Each rung trades reach for guarantees. The ladder, not any single rung, is the product. The ladder also answers the obvious objection honestly: a system built on citation before confidence can still ship a corpus file that is downloaded once and never checked again, because the file's rung is stated and its limits are not hidden.
 
 ---
 
@@ -728,7 +727,7 @@ The following requirements are the normative core of this proposal. A Class B, C
 
 ### Authoring and Change Control
 
-*Requirement numbering is append-only, so this later group extends rather than reorders the series.*
+_Requirement numbering is append-only, so this later group extends rather than reorders the series._
 
 **R22. Authority claims are change-controlled.** An approval (`ksor.approval`) or verification (`verified`) event recorded in frontmatter MUST correspond to an event in the change-control system governing the record, and a Class B publisher MUST validate that correspondence before publication: at minimum, that the commit introducing the event reached the record through the repository's review process by, or on behalf of, the asserted actor. Frontmatter asserts authority. Change control is what makes the assertion checkable. Without this rule, every disclosure requirement in this section guards knowledge whose authority was never established.
 
@@ -746,7 +745,7 @@ The following requirements are the normative core of this proposal. A Class B, C
 
 ## 10. Out of Scope
 
-*This section is non-normative in its rationale and normative in its exclusions.*
+_This section is non-normative in its rationale and normative in its exclusions._
 
 A component belongs in this standard only when it owns a distinct architectural boundary. The following are explicitly not required for conformance:
 
@@ -887,79 +886,78 @@ An implementation cost may be capitalised when all of the following hold. [^ias3
 Training and data migration costs are expensed as incurred. [^ias38]
 
 [^ias38]: IAS 38, Intangible Assets.
-
 ```
 
 The concept satisfies 4.2.2 (all required fields, `sources` present on a reserved type, and `generated`, `verified`, `ksor.approval`, and explicit `ksor.audience` present where required) and 4.2.4 (`ksor.owner` present on a reserved type, `ksor.approval` present on a stable concept). Its trust tier is human-reviewed, and its approval is a separate fact recorded by a different actor, illustrating R17. Under `ksor.audience` it is excluded from open-web artefacts for any audience other than `finance` and `audit` per R5 and R12.
 
 ## Appendix B. Requirement Summary Table
 
-| Req | Short name | Classes |
-| --- | --- | --- |
-| R1                      | No bypass of the record                | B, C, D, E         |
-| R2                      | Governance precedes projection         | B, C, D, E         |
-| R3                      | One policy, all surfaces               | B, C, D, E         |
-| R4                      | No shadow authority                    | B                  |
-| R5                      | Absence means absence                  | B, C, D, E         |
-| R6                      | Static filtering before build          | B                  |
-| R7                      | Dynamic filtering before disclosure    | C, D               |
-| R8                      | Identity is evidence, not authority    | C, D (P-Protected) |
-| R9                      | Takedown outranks everything           | B, C, D, E         |
-| R10                     | Assets inherit authority               | B                  |
-| R11                     | Links can disclose                     | B                  |
-| R12                     | Discovery downstream of governance     | B                  |
-| R13                     | Lifecycle and effectivity on open web | B                  |
-| R14                     | Artefacts carry their generation       | B, E               |
-| R15                     | Export downstream of governance        | E                  |
-| R16                     | Import confers no authority            | E                  |
-| R17                     | Approval is not verification           | A, E               |
-| R18                     | Tiers never cross downward             | C, D               |
-| R19                     | Signatures prove integrity, not truth  | B (P-Verified)     |
-| R20                     | Telemetry inside governance            | C, D               |
-| R21                     | One generation per publication         | B, C, D, E         |
-| R22                     | Authority claims are change-controlled | B                  |
-| R23                     | Status transitions are governed events | B                  |
-| R24                     | Ownership binds review                 | B                  |
-| R25                     | Recorded actors are truthful           | B                  |
-| R26                     | Import lands as draft                  | E, B               |
-| R27                     | Takedown is a governed write           | B                  |
+| Req | Short name                             | Classes            |
+| --- | -------------------------------------- | ------------------ |
+| R1  | No bypass of the record                | B, C, D, E         |
+| R2  | Governance precedes projection         | B, C, D, E         |
+| R3  | One policy, all surfaces               | B, C, D, E         |
+| R4  | No shadow authority                    | B                  |
+| R5  | Absence means absence                  | B, C, D, E         |
+| R6  | Static filtering before build          | B                  |
+| R7  | Dynamic filtering before disclosure    | C, D               |
+| R8  | Identity is evidence, not authority    | C, D (P-Protected) |
+| R9  | Takedown outranks everything           | B, C, D, E         |
+| R10 | Assets inherit authority               | B                  |
+| R11 | Links can disclose                     | B                  |
+| R12 | Discovery downstream of governance     | B                  |
+| R13 | Lifecycle and effectivity on open web  | B                  |
+| R14 | Artefacts carry their generation       | B, E               |
+| R15 | Export downstream of governance        | E                  |
+| R16 | Import confers no authority            | E                  |
+| R17 | Approval is not verification           | A, E               |
+| R18 | Tiers never cross downward             | C, D               |
+| R19 | Signatures prove integrity, not truth  | B (P-Verified)     |
+| R20 | Telemetry inside governance            | C, D               |
+| R21 | One generation per publication         | B, C, D, E         |
+| R22 | Authority claims are change-controlled | B                  |
+| R23 | Status transitions are governed events | B                  |
+| R24 | Ownership binds review                 | B                  |
+| R25 | Recorded actors are truthful           | B                  |
+| R26 | Import lands as draft                  | E, B               |
+| R27 | Takedown is a governed write           | B                  |
 
 Normative requirements also appear as numbered clauses outside the R-series. The table below maps the clause groups to conformance classes so that a test-suite author working from this appendix misses nothing.
 
-| Clauses | Subject | Classes |
-| --- | --- | --- |
-| 4.1.1 to 4.1.4           | Record as OKF bundle, reserved filenames, canonical flow         | A                            |
-| 4.2.1 to 4.2.3           | Reserved types, required fields, trust vocabulary                | A (build gate: B)            |
-| 4.2.4.1 to 4.2.4.4       | Governance extension: owner, audience, approval, effective\_from | A (build gate: B)            |
-| 4.2.5.1 to 4.2.5.3       | `.ksor/governance.yaml`: registry, ownership, authorities        | A (validation: B)            |
-| 4.2.6.1                  | Adapter boundary                                                 | B, C, D, E                   |
-| 5.1 to 5.4               | Retrieval predicates and abstention basis                        | C                            |
-| 6.1.1 to 6.1.3           | Human surface                                                    | B                            |
-| 6.2.1 to 6.2.5           | Discovery surface                                                | B                            |
-| 6.3.1 to 6.3.5           | Agent surface contract                                           | D                            |
-| 6.4.1 to 6.4.3           | Exchange                                                         | E                            |
-| Section 7                | Guarantee claims per rung                                        | A to E                       |
-| 8.1.1 to 8.1.4           | Identity                                                         | P-Protected                  |
-| 8.2.1 to 8.2.4           | Publication integrity                                            | B (8.2.2 onward: P-Verified) |
-| 8.3.1 to 8.3.2           | Observability                                                    | C, D                         |
-| 13.3                     | Immutable OKF v0.2 specification pinning                        | A                            |
+| Clauses            | Subject                                                          | Classes                      |
+| ------------------ | ---------------------------------------------------------------- | ---------------------------- |
+| 4.1.1 to 4.1.4     | Record as OKF bundle, reserved filenames, canonical flow         | A                            |
+| 4.2.1 to 4.2.3     | Reserved types, required fields, trust vocabulary                | A (build gate: B)            |
+| 4.2.4.1 to 4.2.4.4 | Governance extension: owner, audience, approval, effective\_from | A (build gate: B)            |
+| 4.2.5.1 to 4.2.5.3 | `.ksor/governance.yaml`: registry, ownership, authorities        | A (validation: B)            |
+| 4.2.6.1            | Adapter boundary                                                 | B, C, D, E                   |
+| 5.1 to 5.4         | Retrieval predicates and abstention basis                        | C                            |
+| 6.1.1 to 6.1.3     | Human surface                                                    | B                            |
+| 6.2.1 to 6.2.5     | Discovery surface                                                | B                            |
+| 6.3.1 to 6.3.5     | Agent surface contract                                           | D                            |
+| 6.4.1 to 6.4.3     | Exchange                                                         | E                            |
+| Section 7          | Guarantee claims per rung                                        | A to E                       |
+| 8.1.1 to 8.1.4     | Identity                                                         | P-Protected                  |
+| 8.2.1 to 8.2.4     | Publication integrity                                            | B (8.2.2 onward: P-Verified) |
+| 8.3.1 to 8.3.2     | Observability                                                    | C, D                         |
+| 13.3               | Immutable OKF v0.2 specification pinning                         | A                            |
 
 ---
 
 ## Acknowledgements
 
-This proposal consolidates working drafts produced with the assistance of Claude (Anthropic) and ChatGPT (OpenAI), and builds directly on the Open Knowledge Format published by the Google Cloud Data Cloud team, the `llms.txt` convention proposed by Jeremy Howard, and the Model Context Protocol. The governance-first framing draws on the KSoR concept developed in *The AI Agent Factory*.
+This proposal consolidates working drafts produced with the assistance of Claude (Anthropic) and ChatGPT (OpenAI), and builds directly on the Open Knowledge Format published by the Google Cloud Data Cloud team, the `llms.txt` convention proposed by Jeremy Howard, and the Model Context Protocol. The governance-first framing draws on the KSoR concept developed in _The AI Agent Factory_.
 
 ## Change Log
 
-| Version | Date | Change |
-| --- | --- | --- |
+| Version     | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.1 draft 9 | 2026-08-24 | Clarified OKF's dual architectural role. The canonical KSoR record is now described consistently as Markdown in the KSoR Profile of OKF, making OKF foundational to the authoritative record rather than only an exchange format. The same native OKF representation is reused for governed interoperability, so Class E exchange is described as selection and packaging rather than translation into a separate knowledge model. Updated the Executive Brief, Abstract, relationship-to-standards section, terminology, Section 3 responsibility table and diagram, Section 4 authoritative-record language, Section 6.4 exchange explanation, and the KSoR-versus-OKF differentiation without changing the conformance model or governance requirements. |
-| 0.1 draft 8 | 2026-08-24 | Publication and conformance repair pass: restored story-first ordering in the Executive Brief and kept the nine responsibilities there in plain language, corrected the Section 3 diagram so human serving, AI discovery, MCP, and OKF are parallel outward boundaries, made `ksor.audience` mandatory for every concept, defined deterministic Governance Policy scope resolution, removed semicolons from editable prose, repaired the `llms.txt` wording, restored the leadership reading path to the Write-Side Lifecycle and Trust Ladder, and pinned KSP-001 v0.1 to the immutable OKF v0.2 release specification at commit `3fcbb9f828c2f23d109c855ee403c3a4c81f3a96`. The pinned specification defines `stale_after` as a `YYYY-MM-DD` date. |
-| 0.1 draft 7 | 2026-08-24 | Reframed the proposal around KSoR as an open, vendor-neutral knowledge infrastructure framework. Moved the three-line model and nine responsibilities to the front of the Executive Brief, clarified framework versus deployed infrastructure layer, strengthened the Abstract, expanded Section 3 so the responsibilities and boundaries, rather than a technology list, are the organising architecture, distinguished open protocol bindings from reference implementation choices, and made vendor-neutrality explicit from page one. No normative governance requirements changed. |
-| 0.1 draft 6          | 2026-08-24 | Specification-hardening pass: made `ksor.audience` explicit and fail-closed, standardised the Governance Policy at `.ksor/governance.yaml` with portable rule semantics, added `ksor.effective_from` to retrieval and open-web gating, required `generated` for stable concepts and strengthened R23, narrowed R4 from no omission to no shadow authority, changed `stale_after` to the date semantics defined by the OKF v0.2 release specification later pinned in draft 8, aligned the Executive Brief with publication-time guarantees, and repaired tables and the table of contents. |
-| 0.1 draft 5          | 2026-08-24 | Added the non-normative Executive Brief ahead of the Abstract, so that decision-makers without technical background can evaluate the proposal: the problem story, the one-line principle, the trust ladder as a risk table, the write-side lifecycle as an approval workflow, protections, costs, and the decision being asked. No normative content changed.                                                                                                                                                                                                                                                                                                                                 |
-| 0.1 draft 4          | 2026-08-24 | Write-side governance completed: added the Governance Policy (4.2.5) as the normative root of authority, the write-side lifecycle summary (4.3), and requirements R23 to R27 covering status transitions, ownership-bound review, actor truthfulness, import mechanics, and governed takedown. Consistency pass: conformance class descriptions updated for R22 to R27, cross-references added between R9 and R27, R16 and R26, 4.2.4 and 4.2.5, and 8.1.2, adapter boundary renumbered to 4.2.6, abstract count corrected to twenty-seven, terminology extended with Governance Policy, candidate knowledge, and takedown, Appendix B extended, Open Issue 4 narrowed to serialisation only. |
-| 0.1 draft 3          | 2026-08-24 | Second review revision: added R22 requiring authority claims to correspond to change-control events, with the matching security paragraph and the evidence chain in 8.2.4. Corrected the actor convention attribution (`team:` is a profile extension, not OKF). Fixed the reference SQL audience predicate to overlap semantics with NULL as public. Defined the instance document and its relationship to the bundle-root `index.md`. Reserved `public` as an audience identifier. Changed "conformant to" to "following" for `llms.txt` v2. Extended Appendix B with the clause-level requirement map and R22.                                                                             |
-| 0.1 draft 2          | 2026-08-24 | Review revision: added the `ksor` governance extension (owner, audience, approval, effective\_from), documented the OKF reserved-filename contract, restated the governance boundary as governance before every disclosure, updated the discovery surface to `llms.txt` v2 with `llms-full.txt` as a KSoR extension, changed `stale_after` to an ISO 8601 instant, marked Profile P-Attested experimental pending an attestation follow-on proposal, fixed the Class D binding to MCP for version 0.1, and revised the identity line to "OAuth/OIDC establishes identity. KSoR governance controls access."                                                                                 |
-| 0.1 draft 1          | 2026-08-24 | Initial draft proposal, consolidating decision draft D25.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 0.1 draft 8 | 2026-08-24 | Publication and conformance repair pass: restored story-first ordering in the Executive Brief and kept the nine responsibilities there in plain language, corrected the Section 3 diagram so human serving, AI discovery, MCP, and OKF are parallel outward boundaries, made `ksor.audience` mandatory for every concept, defined deterministic Governance Policy scope resolution, removed semicolons from editable prose, repaired the `llms.txt` wording, restored the leadership reading path to the Write-Side Lifecycle and Trust Ladder, and pinned KSP-001 v0.1 to the immutable OKF v0.2 release specification at commit `3fcbb9f828c2f23d109c855ee403c3a4c81f3a96`. The pinned specification defines `stale_after` as a `YYYY-MM-DD` date.        |
+| 0.1 draft 7 | 2026-08-24 | Reframed the proposal around KSoR as an open, vendor-neutral knowledge infrastructure framework. Moved the three-line model and nine responsibilities to the front of the Executive Brief, clarified framework versus deployed infrastructure layer, strengthened the Abstract, expanded Section 3 so the responsibilities and boundaries, rather than a technology list, are the organising architecture, distinguished open protocol bindings from reference implementation choices, and made vendor-neutrality explicit from page one. No normative governance requirements changed.                                                                                                                                                                     |
+| 0.1 draft 6 | 2026-08-24 | Specification-hardening pass: made `ksor.audience` explicit and fail-closed, standardised the Governance Policy at `.ksor/governance.yaml` with portable rule semantics, added `ksor.effective_from` to retrieval and open-web gating, required `generated` for stable concepts and strengthened R23, narrowed R4 from no omission to no shadow authority, changed `stale_after` to the date semantics defined by the OKF v0.2 release specification later pinned in draft 8, aligned the Executive Brief with publication-time guarantees, and repaired tables and the table of contents.                                                                                                                                                                  |
+| 0.1 draft 5 | 2026-08-24 | Added the non-normative Executive Brief ahead of the Abstract, so that decision-makers without technical background can evaluate the proposal: the problem story, the one-line principle, the trust ladder as a risk table, the write-side lifecycle as an approval workflow, protections, costs, and the decision being asked. No normative content changed.                                                                                                                                                                                                                                                                                                                                                                                               |
+| 0.1 draft 4 | 2026-08-24 | Write-side governance completed: added the Governance Policy (4.2.5) as the normative root of authority, the write-side lifecycle summary (4.3), and requirements R23 to R27 covering status transitions, ownership-bound review, actor truthfulness, import mechanics, and governed takedown. Consistency pass: conformance class descriptions updated for R22 to R27, cross-references added between R9 and R27, R16 and R26, 4.2.4 and 4.2.5, and 8.1.2, adapter boundary renumbered to 4.2.6, abstract count corrected to twenty-seven, terminology extended with Governance Policy, candidate knowledge, and takedown, Appendix B extended, Open Issue 4 narrowed to serialisation only.                                                               |
+| 0.1 draft 3 | 2026-08-24 | Second review revision: added R22 requiring authority claims to correspond to change-control events, with the matching security paragraph and the evidence chain in 8.2.4. Corrected the actor convention attribution (`team:` is a profile extension, not OKF). Fixed the reference SQL audience predicate to overlap semantics with NULL as public. Defined the instance document and its relationship to the bundle-root `index.md`. Reserved `public` as an audience identifier. Changed "conformant to" to "following" for `llms.txt` v2. Extended Appendix B with the clause-level requirement map and R22.                                                                                                                                           |
+| 0.1 draft 2 | 2026-08-24 | Review revision: added the `ksor` governance extension (owner, audience, approval, effective\_from), documented the OKF reserved-filename contract, restated the governance boundary as governance before every disclosure, updated the discovery surface to `llms.txt` v2 with `llms-full.txt` as a KSoR extension, changed `stale_after` to an ISO 8601 instant, marked Profile P-Attested experimental pending an attestation follow-on proposal, fixed the Class D binding to MCP for version 0.1, and revised the identity line to "OAuth/OIDC establishes identity. KSoR governance controls access."                                                                                                                                                 |
+| 0.1 draft 1 | 2026-08-24 | Initial draft proposal, consolidating decision draft D25.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
