@@ -3,15 +3,23 @@
  *
  * A concept holds a LIST of audience identifiers (`ksor.audience`); a viewer
  * holds a list that always includes `public`; the concept is visible when the
- * two overlap — `n.audience && :viewer`, one predicate bound into search, read,
- * outline and the calibration sampler the way `lib/takedown.ts` binds denial.
- * Rank moved to the viewer and membership stayed on the document, which is what
- * let every row of the old ranked table keep its meaning (`OVERLAP_CASES` is
- * the rule; `audience-conformance.db.test.ts` runs the predicate against every
- * row through real Postgres).
+ * two overlap — `n.audience && :viewer`. Rank moved to the viewer and
+ * membership stayed on the document, which is what let every row of the old
+ * ranked table keep its meaning (`AUDIENCE_CASES` is the rule;
+ * `audience-conformance.db.test.ts` runs the predicate against every row
+ * through real Postgres).
  *
- * Sections carry the UNION of their descendants' lists at ingest, so the same
- * predicate admits a section iff a descendant is visible — no second branch.
+ * This is ONE of three predicates, not the whole admission decision:
+ * `lib/admit.ts` composes it with `lib/lifecycle.ts` and `lib/trust.ts` into
+ * the set that search, read, outline and the calibration sampler bind, the way
+ * `lib/takedown.ts` binds denial. Bind THAT, not this — a path that overlapped
+ * audience alone would serve drafts and expired documents to the right people.
+ *
+ * A SECTION is not decided here. Ingest gives it the union of its descendants'
+ * lists, which is enough for audience and for nothing else — a section whose
+ * every document is a draft or past its review date would still carry their
+ * lists — so admission resolves it by a descendant walk instead (`admit.ts`).
+ * The union stays on the row because it is what the site's own tree reads.
  *
  * Omission is a refusal upstream (the checker), never a default here: a NULL
  * or empty list overlaps nothing and is served to nobody.
