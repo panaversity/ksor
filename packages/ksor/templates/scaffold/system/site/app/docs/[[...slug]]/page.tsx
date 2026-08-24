@@ -15,7 +15,7 @@ import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/components/mdx";
 import type { Metadata } from "next";
 import type { ReactElement } from "react";
-import { createRelativeLink } from "fumadocs-ui/mdx";
+import { recordLink } from "@/lib/record-link";
 import {
   DeprecatedNotice,
   GovernanceMeta,
@@ -180,15 +180,15 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
             summaryMinutes={summaryMinutes ?? undefined}
             summary={
               Summary === null ? null : (
-                <Summary components={getMDXComponents({ a: createRelativeLink(source, page) })} />
+                <Summary components={getMDXComponents({ a: recordLink(source, page) })} />
               )
             }
           >
             <MDX
               components={getMDXComponents({
-                // relative links between documents in knowledge/ resolve to
-                // their rendered pages
-                a: createRelativeLink(source, page),
+                // links between documents in knowledge/, in both OKF forms,
+                // resolve to their rendered pages
+                a: recordLink(source, page),
                 // The deck, rendered where the record's own shape puts it:
                 // after the introduction, before the first section.
                 TeachingAid: () =>
