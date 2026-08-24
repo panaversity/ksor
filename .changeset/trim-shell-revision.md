@@ -16,3 +16,16 @@ unblocked. That last one is the reason it stays.
 But coding principle 1 applies to this file too — context is liability, and
 AGENTS.md loads every session. The narrative half was 90 words explaining why
 the proof had been valuable, which the commit already records.
+
+Also documents the thing that was missing entirely: **how to keep people out of
+the site.** The door's auth had four recipes; the site had nothing, and the
+most common requirement — "everyone signs in before reading anything" — is also
+the easiest, needs no ksor change, and was written down nowhere.
+
+Three shapes, separated because they had been muddled: a host-level gate in
+front of the origin (protects every byte, holds against `curl`, and makes a
+site sign-in button redundant rather than complementary); per-audience builds
+for a restricted subset (enforcement by absence, already built); and the
+per-request case, which a static export cannot express and which issue #130
+records rather than implements. Plus what does not work — hiding rendered
+content behind a browser check, which presents rather than protects.

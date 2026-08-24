@@ -32,8 +32,11 @@ Read this before spending an afternoon on a provider's console.
 **It protects the MCP door, not the website.** Everything on this page is a
 bearer token on `POST /mcp`. Your static site is a separate surface, served by
 whatever hosts it, and configuring auth here leaves it exactly as public as it
-was. If people must not read the record at all, the site needs its own access
-control — or must not be published.
+was. Keeping people out of the SITE is a different mechanism and is not on this
+page — see "Keeping people out of the site" in
+[deploying.md](./deploying.md), which covers the three shapes: a host-level gate
+in front of everything, per-audience builds for a restricted subset, and why the
+per-request case needs a decision first.
 
 **It is one gate, not per-user rules.** The door checks that a token was signed
 by the issuer you named and audienced at this record. It reads no scopes, no
