@@ -135,12 +135,13 @@ export function writesLedger(mode: TakedownMode): boolean {
 }
 
 /**
- * Who performed the act — NAMED, never inferred, and named by someone the
- * policy authorises. Both halves are checked BEFORE any DSN is resolved: a
- * missing or unauthorised actor is an argument error (exit 1), and deferring it
- * to the write site reported it as "the environment cannot run ksor" (exit 3).
+ * Is an actor NAMED, and named in a shape that can perform an act? Checked
+ * from the ARGUMENTS alone, before any file is opened and any DSN resolved: a
+ * missing `--actor` is an argument error (exit 1), and it must not be reported
+ * as a missing policy or a broken environment (exit 3) just because the record
+ * also has something else wrong with it.
  */
-export function authorizeActor(actor: string | undefined, policy: Policy): VerbRefusal | null {
+export function checkActorNamed(actor: string | undefined): VerbRefusal | null {
   const named = (actor ?? "").trim();
   if (named === "") {
     return {
@@ -156,6 +157,18 @@ export function authorizeActor(actor: string | undefined, policy: Policy): VerbR
       fix: "use `human:<handle>` or `process:<id>`, e.g. --actor human:ciso",
     };
   }
+  return null;
+}
+
+/**
+ * …and does the POLICY name them? The authority half needs the policy, so it
+ * runs once the record is read — still before any DSN, because an unauthorised
+ * actor is a refusal and not an environment failure.
+ */
+export function authorizeActor(actor: string | undefined, policy: Policy): VerbRefusal | null {
+  const unnamed = checkActorNamed(actor);
+  if (unnamed !== null) return unnamed;
+  const named = (actor ?? "").trim();
   if (!policy.takedownActors.includes(named)) {
     return {
       slug: "ksor-takedown-unauthorised",

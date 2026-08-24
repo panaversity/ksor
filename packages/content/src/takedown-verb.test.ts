@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { parsePolicy, type Policy } from "./record/policy.js";
 import {
   authorizeActor,
+  checkActorNamed,
   conceptPathOf,
   decideRowStep,
   expectedFor,
@@ -127,14 +128,20 @@ describe("a denial's arguments", () => {
 });
 
 describe("who may perform the act", () => {
-  it("refuses an unnamed actor", () => {
+  it("refuses an unnamed actor from the ARGUMENTS alone — no policy needed to know", () => {
+    expect(checkActorNamed(undefined)?.slug).toBe("ksor-takedown-unattributed");
+    expect(checkActorNamed("  ")?.slug).toBe("ksor-takedown-unattributed");
     expect(authorizeActor(undefined, POLICY)?.slug).toBe("ksor-takedown-unattributed");
-    expect(authorizeActor("  ", POLICY)?.slug).toBe("ksor-takedown-unattributed");
   });
 
   it("refuses a shape that is not an actor — a team cannot perform an act", () => {
-    expect(authorizeActor("you@example.com", POLICY)?.slug).toBe("ksor-actor-form");
+    expect(checkActorNamed("you@example.com")?.slug).toBe("ksor-actor-form");
+    expect(checkActorNamed("team:legal")?.slug).toBe("ksor-actor-form");
     expect(authorizeActor("team:legal", POLICY)?.slug).toBe("ksor-actor-form");
+  });
+
+  it("a NAMED, well-formed actor passes the file-free half whatever the policy says", () => {
+    expect(checkActorNamed("human:intern")).toBeNull();
   });
 
   it("refuses an actor the policy does not name, exactly as the checker refuses a hand-appended entry", () => {

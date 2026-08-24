@@ -38,6 +38,7 @@ import { resolveInstanceDir } from "./record/load.js";
 import { parsePolicy } from "./record/policy.js";
 import {
   authorizeActor,
+  checkActorNamed,
   conceptPathOf,
   decideRowStep,
   expectedFor,
@@ -840,8 +841,12 @@ async function takedownCommand(args: string[]): Promise<number> {
 
   // The POLICY decides who may do this, and it is read — and enforced — before
   // any DSN is resolved: an unauthorised actor is an argument error (exit 1),
-  // never "the environment cannot run ksor" (exit 3).
+  // never "the environment cannot run ksor" (exit 3). The half that needs no
+  // file runs FIRST, so a missing --actor is never reported as a missing
+  // policy just because the record also has something else wrong with it.
   if (writesLedger(mode)) {
+    const unnamed = checkActorNamed(values.actor);
+    if (unnamed !== null) return refuse(unnamed);
     const policyPath = join(root, ".ksor", "governance.yaml");
     const parsed = parsePolicy(
       existsSync(policyPath) ? readFileSync(policyPath, "utf8") : null,

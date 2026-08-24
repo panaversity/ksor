@@ -264,6 +264,22 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
     expect(err.join("").split("\n")[0]).toMatch(/^ksor-actor-form:/);
   });
 
+  it("the missing actor is reported FIRST, even when the record has other problems", async () => {
+    // The two halves of the actor check are ordered deliberately: `--actor` is
+    // an argument, so its absence is knowable with no file open. Reading the
+    // policy first would report a record with no `.ksor/governance.yaml` as
+    // `ksor-policy-missing` and never mention the flag the operator forgot.
+    const root = record(false);
+    rmSync(join(root, ".ksor", "governance.yaml"));
+    expect(await run(root, "--reason", "legal", "knowledge/policies/current")).toBe(1);
+    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-unattributed:/);
+    // …and WITH an actor, the missing policy is what refuses.
+    expect(
+      await run(root, "--actor", ACTOR, "--reason", "legal", "knowledge/policies/current"),
+    ).toBe(1);
+    expect(err.join("").split("\n")[0]).toMatch(/^ksor-policy-missing:/);
+  });
+
   it("--revoke lifts the denial by naming its entry, and a re-denial denies again", async () => {
     const root = record(true);
     process.env[DSN_ENV] = dsn;
