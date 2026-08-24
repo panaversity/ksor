@@ -1,5 +1,11 @@
 # @panaversity/ksor
 
+## 0.0.37
+
+### Patch Changes
+
+- 3eafb25: The package README states the KSoR architecture: one governed record — Markdown in the KSoR Profile of the Open Knowledge Format (OKF) — behind one governance boundary, projected through open standards.
+
 ## 0.0.36
 
 ### Patch Changes
