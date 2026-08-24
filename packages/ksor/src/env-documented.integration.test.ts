@@ -31,6 +31,10 @@ const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const DOCUMENTED_ELSEWHERE = new Map([
   ["KSOR_BASE_PATH", "scaffold README + AGENTS.md — a site build flag, not a server variable"],
   ["KSOR_AUDIENCE", "scaffold README + AGENTS.md — a site build flag"],
+  [
+    "KSOR_DRAFTS",
+    "scaffold README + AGENTS.md — a site build flag (build spec §3: drafts on human surfaces)",
+  ],
   ["KSOR_INSTANCE", "a CLI convenience for --instance; the flag is the documented form"],
   // RETIRED, replaced by KSOR_AUTH. The code still READS them, solely to tell an
   // operator following an old runbook what replaced them — documenting them in

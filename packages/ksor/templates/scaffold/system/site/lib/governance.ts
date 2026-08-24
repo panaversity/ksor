@@ -181,64 +181,33 @@ export function isCalendarDate(value: string): boolean {
  *     site:
  *       governance: false
  *
- * The record often wants `owner:` and `provenance:` filled in for the agent
- * surface and the audit trail while the published page stays plain. That is a
+ * The record often wants owners and sources filled in for the agent surface
+ * and the audit trail while the published page stays plain. That is a
  * publication choice, so it belongs to the instance, not to each document —
  * per-document control is already the frontmatter itself (declare a key and it
  * shows; leave it off and nothing does).
  *
  * Default on, and additive: every record written before this key existed keeps
- * rendering exactly as it did. Turning it off never hides the SUPERSESSION
+ * rendering exactly as it did. Turning it off never hides the DEPRECATION
  * notice — that is a correctness warning, not decoration, and a reader handed a
  * replaced document with no word of its successor has been misled.
  *
- * Takes the frontmatter block (not a path) so it stays pure and testable; the
- * site binds it once in lib/shared.ts.
+ * Takes the parsed instance frontmatter (not a path) so it stays pure and
+ * testable; the site binds it once in lib/shared.ts. Real YAML now, so a flow
+ * mapping and a block read the same — the line scanner this replaced had to
+ * refuse the flow form because it could not read it.
  */
-export function governanceVisible(instanceFrontmatterBlock: string): boolean {
-  const lines = instanceFrontmatterBlock.split("\n");
-  const start = lines.findIndex((line) => /^site[ \t]*:[ \t]*(?:#.*)?$/.test(line));
-  if (start === -1) {
-    // A flow mapping (`site: { governance: false }`) is a scalar to every
-    // reader of this block, so a block-only scan would fall through to the
-    // default and publish what the owner turned off. `pnpm check` refuses the
-    // shape; refuse it here too rather than default past it silently.
-    const inline = lines.find((line) => /^site[ \t]*:[ \t]*\S/.test(line));
-    if (inline !== undefined) {
-      throw new Error(
-        `instance.md has ${JSON.stringify(inline.trim())} — a site: group written on one line is ` +
-          "not read as a group, so every key inside it is dropped without a word. Write it as an " +
-          "indented block:\n  site:\n    governance: false",
-      );
-    }
-    return true;
-  }
-
-  for (const line of lines.slice(start + 1)) {
-    if (line.trim() === "") continue;
-    // A non-indented line ends the block: a TOP-LEVEL `governance:` is a
-    // different key and must never be mistaken for this setting.
-    if (!/^[ \t]/.test(line)) break;
-    const match = /^[ \t]+governance[ \t]*:[ \t]*(.*)$/.exec(line);
-    if (match === null) continue;
-
-    const raw = (match[1] ?? "").trim();
-    // ` #` starts a YAML comment on an unquoted value (the grammar the
-    // audience model already follows).
-    const value = (/^["']/.test(raw) ? raw : raw.replace(/\s+#.*$/, ""))
-      .trim()
-      .replace(/^(['"])(.*)\1$/, "$2")
-      .toLowerCase();
-
-    if (value === "true") return true;
-    if (value === "false") return false;
-    throw new Error(
-      `instance.md site.governance is ${JSON.stringify(raw)} — it must be true or false. ` +
-        "Defaulting silently would publish the governance you asked to hide, or hide what you " +
-        "asked to publish. Write `governance: false` to keep the pages plain, or remove the key.",
-    );
-  }
-  return true;
+export function governanceVisible(instance: Readonly<Record<string, unknown>>): boolean {
+  const site = instance["site"];
+  if (typeof site !== "object" || site === null || Array.isArray(site)) return true;
+  const value = (site as Record<string, unknown>)["governance"];
+  if (value === undefined || value === null) return true;
+  if (typeof value === "boolean") return value;
+  throw new Error(
+    `instance.md site.governance is ${JSON.stringify(value)} — it must be true or false. ` +
+      "Defaulting silently would publish the governance you asked to hide, or hide what you " +
+      "asked to publish. Write `governance: false` to keep the pages plain, or remove the key.",
+  );
 }
 
 // ---------------------------------------------------------------------------

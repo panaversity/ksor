@@ -1,0 +1,562 @@
+/**
+ * Staging on the profile — build spec §3, run against the SHIPPED
+ * `system/site/lib/stage-knowledge.ts` in a temporary record, with no Next
+ * install: the module runs under Node's type stripping the way
+ * `stage-concurrency` runs it, and every assertion reads the stage it wrote.
+ *
+ * The record here is a conformant fixture of its own (the scaffold's starter is
+ * being rewritten in parallel), with one document per state the §2.5 table
+ * names, an `[internal]` canary, a folder that only an internal viewer may see,
+ * a companion, an asset, and a ledger with a denial, a revocation and a subtree.
+ */
+
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+const SITE = fileURLToPath(new URL("../templates/scaffold/system/site/", import.meta.url));
+const KSOR_NODE_MODULES = fileURLToPath(new URL("../node_modules/", import.meta.url));
+
+/** Node strips types but resolves neither `./x` nor `./x.js` to `x.ts`. */
+const RELATIVE_IMPORT = /(from ")(\.{1,2}\/[A-Za-z0-9._/-]+?)(\.js)?(")/g;
+
+const HARNESS = `
+import { readFileSync } from "node:fs";
+import path from "node:path";
+try {
+  const { knowledgeSourceDir } = await import("./lib/stage-knowledge.ts");
+  const dir = path.resolve(knowledgeSourceDir());
+  const manifest = JSON.parse(readFileSync(path.resolve(".staged-knowledge.json"), "utf8"));
+  console.log(JSON.stringify({ dir, manifest }));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+`;
+
+const STABLE = (
+  title: string,
+  description: string,
+  audience: string,
+  extra = "",
+  order = "",
+): string =>
+  `---
+type: Document
+title: ${title}
+description: ${description}
+status: stable
+${order === "" ? "" : `order: ${order}\n`}generated: { by: "ksor-test/1.0", at: 2026-08-01T00:00:00Z }
+${extra}ksor:
+  audience: [${audience}]
+  approval: { by: "human:kim", at: 2026-08-02T00:00:00Z }
+---
+
+Body of ${title}.
+`;
+
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+const AS_OF = "2026-08-25T12:00:00Z";
+
+interface Fixture {
+  readonly root: string;
+  readonly site: string;
+  readonly stage: string;
+}
+
+function writeRecord(root: string): Fixture {
+  const site = path.join(root, "system", "site");
+  const knowledge = path.join(root, "knowledge");
+  mkdirSync(path.join(root, ".ksor"), { recursive: true });
+  mkdirSync(path.join(knowledge, "guides"), { recursive: true });
+  mkdirSync(path.join(knowledge, "secret"), { recursive: true });
+  mkdirSync(path.join(knowledge, "archive"), { recursive: true });
+  mkdirSync(path.join(knowledge, "empty"), { recursive: true });
+
+  writeFileSync(
+    path.join(root, "instance.md"),
+    `---
+format: 2
+name: acme
+title: Acme Handbook
+description: Authoritative for how Acme runs internally.
+toolchain: { requires: ">=0.1.0", scaffolded: "0.1.0" }
+---
+
+You are answering from the Acme Handbook. Cite every passage.
+`,
+  );
+  writeFileSync(
+    path.join(root, ".ksor", "governance.yaml"),
+    `version: "0.1"
+audiences:
+  internal:
+    description: Employees
+approval_authorities:
+  - actors: [human:kim]
+takedown_authorities:
+  actors: [human:ciso]
+`,
+  );
+  writeFileSync(
+    path.join(root, ".ksor", "takedowns.yaml"),
+    `- id: 2026-08-20T10:00:00Z-aaaaaa
+  stable_id: knowledge/denied
+  scope: node
+  expected: present
+  by: human:ciso
+  at: 2026-08-20T10:00:00Z
+- id: 2026-08-20T11:00:00Z-bbbbbb
+  stable_id: knowledge/revoked
+  scope: node
+  expected: present
+  by: human:ciso
+  at: 2026-08-20T11:00:00Z
+- id: 2026-08-21T11:00:00Z-cccccc
+  revokes: 2026-08-20T11:00:00Z-bbbbbb
+  by: human:ciso
+  at: 2026-08-21T11:00:00Z
+- id: 2026-08-22T11:00:00Z-dddddd
+  stable_id: knowledge/archive#section
+  scope: subtree
+  expected: present
+  by: human:ciso
+  at: 2026-08-22T11:00:00Z
+`,
+  );
+
+  const w = (rel: string, text: string | Buffer): void =>
+    writeFileSync(path.join(knowledge, rel), text);
+  w(
+    "public-policy.md",
+    STABLE("Public policy PUBTITLE1", "PUBDESC1 in one line", "public", "", "1"),
+  );
+  w("public-policy.summary.md", "---\ntype: Summary\n---\n\nSUMMARYBODY1\n");
+  w(
+    "internal-note.md",
+    STABLE("Internal note CANARYTITLE", "CANARYDESC internal only", "internal", "", "2"),
+  );
+  w(
+    "draft-doc.md",
+    `---
+type: Document
+title: Draft DRAFTTITLE
+description: DRAFTDESC still being written
+status: draft
+ksor:
+  audience: [public]
+---
+
+DRAFTBODY
+`,
+  );
+  w(
+    "old-policy.md",
+    `---
+type: Document
+title: Old policy OLDTITLE
+description: OLDDESC replaced
+status: deprecated
+generated: { by: "ksor-test/1.0", at: 2026-08-01T00:00:00Z }
+ksor:
+  audience: [public]
+  superseded_by: public-policy
+  deprecated: { by: "human:ciso", at: 2026-08-10T00:00:00Z }
+---
+
+OLDBODY
+`,
+  );
+  w(
+    "future.md",
+    STABLE("Future FUTURETITLE", "FUTUREDESC", "public", "", "").replace(
+      "ksor:\n",
+      "ksor:\n  effective_from: 2030-01-01T00:00:00Z\n",
+    ),
+  );
+  w(
+    "stale.md",
+    STABLE("Stale STALETITLE", "STALEDESC", "public", "stale_after: 2020-01-01T00:00:00Z\n"),
+  );
+  w("denied.md", STABLE("Denied DENIEDTITLE", "DENIEDDESC", "public"));
+  w("revoked.md", STABLE("Revoked REVOKEDTITLE", "REVOKEDDESC", "public"));
+  w(
+    "guides/getting-started.md",
+    STABLE("Getting started GUIDETITLE", "GUIDEDESC", "public", "", "1").replace(
+      "Body of",
+      "![diagram](./diagram.png)\n\nBody of",
+    ),
+  );
+  w("guides/diagram.png", PNG);
+  w("guides/unused.png", PNG);
+  w("secret/plan.md", STABLE("Plan SECRETPLAN", "SECRETDESC", "internal"));
+  w("archive/gone.md", STABLE("Gone ARCHIVETITLE", "ARCHIVEDESC", "public"));
+
+  // The shipped site lib, extensions made explicit for Node; the record module
+  // beside it; the two runtime deps it needs linked from this package.
+  const copy = (from: string, to: string): void => {
+    mkdirSync(to, { recursive: true });
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const source = path.join(from, entry.name);
+      const target = path.join(to, entry.name);
+      if (entry.isDirectory()) copy(source, target);
+      else {
+        const text = readFileSync(source, "utf8");
+        writeFileSync(target, text.replace(RELATIVE_IMPORT, "$1$2.ts$4"));
+      }
+    }
+  };
+  copy(path.join(SITE, "lib"), path.join(site, "lib"));
+  copy(path.join(SITE, "record"), path.join(site, "record"));
+  writeFileSync(
+    path.join(site, "lib", "rules-version.ts"),
+    'export const RULES_VERSION: string = "0.1.0";\n',
+  );
+  mkdirSync(path.join(site, "node_modules"), { recursive: true });
+  for (const dep of ["yaml", "zod"]) {
+    symlinkSync(path.join(KSOR_NODE_MODULES, dep), path.join(site, "node_modules", dep), "dir");
+  }
+  writeFileSync(path.join(site, "stage.mjs"), HARNESS);
+  return { root, site, stage: path.join(site, ".staged-knowledge") };
+}
+
+/** The lock `ksor build` writes (build spec §2), reduced to what the site reads. */
+function writeLock(
+  root: string,
+  options: { asOf?: string; drafts?: "hidden" | "shown"; ksorVersion?: string } = {},
+): void {
+  const knowledge = path.join(root, "knowledge");
+  const documents: { path: string; sha256: string }[] = [];
+  const companions: { path: string; sha256: string }[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const rel = `${prefix}${entry.name}`;
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), `${rel}/`);
+      else if (/\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(entry.name)) {
+        companions.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
+      } else if (entry.name.endsWith(".md") && entry.name !== "index.md") {
+        documents.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
+      }
+    }
+  };
+  walk(knowledge, "");
+  writeFileSync(
+    path.join(root, "build.lock.json"),
+    JSON.stringify(
+      {
+        format: 1,
+        build_id: "sha256:0123456789abcdef",
+        ksor_version: options.ksorVersion ?? "0.1.0",
+        okf: { version: "0.2", commit: "ad30107c", spec_sha256: "26aa5da0" },
+        source_commit: "abc1234",
+        dirty: false,
+        as_of: options.asOf ?? AS_OF,
+        drafts: options.drafts ?? "hidden",
+        instance_sha256: "x",
+        policy_sha256: "x",
+        ledger_sha256: "x",
+        ledger_ids: [],
+        audiences: { registry: ["internal"], viewers: { public: ["public"] } },
+        documents,
+        companions,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function sha(file: string): string {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+interface Staged {
+  readonly status: number | null;
+  readonly stderr: string;
+  readonly dir: string;
+  readonly manifest: Record<string, unknown> & {
+    readonly pages: Record<string, Record<string, unknown>>;
+    readonly stamps: Record<string, unknown>;
+  };
+}
+
+function stage(fixture: Fixture, env: Record<string, string> = {}): Staged {
+  const clean = { ...process.env };
+  delete clean["NODE_ENV"];
+  delete clean["KSOR_AUDIENCE"];
+  delete clean["KSOR_DRAFTS"];
+  const result = spawnSync(process.execPath, ["stage.mjs"], {
+    cwd: fixture.site,
+    encoding: "utf8",
+    env: { ...clean, NODE_ENV: "production", ...env },
+  });
+  const line = (result.stdout ?? "").trim().split("\n").pop() ?? "";
+  const parsed = result.status === 0 ? JSON.parse(line) : { dir: "", manifest: { pages: {} } };
+  return { status: result.status, stderr: result.stderr ?? "", ...parsed };
+}
+
+function walkFiles(dir: string, prefix = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) =>
+      entry.isDirectory()
+        ? walkFiles(path.join(dir, entry.name), `${prefix}${entry.name}/`)
+        : [`${prefix}${entry.name}`],
+    )
+    .sort();
+}
+
+function bytesOf(dir: string): Buffer {
+  return Buffer.concat(
+    walkFiles(dir).map((f) => Buffer.concat([Buffer.from(f), readFileSync(path.join(dir, f))])),
+  );
+}
+
+describe("staging on the profile (build spec §3)", () => {
+  let work: string;
+  let fixture: Fixture;
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-site-stage-")));
+    fixture = writeRecord(path.join(work, "record"));
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  it("refuses without a lock outside development — ksor-lock-missing", () => {
+    const r = stage(fixture);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-missing/);
+    expect(r.stderr).toMatch(/ksor build/);
+    expect(existsSync(fixture.stage), "a refused build left a stage").toBe(false);
+  });
+
+  it("[public] with a fresh lock: admits by the §2.5 table, regenerates every index, leaks nothing", () => {
+    writeLock(fixture.root);
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.dir).toBe(fixture.stage);
+
+    const files = walkFiles(fixture.stage);
+    expect(files).toEqual([
+      "future.md",
+      "guides/diagram.png",
+      "guides/getting-started.md",
+      "guides/index.md",
+      "index.md",
+      "old-policy.md",
+      "public-policy.md",
+      "public-policy.summary.md",
+      "revoked.md",
+      "stale.md",
+    ]);
+
+    // Acceptance 3: no byte of the internal concept's title, path or
+    // description anywhere in the stage — indexes included.
+    const all = bytesOf(fixture.stage).toString("latin1");
+    for (const canary of ["CANARYTITLE", "CANARYDESC", "internal-note", "SECRETPLAN", "secret/"]) {
+      expect(all, `${canary} reached the [public] stage`).not.toContain(canary);
+    }
+    for (const canary of ["DRAFTTITLE", "DENIEDTITLE", "ARCHIVETITLE", "archive/"]) {
+      expect(all, `${canary} reached the build`).not.toContain(canary);
+    }
+
+    // The regenerated root index, in OKF §8 form, from the STAGED tree — never
+    // the committed one (there is none). Concepts by order then title; the
+    // folder after them; the internal-only folder gets no bullet.
+    const root = readFileSync(path.join(fixture.stage, "index.md"), "utf8");
+    expect(root).toBe(
+      `---
+okf_version: "0.2"
+---
+
+# Acme Handbook
+
+* [Public policy PUBTITLE1](public-policy.md) - PUBDESC1 in one line
+* [Future FUTURETITLE](future.md) - FUTUREDESC
+* [Old policy OLDTITLE](old-policy.md) - OLDDESC replaced
+* [Revoked REVOKEDTITLE](revoked.md) - REVOKEDDESC
+* [Stale STALETITLE](stale.md) - STALEDESC
+* [Guides](guides/)
+`,
+    );
+    expect(readFileSync(path.join(fixture.stage, "guides", "index.md"), "utf8")).toBe(
+      "# Guides\n\n* [Getting started GUIDETITLE](getting-started.md) - GUIDEDESC\n",
+    );
+
+    // The manifest: machine admission and the badge, per page, at the lock's as_of.
+    const pages = r.manifest.pages;
+    expect(pages["public-policy.md"]).toMatchObject({ machine: true, badge: null });
+    expect(pages["future.md"]).toMatchObject({ machine: false, badge: "effective-from" });
+    expect(pages["stale.md"]).toMatchObject({ machine: false, badge: "stale" });
+    expect(pages["old-policy.md"]).toMatchObject({
+      machine: false,
+      badge: "deprecated",
+      supersededBy: "public-policy",
+    });
+    expect(pages["revoked.md"]).toMatchObject({ machine: true });
+    expect(Object.keys(pages).sort()).toEqual([
+      "future.md",
+      "guides/getting-started.md",
+      "old-policy.md",
+      "public-policy.md",
+      "revoked.md",
+      "stale.md",
+    ]);
+    expect(r.manifest.stamps).toEqual({
+      build_id: "sha256:0123456789abcdef",
+      source_commit: "abc1234",
+      dirty: false,
+      ksor_version: "0.1.0",
+      unstamped: false,
+    });
+    expect(r.manifest["viewer"]).toEqual(["public"]);
+    expect(r.manifest["asOf"]).toBe(AS_OF);
+    expect(r.manifest["drafts"]).toBe("hidden");
+    expect(r.manifest["title"]).toBe("Acme Handbook");
+    expect(r.manifest["description"]).toBe("Authoritative for how Acme runs internally.");
+  });
+
+  it("the old denylist export is not read: a stray .ksor-denylist.json changes nothing", () => {
+    writeFileSync(
+      path.join(fixture.root, ".ksor-denylist.json"),
+      JSON.stringify({
+        format: 1,
+        source: "database",
+        denied: [{ stable_id: "knowledge/public-policy" }],
+      }),
+    );
+    const r = stage(fixture);
+    rmSync(path.join(fixture.root, ".ksor-denylist.json"));
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(path.join(fixture.stage, "public-policy.md"))).toBe(true);
+  });
+
+  it("a comma-list viewer including a registered audience admits its concepts and folder", () => {
+    const r = stage(fixture, { KSOR_AUDIENCE: "public,internal" });
+    expect(r.status, r.stderr).toBe(0);
+    const files = walkFiles(fixture.stage);
+    expect(files).toContain("internal-note.md");
+    expect(files).toContain("secret/plan.md");
+    expect(files).toContain("secret/index.md");
+    const root = readFileSync(path.join(fixture.stage, "index.md"), "utf8");
+    expect(root).toContain(
+      "* [Internal note CANARYTITLE](internal-note.md) - CANARYDESC internal only",
+    );
+    expect(root).toContain("* [Secret](secret/)");
+    expect(r.manifest["viewer"]).toEqual(["public", "internal"]);
+    // Denials apply to every viewer.
+    expect(files).not.toContain("denied.md");
+    expect(files).not.toContain("archive/gone.md");
+  });
+
+  it("a viewer that omits public is refused — ksor-viewer-omits-public", () => {
+    const r = stage(fixture, { KSOR_AUDIENCE: "internal" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-viewer-omits-public/);
+    expect(existsSync(fixture.stage), "a refused build left the previous stage").toBe(false);
+  });
+
+  it("a viewer naming an unregistered audience is refused — ksor-viewer-unregistered", () => {
+    const r = stage(fixture, { KSOR_AUDIENCE: "public, board" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-viewer-unregistered/);
+    expect(r.stderr).toContain("board");
+    expect(r.stderr).toContain("internal");
+  });
+
+  it("drafts: hidden on every build; KSOR_DRAFTS=show admits them to human surfaces only when the lock agrees", () => {
+    const hidden = stage(fixture, { KSOR_DRAFTS: "show" });
+    expect(hidden.status).not.toBe(0);
+    expect(hidden.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(hidden.stderr).toContain("KSOR_DRAFTS=show");
+
+    writeLock(fixture.root, { drafts: "shown" });
+    const shown = stage(fixture, { KSOR_DRAFTS: "show" });
+    expect(shown.status, shown.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).toContain("draft-doc.md");
+    expect(shown.manifest.pages["draft-doc.md"]).toMatchObject({ machine: false, badge: "draft" });
+    expect(shown.manifest["drafts"]).toBe("shown");
+    writeLock(fixture.root);
+  });
+
+  it("moving as_of across an effectivity boundary moves the machine set", () => {
+    writeLock(fixture.root, { asOf: "2031-01-01T00:00:00Z" });
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.manifest.pages["future.md"]).toMatchObject({ machine: true, badge: null });
+    writeLock(fixture.root);
+  });
+
+  it("a stale lock is refused — ksor-lock-stale names the document", () => {
+    const file = path.join(fixture.root, "knowledge", "public-policy.md");
+    const before = readFileSync(file, "utf8");
+    writeFileSync(file, before.replace("PUBDESC1 in one line", "PUBDESC1 edited"));
+    const r = stage(fixture);
+    writeFileSync(file, before);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain("public-policy.md");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  it("a lock built by a newer ksor than the site's rules is refused — ksor-site-outdated", () => {
+    writeLock(fixture.root, { ksorVersion: "0.2.0" });
+    const r = stage(fixture);
+    writeLock(fixture.root);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-site-outdated/);
+    expect(r.stderr).toContain("0.2.0");
+    expect(r.stderr).toContain("ksor migrate --write-site");
+  });
+
+  it("a checker refusal refuses the build by its slug, before anything is staged", () => {
+    // `stale.md`: nothing points at it, so the one refusal is its own.
+    const file = path.join(fixture.root, "knowledge", "stale.md");
+    const before = readFileSync(file, "utf8");
+    writeFileSync(file, before.replace("  audience: [public]\n", ""));
+    writeLock(fixture.root);
+    const r = stage(fixture);
+    writeFileSync(file, before);
+    writeLock(fixture.root);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-audience-missing/);
+    expect(r.stderr).toContain("knowledge/stale.md");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  it("development needs no lock: drafts admitted and marked, stamps null and unstamped", () => {
+    rmSync(path.join(fixture.root, "build.lock.json"));
+    const r = stage(fixture, { NODE_ENV: "development" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).toContain("draft-doc.md");
+    expect(r.manifest.pages["draft-doc.md"]).toMatchObject({ machine: false, badge: "draft" });
+    expect(r.manifest["drafts"]).toBe("shown");
+    expect(r.manifest.stamps).toEqual({
+      build_id: null,
+      source_commit: null,
+      dirty: false,
+      ksor_version: null,
+      unstamped: true,
+    });
+    // Lifecycle at now: the 2030 concept is still not effective.
+    expect(r.manifest.pages["future.md"]).toMatchObject({ machine: false });
+  });
+});

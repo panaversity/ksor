@@ -214,68 +214,48 @@ describe("resolveSuccessorUrl", () => {
 });
 
 describe("governanceVisible", () => {
-  const fm = (...lines: string[]): string => lines.join("\n");
-
   it("defaults to on when instance.md says nothing", () => {
     // Purely additive: every record written before this key existed keeps
     // rendering its governance.
-    expect(governanceVisible(fm("format: 1", "name: acme"))).toBe(true);
+    expect(governanceVisible({ format: 2, name: "acme" })).toBe(true);
   });
 
   it("stays on for a site block that declares only a url", () => {
-    expect(governanceVisible(fm("site:", "  url: https://acme.example"))).toBe(true);
+    expect(governanceVisible({ site: { url: "https://acme.example" } })).toBe(true);
   });
 
   it("turns off on an explicit false", () => {
-    expect(governanceVisible(fm("site:", "  governance: false"))).toBe(false);
+    expect(governanceVisible({ site: { governance: false } })).toBe(false);
   });
 
   it("stays on for an explicit true", () => {
-    expect(governanceVisible(fm("site:", "  governance: true"))).toBe(true);
+    expect(governanceVisible({ site: { governance: true } })).toBe(true);
   });
 
-  it("reads it beside its sibling keys, in either order", () => {
-    expect(
-      governanceVisible(fm("site:", "  url: https://acme.example", "  governance: false")),
-    ).toBe(false);
-    expect(
-      governanceVisible(fm("site:", "  governance: false", "  url: https://acme.example")),
-    ).toBe(false);
+  it("reads it beside its sibling keys", () => {
+    expect(governanceVisible({ site: { url: "https://acme.example", governance: false } })).toBe(
+      false,
+    );
   });
 
-  it("ends the block at the next top-level key", () => {
-    // `governance:` here is NOT a child of site: — a top-level key of that
-    // name is not this setting and must not silently become it.
-    expect(governanceVisible(fm("site:", "  url: x", "governance: false"))).toBe(true);
-  });
-
-  it("tolerates a trailing comment", () => {
-    expect(governanceVisible(fm("site:", "  governance: false # not on this site"))).toBe(false);
+  it("a top-level governance key is not this setting", () => {
+    // `governance:` at the root is a different key and must never silently
+    // become the site's publication switch.
+    expect(governanceVisible({ site: { url: "x" }, governance: false })).toBe(true);
   });
 
   it("refuses a value that is not true or false", () => {
     // Silently defaulting would publish the governance the owner asked to
-    // hide — the owner's intent must never be dropped without a word.
-    expect(() => governanceVisible(fm("site:", "  governance: no"))).toThrowError(/governance/);
-    expect(() => governanceVisible(fm("site:", "  governance:"))).toThrowError(/governance/);
-  });
-});
-
-describe("governanceVisible — a group written as a flow mapping", () => {
-  // `site: { governance: false }` parses as a SCALAR with no children, so a
-  // block-only scan never sees the key and silently returns the default —
-  // publishing the governance the owner turned off. The checker refuses this
-  // shape; the site refuses it too, because a silent default is the one
-  // outcome this setting must never have.
-  it("refuses a flow mapping rather than defaulting past it", () => {
-    expect(() => governanceVisible("site: { governance: false }")).toThrowError(/site:/);
-    expect(() =>
-      governanceVisible('site: { url: "https://acme.example", governance: false }'),
-    ).toThrowError(/site:/);
+    // hide — the owner's intent must never be dropped without a word. Real
+    // YAML hands `no` back as a string and an empty value as null: the string
+    // refuses, the empty value is the default.
+    expect(() => governanceVisible({ site: { governance: "no" } })).toThrowError(/governance/);
+    expect(governanceVisible({ site: { governance: null } })).toBe(true);
   });
 
-  it("still ignores a site: key that carries only a comment", () => {
-    expect(governanceVisible("site: # nothing yet\n  governance: false")).toBe(false);
+  it("a site: key that is not a mapping is ignored, never read as a switch", () => {
+    expect(governanceVisible({ site: "https://acme.example" })).toBe(true);
+    expect(governanceVisible({ site: ["governance"] })).toBe(true);
   });
 });
 
@@ -293,17 +273,6 @@ describe("readGovernance — YAML types that are not strings", () => {
     expect(
       readGovernance({ status: "approved", effective: Number.NaN, owner: {} }, "k.md"),
     ).toMatchObject({ effective: null, owner: null });
-  });
-});
-
-describe("governanceVisible — whitespace YAML allows", () => {
-  it("reads a key written with a space before its colon", () => {
-    // js-yaml accepts `governance : false`, and the checker's nested-key regex
-    // (`\s*:`) does too — the site's did not, so the setting was read by both
-    // of them and silently ignored by the one that decides (round 3).
-    expect(governanceVisible("site:\n  governance : false")).toBe(false);
-    expect(governanceVisible("site :\n  governance: false")).toBe(false);
-    expect(governanceVisible("site :\n  governance : false")).toBe(false);
   });
 });
 

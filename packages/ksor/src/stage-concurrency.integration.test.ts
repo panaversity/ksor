@@ -23,6 +23,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -31,6 +32,7 @@ import {
   realpathSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,10 +41,11 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const LIB = fileURLToPath(new URL("../templates/scaffold/system/site/lib/", import.meta.url));
+const SITE = fileURLToPath(new URL("../templates/scaffold/system/site/", import.meta.url));
+const KSOR_NODE_MODULES = fileURLToPath(new URL("../node_modules/", import.meta.url));
 
-/** Node strips types but does not resolve `./audience` — only `./audience.ts`. */
-const EXTENSIONLESS = /(from ")(\.\/[A-Za-z0-9._-]+)(")/g;
+/** Node strips types but resolves neither `./x` nor `./x.js` to `x.ts`. */
+const RELATIVE_IMPORT = /(from ")(\.{1,2}\/[A-Za-z0-9._/-]+?)(\.js)?(")/g;
 
 /** One worker: stage, then read back what staging handed us, `rounds` times. */
 const HARNESS = `
@@ -62,9 +65,10 @@ const rounds = Number(process.argv[2] ?? 1);
 
 for (let i = 0; i < rounds; i += 1) {
   const dir = path.resolve(knowledgeSourceDir());
+  // Every record file, plus the ONE regenerated index (a flat record has one).
   const got = walk(dir);
-  if (got.length !== expected.length) {
-    console.error(\`SHORT STAGE: \${got.length} files, expected \${expected.length}\`);
+  if (got.length !== expected.length + 1) {
+    console.error(\`SHORT STAGE: \${got.length} files, expected \${expected.length + 1}\`);
     process.exit(3);
   }
   for (const from of expected) {
@@ -86,30 +90,56 @@ interface Project {
   readonly lock: string;
 }
 
-function project(root: string, options: { documents: number; audiences: boolean }): Project {
+function sha(file: string): string {
+  return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+/** A conformant profile record: `documents` stable concepts, a policy, and a fresh lock. */
+function project(root: string, options: { documents: number; audience: string }): Project {
   const site = path.join(root, "system", "site");
   const record = path.join(root, "knowledge");
   mkdirSync(path.join(site, "lib"), { recursive: true });
+  mkdirSync(path.join(root, ".ksor"), { recursive: true });
   mkdirSync(record, { recursive: true });
 
-  const model = options.audiences
-    ? "audiences:\n  - public\n  - internal\ndefault_visibility: public\n"
-    : "";
   writeFileSync(
     path.join(root, "instance.md"),
-    `---\nname: stage-race\n${model}---\n\n# Stage Race\n\nA record used to hold staging honest under concurrency.\n`,
+    "---\nformat: 2\nname: stage-race\ntitle: Stage Race\ndescription: A record used to hold staging honest under concurrency.\n---\n\nInstructions.\n",
   );
+  writeFileSync(
+    path.join(root, ".ksor", "governance.yaml"),
+    'version: "0.1"\naudiences:\n  internal:\n    description: Employees\napproval_authorities:\n  - actors: [human:kim]\ntakedown_authorities:\n  actors: [human:kim]\n',
+  );
+  const documents: { path: string; sha256: string }[] = [];
   for (let i = 0; i < options.documents; i += 1) {
+    const file = path.join(record, `doc-${i}.md`);
     writeFileSync(
-      path.join(record, `doc-${i}.md`),
-      `---\ntitle: Doc ${i}\nstatus: approved\n---\n\nBody of document ${i}.\n`,
+      file,
+      `---\ntype: Document\ntitle: Doc ${i}\ndescription: Document ${i}.\nstatus: stable\ngenerated: { by: "test/1", at: 2026-08-01T00:00:00Z }\nksor:\n  audience: [${options.audience}]\n  approval: { by: "human:kim", at: 2026-08-02T00:00:00Z }\n---\n\nBody of document ${i}.\n`,
     );
+    documents.push({ path: `doc-${i}.md`, sha256: sha(file) });
   }
+  writeFileSync(
+    path.join(root, "build.lock.json"),
+    JSON.stringify({
+      format: 1,
+      build_id: "sha256:test",
+      ksor_version: "0.1.0",
+      source_commit: null,
+      dirty: false,
+      as_of: "2026-08-25T12:00:00Z",
+      drafts: "hidden",
+      audiences: { registry: ["internal"] },
+      documents,
+      companions: [],
+    }),
+  );
 
   // Copied whole, subdirectories included: the scaffold's lib gained `auth/`
   // when sign-in landed, and a flat read broke on the directory. What this
   // harness needs is the staging modules, but copying the tree is both simpler
-  // and immune to the next directory that appears beside them.
+  // and immune to the next directory that appears beside them. The record
+  // module beside it, and its two runtime deps linked from this package.
   let rewritten = 0;
   const copyLib = (from: string, to: string): void => {
     mkdirSync(to, { recursive: true });
@@ -121,11 +151,21 @@ function project(root: string, options: { documents: number; audiences: boolean 
         continue;
       }
       const text = readFileSync(source, "utf8");
-      rewritten += [...text.matchAll(EXTENSIONLESS)].length;
-      writeFileSync(target, text.replace(EXTENSIONLESS, "$1$2.ts$3"));
+      rewritten += [...text.matchAll(RELATIVE_IMPORT)].length;
+      writeFileSync(target, text.replace(RELATIVE_IMPORT, "$1$2.ts$4"));
     }
   };
-  copyLib(LIB, path.join(site, "lib"));
+  copyLib(path.join(SITE, "lib"), path.join(site, "lib"));
+  copyLib(path.join(SITE, "record"), path.join(site, "record"));
+  writeFileSync(
+    path.join(site, "lib", "rules-version.ts"),
+    'export const RULES_VERSION: string = "0.1.0";\n',
+  );
+  mkdirSync(path.join(site, "node_modules"), { recursive: true });
+  for (const dep of ["yaml", "zod"]) {
+    const link = path.join(site, "node_modules", dep);
+    if (!existsSync(link)) symlinkSync(path.join(KSOR_NODE_MODULES, dep), link, "dir");
+  }
   expect(
     rewritten,
     "the harness rewrote no imports — it is not running the scaffold's lib",
@@ -169,7 +209,7 @@ describe("staging under a build that evaluates its config more than once", () =>
     // /private/var while this path says /var, and every path comparison below
     // would compare two spellings of the same directory.
     work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-stage-race-")));
-    fixture = project(path.join(work, "concurrent"), { documents: DOCUMENTS, audiences: true });
+    fixture = project(path.join(work, "concurrent"), { documents: DOCUMENTS, audience: "public" });
   });
 
   afterAll(() => rmSync(work, { recursive: true, force: true }));
@@ -192,8 +232,8 @@ describe("staging under a build that evaluates its config more than once", () =>
     );
   }, 60_000);
 
-  it("leaves the stage holding exactly the record, and no lock behind", () => {
-    expect(readdirSync(fixture.stage).length).toBe(DOCUMENTS);
+  it("leaves the stage holding exactly the record and its index, and no lock behind", () => {
+    expect(readdirSync(fixture.stage).length).toBe(DOCUMENTS + 1);
     expect(existsSync(fixture.lock), "a lock outlived the build that took it").toBe(false);
   });
 
@@ -217,19 +257,14 @@ describe("staging under a build that evaluates its config more than once", () =>
   }, 30_000);
 
   it("a refused build leaves no stage — the previous, wider one must not survive", async () => {
-    const refusing = project(path.join(work, "refusing"), { documents: 3, audiences: true });
+    const refusing = project(path.join(work, "refusing"), { documents: 3, audience: "public" });
     expect((await stage(refusing.site, 1)).code, "the permissive build should pass").toBe(0);
     expect(existsSync(refusing.stage)).toBe(true);
 
-    // Every document above the build's tier: the record is not empty, this
-    // audience's slice of it is.
-    for (const entry of readdirSync(refusing.record)) {
-      const file = path.join(refusing.record, entry);
-      writeFileSync(
-        file,
-        readFileSync(file, "utf8").replace("status: approved", "visibility: internal"),
-      );
-    }
+    // Every document outside the [public] viewer: the record is not empty,
+    // this viewer's slice of it is. Rewritten in place with a fresh lock, so
+    // the refusal is the viewer's and not the lock's.
+    project(path.join(work, "refusing"), { documents: 3, audience: "internal" });
     const run = await stage(refusing.site, 1);
     expect(run.code, run.out).not.toBe(0);
     expect(run.out).toContain("ksor-audience-empty");
@@ -237,17 +272,17 @@ describe("staging under a build that evaluates its config more than once", () =>
     expect(existsSync(refusing.lock), "a refused build kept the lock").toBe(false);
   }, 30_000);
 
-  it("a record with no audiences serves itself, and a stale stage is removed", async () => {
-    const level0 = project(path.join(work, "level-0"), { documents: 3, audiences: false });
-    mkdirSync(level0.stage, { recursive: true });
-    writeFileSync(path.join(level0.stage, "left-over.md"), "---\ntitle: Stale\n---\n\nStale.\n");
-    const run = await stage(level0.site, 1);
+  it("a stale stage from an earlier build is replaced, never merged", async () => {
+    const fresh = project(path.join(work, "stale-stage"), { documents: 3, audience: "public" });
+    mkdirSync(fresh.stage, { recursive: true });
+    writeFileSync(path.join(fresh.stage, "left-over.md"), "---\ntitle: Stale\n---\n\nStale.\n");
+    const run = await stage(fresh.site, 1);
     expect(run.code, run.out).toBe(0);
-    expect(run.out.trim().split("\n").pop()).toBe(level0.record);
     expect(
-      existsSync(level0.stage),
-      "a stage nothing governs outlived the model that made it",
+      existsSync(path.join(fresh.stage, "left-over.md")),
+      "a file no plan produced outlived the stage that held it",
     ).toBe(false);
-    expect(existsSync(level0.lock)).toBe(false);
+    expect(existsSync(path.join(fresh.stage, "index.md"))).toBe(true);
+    expect(existsSync(fresh.lock)).toBe(false);
   }, 30_000);
 });
