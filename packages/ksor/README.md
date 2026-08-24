@@ -60,8 +60,7 @@ The architecture: **one governed record** — Markdown in the KSoR Profile of
 the Open Knowledge Format (OKF) — behind **one governance boundary**,
 projected through open standards: MCP for agents, `llms.txt` for AI
 discovery, OAuth/OIDC for identity, SLSA/Sigstore for publication integrity,
-OpenTelemetry for observability. The full specification is the
-[KSoR Standard Proposal](https://github.com/panaversity/ksor/blob/main/research/ksor-standard-proposal-001-v0.1-draft9.md).
+OpenTelemetry for observability.
 
 Full concept, design goals, and project status:
 **<https://github.com/panaversity/ksor>**
