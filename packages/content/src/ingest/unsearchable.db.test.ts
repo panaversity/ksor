@@ -33,16 +33,22 @@ import type pg from "pg";
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_unsearchable";
 
-/** Navigation: a page of links, which no search should ever return. */
+/**
+ * Navigation: a page of links, which no search should ever return. Every link
+ * resolves — `ksor-link-dead` refuses a record whose internal links do not,
+ * and a fixture that could not be published is not evidence about what
+ * publishing does. What is being measured is the SHAPE (a segment that is
+ * mostly link lines), which four resolving links make exactly as well.
+ */
 const NAV = profileDoc({
   title: "Handbook",
   body: `
 # Handbook
 
 - [Probation](probation.md)
-- [Notice periods](notice-periods.md)
-- [Expense limits](expense-limits.md)
-- [Travel](travel.md)
+- [Notice periods](probation.md#notice)
+- [Expense limits](expenses.md#limits)
+- [Travel](expenses.md#travel)
 `,
 });
 
