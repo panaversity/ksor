@@ -65,7 +65,14 @@ export function linkTargets(body: string): string[] {
  * bundle.
  */
 export function resolveLink(sourceId: string, target: string): string | null {
-  const clean = decodeURIComponent(target.split("#")[0] ?? "").replace(/\.md$/, "");
+  const raw = target.split("#")[0] ?? "";
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // A malformed %-escape names nothing; it resolves to a path that does not exist.
+  }
+  const clean = decoded.replace(/\.md$/, "");
   const base = clean.startsWith("/") ? [] : sourceId.split("/").slice(0, -1);
   const segments = [...base];
   for (const seg of clean.replace(/^\/+/, "").split("/")) {

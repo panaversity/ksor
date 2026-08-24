@@ -281,7 +281,29 @@ not exist, is not `stable`, or fails the widening rule),
 `ksor-takedown-unauthorised`, `ksor-takedown-dangling`,
 `ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-invalid`,
 `ksor-policy-missing`, `ksor-policy-invalid`, `ksor-legacy-key` (§2.6),
-`ksor-instance-format`, `ksor-migrate-underivable` (migrate only). Viewer
+`ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
+`^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside
+the closed set at any level, a group not written as a block, a non-boolean
+`site.governance`), `ksor-migrate-underivable` (migrate only). The hygiene
+rules the scaffold's hand-written checker carried, ported so nothing it
+refused is accepted silently: `ksor-record-empty` (no concept at all),
+`ksor-symlink`, `ksor-name-unportable` (whitespace, `<>:"|?*`, a trailing dot,
+a Windows device name, uppercase, non-ASCII, a leading underscore,
+parentheses — on files and directories alike), `ksor-name-collides` (two
+paths one apart in case; a concept `x.md` beside a directory `x/`),
+`ksor-file-type` (`.mdx`, `meta.json`, a YAML that is no companion, anything
+but markdown and `png/jpg/jpeg/gif/svg/webp`), `ksor-asset-corrupt` (a PNG
+whose signature or chunk CRC fails), `ksor-attachment-near-miss` (`.yml`,
+`.json`, `.markdown` one character off a companion), `ksor-link-dead` (a
+record-internal link that resolves to no concept, companion, asset,
+directory, index or the root), `ksor-link-escapes` (a `..` that climbs out of
+`knowledge/`). Unknown frontmatter keys are NOT refused (§2.7) — the one
+deliberate loosening against the old checker's closed key set. The project
+around the record is checked by `pnpm check` alone, not by `ksor build` or
+ingest: `ksor-pointer-changed` (`CLAUDE.md` is not exactly `@AGENTS.md`),
+`ksor-skill-copy-diverged` (`.agents/skills` and `.claude/skills` differ in
+either direction), `ksor-site-holds-content` (a `.md`/`.mdx` inside
+`system/site`). Viewer
 and lock refusals (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`,
 `ksor-lock-missing`, `ksor-lock-stale`, `ksor-site-outdated`) belong to the
 site build and the door, not to the record checker (build spec §3).

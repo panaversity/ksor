@@ -203,7 +203,14 @@ export {
   type CheckOptions,
   type CheckResult,
 } from "./record/check.js";
-export { loadRecord, resolveInstanceDir } from "./record/load.js";
+export { loadRecord, loadScaffoldStructure, resolveInstanceDir } from "./record/load.js";
+export {
+  checkHygiene,
+  checkScaffoldStructure,
+  firstBrokenPngChunk,
+  type HygieneTree,
+  type ScaffoldStructure,
+} from "./record/hygiene.js";
 export { overlaps, mayReach } from "./lib/audience-rule.js";
 export { OVERLAP_CASES, WIDENING_CASES } from "./lib/audience-conformance.js";
 export { admitsLifecycle, type LifecycleDoc, type Surface } from "./lib/lifecycle-rule.js";

@@ -179,12 +179,12 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     expect(slugs(files)).toEqual(["ksor-link-widens knowledge/a.summary.md"]);
   });
 
-  it("an index is never a link source, and a link to a missing concept is not a widening", () => {
+  it("an index is never a link source; a link to a missing concept is dead, never a widening", () => {
     const files = {
       "knowledge/a.md": doc("A", PUBLIC, "[gone](gone.md) [idx](index.md)\n"),
       "knowledge/index.md": "[b](b.md)",
     };
-    expect(slugs(files, [], "build")).toEqual([]);
+    expect(slugs(files, [], "build")).toEqual(["ksor-link-dead knowledge/a.md"]);
   });
 
   it("ksor-supersession-strands: the successor must exist, be stable, and pass the widening rule", () => {
@@ -238,13 +238,18 @@ describe("checkRecord — one rule set (record spec §6)", () => {
   });
 
   it("ksor-instance-format: the instance must say format: 2 and carry none of the moved keys", () => {
+    const a = { "knowledge/a.md": doc("A", PUBLIC) };
     const one = INSTANCE.replace("format: 2", "format: 1");
     expect(
-      checkRecord(record({ "instance.md": one }), { mode: "build" }).refusals.map((r) => r.slug),
+      checkRecord(record({ ...a, "instance.md": one }), { mode: "build" }).refusals.map(
+        (r) => r.slug,
+      ),
     ).toEqual(["ksor-instance-format"]);
     const moved = INSTANCE.replace("title: Acme", "title: Acme\naudiences: [public, internal]");
     expect(
-      checkRecord(record({ "instance.md": moved }), { mode: "build" }).refusals.map((r) => r.slug),
+      checkRecord(record({ ...a, "instance.md": moved }), { mode: "build" }).refusals.map(
+        (r) => r.slug,
+      ),
     ).toEqual(["ksor-instance-format"]);
   });
 

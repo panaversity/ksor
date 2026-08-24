@@ -39,6 +39,20 @@ export const REFUSAL_SLUGS = [
   "ksor-legacy-key",
   "ksor-instance-format",
   "ksor-migrate-underivable",
+  // Hygiene (record spec §6, ported from the scaffold's hand-written checker).
+  "ksor-record-empty",
+  "ksor-symlink",
+  "ksor-name-unportable",
+  "ksor-name-collides",
+  "ksor-file-type",
+  "ksor-asset-corrupt",
+  "ksor-attachment-near-miss",
+  "ksor-link-dead",
+  "ksor-link-escapes",
+  // The project around the record (`pnpm check` only).
+  "ksor-pointer-changed",
+  "ksor-skill-copy-diverged",
+  "ksor-site-holds-content",
 ] as const;
 
 export type RefusalSlug = (typeof REFUSAL_SLUGS)[number];
