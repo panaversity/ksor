@@ -38,11 +38,13 @@ export function keyRingFromEnv(raw: string | undefined): KeyRing {
   }
   const keys = new Map<string, Buffer>();
   let active: string | null = null;
-  for (const part of raw.split(",")) {
+  for (const [i, part] of raw.split(",").entries()) {
     const eq = part.indexOf("=");
     if (eq <= 0 || eq === part.length - 1) {
+      // Never echo the entry: when kid= was forgotten, the entry IS the
+      // secret, and this message lands in whatever collects logs.
       throw new Error(
-        `KSOR_SNAPSHOT_KEYS entry ${JSON.stringify(part)} is not kid=secret — ` +
+        `KSOR_SNAPSHOT_KEYS entry ${i + 1} (${part.length} chars) is not kid=secret — ` +
           "a half-parsed key ring would mint tokens nothing can validate; " +
           "write comma-separated kid=secret pairs, first one active",
       );

@@ -65,6 +65,25 @@ describe("snapshot tokens", () => {
     // MAC fails — the soft "refreshed" path, exactly what ephemeral means.
     expect(validate(keyRingFromEnv(undefined), token, scope, NOW).reason).toBe("invalid");
   });
+
+  it("a malformed entry's refusal never echoes the entry — it is the secret when kid= was forgotten", () => {
+    // The likeliest operator mistake is pasting a bare secret; the refusal
+    // reaches whatever collects logs, so it may name only position and length.
+    for (const [ring, secret] of [
+      ["prod=good-one,s3cr3t-hunter2-oops", "s3cr3t-hunter2-oops"],
+      ["prod=good-one,=s3cr3t-hunter2-oops", "s3cr3t-hunter2-oops"],
+    ] as const) {
+      let message = "";
+      try {
+        keyRingFromEnv(ring);
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(message).not.toContain(secret);
+      expect(message).toMatch(/entry 2 \(\d+ chars\)/);
+      expect(message).toMatch(/kid=secret/);
+    }
+  });
 });
 
 /**
