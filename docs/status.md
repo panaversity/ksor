@@ -6,7 +6,7 @@ updated: 2026-08-23.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.22** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.35** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -20,9 +20,11 @@ Verified end to end against each published version. The full KERNEL walk was
 last run against **0.0.18** (2026-08-22: fresh `npm install` into a bare
 project, driven by the real `@modelcontextprotocol/client` SDK over live
 Postgres 17.7 + pgvector 0.8.2 with real Gemini embeddings) and has not been
-re-run since — 0.0.19 through 0.0.22 changed the site surface, not the kernel,
-and this page says which walk covered what rather than letting a version bump
-re-attribute one. What that walk covers: install · `schema` ·
+re-run since. 0.0.19–0.0.22 changed the site surface; 0.0.24–0.0.29 DID change
+the door's registration and auth surfaces, and those were proven differently —
+live, from claude.ai as a real MCP client against a real deployment (the next
+section). This page says which walk covered what rather than letting a version
+bump re-attribute one. What that walk covers: install · `schema` ·
 `grant` · first `ingest` builds and flips · a **second ingest consumes nothing**
 ("unchanged — generation N already serves this corpus") · the shrink guard
 refusing a catastrophic deletion · `serve` boots and prints its posture · three
@@ -30,6 +32,104 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
+
+Deployment stopped being prose and became shipped artifacts, then a walked
+deployment:
+
+- `ksor init` emits a `Dockerfile` and `.dockerignore` (decision 8 revision
+  2026-08-23). The Dockerfile names no host, and `vercel.json` grew from one
+  static build to TWO services behind one domain — site + door — POINTING AT
+  the Dockerfile rather than replacing it, so moving hosts is a redeploy, not
+  a rewrite. A test asserts that neutrality directly.
+- Verifying live before shipping earned its cost twice. A project-level
+  `trailingSlash: true` — harmless while the project was static-only —
+  308-redirected every door route **including `POST /mcp`**, which would have
+  broken the MCP endpoint of every adopter who deployed. And the first
+  `.dockerignore` cut `system/` from the image, so the adopter's own tool
+  registration never reached the container and the door silently served the
+  defaults (fixed 0.0.25/0.0.26; the Dockerfile also names the files it
+  copies instead of `COPY . ./`, which a host that ignores `.dockerignore`
+  turned into a 643 MB upload).
+- A real record runs at **ksor-book.vercel.app**: site + MCP door, one domain,
+  Neon Postgres, real Gemini embeddings. The door's auth was proven from
+  **claude.ai as a real MCP client** — the full OAuth dance with RFC 8707
+  resource indicators and dynamic client registration off — against BOTH
+  Auth0 and the Panaversity SSO (Better Auth): the vendor-free claim
+  demonstrated rather than argued.
+- The docs shipped with the walk, not before it: `deploying.md`,
+  `ingesting.md`, `tool-surface.md`, and `authorization.md` with four worked
+  provider recipes (Keycloak, Ory Hydra, Auth0, Better Auth), each written
+  around the confusions because each was got wrong first on a real tenant.
+  `deploying.md` and `ingesting.md` were then read cold by someone who had
+  never used the product and corrected from their report (0.0.33).
+
+- Re-walked on **0.0.35** the day it published (2026-08-24): the record was
+  re-scaffolded from the registry, redeployed, and both surfaces exercised
+  live. The DOOR: `POST /mcp` answers curl `401` with its RFC 9728
+  `resource_metadata` challenge, and claude.ai — connected via OAuth against
+  the Panaversity SSO — ran `search` and returned the passage byte-exact with
+  its citation (`stable_id: knowledge/what-is-a-ksor`, `generation: 5`) and a
+  generation-pinned snapshot token; the client also relayed the envelope's
+  own `gate: "off"` disclosure, which is the honest-absence posture doing its
+  job on a record with no calibrated floor. The SITE: the 0.0.35 sign-in
+  control live on the same domain — sign in against Auth0, the reader's name
+  and email in the navbar, sign out returning the control. Two different
+  identity providers on one deployment, neither named in framework code.
+
+### The site names its reader (0.0.35)
+
+The scaffolded site gains an optional sign-in control: OAuth 2.0
+Authorization Code + PKCE against a public client, endpoints discovered (RFC
+8414, then OIDC — no vendor named anywhere), session in `sessionStorage` for
+the tab, no refresh token requested. Off unless three `NEXT_PUBLIC_KSOR_*`
+variables are set at build time; unconfigured it renders nothing at all. It
+NAMES an already-authenticated reader — it does not gate, and
+`deploying.md`'s "Naming the reader" section leads with that, beside the
+section that says what actually keeps people out of a static export. Walked
+live against a real Auth0 tenant before landing: sign-in, consent, session,
+sign-out, a forged callback refused on state before any code was redeemed,
+an issuer decline rendered honestly. The state-before-redemption assertion
+is mutation-tested. Also fixed the gap the work exposed: the site build
+never read the repository-root `.env`, so the scaffold's own instructions
+set variables that silently never reached the bundle.
+
+### The tool surface is adopter-owned code (0.0.24, decision 23)
+
+`ksor init` emits the MCP tool REGISTRATION — ordinary `registerTool`,
+ordinary zod — into `system/gateways/content.ts`, importing from
+`@panaversity/ksor/gateway`. Renaming a tool, tightening a description,
+dropping or adding one is editing a file the adopter owns; a config API was
+built first and discarded, because models are trained on the MCP SDK and zod,
+not on invented field names. What stays in the package: the handlers (only
+they can prove a passage came from the governed record), the output schemas,
+and the floor text. The exchange is prevention for verification — the door
+inspects its OWN served surface at boot over a real in-memory MCP handshake
+and refuses `ksor-gateway-floor-missing` / `ksor-gateway-no-tools`. Deleting
+the file is supported and asserted: the compiled default serves the identical
+surface, compared over the protocol. The measurement that motivated it: three
+tool definitions cost ~2,990 always-resident tokens and one default `search`
+call ~3,541 — an agent pays for a record's tool surface out of its context
+window, so the record's owner decides what it says.
+
+### One auth switch, spelled like what it does (0.0.29)
+
+**Breaking:** `KSOR_AUTH_DISABLED` and `KSOR_ALLOW_PUBLIC_UNAUTHENTICATED`
+are replaced by one `KSOR_AUTH` with two explicit values — `disabled-local`
+(loopback only) and `disabled-public` (a public bind that really means to be
+open, written out). The fail-closed posture is unchanged: no SSO configured
+and no explicit disable still refuses to boot.
+
+### One shell (0.0.34)
+
+The second site shell is retired (decision 9 revision 2026-08-24, owner):
+every surface the record grew had to be built twice to keep the conformance
+suites green, for a shell no adopter runs — `ksor init` has always emitted
+Fumadocs and there was never a selector. The five-clause surface contract is
+unchanged and still asserted against the one implementation; both suites keep
+their `.each(SHELLS)` shape, so a shell returning needs no restructuring.
+Restored by an adopter actually swapping one in; the recipe is in git history.
 
 ### What a concurrent build found (0.0.22)
 
@@ -221,14 +321,13 @@ either stops being true.
   stable slugs and remedies. Acceptance runs on ubuntu and windows; a
   gated browser e2e drives the built site in real Chromium.
 
-- **The shell swap seam, proven with two implementations** — a Docusaurus
-  conformance shell at `workbench/shells/docusaurus/` — RETIRED 2026-08-24
-  (decision 9 revision); the suite now runs one shell — (predecessor-based,
-  decision 6) swaps into any scaffolded project by its README recipe, and
-  one shell-agnostic suite runs the surface contract's five clauses, the
-  `order:` translation, and the base-path build against both shells in CI.
-  `ksor init` still emits Fumadocs, always — the second shell is the
-  option and the vendor-neutrality proof, not a selector.
+- **The shell swap seam** — the surface contract's five clauses, the
+  `order:` translation, and the base-path build run as one shell-agnostic
+  conformance suite. It was proven with TWO implementations (a Docusaurus
+  shell at `workbench/shells/docusaurus/`, predecessor-based) until
+  2026-08-24, when the second shell was retired (decision 9 revision): every
+  new surface had to be built twice for a shell no adopter runs. The suite
+  keeps its `.each(SHELLS)` shape; `ksor init` emits Fumadocs, always.
 
 - **Visibility** (`specs/ksor/visibility/spec.md`, evidence in
   `research/visibility.md` and issue #10) — the record declares its
@@ -274,7 +373,7 @@ either stops being true.
   decision about the PAGES and never reaches those files.
   Fumadocs shell only: bound there rather than as a surface-contract clause
   (owner, 2026-08-20), so a project that swaps shells loses it until its shell
-  adds it. Not yet released.
+  adds it. Released in 0.0.21.
 
 - **The deploy story** — the scaffold ships `vercel.json` answering
   Vercel's setup interview (repo root, static export), and the scaffolded
@@ -297,7 +396,17 @@ either stops being true.
 
 ## Released since 0.0.7
 
-- **Presentations** (`specs/ksor/slides/spec.md`, unreleased on this branch).
+- **Smaller shipped truths (0.0.28–0.0.33):** each document page reports its
+  reading time, counted at build time from its own markdown (0.0.28). The
+  door's per-tool instructions render as tabs (0.0.32). The MCP door gained
+  its first slice of standing adversarial governance coverage (issue #33,
+  0.0.31). And the site's search index no longer pins English tokenization —
+  a record written in Urdu, Chinese, Japanese or Korean was published
+  complete and silently unsearchable; the pin bought nothing on English text
+  (measured: `english` and `multilingual` return identical results under
+  ZBSearch) and is removed (0.0.33).
+
+- **Presentations** (`specs/ksor/slides/spec.md`, released in 0.0.31).
   `<doc>.slides.yaml` is the FIFTH attachment, on the same rule again — the
   suffix list changed and the guarantee did not. It renders at the TOP of the
   document's page, before the prose, because a deck is the shape of the thing
@@ -326,7 +435,7 @@ either stops being true.
   seeds content we authored, and a slides attachment pointing outside the repo
   could only seed a third party's deck or a dead link.
 
-- **Quizzes** (`specs/ksor/quiz/spec.md`, unreleased on this branch). A
+- **Quizzes** (`specs/ksor/quiz/spec.md`, released in 0.0.30). A
   document may carry `<doc>.quiz.yaml` as a THIRD attachment, on the same rule
   as the summary and the deck — so no route, no `llms.txt` line, no stable id,
   and its parent's tier and takedown, all inherited rather than
@@ -360,7 +469,7 @@ either stops being true.
   for putting four of five answers at option B.
 
 - **Study attachments — summaries and flashcard decks** (decision 24,
-  `specs/ksor/study-attachments/spec.md`, unreleased on this branch). A
+  `specs/ksor/study-attachments/spec.md`, released in 0.0.28). A
   document may carry `<doc>.summary.md` and `<doc>.flashcards.yaml` beside it.
   The summary joins the record's own words as a second TAB — the two readings
   of a document. The deck renders at the END of the page, in the region the quiz
@@ -458,9 +567,10 @@ either stops being true.
   scaffold agent kit (today the runbook lives in the scaffold `AGENTS.md`,
   which every coding agent reads first — a skill must first be shown to beat
   that);
-  and a **serve deploy recipe** (Dockerfile / managed-Postgres guide — today
-  serve runs anywhere Node runs, with the env contract and fail-closed posture
-  documented, but no packaged deploy).
+  and a **serve deploy recipe — DONE in 0.0.23–0.0.27**: the scaffold ships
+  the `Dockerfile`/`.dockerignore`, `vercel.json` deploys both services behind
+  one domain, and `deploying.md` is the managed-Postgres guide — walked live
+  (see "Deployed live" above).
 - **MCP protocol version — DONE: the surface ships on the current revision.**
   The gateway serves the **2026-07-28** spec revision via SDK **v2**
   (`@modelcontextprotocol/server` 2.0.0; `@modelcontextprotocol/client` 2.0.0
