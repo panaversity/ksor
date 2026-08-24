@@ -281,3 +281,19 @@ export function checkLedgerShrank(
     },
   ];
 }
+
+/**
+ * Does any in-force denial cover the concept `id` (bundle-relative)? A `node`
+ * entry names exactly `knowledge/<id>`; a `subtree` entry names
+ * `knowledge/<dir>#section` and covers every id beneath `dir/` (the root,
+ * `knowledge/#section`, covers everything). Resolved at use, never expanded
+ * at write time, for the reason decision 14 records: a subtree denial must
+ * also cover a descendant a later change adds.
+ */
+export function denies(inForceDenials: readonly Denial[], id: string): boolean {
+  return inForceDenials.some((d) => {
+    if (d.scope === "node") return d.stableId === `knowledge/${id}`;
+    const dir = d.stableId.slice("knowledge/".length, -"#section".length);
+    return dir === "" || id === dir || id.startsWith(`${dir}/`);
+  });
+}

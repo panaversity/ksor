@@ -173,10 +173,29 @@ export {
   checkLedgerActors,
   checkLedgerAgainstTree,
   checkLedgerShrank,
+  denies,
   type Ledger,
   type LedgerEntry,
   type LedgerBaseline,
+  type Denial,
 } from "./record/ledger.js";
+export {
+  composeLock,
+  parseLock,
+  buildIdOf,
+  sha256Hex,
+  canonicalViewers,
+  admittedViewersOf,
+  OKF_PIN,
+  LOCK_FORMAT,
+  type Lock,
+  type LockDocument,
+  type LockInput,
+  type LockResult,
+  type BuildIdInputs,
+  type AdmissionConcept,
+  type Drafts,
+} from "./record/lock.js";
 export { generateIndexes, parseIndex, humanise, type IndexInput } from "./record/index-file.js";
 export {
   checkRecord,

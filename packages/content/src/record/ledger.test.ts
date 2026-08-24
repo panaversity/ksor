@@ -4,8 +4,10 @@ import {
   checkLedgerActors,
   checkLedgerAgainstTree,
   checkLedgerShrank,
+  denies,
   inForce,
   parseLedger,
+  type Denial,
   type Ledger,
 } from "./ledger.js";
 
@@ -202,5 +204,26 @@ describe("checkLedgerShrank", () => {
     expect(
       checkLedgerShrank(["a", "b", "c"], [{ source: "git history", ids: ["a", "b", "c"] }]),
     ).toEqual([]);
+  });
+});
+
+describe("denies — the in-force denials as a predicate over concept ids", () => {
+  const denial = (stableId: string, scope: "node" | "subtree"): Denial => ({
+    kind: "denial",
+    id: "x",
+    by: "human:ciso",
+    at: "2026-08-25T10:00:00Z",
+    reason: null,
+    stableId,
+    scope,
+    expected: "present",
+  });
+  it("node matches one id exactly; subtree matches the directory's descendants and never a prefix-sibling", () => {
+    expect(denies([denial("knowledge/a/b", "node")], "a/b")).toBe(true);
+    expect(denies([denial("knowledge/a/b", "node")], "a/bc")).toBe(false);
+    expect(denies([denial("knowledge/a#section", "subtree")], "a/b/c")).toBe(true);
+    expect(denies([denial("knowledge/a#section", "subtree")], "ab/c")).toBe(false);
+    expect(denies([denial("knowledge/#section", "subtree")], "anything")).toBe(true);
+    expect(denies([], "a")).toBe(false);
   });
 });
