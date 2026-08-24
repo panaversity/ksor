@@ -27,9 +27,9 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 ## Start here
 
-Node 24 or newer — the only prerequisite. Run init with the package manager
-you already use; the runner you type IS the choice, and everything the
-scaffold emits — scripts, README, the agent kit — speaks that manager:
+All you need is Node 24 or newer. Use whichever package manager you already
+have — npm, pnpm, or bun — and the project it creates will use that same
+manager everywhere:
 
 **npm**
 
@@ -52,34 +52,35 @@ bunx @panaversity/ksor init my-knowledge-sor
 cd my-knowledge-sor && bun install && bun run dev
 ```
 
-Your governed record is now live at `http://localhost:3000`, hot-reloading as
-you edit `knowledge/`. What you have is a real project — the record, a working
-site, adopter CI, and the rules and skills a coding agent needs — and it is
-yours outright: nothing is downloaded at build time and nothing phones home.
+Open `http://localhost:3000`. Your knowledge site is running, and it reloads
+as you edit the Markdown files in `knowledge/`. What you have is a complete,
+ordinary project — your knowledge, a working website, a CI workflow, and
+instructions for coding agents — and it is entirely yours: nothing is
+downloaded at build time, and nothing phones home.
 
-**Then open the project in the coding agent you already use and tell it what
-this record is for.** That is the interface. The scaffold ships `AGENTS.md`
-(`CLAUDE.md` is a symlink to it) carrying the working rules, and an intake
-interview the agent runs with you to replace the placeholder identity in
-`instance.md` with your real one. You write knowledge in plain Markdown, in any
-language you write in; the agent handles the governance ladder around it.
+**Next, open the project in the coding agent you already use** (Claude Code,
+Cursor, Copilot — any of them) **and tell it what this knowledge base is
+for.** That is how you work with KSoR day to day: you write plain Markdown,
+in whatever language you write in, and the agent handles the checks and
+structure around it. The project ships `AGENTS.md` with the working rules,
+and the agent will interview you to replace the placeholder in `instance.md`
+— the file that says what this knowledge base covers.
 
-Two commands are worth knowing on day one — shown here and for the rest of
-this page in the pnpm spelling; your own scaffold's README speaks your
-manager (`npm run check`, `bun run build`):
+Two commands are worth knowing on day one (shown with pnpm here and for the
+rest of this page; your own project's README uses your manager):
 
 ```bash
-pnpm check    # the format checker — run before handing off any knowledge change
-pnpm build    # a fully static site into system/site/out/, deployable anywhere
+pnpm check    # validates your knowledge files — run it before sharing a change
+pnpm build    # builds a fully static site into system/site/out/, hostable anywhere
 ```
 
-**When you want agents to query it**, climb one rung — that needs Postgres and
-an embedding key, and it is three deliberate steps: `pnpm provision` once, then
-`pnpm refresh` to publish, then `pnpm serve`. See
-[Serve to AI Agents](#serve-to-ai-agents) below for the whole path.
+**Later, when you want AI agents to query your knowledge directly**, you add
+a Postgres database and an embedding API key, then run three commands:
+`pnpm provision` once, `pnpm refresh` to publish, and `pnpm serve`. The full
+path is in [Serve to AI Agents](#serve-to-ai-agents) below.
 
-Everything after this section is *why* it is built this way. If you would rather
-read the reference, jump to [Requirements](#requirements).
+The rest of this page explains _why_ KSoR is built this way. To go straight
+to the practical reference, jump to [Requirements](#requirements).
 
 ---
 
@@ -134,7 +135,7 @@ KSoR exists to solve that problem.
 
 ---
 
-# The KSoR Framework
+## The KSoR Framework: Nine Responsibilities
 
 KSoR is an **open, vendor-neutral knowledge infrastructure framework**,
 built around three commitments:
@@ -142,6 +143,35 @@ built around three commitments:
 > **One authoritative record.**  
 > **One governance boundary.**  
 > **Many open projections.**
+
+That model in one picture:
+
+```text
+                      KSoR FRAMEWORK
+      open, vendor-neutral knowledge infrastructure
+                             │
+                    AUTHORITATIVE CORE
+                     Governed Markdown
+                   (KSoR Profile of OKF)
+                             │
+                    GOVERNANCE BOUNDARY
+                             │
+      ┌──────────────┬───────┴───────┬──────────────┐
+      │              │               │              │
+      ▼              ▼               ▼              ▼
+  Human site    AI discovery   Agent surface    Exchange
+   Fumadocs       llms.txt          MCP       governed OKF
+                                     │           bundles
+                                     ▼
+                              Retrieval layer
+                            Postgres + pgvector
+```
+
+Identity (OAuth/OIDC), publication integrity (SLSA/Sigstore), and
+observability (OpenTelemetry) cut across every surface without becoming
+knowledge stores.
+
+### The nine responsibilities
 
 The framework separates **nine responsibilities**, so that no single product
 becomes the knowledge authority. Wherever an open format, convention, or
@@ -178,31 +208,6 @@ boundary without first passing the applicable governance decision. For a
 static build that decision runs once per audience-specific build; for dynamic
 retrieval it runs per request; the policy is the same either way.
 
-```text
-                      KSoR FRAMEWORK
-      open, vendor-neutral knowledge infrastructure
-                             │
-                    AUTHORITATIVE CORE
-                     Governed Markdown
-                   (KSoR Profile of OKF)
-                             │
-                    GOVERNANCE BOUNDARY
-                             │
-      ┌──────────────┬───────┴───────┬──────────────┐
-      │              │               │              │
-      ▼              ▼               ▼              ▼
-  Human site    AI discovery   Agent surface    Exchange
-   Fumadocs       llms.txt          MCP       governed OKF
-                                     │           bundles
-                                     ▼
-                              Retrieval layer
-                            Postgres + pgvector
-```
-
-Identity (OAuth/OIDC), publication integrity (SLSA/Sigstore), and
-observability (OpenTelemetry) cut across every surface without becoming
-knowledge stores.
-
 The governance boundary is what turns a set of useful technologies into a
 Knowledge System of Record. Without it, the components above would merely
 form another knowledge stack.
@@ -223,7 +228,7 @@ inferred from this section.
 
 ---
 
-# What Is a Knowledge System of Record?
+## What Is a Knowledge System of Record?
 
 A **Knowledge System of Record — KSoR — is the authoritative, governed knowledge layer that humans, AI agents, and software use to understand, decide, and act.**
 
@@ -254,7 +259,7 @@ The goal is to establish:
 
 ---
 
-## Traditional SoR vs. KSoR
+### Traditional SoR vs. KSoR
 
 A traditional System of Record and a Knowledge System of Record solve different problems.
 
@@ -293,7 +298,7 @@ A capable enterprise agent may read policy from a KSoR, retrieve current account
 
 ---
 
-# KSoR Is More Than a Knowledge Base
+## KSoR Is More Than a Knowledge Base
 
 A knowledge base stores information.
 
@@ -326,7 +331,7 @@ KSoR therefore treats **governance, provenance, citations, versioning, and abste
 
 ---
 
-# Retrieval Is Not the Product
+## Retrieval Is Not the Product
 
 KSoR may use search, indexing, embeddings, full-text retrieval, structured lookup, or other retrieval techniques.
 
@@ -348,13 +353,13 @@ They do not make something a KSoR.
 The defining property is **authoritative governed knowledge**.
 
 Retrieval is one responsibility of nine ([The KSoR
-Framework](#the-ksor-framework)); the record, and the governance boundary
-around it, are what define a KSoR.
+Framework](#the-ksor-framework-nine-responsibilities)); the record, and the
+governance boundary around it, are what define a KSoR.
 
 
 ---
 
-# One Source. Multiple Projections.
+## One Source. Multiple Projections.
 
 KSoR follows a simple principle:
 
@@ -398,7 +403,7 @@ They are different projections of the **same governed source**.
 
 ---
 
-# The Trust Ladder
+## The Trust Ladder
 
 Not every way of serving knowledge gives the same guarantee, and a KSoR
 refuses to pretend otherwise. The trade is explicit, as a ladder: **wider
@@ -418,9 +423,9 @@ which rung is a decision the organization makes, not the tooling.
 
 ---
 
-# Core Principles
+## Core Principles
 
-## 1. One Authoritative Source
+### 1. One Authoritative Source
 
 Knowledge should have one canonical location.
 
@@ -428,7 +433,7 @@ Different consumers may receive different representations, but those representat
 
 ---
 
-## 2. Humans, Agents, and Software Are First-Class Consumers
+### 2. Humans, Agents, and Software Are First-Class Consumers
 
 Knowledge architecture can no longer assume that only people will read documentation.
 
@@ -445,7 +450,7 @@ Different consumers may require different representations, but those representat
 
 ---
 
-## 3. Provenance Matters
+### 3. Provenance Matters
 
 An answer is much more useful when you can determine:
 
@@ -458,7 +463,7 @@ KSoR preserves the chain from source knowledge to generated projections.
 
 ---
 
-## 4. Citation Before Confidence
+### 4. Citation Before Confidence
 
 An AI sounding confident is not evidence.
 
@@ -468,7 +473,7 @@ The agent should be able to identify the knowledge that supports its answer rath
 
 ---
 
-## 5. Abstention Is a Feature
+### 5. Abstention Is a Feature
 
 A governed AI system needs to know the boundary of its knowledge.
 
@@ -480,7 +485,7 @@ When the KSoR does not contain enough information to support an answer, the corr
 
 ---
 
-## 6. Governance Before Retrieval
+### 6. Governance Before Retrieval
 
 Retrieval technology is not the hard part.
 
@@ -504,7 +509,7 @@ decision.**
 
 ---
 
-## 7. Vendor Neutrality
+### 7. Vendor Neutrality
 
 Your institutional knowledge should not belong to an AI model vendor.
 
@@ -531,7 +536,7 @@ Your institutional truth should remain yours.
 
 ---
 
-# What Can You Build with KSoR?
+## What Can You Build with KSoR?
 
 KSoR is intentionally not limited to a particular industry or type of knowledge.
 
@@ -582,7 +587,7 @@ A **Vertical KSoR** is simply one application of KSoR: an authoritative knowledg
 
 ---
 
-# Example
+## Example
 
 Imagine an Accounting KSoR containing:
 
@@ -618,7 +623,7 @@ If the capitalization policy does not address the situation, the system should n
 
 ---
 
-# Quick Start
+## Quick Start
 
 > **Status:** `ksor init` works, and `ksor serve` runs the MCP server over a
 > built record (with `ingest`/`schema`/`calibrate`/`gc` — the climbed rung,
@@ -627,7 +632,7 @@ If the capitalization policy does not address the situation, the system should n
 > scaffold's own `pnpm dev` / `pnpm build` cover local work until they land.
 > [`docs/status.md`](docs/status.md) is authoritative on the released version.
 
-## Requirements
+### Requirements
 
 Node.js 24 or newer, and the package manager you already use — pnpm, npm, or
 bun. `ksor init` emits the scaffold for whichever one runs it; nobody
@@ -637,51 +642,13 @@ installs a second package manager to open their own knowledge base.
 node --version
 ```
 
----
-
-## Create a KSoR
-
-```bash
-npx @panaversity/ksor init my-ksor        # npm  → npm install, npm run dev
-pnpm dlx @panaversity/ksor init my-ksor   # pnpm → pnpm install, pnpm dev
-bunx @panaversity/ksor init my-ksor       # bun  → bun install, bun run dev
-
-cd my-ksor
-```
-
-One command emits a complete governed project: the knowledge record, a
-working documentation site, adopter CI, and the instructions and skills a
-coding agent needs to work in it. Nothing else is downloaded — the scaffold
-is deterministic, offline, and entirely yours.
+Creating a project, running the site locally, and building it are covered in
+[Start here](#start-here) at the top of this page — this section continues
+where it leaves off.
 
 ---
 
-## Start Development
-
-```bash
-pnpm install
-pnpm dev
-```
-
-The local knowledge site serves at `http://localhost:3000` and hot-reloads as
-you edit the Markdown source — the same governed corpus that will ultimately
-serve humans, agents, and machine-readable consumers.
-
----
-
-## Build
-
-```bash
-pnpm build
-```
-
-A fully static export of the human surface lands in `system/site/out/`,
-deployable to any static host. (`ksor build` — validation plus build
-provenance — is a future verb; see [`docs/status.md`](docs/status.md).)
-
----
-
-## Serve to AI Agents
+### Serve to AI Agents
 
 First tell `instance.md` which environment variable holds your DSN — never the
 DSN itself. This block is the one piece of configuration the served rung needs:
@@ -735,7 +702,7 @@ off until you measure a floor with `ksor calibrate` and paste it into
 
 ---
 
-# Project Structure
+## Project Structure
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
@@ -764,7 +731,7 @@ my-ksor/
 └── ...
 ```
 
-## `knowledge/`
+### `knowledge/`
 
 The authoritative knowledge corpus.
 
@@ -782,7 +749,7 @@ Subdirectories naturally organize the knowledge hierarchy.
 
 ---
 
-## `instance.md`
+### `instance.md`
 
 Describes the identity and purpose of this KSoR instance.
 
@@ -798,7 +765,7 @@ used by Example Corporation.
 
 ---
 
-## `system/site/`
+### `system/site/`
 
 The reference **human projection** — a real Next.js + Fumadocs app that renders the
 record, shipped as ordinary source code you own outright rather than an
@@ -814,7 +781,7 @@ maintained AI corpus.
 
 ---
 
-## `.agents/`
+### `.agents/`
 
 Instructions and reusable skills for AI coding agents working on the KSoR.
 
@@ -835,7 +802,7 @@ Instead of forcing users to manually perform repetitive repository operations, t
 
 ---
 
-# Knowledge as Code
+## Knowledge as Code
 
 KSoR treats institutional knowledge increasingly like software teams treat source code.
 
@@ -879,7 +846,7 @@ This makes an important shift possible:
 
 ---
 
-# Build Provenance
+## Build Provenance
 
 Every production answer should be traceable to the knowledge that produced it.
 
@@ -929,7 +896,7 @@ provenance attached; corpus-level attestation will land with `ksor build`.
 
 ---
 
-# The Agent Projection
+## The Agent Projection
 
 KSoR uses the **Model Context Protocol (MCP)** as the agent surface: the governed interaction boundary through which agents search, retrieve, cite — and abstain.
 
@@ -963,7 +930,7 @@ The model or runtime becomes replaceable.
 
 ---
 
-# The Machine Projection
+## The Machine Projection
 
 AI-native systems increasingly need knowledge in forms that software can consume directly, without scraping a human documentation interface.
 
@@ -989,7 +956,7 @@ The durable asset remains the governed knowledge; each representation is replace
 ---
 
 
-# KSoR and OKF
+## KSoR and OKF
 
 The [Open Knowledge Format
 (OKF)](https://github.com/GoogleCloudPlatform/open-knowledge-format) is an
@@ -1029,7 +996,7 @@ The shipped scaffold does not yet emit the KSoR Profile —
 
 ---
 
-# KSoR and RAG
+## KSoR and RAG
 
 RAG answers:
 
@@ -1068,7 +1035,7 @@ A KSoR is not merely a RAG system.
 
 ---
 
-# KSoR and a CMS
+## KSoR and a CMS
 
 A Content Management System asks:
 
@@ -1086,7 +1053,7 @@ Authority is the differentiator.
 
 ---
 
-# Governance Model
+## Governance Model
 
 A production KSoR should make knowledge ownership explicit.
 
@@ -1135,7 +1102,7 @@ KSoR provides the architectural foundation; governance policy remains the respon
 
 ---
 
-# Knowledge Boundaries
+## Knowledge Boundaries
 
 A trustworthy KSoR has a boundary.
 
@@ -1165,7 +1132,7 @@ This distinction is essential for trustworthy agentic systems.
 
 ---
 
-# KSoR in an AI-Native Architecture
+## KSoR in an AI-Native Architecture
 
 An AI-native organization cannot rely on model memory, scattered documents, or an ungoverned RAG index as its institutional knowledge layer.
 
@@ -1205,7 +1172,7 @@ Together they provide the context required for reliable enterprise action.
 
 ---
 
-# Agent-First Development
+## Agent-First Development
 
 KSoR is designed for a development world in which coding agents perform much of the mechanical work.
 
@@ -1238,7 +1205,7 @@ This allows subject-matter experts and software engineers to collaborate around 
 
 ---
 
-# Human-Readable by Default
+## Human-Readable by Default
 
 KSoR does not require organizational knowledge to disappear into a vector database.
 
@@ -1258,7 +1225,7 @@ This is an intentional architectural property.
 
 ---
 
-# Vendor-Free by Design
+## Vendor-Free by Design
 
 Your KSoR should survive changes in:
 
@@ -1276,7 +1243,7 @@ Everything around it should be replaceable.
 
 ---
 
-# Deployment
+## Deployment
 
 The human surface generated by `pnpm build` in a scaffolded project (and by
 `ksor build` once that verb ships) is a fully static site.
@@ -1298,7 +1265,7 @@ Detailed deployment guidance can live with each generated project so the instruc
 
 ---
 
-# Working Behind the Firewall
+## Working Behind the Firewall
 
 A Knowledge System of Record frequently contains internal organizational knowledge.
 
@@ -1313,9 +1280,9 @@ A KSoR should not require an organization to publish its institutional knowledge
 
 ---
 
-# Example Applications
+## Example Applications
 
-## Agent Factory KSoR
+### Agent Factory KSoR
 
 Agent Factory illustrates the transition KSoR is designed to support: from a human-readable book plus retrieval service toward an **AI-native knowledge platform** where humans and AI agents learn, reason, and operate from the same governed source of truth.
 
@@ -1337,7 +1304,7 @@ It acts as a shared methodological System of Record.
 
 ---
 
-## Vertical KSoR
+### Vertical KSoR
 
 A Vertical KSoR captures knowledge specific to a profession or industry.
 
@@ -1376,7 +1343,7 @@ Both can be built using the same `ksor` SDK.
 
 ---
 
-# What KSoR Does Not Replace
+## What KSoR Does Not Replace
 
 KSoR is complementary to existing enterprise systems.
 
@@ -1398,7 +1365,7 @@ KSoR adds the authoritative **knowledge layer** agents need in order to understa
 
 ---
 
-# Design Goals
+## Design Goals
 
 KSoR is being designed around the following goals.
 
@@ -1450,7 +1417,7 @@ Organizations should be able to adapt the framework to their requirements.
 
 ---
 
-# Project Status
+## Project Status
 
 KSoR is under active development.
 
@@ -1469,7 +1436,7 @@ Do not infer production readiness of a capability from this conceptual README al
 
 ---
 
-# CLI
+## CLI
 
 The intended CLI vocabulary is deliberately small:
 
@@ -1533,6 +1500,11 @@ generations. Each needs the same Postgres store.
 a row in the database that row-level security checks, never by a flag on a
 command line.
 
+The npm package is
+[`@panaversity/ksor`](https://www.npmjs.com/package/@panaversity/ksor) — the
+unscoped name `ksor` is blocked by npm's similarity guard — but the command it
+installs is plain `ksor`.
+
 The installed release's help lists the commands it supports:
 
 ```bash
@@ -1541,38 +1513,7 @@ ksor --help
 
 ---
 
-# npm Package
-
-The canonical npm package is:
-
-```text
-@panaversity/ksor
-```
-
-The unscoped name `ksor` is blocked by npm's similarity guard, so the package is
-scoped. The **command** installed by it is still `ksor`.
-
-Install it:
-
-```bash
-npm install @panaversity/ksor
-```
-
-Install globally:
-
-```bash
-npm install -g @panaversity/ksor
-```
-
-Or execute without a global installation:
-
-```bash
-npx @panaversity/ksor
-```
-
----
-
-# Contributing
+## Contributing
 
 Contributions are welcome.
 
@@ -1597,7 +1538,7 @@ Those are part of the product.
 
 ---
 
-# Security
+## Security
 
 Knowledge Systems of Record can contain sensitive institutional information and can influence AI agent behavior.
 
@@ -1617,7 +1558,7 @@ See [`SECURITY.md`](SECURITY.md) for reporting instructions.
 
 ---
 
-# License
+## License
 
 KSoR is licensed under the **Apache License 2.0**.
 
@@ -1625,17 +1566,11 @@ See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 ---
 
-# The Idea in One Sentence
+## The Idea in One Sentence
 
 > **A traditional System of Record tells an AI system what is true about the business; a Knowledge System of Record tells humans, agents, and software what the organization knows and how it should operate.**
 
 KSoR makes that knowledge **authoritative, governed, traceable, human-readable, agent-readable, machine-readable, and vendor-neutral**.
-
-And the relationship between the framework and the open format beneath it
-reduces to two lines:
-
-> **OKF makes KSoR knowledge open, portable, and interoperable.**  
-> **KSoR governance makes that knowledge institutionally authoritative and operational.**
 
 ---
 
