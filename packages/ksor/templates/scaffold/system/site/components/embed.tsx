@@ -22,6 +22,41 @@ import { Button } from "@/components/ui/button";
  * anyone reviewing it. The link out is always there and costs nothing, because
  * a plain `<a>` is not a request.
  */
+
+/**
+ * A framed page may not scroll the document that hosts it.
+ *
+ * `scrollIntoView` scrolls EVERY ancestor scrolling box, and a frame's
+ * ancestors include the host page — so a page that auto-scrolls its own log
+ * throws the reader somewhere else entirely. Six of the seven sims this was
+ * built for do exactly that, and clicking one moved the page 5,807px (found
+ * live).
+ *
+ * The call still does its real job inside the frame; only the part that moved
+ * the host is undone, in the same task, so nothing is painted in between.
+ *
+ * Same-origin only, which is all it can be: a cross-origin frame's prototypes
+ * are not reachable, and it cannot scroll us either.
+ */
+function containScrolling(doc: Document | null): void {
+  const view = doc?.defaultView;
+  if (!view) return;
+  const proto = view.Element.prototype as Element & {
+    scrollIntoView: (...args: unknown[]) => void;
+    __ksorContained?: boolean;
+  };
+  if (proto.__ksorContained) return;
+  const native = proto.scrollIntoView;
+  proto.scrollIntoView = function contained(this: Element, ...args: unknown[]): void {
+    const { scrollX, scrollY } = window;
+    native.apply(this, args);
+    if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+      window.scrollTo(scrollX, scrollY);
+    }
+  };
+  proto.__ksorContained = true;
+}
+
 export function Embed({
   url,
   host,
@@ -114,6 +149,7 @@ export function Embed({
     } catch {
       return;
     }
+    containScrolling(doc);
     const body = doc?.body;
     if (!body || typeof ResizeObserver === "undefined") return;
     watcher.current?.disconnect();
