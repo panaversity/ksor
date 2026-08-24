@@ -884,6 +884,16 @@ html > body[data-scroll-locked] {
   margin-top: 0;
 }
 
+/* The same rule, one level in. The document's first block is not a child of
+   `.prose` — it is inside the views wrapper, and inside a tab panel when the
+   document has a summary — so the reset above never reached it and the top of
+   every document sat 20px lower than the rule above it intended (measured
+   after the empty view strip was removed, which is what exposed it). */
+#nd-page .prose > .ksor-views > :first-child,
+#nd-page .prose > .ksor-views [role="tabpanel"] > :first-child {
+  margin-top: 0;
+}
+
 /* ── The page pager ──────────────────────────────────────────────────────────
    Fumadocs lays the neighbours out as a grid that becomes two columns when both
    exist. With only one — the first or last document of the record — it stays a
