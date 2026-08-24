@@ -183,18 +183,12 @@ export function Embed({
 
   return (
     <figure
-      className="not-prose my-8"
-      // A little wider than the prose measure, not a lot. A page built to be
-      // interactive is laid out for a screen rather than for a 60-character
-      // column, so it reads cramped at the measure — but 64rem overshot far
-      // enough that the block stopped belonging to the document around it.
-      // Centred on the column and clamped to the viewport, so it never causes
-      // a horizontal scroll.
-      style={{
-        width: "min(56rem, calc(100vw - 3rem))",
-        marginLeft: "50%",
-        transform: "translateX(-50%)",
-      }}
+      // The measure, like every other figure in the document. Wider was tried
+      // twice — 64rem, then 56rem — and both read as a block that had stopped
+      // belonging to the text around it (owner, seen live). These pages are
+      // responsive and lay themselves out at whatever width they are given, so
+      // the measure costs them nothing.
+      className="not-prose my-8 w-full"
     >
       <div
         // A ratio rather than a fixed height, so the frame scales with the
