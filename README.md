@@ -1454,20 +1454,6 @@ Organizations should be able to adapt the framework to their requirements.
 
 KSoR is under active development.
 
-The project is evolving from the original VSOR implementation into the more general **Knowledge System of Record** architecture.
-
-The predecessor (vsor) implementation — reference material for this rebuild, not its authority — already proved out several foundations that inform this package's design, including:
-
-- Markdown-based authoritative source content,
-- generated human-readable documentation sites,
-- project scaffolding,
-- local development,
-- static builds,
-- build provenance,
-- agent-oriented repository instructions,
-- automated testing,
-- and deployment workflows.
-
 The MCP-based agent projection (`ksor serve`) is implemented — the climbed rung,
 needing Postgres and a provider key; see [`docs/status.md`](docs/status.md) for
 the released version.
