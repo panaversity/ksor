@@ -8,7 +8,12 @@ import { agentFrontmatter, badgeLabel, readGovernance, stampLines } from "./gove
 import { dirOfRoute, listingOf, readingOrder } from "./index-routes";
 import type { LifecycleBadge } from "./lifecycle-rule";
 import { appName, appTitle, appDescription, showGovernance } from "./shared";
-import { readStagedIndex, readStageManifest, stagePageOf } from "./stage-manifest";
+import {
+  readStagedIndex,
+  readStageManifest,
+  stagedFrontmatter,
+  stagePageOf,
+} from "./stage-manifest";
 import { renderBadge } from "@/components/sidebar-status";
 import { generateIndexes, humanise, type IndexEntry } from "../record/index-file";
 
@@ -167,15 +172,22 @@ export function getMachinePages(): KnowledgePage[] {
 }
 
 /**
- * One document as the full-corpus file and its twin carry it: heading, then
- * the record's own governance and the build's stamps as frontmatter, then the
- * body. The frontmatter is the point — without it a consumer ingesting the
- * corpus had no way to tell a passage's status, owner or source, and nothing
- * connecting it to the publication it came from (R14).
+ * One document as the full-corpus file and its twin carry it: heading, then the
+ * record's OWN frontmatter intact under the build's stamps, then the body.
+ *
+ * The frontmatter is the point — without it a consumer ingesting the corpus had
+ * no way to tell a passage's status, owner or source, and nothing connecting it
+ * to the publication it came from (R14) — and it is served intact so that what
+ * a consumer parses is the profile's grammar rather than this shell's summary
+ * of it.
  */
 export async function getLLMText(page: KnowledgePage): Promise<string> {
   const processed = await page.data.getText("processed");
-  const front = agentFrontmatter(readGovernance(page.data, page.path), readStageManifest().stamps);
+  const front = agentFrontmatter(
+    stagedFrontmatter(page.path),
+    readGovernance(page.data, page.path),
+    readStageManifest().stamps,
+  );
   // found live 2026-08-21: the processed markdown arrives with its own leading
   // blank lines, so every block opened with three of them — and adding the
   // frontmatter above made it four. One blank line between each part, always.

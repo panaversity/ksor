@@ -145,12 +145,48 @@ export function readGovernance(data: unknown, where: string): DocumentGovernance
   };
 }
 
+/** The three tiers, in the order OKF ranks them. */
+export type TrustTier = "unverified" | "machine-confirmed" | "human-reviewed";
+
 /** Trust tier derives from `verified` (record spec §2.3): none, machine only, or any human. */
-export function trustTierOf(
-  verified: readonly Act[],
-): "unverified" | "machine-confirmed" | "human-reviewed" {
+export function trustTierOf(verified: readonly Act[]): TrustTier {
   if (verified.length === 0) return "unverified";
   return verified.some((v) => v.by.startsWith("human:")) ? "human-reviewed" : "machine-confirmed";
+}
+
+/** The tier, and the verification that put the document there. */
+export interface TrustSignal {
+  readonly tier: TrustTier;
+  /** Null at `unverified`, where by definition nobody has said anything. */
+  readonly by: string | null;
+  readonly at: string | null;
+}
+
+/**
+ * The tier a page shows, WITH its verifier — "human-reviewed" alone is a claim
+ * with nobody behind it, and provenance is load-bearing.
+ *
+ * The verification named is the latest one OF THE KIND THAT SET THE TIER: the
+ * tier keys on the `human:` prefix (record spec §2.3), so a nightly machine
+ * pass running after a human review must not end up credited with the review.
+ * A tier is never inferred from anything but `verified`, and `unverified` is
+ * the honest state a stable, approved, unreviewed concept sits at — reported,
+ * not hidden (research/okf-native.md §1.1).
+ */
+export function trustSignal(verified: readonly Act[]): TrustSignal {
+  const tier = trustTierOf(verified);
+  if (tier === "unverified") return { tier, by: null, at: null };
+  const deciding =
+    tier === "human-reviewed" ? verified.filter((v) => v.by.startsWith("human:")) : verified;
+  // Latest by instant; an unparsable `at` (which the checker refuses) keeps
+  // declaration order rather than crashing the page it was handed.
+  let latest = deciding[0] as Act;
+  for (const entry of deciding.slice(1)) {
+    const a = Date.parse(entry.at);
+    const b = Date.parse(latest.at);
+    if (!Number.isNaN(a) && (Number.isNaN(b) || a >= b)) latest = entry;
+  }
+  return { tier, by: latest.by, at: latest.at };
 }
 
 /** One document as the loader reports it: its source path, and its route. */
@@ -251,7 +287,15 @@ export function governanceVisible(instance: Readonly<Record<string, unknown>>): 
 // the listings and the search results, so a reader picking between a document
 // and its successor sees the same word everywhere.
 
-/** The chip text for a badge, or null for a document every surface admits. */
+/**
+ * The chip text for a badge, or null for a document every surface admits.
+ *
+ * The words are record spec §2.5's own — "effective from …" and "past its
+ * review date" — because the reader who meets one on a sidebar row and again
+ * on the page must not have to work out that two phrasings mean one state.
+ * §2.5's ellipsis is the date, and `badgeText` fills it in where there is
+ * room; this is the same sentence with the value left off, never a second one.
+ */
 export function badgeLabel(badge: LifecycleBadge | null): string | null {
   switch (badge) {
     case null:
@@ -261,10 +305,65 @@ export function badgeLabel(badge: LifecycleBadge | null): string | null {
     case "deprecated":
       return "deprecated";
     case "effective-from":
-      return "not yet effective";
+      return "effective from";
     case "stale":
       return "past its review date";
   }
+}
+
+/**
+ * The badge as a PAGE says it: §2.5's words with the ellipsis filled in from
+ * the document's own `ksor.effective_from`.
+ *
+ * Only `effective-from` carries a date, and only forwards: "past its review
+ * date" is about a day that has gone, and the day itself is already a fact in
+ * the strip beside it ("Review by"), so repeating it in the chip would say the
+ * same thing twice in one line.
+ */
+export function badgeText(
+  badge: LifecycleBadge | null,
+  effectiveFrom: string | null,
+): string | null {
+  const label = badgeLabel(badge);
+  if (label === null) return null;
+  if (badge !== "effective-from" || effectiveFrom === null) return label;
+  return `${label} ${dayOf(effectiveFrom)}`;
+}
+
+/**
+ * Does the badge say anything the status chip does not?
+ *
+ * `draft` and `deprecated` are both a status word and a badge word, so a page
+ * that drew both would print one state twice. The two date states have no
+ * status word of their own — the document is `stable` and something about the
+ * calendar keeps it off the machine surfaces — and those are exactly the ones
+ * a reader cannot infer from the status alone.
+ */
+export function badgeAddsToStatus(badge: LifecycleBadge | null, status: string | null): boolean {
+  return badge !== null && badge !== status;
+}
+
+/** The three lifecycle states (record spec §2.2), and nothing else — a word the record does not define is not a status. */
+const STATUSES: readonly string[] = ["draft", "stable", "deprecated"];
+
+/**
+ * The status chip every page carries — including a `stable` one, which is the
+ * one difference from the badge.
+ *
+ * A badge is rare on purpose: it marks the documents the machine surfaces
+ * decline. The status is not a caveat, it is the record's own word for where
+ * the document stands, and research/okf-native.md §1.1 has the page saying it
+ * out loud from day one — "the chips say `stable` with approver and date, and
+ * the badge says unverified". A reader who cannot see `stable` cannot tell a
+ * governed record from a site that simply never said.
+ */
+export function statusLabel(status: string | null): string | null {
+  return status !== null && STATUSES.includes(status) ? status : null;
+}
+
+/** The status chip's tone — the same rule the badge uses, so one state is one colour. */
+export function statusTone(status: string | null): string {
+  return status === "deprecated" ? "ksor-withdrawn" : "";
 }
 
 /**
@@ -323,39 +422,38 @@ export function stampLines(stamps: Stamps): string[] {
 }
 
 /**
- * The governance block that precedes a document's body in `llms-full.txt` and
- * its markdown twin, written as frontmatter — the record's own grammar, so a
- * consumer parses the corpus the way the corpus is authored.
+ * The frontmatter a document's markdown twin and its `llms-full.txt` block
+ * carry: the record's OWN frontmatter, intact, then the derived trust tier and
+ * the build's stamps (R14).
  *
- * `status` is emitted even though every document here is `stable`, which is
- * the opposite call to the page's. A reader assumes a document in a record is
- * current; a consumer assumes nothing, and that silence is exactly what F1 was.
- * Nothing is inferred: an undeclared key is absent, never an empty one.
+ * `raw` is the concept's frontmatter exactly as the staged file holds it,
+ * between its fences and unparsed. Intact, because the twin is the record's
+ * bytes: an OKF consumer that fetches one must be able to parse the concept the
+ * profile describes, and record spec §2.7 keeps unknown keys for exactly that
+ * reason — a re-serialisation drops whatever this shell did not think to
+ * project.
+ *
+ * The projection this replaced flattened `ksor.owner` into a top-level `owner:`
+ * and `ksor.effective_from` into `effective_from:`. Both are keys record spec
+ * §2.7 refuses BY NAME as pre-profile leftovers, so every twin published a
+ * frontmatter the record's own checker would have rejected — the corpus
+ * describing itself in a grammar it forbids (found while implementing build
+ * spec §3's twin clause).
+ *
+ * Two keys are ADDED rather than copied, and both are the build speaking about
+ * the document rather than the document speaking about itself: `trust_tier`,
+ * which record spec §2.3 derives from `verified` and no reader should have to
+ * re-derive, and the stamps, which are what connect these bytes to one
+ * publication.
  */
-export function agentFrontmatter(governance: DocumentGovernance, stamps: Stamps): string {
-  const { status, type, owner, effectiveFrom, staleAfter, sources, approval, verified } =
-    governance;
-  const lines: string[] = [];
-  if (status !== null) lines.push(`status: ${yamlScalar(status)}`);
-  if (type !== null) lines.push(`type: ${yamlScalar(type)}`);
-  if (owner !== null) lines.push(`owner: ${yamlScalar(owner)}`);
-  if (effectiveFrom !== null) lines.push(`effective_from: ${yamlScalar(effectiveFrom)}`);
-  if (staleAfter !== null) lines.push(`stale_after: ${yamlScalar(staleAfter)}`);
-  if (approval !== null)
-    lines.push(`approval: { by: ${yamlScalar(approval.by)}, at: ${yamlScalar(approval.at)} }`);
-  lines.push(`trust_tier: ${trustTierOf(verified)}`);
-  if (sources.length > 0) {
-    lines.push("sources:");
-    for (const source of sources) {
-      const fields = [
-        source.id === null ? null : `id: ${yamlScalar(source.id)}`,
-        `resource: ${yamlScalar(source.resource)}`,
-        source.title === null ? null : `title: ${yamlScalar(source.title)}`,
-      ].filter((f): f is string => f !== null);
-      lines.push(`  - { ${fields.join(", ")} }`);
-    }
-  }
-  lines.push(...stampLines(stamps));
+export function agentFrontmatter(
+  raw: string,
+  governance: DocumentGovernance,
+  stamps: Stamps,
+): string {
+  const own = raw.replace(/\s+$/, "");
+  const lines = own === "" ? [] : [own];
+  lines.push(`trust_tier: ${trustTierOf(governance.verified)}`, ...stampLines(stamps));
   return `---\n${lines.join("\n")}\n---\n`;
 }
 

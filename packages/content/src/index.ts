@@ -146,7 +146,12 @@ export {
 // The record module (record spec; decision 26): the profile, the control
 // files and the checker `ksor build`, `ksor ingest` and the emitted checker
 // will run. Nothing in the CLI consumes it yet.
-export { splitFrontmatter, normalizeText, type Split } from "./record/frontmatter.js";
+export {
+  splitFrontmatter,
+  frontmatterText,
+  normalizeText,
+  type Split,
+} from "./record/frontmatter.js";
 export { REFUSAL_SLUGS, sortRefusals, type Refusal, type RefusalSlug } from "./record/refusal.js";
 export {
   parseConcept,

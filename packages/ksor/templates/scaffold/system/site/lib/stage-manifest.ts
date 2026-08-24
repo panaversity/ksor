@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { LifecycleBadge } from "./lifecycle-rule";
+import { frontmatterText } from "../record/frontmatter";
 import { parseIndex, type IndexEntry } from "../record/index-file";
 
 /**
@@ -85,4 +86,19 @@ export function readStagedIndex(dir: string): IndexEntry[] | null {
   const file = path.resolve(process.cwd(), STAGE_DIR, dir, "index.md");
   if (!existsSync(file)) return null;
   return parseIndex(readFileSync(file, "utf8"));
+}
+
+/**
+ * The staged concept's own frontmatter, verbatim — the bytes its markdown twin
+ * and its `llms-full.txt` block republish (build spec §3).
+ *
+ * Read from the STAGE rather than from `page.data`, because the stage holds
+ * the record's file byte-for-byte: re-serialising the parsed object could only
+ * emit the keys this shell knows about, and record spec §2.7 keeps the ones it
+ * does not. Empty string for a concept with no frontmatter — a checker refusal,
+ * so unreachable on a built record, but the twin must not crash on it.
+ */
+export function stagedFrontmatter(pagePath: string): string {
+  const file = path.resolve(process.cwd(), STAGE_DIR, pagePath.replaceAll("\\", "/"));
+  return frontmatterText(readFileSync(file, "utf8")) ?? "";
 }

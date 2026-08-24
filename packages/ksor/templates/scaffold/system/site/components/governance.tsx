@@ -4,11 +4,15 @@ import { DocumentActions } from "@/components/document-actions";
 import type { ReactElement } from "react";
 
 import {
-  badgeLabel,
+  badgeAddsToStatus,
+  badgeText,
   badgeTone,
   dayOf,
   isCalendarDate,
   sourceHref,
+  statusLabel,
+  statusTone,
+  trustSignal,
   type DocumentGovernance,
 } from "@/lib/governance";
 import type { LifecycleBadge } from "@/lib/lifecycle-rule";
@@ -112,21 +116,39 @@ function Fact({
   );
 }
 
-/** The chip a badge wears, in every listing and on the page. */
-export function BadgeChip({ badge }: { badge: LifecycleBadge }): ReactElement {
+/** One chip: a word the record says about this document, in the register's voice. */
+function Chip({ text, tone = "" }: { text: string; tone?: string }): ReactElement {
   return (
     <span
-      className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest uppercase ${badgeTone(badge)}`}
+      className={`rounded-sm border border-fd-border px-1.5 py-0.5 tracking-widest whitespace-nowrap uppercase ${tone}`}
     >
-      {badgeLabel(badge)}
+      {text}
     </span>
   );
 }
 
+/** The chip a badge wears, in every listing and on the page. */
+export function BadgeChip({
+  badge,
+  effectiveFrom = null,
+}: {
+  badge: LifecycleBadge;
+  /** `ksor.effective_from`, which fills record spec §2.5's "effective from …". */
+  effectiveFrom?: string | null;
+}): ReactElement {
+  return <Chip text={badgeText(badge, effectiveFrom) ?? ""} tone={badgeTone(badge)} />;
+}
+
 /**
- * The one-line governance strip under the document's title: the badge when
- * the machine surfaces decline the document, who stands behind it, when it
- * takes effect and when it is due for review.
+ * The one-line governance strip under the document's title: what the record
+ * says about this document, and who said it.
+ *
+ * Two kinds of thing sit here and they are drawn differently on purpose. The
+ * CHIPS are states — the lifecycle status, and the date badge when the calendar
+ * keeps an otherwise current document off the machine surfaces (record spec
+ * §2.5) — and the FACTS are attributions: who owns it, who approved it, who
+ * verified it and when. A reader deciding whether to act on a document needs
+ * both halves, and the predecessor's failure was showing neither.
  */
 export function GovernanceMeta({
   governance,
@@ -142,23 +164,66 @@ export function GovernanceMeta({
   /** The document's markdown twin, offered beside its governance — only where one exists. */
   markdownUrl?: string;
 }): ReactElement | null {
-  const { owner, effectiveFrom, staleAfter } = governance;
+  const { status, owner, effectiveFrom, staleAfter, approval } = governance;
+  const state = statusLabel(status);
+  // The badge is a SECOND chip only where it says something the status does
+  // not: `draft` and `deprecated` are both words, and printing either twice
+  // reads as two facts about one document.
+  const alsoBadge = badgeAddsToStatus(badge, status) ? badge : null;
+  const trust = trustSignal(governance.verified);
+  // …and where the badge carries the date, the fact beside it would repeat it.
+  const showEffective = effectiveFrom !== null && alsoBadge !== "effective-from";
+
   const bare =
-    badge === null &&
+    state === null &&
+    alsoBadge === null &&
     owner === null &&
-    effectiveFrom === null &&
+    approval === null &&
+    !showEffective &&
     staleAfter === null &&
     replaces.length === 0;
   if (bare && markdownUrl === undefined) return null;
 
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
-      {badge === null ? null : (
+      {state === null && alsoBadge === null ? null : (
         <Fact label="Status">
-          <BadgeChip badge={badge} />
+          <span className="flex flex-wrap items-baseline gap-1.5">
+            {state === null ? null : <Chip text={state} tone={statusTone(status)} />}
+            {alsoBadge === null ? null : (
+              <BadgeChip badge={alsoBadge} effectiveFrom={effectiveFrom} />
+            )}
+          </span>
         </Fact>
       )}
+      {/* The tier OKF's own vocabulary names, on every document including the
+          unverified ones — that is the honest state of a stable, approved
+          concept nobody has reviewed, and hiding it would leave a reader unable
+          to tell "checked" from "never mentioned" (research/okf-native.md
+          §1.1). Never a colour: a tier is a fact about review, not a warning. */}
+      <Fact label="Trust">
+        <span className="flex flex-wrap items-baseline gap-1.5">
+          <Chip text={trust.tier} />
+          {trust.by === null ? null : (
+            <span className="font-normal text-fd-muted-foreground">
+              {trust.by}
+              {trust.at === null ? null : <> · {day(trust.at)}</>}
+            </span>
+          )}
+        </span>
+      </Fact>
       {owner === null ? null : <Fact label="Owner">{owner}</Fact>}
+      {/* Who let this into the record. `ksor.approval` is what makes a `stable`
+          document stable at all (record spec §2.2), so a page that showed the
+          word and not the signature would be publishing the claim without its
+          author. */}
+      {approval === null ? null : (
+        <Fact label="Approved">
+          <>
+            {approval.by} · {day(approval.at)}
+          </>
+        </Fact>
+      )}
       {replaces.length === 0 ? null : (
         // The other half of a supersession. The withdrawn document names its
         // successor above the title; this is the successor naming what it
@@ -184,7 +249,9 @@ export function GovernanceMeta({
           </>
         </Fact>
       )}
-      {effectiveFrom === null ? null : <Fact label="Effective from">{day(effectiveFrom)}</Fact>}
+      {effectiveFrom === null || !showEffective ? null : (
+        <Fact label="Effective from">{day(effectiveFrom)}</Fact>
+      )}
       {staleAfter === null ? null : <Fact label="Review by">{day(staleAfter)}</Fact>}
       {markdownUrl === undefined ? null : (
         // On the governance row, not as a footnote below the sources: it is

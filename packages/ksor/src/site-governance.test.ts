@@ -12,7 +12,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   agentFrontmatter,
+  badgeAddsToStatus,
   badgeLabel,
+  badgeText,
   badgeTone,
   conceptIdOfPath,
   dayOf,
@@ -23,6 +25,9 @@ import {
   resolveSuccessorUrl,
   sourceHref,
   stampLines,
+  statusLabel,
+  statusTone,
+  trustSignal,
   trustTierOf,
   type DocumentGovernance,
   type Stamps,
@@ -246,23 +251,111 @@ describe("predecessorsOf — the other direction, derived", () => {
   });
 });
 
-describe("the badge vocabulary — one word per §2.5 state, everywhere", () => {
-  it("labels every badge and nothing for a current document", () => {
+describe("the badge vocabulary — the §2.5 words, everywhere", () => {
+  it("labels every badge in the table's own words, and nothing for a current document", () => {
     expect(badgeLabel(null)).toBeNull();
     expect(badgeLabel("draft")).toBe("draft");
     expect(badgeLabel("deprecated")).toBe("deprecated");
-    expect(badgeLabel("effective-from")).toBe("not yet effective");
+    // Record spec §2.5 writes these two badges out: "effective from …" and
+    // "past its review date". The ellipsis is the date, which only a page has
+    // room for — so the WORDS are one vocabulary and the date is appended
+    // where it fits, never a second spelling of the same state.
+    expect(badgeLabel("effective-from")).toBe("effective from");
     expect(badgeLabel("stale")).toBe("past its review date");
   });
+
+  it("fills the §2.5 ellipsis with the day when the page has one", () => {
+    expect(badgeText("effective-from", "2026-09-01T00:00:00Z")).toBe("effective from 2026-09-01");
+    expect(badgeText("effective-from", null)).toBe("effective from");
+    expect(badgeText("stale", "2020-01-01T00:00:00Z")).toBe("past its review date");
+    expect(badgeText("draft", null)).toBe("draft");
+    expect(badgeText(null, null)).toBeNull();
+  });
+
   it("colours only the withdrawn state", () => {
     expect(badgeTone("deprecated")).toBe("ksor-withdrawn");
     for (const badge of ["draft", "effective-from", "stale", null] as const) {
       expect(badgeTone(badge)).toBe("");
     }
   });
+
+  it("adds a second chip only where the badge says something the status does not", () => {
+    // `draft` and `deprecated` are BOTH a status word and a badge word, so
+    // rendering the chip twice would say the same thing twice.
+    expect(badgeAddsToStatus("draft", "draft")).toBe(false);
+    expect(badgeAddsToStatus("deprecated", "deprecated")).toBe(false);
+    expect(badgeAddsToStatus("effective-from", "stable")).toBe(true);
+    expect(badgeAddsToStatus("stale", "stable")).toBe(true);
+    expect(badgeAddsToStatus(null, "stable")).toBe(false);
+    // A document whose status the record did not declare still gets the badge.
+    expect(badgeAddsToStatus("draft", null)).toBe(true);
+  });
 });
 
-describe("agentFrontmatter — the twin's and llms-full.txt's governance block", () => {
+describe("the status chip — the record's own word, on every page", () => {
+  it("labels the three lifecycle states and nothing else", () => {
+    // Unlike the badge, this is shown for EVERY document, `stable` included:
+    // research/okf-native.md §1.1 — "the chips say `stable` with approver and
+    // date, and the badge says unverified".
+    expect(statusLabel("draft")).toBe("draft");
+    expect(statusLabel("stable")).toBe("stable");
+    expect(statusLabel("deprecated")).toBe("deprecated");
+    expect(statusLabel(null)).toBeNull();
+    // Not a lifecycle state: the checker refuses it, and the page must not
+    // publish a word the record does not define as a status.
+    expect(statusLabel("approved")).toBeNull();
+  });
+
+  it("colours only the withdrawn state, exactly as the badge does", () => {
+    expect(statusTone("deprecated")).toBe("ksor-withdrawn");
+    expect(statusTone("stable")).toBe("");
+    expect(statusTone("draft")).toBe("");
+    expect(statusTone(null)).toBe("");
+  });
+});
+
+describe("trustSignal — the tier, and who put it there (record spec §2.3)", () => {
+  it("names no verifier for the unverified tier", () => {
+    expect(trustSignal([])).toEqual({ tier: "unverified", by: null, at: null });
+  });
+
+  it("names the machine that confirmed it", () => {
+    expect(trustSignal([{ by: "process:nightly", at: "2026-08-20T00:00:00Z" }])).toEqual({
+      tier: "machine-confirmed",
+      by: "process:nightly",
+      at: "2026-08-20T00:00:00Z",
+    });
+  });
+
+  it("names the HUMAN who reviewed it, never a machine that ran afterwards", () => {
+    // The tier keys on the `human:` prefix, so the verifier the page shows must
+    // be the one that SET the tier — a later machine pass would otherwise
+    // credit a human-reviewed document to a cron job.
+    expect(
+      trustSignal([
+        { by: "human:kim", at: "2026-08-21T14:00:00Z" },
+        { by: "process:nightly", at: "2026-08-22T00:00:00Z" },
+      ]),
+    ).toEqual({ tier: "human-reviewed", by: "human:kim", at: "2026-08-21T14:00:00Z" });
+  });
+
+  it("takes the LATEST verification of the tier's own kind", () => {
+    expect(
+      trustSignal([
+        { by: "human:kim", at: "2026-08-21T14:00:00Z" },
+        { by: "human:sam", at: "2026-09-02T09:00:00Z" },
+      ]),
+    ).toMatchObject({ by: "human:sam", at: "2026-09-02T09:00:00Z" });
+  });
+
+  it("falls back to declaration order when an instant is unparsable", () => {
+    // The checker refuses a non-instant (`ksor-instant-form`); the page still
+    // has to render something rather than crash on the record it was handed.
+    expect(trustSignal([{ by: "human:kim", at: "whenever" }])).toMatchObject({ by: "human:kim" });
+  });
+});
+
+describe("agentFrontmatter — the twin's and llms-full.txt's frontmatter", () => {
   const STABLE: DocumentGovernance = {
     status: "stable",
     type: "Policy",
@@ -276,18 +369,33 @@ describe("agentFrontmatter — the twin's and llms-full.txt's governance block",
     verified: [],
   };
 
-  it("emits the governance as frontmatter, then the stamps (R14)", () => {
-    expect(agentFrontmatter(STABLE, STAMPED)).toBe(
+  // What the record actually wrote — the bytes the staged concept carries
+  // between its fences.
+  const RAW = [
+    "type: Policy",
+    "title: Purchase approval",
+    "description: Who may approve a purchase.",
+    "status: stable",
+    'generated: { by: "claude-code/1.0", at: 2026-08-20T09:00:00Z }',
+    "sources:",
+    "  - { id: fin, resource: https://example.com/fin.pdf, title: Finance handbook }",
+    "ksor:",
+    "  audience: [public]",
+    "  owner: team:finance",
+    "  approval: { by: human:cfo, at: 2026-08-22T10:00:00Z }",
+    "  local_convention: kept",
+  ].join("\n");
+
+  it("serves the document's own frontmatter INTACT, then the derived tier and the stamps (R14)", () => {
+    // Intact, not projected. The projection this replaced flattened `ksor.owner`
+    // to a top-level `owner:` — a key record spec §2.7 refuses BY NAME as a
+    // pre-profile legacy key, so the twin published a frontmatter the record's
+    // own checker would have rejected. Unknown keys survive too (OKF §11).
+    expect(agentFrontmatter(RAW, STABLE, STAMPED)).toBe(
       [
         "---",
-        "status: stable",
-        "type: Policy",
-        "owner: team:finance",
-        "effective_from: 2026-09-01T00:00:00Z",
-        "approval: { by: human:cfo, at: 2026-08-22T10:00:00Z }",
+        RAW,
         "trust_tier: unverified",
-        "sources:",
-        '  - { id: fin, resource: https://example.com/fin.pdf, title: "Finance: 2024" }',
         "build_id: sha256:abc",
         "source_commit: 0123abc",
         "ksor_version: 0.1.0",
@@ -295,6 +403,12 @@ describe("agentFrontmatter — the twin's and llms-full.txt's governance block",
         "",
       ].join("\n"),
     );
+  });
+
+  it("derives the tier from the record's verifications, never from the raw text", () => {
+    expect(
+      agentFrontmatter(RAW, { ...STABLE, verified: [{ by: "human:kim", at: "x" }] }, STAMPED),
+    ).toContain("\ntrust_tier: human-reviewed\n");
   });
 
   it("says dirty when the lock does, and says unstamped in development", () => {
@@ -305,18 +419,24 @@ describe("agentFrontmatter — the twin's and llms-full.txt's governance block",
       "ksor_version: 0.1.0",
     ]);
     expect(stampLines(DEV)).toEqual(["build_id: null", "unstamped: true"]);
-    expect(agentFrontmatter({ ...STABLE, sources: [] }, DEV)).toContain("\nunstamped: true\n");
+    expect(agentFrontmatter(RAW, STABLE, DEV)).toContain("\nunstamped: true\n");
   });
 
-  it("emits nothing the document did not declare", () => {
-    const bare = agentFrontmatter(
-      { ...STABLE, type: null, owner: null, sources: [], effectiveFrom: null, approval: null },
-      STAMPED,
+  it("invents no frontmatter for a document that declares none", () => {
+    // A concept with no frontmatter is a checker refusal, so this can only be
+    // reached by a record the checker never saw; the stamps still have to say
+    // which build the bytes came from.
+    expect(agentFrontmatter("", { ...STABLE, verified: [] }, STAMPED)).toBe(
+      [
+        "---",
+        "trust_tier: unverified",
+        "build_id: sha256:abc",
+        "source_commit: 0123abc",
+        "ksor_version: 0.1.0",
+        "---",
+        "",
+      ].join("\n"),
     );
-    expect(bare).not.toContain("owner:");
-    expect(bare).not.toContain("sources:");
-    expect(bare).not.toContain("approval:");
-    expect(bare).toContain("status: stable");
   });
 });
 

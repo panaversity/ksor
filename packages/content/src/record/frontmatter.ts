@@ -25,6 +25,37 @@ export function normalizeText(text: string): string {
 }
 
 /**
+ * The fenced block and the body, by the line walk described on
+ * `splitFrontmatter` — `null` when the text opens with no fence at all, and
+ * `block: null` when it opens with one that never closes.
+ *
+ * Extracted so the RAW block has exactly one definition: the markdown twin
+ * republishes the record's frontmatter verbatim (build spec §3), and a second
+ * walk that disagreed about where the fence ends would publish a different
+ * document from the one the checker read.
+ */
+function fence(normalized: string): { block: string | null; body: string } | null {
+  const lines = normalized.split("\n");
+  if (!FENCE.test(lines[0] ?? "")) return null;
+  const closeAt = lines.findIndex((line, i) => i > 0 && FENCE.test(line));
+  if (closeAt === -1) return { block: null, body: "" };
+  return { block: lines.slice(1, closeAt).join("\n"), body: lines.slice(closeAt + 1).join("\n") };
+}
+
+/**
+ * The document's frontmatter as the file holds it — the bytes between the
+ * fences, unparsed — or null when it has none (or an unclosed one, which
+ * `splitFrontmatter` refuses by name).
+ *
+ * The markdown twin serves this INTACT rather than a re-serialisation of the
+ * parsed object: record spec §2.7 preserves unknown keys, and anything this
+ * codebase re-emits can only carry the keys it thought of.
+ */
+export function frontmatterText(text: string): string | null {
+  return fence(normalizeText(text))?.block ?? null;
+}
+
+/**
  * `frontmatter` is null when the text has no fence at all, `{}` for an empty
  * block. The body is everything after the closing fence's newline, byte-exact.
  *
@@ -37,20 +68,19 @@ export function normalizeText(text: string): string {
  */
 export function splitFrontmatter(text: string, path: string): Split {
   const normalized = normalizeText(text);
-  const lines = normalized.split("\n");
-  if (!FENCE.test(lines[0] ?? "")) {
+  const fenced = fence(normalized);
+  if (fenced === null) {
     return { ok: true, frontmatter: null, body: normalized };
   }
-  const closeAt = lines.findIndex((line, i) => i > 0 && FENCE.test(line));
-  if (closeAt === -1) {
+  if (fenced.block === null) {
     return refuse(
       path,
       "the frontmatter opens with `---` but no closing `---` line follows",
       "add a `---` line after the last frontmatter key",
     );
   }
-  const block = lines.slice(1, closeAt).join("\n");
-  const body = lines.slice(closeAt + 1).join("\n");
+  const block = fenced.block;
+  const { body } = fenced;
 
   let value: unknown;
   try {
