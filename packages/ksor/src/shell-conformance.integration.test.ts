@@ -278,9 +278,11 @@ describe.runIf(enabled).each(SHELLS)(
       // A link between concepts reaches the page it names, in BOTH OKF §6.1
       // forms — asserted on the rendered bytes, because this is exactly what
       // passed every type and unit check while 404ing in a browser.
+      // Slash-tolerant: `trailingSlash: true` renders the route as
+      // `/docs/beta/`, and the claim is the route, not the shell's slash.
       const pay = readFileSync(path.join(outDir, "docs", "hr", "pay", "index.html"), "utf8");
-      expect(pay, "a bundle-absolute link did not resolve").toContain('href="/docs/beta"');
-      expect(pay, "a bare relative link did not resolve").toContain('href="/docs/hr/leave"');
+      expect(pay, "a bundle-absolute link did not resolve").toMatch(/href="\/docs\/beta\/?"/);
+      expect(pay, "a bare relative link did not resolve").toMatch(/href="\/docs\/hr\/leave\/?"/);
 
       // A directory is a page too: the regenerated index, rendered as a
       // listing (build spec §3). The root is the record's own map.
