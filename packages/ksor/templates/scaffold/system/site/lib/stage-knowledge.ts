@@ -14,6 +14,7 @@ import path from "node:path";
 import { ATTACHMENT_SUFFIXES, isAttachment, parentDocumentOf } from "./attachment-rule";
 import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience";
 import { isDenied, recordPathFrom, stableIdFrom, type DenylistManifest } from "./denial-rule";
+import { publicSimPath, SIM_SUFFIX } from "./embed-rule";
 import { appName, instanceFrontmatter } from "./shared";
 
 // Both relative to the site directory — the directory every build runs from
@@ -21,6 +22,8 @@ import { appName, instanceFrontmatter } from "./shared";
 // resolves a collection's `dir`.
 const RECORD_DIR = "../../knowledge";
 const STAGE_DIR = "./.staged-knowledge";
+// Served, not bundled. Next copies public/ into the export as-is.
+const PUBLIC_SIM_DIR = "./public/sims";
 
 // ONE frontmatter boundary, the checker's exactly: BOM stripped, CRLF
 // normalized, lax close (a `----` line closes — review finding 2026-08-19:
@@ -686,6 +689,66 @@ function watchRecord(recordDir: string, stageDir: string): void {
  * per-request filter leaked on the fifth and sixth consumer of the record
  * its own author had not enumerated (research/visibility.md §4–§5).
  */
+
+/**
+ * A sim is the one asset that has to be SERVED rather than bundled: it is a
+ * page, and a page needs a url before anything can frame it. Next copies
+ * `public/` into the export as-is, so that is where it goes.
+ *
+ * A PASS OF ITS OWN, over the directory the collection actually reads — not a
+ * rider on staging. Staging runs only for a record that declares `audiences:`
+ * or carries a takedown, and most records declare neither, so a sim hung off
+ * it published for the rare record and silently vanished for the common one
+ * (found live 2026-08-24: nothing reached `public/` on the level-0 path).
+ * Reading the SOURCE dir inherits the filtering when there is any, and works
+ * when there is none. What it does NOT inherit at level 0 is the staging
+ * plan's rule that only a REFERENCED asset ships: a record with no audiences
+ * and no takedowns publishes every document anyway, so an unreferenced sim
+ * ships its bytes there. Said rather than fixed, because the moment either
+ * governance exists the staged dir is what this walks and the rule applies.
+ */
+function publishSims(sourceDir: string, lockDir: string): void {
+  const target = path.resolve(process.cwd(), PUBLIC_SIM_DIR);
+
+  const walk = (dir: string, rel: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const from = path.join(dir, entry.name);
+      const next = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(from, next);
+        continue;
+      }
+      if (!entry.name.endsWith(SIM_SUFFIX)) continue;
+      const to = path.join(target, publicSimPath(next));
+      // Same size AND same mtime is this file's own definition of unchanged
+      // (see `stageHolds`). Skipping the write is what keeps the common
+      // build from touching the tree at all.
+      try {
+        const source = statSync(from);
+        const published = statSync(to);
+        if (published.size === source.size && published.mtimeMs >= source.mtimeMs) continue;
+      } catch {
+        // Not published yet, which is the ordinary first-build case.
+      }
+      mkdirSync(path.dirname(to), { recursive: true });
+      copyFileSync(from, to);
+    }
+  };
+
+  // UNDER THE LOCK, for the reason `withStageLock` records at length: a build
+  // evaluates this file in seven processes, and a destructive pass run by two
+  // of them at once fails as `ENOENT`/`EINVAL` out of `copyFileSync`. Walked
+  // into directly while prototyping this (2026-08-24) — the same four shapes,
+  // from a pass that had not yet learned the lesson beside it.
+  withStageLock(lockDir, () => walk(sourceDir, ""));
+}
+
 export function knowledgeSourceDir(): string {
   const stageDir = path.resolve(process.cwd(), STAGE_DIR);
   const recordDir = path.resolve(process.cwd(), RECORD_DIR);
@@ -707,11 +770,13 @@ export function knowledgeSourceDir(): string {
     if (existsSync(stageDir)) withStageLock(stageDir, () => removeStage(stageDir));
     refuseVisibilityWithoutAudiences(recordDir);
     assertAttachmentsWellFormed(recordDir);
+    publishSims(recordDir, recordDir);
     return RECORD_DIR;
   }
   if (audienceModel === null) refuseVisibilityWithoutAudiences(recordDir);
   assertAttachmentsWellFormed(recordDir);
   fillStage(recordDir, stageDir, denied);
   watchRecord(recordDir, stageDir);
+  publishSims(stageDir, stageDir);
   return STAGE_DIR;
 }
