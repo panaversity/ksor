@@ -19,7 +19,10 @@ instead of their training memory. The corpus grows with each implemented verb.
   `.claude/skills/` copies), adopter CI, and a dependency-free format
   checker (`pnpm check`). `ksor init .` scaffolds into an empty directory
   whose name passes the project-name grammar. Everything emitted belongs to
-  the adopter (templates are MIT-0).
+  the adopter (templates are MIT-0). The scaffold is emitted for the package
+  manager that ran init — `npx …` yields an npm project, `bunx …` a bun one,
+  `pnpm dlx …` (or a bare `ksor`) the pnpm shape — so the commands below use
+  the pnpm spelling and your own scaffold's README speaks your manager.
 - Inside a scaffolded project, `pnpm install && pnpm dev` serves the record
   at `http://localhost:3000`; `pnpm build` writes a fully static export to
   `system/site/out/`. `KSOR_BASE_PATH=/repo pnpm build` targets sub-path
