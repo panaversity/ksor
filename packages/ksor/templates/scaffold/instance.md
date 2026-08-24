@@ -37,8 +37,9 @@ record wins.
 ## This is a starter, and it is yours to replace
 
 Everything above describes KSoR itself. It ships filled in so that a fresh
-project has a real governed corpus on the first `pnpm dev` — statuses, owners,
-provenance, a folder and a draft — instead of an empty shelf and a placeholder.
+project has a real governed corpus on the first `pnpm dev` — types, statuses,
+audiences, a folder and a companion summary — instead of an empty shelf and a
+placeholder.
 The documents live in `knowledge/`; delete them as your own knowledge arrives.
 
 Be deliberate about replacing it, because a starter that describes the wrong

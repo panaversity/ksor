@@ -288,10 +288,11 @@ machine or from CI — and it is deliberately not something a booting container
 does. The full walkthrough, including what a cold start costs and where ingest
 belongs, is in `node_modules/@panaversity/ksor/docs/deploying.md`.
 
-If `instance.md` declares `audiences:`, what you deploy is a **tier**.
-Plain `pnpm build` always builds the public tier — safe for any host.
-`KSOR_AUDIENCE=<audience> pnpm build` builds a wider tier for that
-audience's own deployment, and that build carries an
+If `.ksor/governance.yaml` registers audiences, what you deploy is a
+**viewer**. Plain `pnpm build` builds for `[public]` — safe for any host.
+`KSOR_AUDIENCE=public,<audience> pnpm build` — a comma list that must always
+include `public` — builds for a wider viewer's own deployment, and that build
+carries an
 "— not for publication" label because it must never reach a public host:
 put it behind access control you already trust (VPN, SSO proxy,
 authenticated host). The tiers govern what a build contains; where each
