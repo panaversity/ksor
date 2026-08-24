@@ -146,23 +146,12 @@ export function RecordViews({
     [select, views],
   );
 
-  // No summary, so no tabs — but the strip row still carries the reading time.
-  // It sits here rather than up with the title because this row is about the
-  // reading you are ABOUT to do, and a lone line above the facts row read as
-  // floating between two things it belonged to neither of.
-  if (only) {
-    return (
-      <div className="ksor-views">
-        {documentMinutes === undefined ? null : (
-          <p className="mb-6 flex items-center justify-end gap-2 border-b border-fd-border pb-2.5 text-sm text-fd-muted-foreground">
-            <Clock aria-hidden className="size-3.5 shrink-0" />
-            <span>{documentMinutes} min read</span>
-          </p>
-        )}
-        {children}
-      </div>
-    );
-  }
+  // No summary, so no tabs — and so no strip. It used to keep the row anyway,
+  // for the reading time alone: a full-width rule under an empty band with one
+  // number at its far end, which is what most documents got, because most have
+  // no summary. The number moved to the governance row, where it sits with the
+  // document's other facts and needs no furniture of its own.
+  if (only) return <div className="ksor-views">{children}</div>;
 
   return (
     <div className="ksor-views">

@@ -554,6 +554,62 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
    * ten-section document picks their tool ten times. Nothing errors, so only
    * an assertion on the shipped bytes catches it.
    */
+  it("gives a new record its reading surface, with nothing configured", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const doc = path.join(project, "knowledge", "surface-host.md");
+    try {
+      writeFileSync(
+        doc,
+        "---\ntitle: Surface host\nstatus: approved\n---\n\n" +
+          "> [!WARNING]\n> zzalertbodyzz\n\n" +
+          "| Head | Other |\n| --- | --- |\n| zzcellzz | second |\n\n" +
+          "```text\nzzverbatimzz\n```\n",
+      );
+      expect(buildScaffold(project).status, "build with the affordances").toBe(0);
+
+      const page = readFileSync(path.join(outDir, "docs", "surface-host", "index.html"), "utf8");
+
+      // The alert became a callout. Its marker must NOT survive as text: a
+      // record that writes `[!WARNING]` and reads `[!WARNING]` got nothing.
+      expect(page, "the alert did not become a callout").toContain("--callout-color");
+      expect(page, "the marker was served as literal text").not.toContain("[!WARNING]");
+      expect(page).toContain("zzalertbodyzz");
+
+      // And the agent surface keeps what the author wrote, because the
+      // conversion is a rehype step. This is the clause that fails if anyone
+      // moves it to remark.
+      const twin = readFileSync(path.join(outDir, "md", "surface-host.md"), "utf8");
+      expect(twin, "the markdown twin lost the author's alert").toContain("[!WARNING]");
+      expect(twin, "the markdown twin served a React component").not.toContain("Callout");
+
+      // The stylesheet SHIPS the rules — asserted on the built bytes rather
+      // than on the source, because a rule that never reaches the export is a
+      // default the adopter does not have.
+      const stylesheets: string[] = [];
+      const collect = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) collect(full);
+          else if (entry.name.endsWith(".css")) stylesheets.push(readFileSync(full, "utf8"));
+        }
+      };
+      collect(path.join(outDir, "_next"));
+      const css = stylesheets.join("");
+      expect(stylesheets.length, "the export shipped no stylesheet at all").toBeGreaterThan(0);
+      for (const rule of [
+        "--callout-color", // callouts are tinted and ruled
+        "thead", // the table head is a band
+        "nth-child(odd)", // and its rows alternate
+        "data-wrapped", // a long line can be unwrapped
+        "--shiki-light", // a language-less block is set as a passage
+      ]) {
+        expect(css, `the export does not carry the rule for ${rule}`).toContain(rule);
+      }
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
   it("renders code tabs from a fence's info string, and carries the group", () => {
     const knowledge = path.join(project, "knowledge");
     const doc = path.join(knowledge, "tabbed.md");

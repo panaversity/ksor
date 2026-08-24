@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DocumentActions } from "@/components/document-actions";
+import { Clock } from "lucide-react";
 import type { ReactElement } from "react";
 
 import {
@@ -113,17 +114,24 @@ export function GovernanceMeta({
   governance,
   replaces = [],
   markdownUrl,
+  minutes,
 }: {
   governance: DocumentGovernance;
   /** Documents this one replaced — derived from the record, never declared. */
   replaces?: readonly Successor[];
   /** The document's markdown twin, offered beside its governance. */
   markdownUrl?: string;
+  /**
+   * How long the document takes to read, when this row is the only place for
+   * it — a document with a summary shows it on that view's own strip instead,
+   * because there the number belongs to the view you picked.
+   */
+  minutes?: number;
 }): ReactElement | null {
   const { owner, effective } = governance;
   const status = caveatStatus(governance.status);
   const bare = status === null && owner === null && effective === null && replaces.length === 0;
-  if (bare && markdownUrl === undefined) return null;
+  if (bare && markdownUrl === undefined && minutes === undefined) return null;
 
   return (
     <dl className="mb-7 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-fd-border pb-4">
@@ -198,6 +206,12 @@ export function GovernanceMeta({
         <span className="ms-auto">
           <DocumentActions href={markdownUrl} />
         </span>
+      )}
+      {minutes === undefined ? null : (
+        <div className="ms-auto flex items-center gap-2 text-sm text-fd-muted-foreground">
+          <Clock aria-hidden className="size-3.5 shrink-0" />
+          <span>{minutes} min read</span>
+        </div>
       )}
     </dl>
   );
