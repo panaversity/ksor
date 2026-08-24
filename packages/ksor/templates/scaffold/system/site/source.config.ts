@@ -5,6 +5,8 @@ import { z } from "zod";
 import { DeckSchema } from "./lib/deck";
 import { QuizSchema } from "./lib/quiz";
 import { SlidesSchema } from "./lib/slides";
+import { isAttachment } from "./lib/attachment-rule";
+import { rehypeTeachingAid } from "./lib/teaching-aid-rule";
 import { knowledgeSourceDir } from "./lib/stage-knowledge";
 
 // The record lives at <repo>/knowledge — two levels up from this site.
@@ -115,6 +117,13 @@ export const slides = defineCollections({
 
 export default defineConfig({
   mdxOptions: {
+    /**
+     * WHERE the teaching aid sits: after the document's introduction, which
+     * is everything before its first `##` section. The plugin only marks the
+     * place; the page decides whether there is a deck to put there. See
+     * lib/teaching-aid-rule.ts.
+     */
+    rehypePlugins: [[rehypeTeachingAid, { isAttachment }]],
     /**
      * Alternative versions of the same instruction, as TABS.
      *
