@@ -189,6 +189,16 @@ describe("hygiene — the instance's closed key set", () => {
     ).toEqual([]);
   });
 
+  it("a missing instance.md is ksor-instance-format", () => {
+    const files: RecordFiles = {
+      files: new Map([[".ksor/governance.yaml", POLICY], ...Object.entries(A)]),
+      dirs: [],
+    };
+    expect(checkRecord(files, { mode: "build" }).refusals.map((r) => r.slug)).toEqual([
+      "ksor-instance-format",
+    ]);
+  });
+
   it.each([
     ["a missing name", "format: 2\ntitle: T\ndescription: D.\n", /name/],
     ["a name outside the grammar", `${BASE}`.replace("name: acme", "name: Acme_1"), /name/],

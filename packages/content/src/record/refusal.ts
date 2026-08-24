@@ -75,3 +75,12 @@ export function sortRefusals(refusals: readonly Refusal[]): Refusal[] {
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
+
+/**
+ * The line format the scaffold's checker has always printed — where, what,
+ * why, fix — kept byte-stable because adopters' CI logs and skills read it.
+ * `problem:` carries the slug so a reader can grep for the rule.
+ */
+export function formatRefusal(r: Refusal): string {
+  return `${r.path}\n    problem: ${r.slug}\n    why: ${r.why}\n    fix: ${r.fix}`;
+}

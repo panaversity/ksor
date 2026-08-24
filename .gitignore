@@ -15,6 +15,9 @@ workbench/shells/*/.staged-knowledge/
 workbench/shells/*/out/
 packages/content-gateway/schema/
 packages/ksor/schema/
+# the emitted checker is BUILT from the record module (record spec §6), like schema/
+packages/ksor/templates/scaffold/.agents/skills/format-checker/check.mjs
+packages/ksor/templates/scaffold/.claude/skills/format-checker/check.mjs
 # transient integration-test roots (rooted under the package so the built CLI
 # resolves its bundled deps by upward walk; afterEach removes them)
 packages/ksor/ksor-fakeinstall-*/

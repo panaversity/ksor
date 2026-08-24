@@ -245,7 +245,15 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
 
 /** Returns the instance title for the root index; refuses a pre-profile instance. */
 function checkInstance(text: string | null, refusals: Refusal[]): string {
-  if (text === null) return "Index";
+  if (text === null) {
+    refusals.push({
+      slug: "ksor-instance-format",
+      path: INSTANCE_PATH,
+      why: "instance.md is missing — it says what this record is authoritative for; without it nothing states the record's scope and the MCP server has no instructions",
+      fix: "restore instance.md from git history, or run the intake-interview skill to write it",
+    });
+    return "Index";
+  }
   const split = splitFrontmatter(text, INSTANCE_PATH);
   if (!split.ok) {
     refusals.push(split.refusal);
