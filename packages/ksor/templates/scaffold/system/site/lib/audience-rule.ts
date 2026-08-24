@@ -42,3 +42,24 @@ export function decideVisible(
   if (rank === -1) return false;
   return rank <= model.audiences.indexOf(audience);
 }
+
+/**
+ * The overlap rule (record spec §2.4): a concept holds a LIST of audience
+ * identifiers, a viewer holds a list that always includes `public`, and the
+ * concept is visible when the two overlap. Rank moves to the viewer,
+ * membership stays on the document. Omission is a refusal upstream, never a
+ * default here — an empty list on either side is visible to nobody.
+ */
+export function overlaps(viewer: readonly string[], audience: readonly string[]): boolean {
+  return audience.some((a) => viewer.includes(a));
+}
+
+/**
+ * The widening rule: a link, a `ksor.superseded_by` pointer or a companion
+ * body may reach a target whose audience contains `public` or contains every
+ * identifier in the source's — then every reader of the source can read the
+ * target. `[internal]` → `[public]` passes; `[public]` → `[internal]` refuses.
+ */
+export function mayReach(source: readonly string[], target: readonly string[]): boolean {
+  return target.includes("public") || source.every((a) => target.includes(a));
+}

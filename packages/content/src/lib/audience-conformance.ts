@@ -189,3 +189,134 @@ export const AUDIENCE_CASES: readonly AudienceCase[] = [
     visible: true,
   },
 ];
+
+/**
+ * The overlap table (record spec §2.4) — the rule the OKF-native record
+ * moves to, beside the ranked table above it replaces. TS is asserted in
+ * `audience-overlap.test.ts`; the SQL half (`n.audience && :viewer`) is
+ * asserted through real Postgres when the serving predicate lands with it
+ * (research/okf-native.md §4.1), and the ranked table retires in that change.
+ */
+export interface OverlapCase {
+  readonly name: string;
+  /** The viewer's list — always includes `public` once validated upstream. */
+  readonly viewer: readonly string[];
+  /** The concept's `ksor.audience`. */
+  readonly audience: readonly string[];
+  readonly visible: boolean;
+}
+
+export const OVERLAP_CASES: readonly OverlapCase[] = [
+  {
+    name: "public viewer sees a public concept",
+    viewer: ["public"],
+    audience: ["public"],
+    visible: true,
+  },
+  {
+    name: "public viewer does NOT see an internal concept",
+    viewer: ["public"],
+    audience: ["internal"],
+    visible: false,
+  },
+  {
+    name: "internal viewer sees an internal concept",
+    viewer: ["public", "internal"],
+    audience: ["internal"],
+    visible: true,
+  },
+  {
+    name: "internal viewer sees a public concept too",
+    viewer: ["public", "internal"],
+    audience: ["public"],
+    visible: true,
+  },
+  {
+    name: "internal viewer does NOT see a board concept",
+    viewer: ["public", "internal"],
+    audience: ["board"],
+    visible: false,
+  },
+  {
+    name: "a three-tier viewer sees a concept in any of its tiers",
+    viewer: ["public", "internal", "board"],
+    audience: ["board"],
+    visible: true,
+  },
+  {
+    name: "a concept for two audiences is visible to a viewer holding either",
+    viewer: ["public", "board"],
+    audience: ["internal", "board"],
+    visible: true,
+  },
+  {
+    name: "…and not to a viewer holding neither",
+    viewer: ["public", "finance"],
+    audience: ["internal", "board"],
+    visible: false,
+  },
+  {
+    name: "an unregistered identifier on the concept is a restriction, never a widening",
+    viewer: ["public", "internal"],
+    audience: ["board-only"],
+    visible: false,
+  },
+  {
+    name: "an empty audience list is visible to nobody (omission is refused upstream)",
+    viewer: ["public"],
+    audience: [],
+    visible: false,
+  },
+  {
+    name: "a section is admitted iff a descendant is visible — the section itself carries no list",
+    viewer: ["public"],
+    audience: [],
+    visible: false,
+  },
+];
+
+export interface WideningCase {
+  readonly name: string;
+  readonly source: readonly string[];
+  readonly target: readonly string[];
+  readonly reaches: boolean;
+}
+
+export const WIDENING_CASES: readonly WideningCase[] = [
+  {
+    name: "[internal] → [public] passes: every reader of the source can read the target",
+    source: ["internal"],
+    target: ["public"],
+    reaches: true,
+  },
+  {
+    name: "[public] → [internal] refuses: a public reader would hit a wall",
+    source: ["public"],
+    target: ["internal"],
+    reaches: false,
+  },
+  {
+    name: "[internal] → [internal] passes",
+    source: ["internal"],
+    target: ["internal"],
+    reaches: true,
+  },
+  {
+    name: "[internal] → [internal, board] passes: the target contains every identifier of the source",
+    source: ["internal"],
+    target: ["internal", "board"],
+    reaches: true,
+  },
+  {
+    name: "[internal, board] → [internal] refuses: a board reader of the source cannot read the target",
+    source: ["internal", "board"],
+    target: ["internal"],
+    reaches: false,
+  },
+  {
+    name: "[internal, board] → [public, internal] passes: public covers everyone",
+    source: ["internal", "board"],
+    target: ["public", "internal"],
+    reaches: true,
+  },
+];
