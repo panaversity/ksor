@@ -454,6 +454,7 @@ describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () 
         corpusId: inst2.corpusId,
         tenantId: inst2.tenantId,
         instanceDigest: createHash("sha256").update("pin").digest("hex"),
+        viewer: ["public"],
       },
       generation,
     ).token;

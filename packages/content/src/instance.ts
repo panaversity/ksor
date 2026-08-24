@@ -102,6 +102,11 @@ const groupSchemas = {
       )
       .default("english"),
     vector_floor: floorSchema.default(null),
+    // The digest of the predicate the floor was measured under, written by
+    // `ksor calibrate` beside the number. Absent on a floor calibrated before
+    // the predicate had a name — which is a floor measured without today's
+    // lifecycle window and trust arm, so absence refuses rather than passes.
+    floor_digest: z.union([z.string(), z.null()]).default(null),
     // The keyword floor is a degraded-path number or null only — the
     // uncalibrated-refuses state is a property of the VECTOR gate.
     keyword_floor: z.union([z.number(), z.null()]).default(null),
@@ -205,7 +210,11 @@ export function parseInstanceText(text: string): ContentInstance {
     description: doc.description,
     toolchain: doc.toolchain,
     dsnEnv: database.dsn_env,
-    abstain: { vectorFloor: retrieval.vector_floor, keywordFloor: retrieval.keyword_floor },
+    abstain: {
+      vectorFloor: retrieval.vector_floor,
+      keywordFloor: retrieval.keyword_floor,
+      floorDigest: retrieval.floor_digest,
+    },
     textSearchConfig: retrieval.text_search_config,
     maximumResponseCharacters: budgets.maximum_response_characters,
     instructions: doc.instructions,

@@ -7,10 +7,12 @@
  * denial is applied PRE-fusion so a denied node cannot leak by ranking.
  */
 
+import { createHash } from "node:crypto";
+
 import type pg from "pg";
 
 import { MIN_CONTENT_CHARS, RRF_K } from "../config.js";
-import { AUDIENCE_ALLOWED } from "./audience.js";
+import { ADMITTED, ADMITTED_CTE } from "./admit.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 
 /**
@@ -58,7 +60,32 @@ const armWhere = (kindsParam: string): string => `
           AND n.status = 'published'
           AND (${kindsParam}::text[] IS NULL OR n.kind = ANY(${kindsParam}::text[]))
           AND ${DENY}
-          AND ${AUDIENCE_ALLOWED}`;
+          AND ${ADMITTED}`;
+
+/**
+ * The EXACT text the abstention signal is measured through — the candidate set
+ * a top-1 cosine is the top of.
+ *
+ * A floor is a threshold inside one predicate. Change the predicate and the
+ * same question reaches a different candidate set, so the measured separation
+ * the number encodes is no longer the separation the door has: the floor stays
+ * plausible and stops meaning what it said. `ksor calibrate` records this
+ * digest beside the floor and the door compares it at boot (service.ts), which
+ * is the only way a predicate change can be made to show up as anything other
+ * than quietly different answers.
+ *
+ * The kinds parameter is spelled `$k` rather than its real number, so
+ * renumbering a statement is not mistaken for a change in what it selects.
+ */
+export const GATE_PREDICATE: string = [DENIED_CTE, ADMITTED_CTE, armWhere("$k"), SERVABLE].join(
+  "\n",
+);
+
+/** Short enough to paste beside a number in `instance.md`, long enough to collide with nothing. */
+export const GATE_PREDICATE_DIGEST: string = createHash("sha256")
+  .update(GATE_PREDICATE)
+  .digest("hex")
+  .slice(0, 12);
 
 const JOINS = `
         FROM chunks c
@@ -77,7 +104,7 @@ const JOINS = `
  * (issue #59).
  */
 export const HYBRID_SQL: string = `
-WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
+WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE}, ${ADMITTED_CTE},
     -- The top-k is taken by a PLAIN \`ORDER BY <distance> LIMIT\`, and the rank
     -- is numbered OUTSIDE it. Ordering by a window column instead made the
     -- HNSW index unusable: a window function must see every row in its
@@ -123,7 +150,7 @@ WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE},
     ORDER BY f.score DESC, c.chunk_id LIMIT $7`;
 
 const KEYWORD_SQL = `
-WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}
+WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}, ${ADMITTED_CTE}
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
            c.content,
            ts_rank_cd(c.search_tsv, websearch_to_tsquery($7::regconfig, $3)) AS score,
@@ -135,7 +162,7 @@ WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}
 
 /** The calibrator's standalone top-1 signal (the read path gets it free from HYBRID_SQL). */
 const TOP_ONE_SQL = `
-WITH RECURSIVE ${GEN_CTE.replace("$8", "$5")}, ${DENIED_CTE}
+WITH RECURSIVE ${GEN_CTE.replace("$8", "$5")}, ${DENIED_CTE}, ${ADMITTED_CTE}
     SELECT 1 - (c.embedding <=> $3::vector) AS score
     ${JOINS}
     WHERE ${armWhere("$4")}

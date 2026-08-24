@@ -20,6 +20,7 @@ import {
 } from "./schema.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type SearchScope } from "./lib/search.js";
 import { vectorAbstains } from "./lib/abstain.js";
+import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
 import { keyRingFromEnv, mint, validate } from "./lib/snapshot.js";
 import { readDocument, search, type ServiceContext } from "./service.js";
 import type { ContentInstance } from "./instance.js";
@@ -86,8 +87,8 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
           // rows are about generations, denial and windowing, so they are
           // public — omitting it would make every one of them invisible to
           // every viewer, which is the profile's intent, not a serving bug.
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience)
-           VALUES ($1, 1, $2, 'document', $3, $4, $5, ARRAY['public']) RETURNING node_id`,
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience, doc_status)
+           VALUES ($1, 1, $2, 'document', $3, $4, $5, ARRAY['public'], 'stable') RETURNING node_id`,
           [TENANT, stableId, slug, slug, status],
         );
         return String(r.rows[0].node_id);
@@ -159,7 +160,13 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     expect(hits[0]?.generation).toBe(1);
     expect(typeof hits[0]?.score).toBe("number");
     // A calibrated floor between the two arms' separations gates correctly.
-    expect(vectorAbstains(topCosine, { vectorFloor: 0.9, keywordFloor: null })).toBe(false);
+    expect(
+      vectorAbstains(topCosine, {
+        vectorFloor: 0.9,
+        keywordFloor: null,
+        floorDigest: GATE_PREDICATE_DIGEST,
+      }),
+    ).toBe(false);
   });
 
   it("a far query abstains under a calibrated floor — and the draft and pending chunks never surface", async () => {
@@ -176,7 +183,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       expect(hit.content, "pending chunk text must never serve").not.toContain("secret pending");
     }
     expect(
-      vectorAbstains(topCosine, { vectorFloor: 0.9, keywordFloor: null }),
+      vectorAbstains(topCosine, {
+        vectorFloor: 0.9,
+        keywordFloor: null,
+        floorDigest: GATE_PREDICATE_DIGEST,
+      }),
       `topCosine=${topCosine}`,
     ).toBe(true);
   });
@@ -227,7 +238,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       corpusId: CORPUS,
       tenantId: TENANT,
       dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: 0.9, keywordFloor: null },
+      abstain: { vectorFloor: 0.9, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
@@ -255,6 +266,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         corpusId: CORPUS,
         tenantId: TENANT,
         instanceDigest: "digest-1",
+        viewer: ["public"],
       });
       expect(verdict, "the snapshot must validate and pin the generation").toEqual({
         generation: 1,
@@ -299,7 +311,10 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     // degrade serves exactly what an uncalibrated corpus always serves.
     const uncalibrated: ServiceContext = {
       ...ctx,
-      instance: { ...instance, abstain: { vectorFloor: null, keywordFloor: null } },
+      instance: {
+        ...instance,
+        abstain: { vectorFloor: null, keywordFloor: null, floorDigest: null },
+      },
       embedQuery: down,
     };
     const kwServed = await search(uncalibrated, "onboarding checklist", 5);
@@ -356,8 +371,8 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   it("a snapshot pinned to a withdrawn generation refreshes instead of serving it", async () => {
     await runIngest(pool, TENANT, async (c) => {
       const r = await c.query(
-        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience)
-         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published', ARRAY['public']) RETURNING node_id`,
+        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience, doc_status)
+         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published', ARRAY['public'], 'stable') RETURNING node_id`,
         [TENANT],
       );
       const nodeId = String(r.rows[0].node_id);
@@ -383,7 +398,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       corpusId: CORPUS,
       tenantId: TENANT,
       dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: 0.9, keywordFloor: null },
+      abstain: { vectorFloor: 0.9, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
@@ -401,7 +416,12 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       instanceDigest: "digest-1",
       embedQuery: async () => unit(0),
     };
-    const scope = { corpusId: CORPUS, tenantId: TENANT, instanceDigest: "digest-1" };
+    const scope = {
+      corpusId: CORPUS,
+      tenantId: TENANT,
+      instanceDigest: "digest-1",
+      viewer: ["public"],
+    };
 
     // The withdrawn pin: a cryptographically VALID token for generation 2.
     const withdrawn = mint(ring, scope, 2);

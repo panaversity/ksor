@@ -34,7 +34,7 @@ describe("parseInstanceText", () => {
     expect(instance.embeddingProvider).toBe("gemini");
     expect(instance.embeddingModel).toBe("gemini-embedding-001");
     expect(instance.embeddingDim).toBe(1536);
-    expect(instance.abstain).toEqual({ vectorFloor: null, keywordFloor: null });
+    expect(instance.abstain).toEqual({ vectorFloor: null, keywordFloor: null, floorDigest: null });
     expect(instance.maximumResponseCharacters).toBe(120_000);
     expect(instance.instructions.startsWith("# Acme Handbook")).toBe(true);
     expect(instance.instructions, "the WHOLE body is the instructions").toContain(

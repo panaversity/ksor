@@ -72,7 +72,7 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
     for (const [slug, audience] of docs) {
       const node = await pool.query(
         "INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title," +
-          " corpus_id, audience) VALUES ($1, 1, $2, 'document', $3, $4, $1, $5::text[])" +
+          " corpus_id, audience, doc_status) VALUES ($1, 1, $2, 'document', $3, $4, $1, $5::text[], 'stable')" +
           " RETURNING node_id",
         [TENANT, `knowledge/${slug}`, slug, slug, audience],
       );

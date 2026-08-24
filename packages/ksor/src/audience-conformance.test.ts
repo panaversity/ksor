@@ -1,7 +1,7 @@
 /**
  * The SITE's half of the shared audience decision table.
  *
- * `AUDIENCE_CASES` lives in the kernel and is asserted against the real SQL in
+ * `RANKED_AUDIENCE_CASES` lives in the kernel and is asserted against the real SQL in
  * `audience-conformance.db.test.ts`. This file asserts the SITE's rule against
  * the SAME rows, so the two surfaces cannot drift without one of them failing
  * on the exact case it broke.
@@ -19,10 +19,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { AUDIENCE_CASES, decideVisible } from "@panaversity/ksor-content";
+// The RANKED table, deliberately: this file asserts the scaffolded site's
+// `decideVisible`, which is still the ranked rule. `AUDIENCE_CASES` is now the
+// overlap rule the kernel serves through, and this test moves to it with the
+// site (record spec §2.4).
+import { RANKED_AUDIENCE_CASES, decideVisible } from "@panaversity/ksor-content";
 
 describe("the audience decision table, in the site's rule", () => {
-  it.each(AUDIENCE_CASES)("$name", (testCase) => {
+  it.each(RANKED_AUDIENCE_CASES)("$name", (testCase) => {
     // The site has no concept of "an unidentified viewer": a build is always
     // FOR an audience, and with no model it builds everything. Both are the
     // first tier, which is what the kernel resolves a null viewer to.

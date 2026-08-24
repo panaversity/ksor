@@ -25,6 +25,16 @@ export interface AbstainConfig {
    * never set one by intuition, recalibrate per corpus.
    */
   readonly keywordFloor: number | null;
+  /**
+   * The digest of the retrieval predicate {@link vectorFloor} was MEASURED
+   * under (`GATE_PREDICATE_DIGEST`), or null on a record that declares none.
+   *
+   * A number alone cannot say which candidate set it separated, so a floor
+   * carried across a predicate change reads as calibrated while gating a set
+   * it was never measured on. The door compares this at boot and refuses on a
+   * mismatch — the declared-but-uncalibrated state, not `gate: off`.
+   */
+  readonly floorDigest: string | null;
 }
 
 /**

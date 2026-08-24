@@ -16,7 +16,15 @@ import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
 import { audienceGucs } from "./lib/audience.js";
-import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type Hit } from "./lib/search.js";
+import { trustGucs } from "./lib/trust.js";
+import type { TrustTier } from "./record/profile.js";
+import {
+  GATE_PREDICATE_DIGEST,
+  hybridSearch,
+  keywordSearch,
+  VECTOR_TXN_GUCS,
+  type Hit,
+} from "./lib/search.js";
 import {
   mint,
   validate as validateToken,
@@ -92,15 +100,34 @@ export interface ServiceContext {
    * establish who is asking must not hand out the restricted half of the record.
    */
   readonly viewer?: readonly string[];
+  /**
+   * The lowest trust tier this door will answer from (record spec §2.3):
+   * 0 unverified, 1 machine-confirmed, 2 human-reviewed. Absent = 0, which
+   * admits every tier — the honest default, since `verified` is never required
+   * and a record with no verifications is a legitimate level-0 state.
+   *
+   * Bound as an ARM predicate, never applied to the hits afterwards: a floor
+   * enforced after ranking has already let a lower-tier passage decide what
+   * the answer was.
+   */
+  readonly minTrustTier?: TrustTier | number;
 }
 
 /**
- * The audience GUC every serving statement's predicate reads. Folded into the
- * same transaction-local `set_config` round trip as the tenant wall — so a
- * path cannot serve without it the way it could not serve without the tenant.
+ * The GUCs every serving statement's predicates read — the viewer list and the
+ * trust floor, together, because `lib/admit.ts` composes them into one set and
+ * a path that bound one without the other would be admitting on half a rule.
+ * Folded into the same transaction-local `set_config` round trip as the tenant
+ * wall, so a path cannot serve without them the way it could not serve without
+ * the tenant.
  */
-function audienceScope(ctx: ServiceContext): Readonly<Record<string, string>> {
-  return audienceGucs(ctx.viewer ?? ["public"]);
+function servingScope(ctx: ServiceContext): Readonly<Record<string, string>> {
+  return { ...audienceGucs(viewerOf(ctx)), ...trustGucs(ctx.minTrustTier ?? 0) };
+}
+
+/** The viewer this door serves; absent is `[public]`, the safe default. */
+function viewerOf(ctx: ServiceContext): readonly string[] {
+  return ctx.viewer ?? ["public"];
 }
 
 export interface SearchHit {
@@ -135,7 +162,11 @@ export type GateState = "off" | "uncalibrated" | { readonly floor: number };
 export function gateState(instance: ContentInstance): GateState {
   const floor = instance.abstain.vectorFloor;
   if (floor === "uncalibrated") return "uncalibrated";
-  if (floor !== null) return { floor };
+  // A floor measured under a different predicate is reported as UNCALIBRATED
+  // and never as `off`: `off` is the honest level-0 rung and would tell an
+  // agent this record cannot abstain, when what is true is that its gate is
+  // armed with a number that no longer describes the set it gates.
+  if (floor !== null) return staleFloor(instance) === null ? { floor } : "uncalibrated";
   // A keyword floor gates ONLY the degraded (embed-outage) path, so the healthy
   // path really cannot abstain and "off" is the honest answer for it. Saying
   // {floor} here would claim a gate that is not armed — the inverse error of
@@ -229,6 +260,7 @@ function snapshotEnvelope(ctx: ServiceContext, generation: number): SnapshotEnve
     corpusId: ctx.instance.corpusId,
     tenantId: ctx.instance.tenantId,
     instanceDigest: ctx.instanceDigest,
+    viewer: viewerOf(ctx),
   };
   const minted: SnapshotToken = mint(ctx.ring, scope, generation);
   return {
@@ -253,18 +285,57 @@ export class EmptyQueryError extends Error {
  * The remedy is to run calibration and paste the floor.
  */
 export class UncalibratedFloorError extends Error {
-  constructor() {
+  constructor(message?: string) {
     super(
-      "ksor-uncalibrated: retrieval.vector_floor is declared 'uncalibrated' — the abstention gate " +
-        "is not measured yet, so this corpus refuses to serve. Run `ksor calibrate` and " +
-        "paste the recommended vector_floor into instance.md.",
+      message ??
+        "ksor-uncalibrated: retrieval.vector_floor is declared 'uncalibrated' — the abstention gate " +
+          "is not measured yet, so this corpus refuses to serve. Run `ksor calibrate` and " +
+          "paste the recommended vector_floor into instance.md.",
     );
     this.name = "UncalibratedFloorError";
   }
 }
 
+/**
+ * The digest a declared numeric floor was measured under, when it is NOT the
+ * predicate this door serves through — otherwise null.
+ *
+ * Absent counts as stale. Every floor calibrated before the digest existed was
+ * measured without the lifecycle window and the trust arm, which is precisely
+ * the drift this compares for; treating "no digest" as "fine" would exempt the
+ * only floors known to be stale.
+ */
+function staleFloor(instance: ContentInstance): string | null {
+  const floor = instance.abstain.vectorFloor;
+  if (typeof floor !== "number") return null;
+  const declared = instance.abstain.floorDigest;
+  return declared === GATE_PREDICATE_DIGEST ? null : (declared ?? "(none recorded)");
+}
+
+/**
+ * Every serve passes through here: an unmeasured floor and a floor measured
+ * under a predicate this door no longer has are the SAME state — a gate that
+ * cannot be trusted to abstain — and get the same refusal, because inventing a
+ * second one would invite a second remedy and there is only one.
+ */
+export function assertGateMeasured(instance: ContentInstance): void {
+  if (instance.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  const stale = staleFloor(instance);
+  if (stale === null) return;
+  throw new UncalibratedFloorError(
+    `ksor-uncalibrated: retrieval.vector_floor is ${String(instance.abstain.vectorFloor)}, measured under ` +
+      `retrieval predicate ${stale} — this door serves through ${GATE_PREDICATE_DIGEST}.\n` +
+      "  why: a floor is a threshold inside ONE candidate set. The predicate changed (audience " +
+      "overlap, the lifecycle window, the trust floor, the denial scope), so the separation this " +
+      "number encodes is not the separation this door has — it would keep gating, plausibly, on a " +
+      "measurement of something else\n" +
+      "  fix: re-measure and paste both lines:\n" +
+      "    ksor calibrate --instance instance.md",
+  );
+}
+
 export async function search(ctx: ServiceContext, query: string, k = 10): Promise<SearchResult> {
-  if (ctx.instance.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  assertGateMeasured(ctx.instance);
   if (query.trim() === "") throw new EmptyQueryError();
   // Code points, Python len parity — the two planes must read the same
   // budget contract (review finding, 2026-08-19).
@@ -322,7 +393,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ctx.pool,
       inst.tenantId,
       (client) => hybridSearch(client, scope, vec, query, kb),
-      { ...VECTOR_TXN_GUCS, ...audienceScope(ctx) },
+      { ...VECTOR_TXN_GUCS, ...servingScope(ctx) },
     );
     hits = result.hits;
     topCosine = result.topCosine;
@@ -346,7 +417,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ctx.pool,
       inst.tenantId,
       (client) => keywordSearch(client, scope, query, kb),
-      audienceScope(ctx),
+      servingScope(ctx),
     );
     const topKw = hits[0]?.score ?? null;
     abstained = keywordAbstains(topKw, inst.abstain);
@@ -396,7 +467,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
           );
           return Number(r.rows[0]?.active_generation ?? 0) === 0;
         },
-        audienceScope(ctx),
+        servingScope(ctx),
       ));
 
     // "The record does not cover this" and "I could not look properly" are
@@ -585,7 +656,7 @@ export async function readDocument(
   options: ReadOptions = {},
 ): Promise<ReadResult> {
   const inst = ctx.instance;
-  if (inst.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  assertGateMeasured(inst);
   const actor = ctx.actor?.() ?? "anonymous";
   // An invalid or expired snapshot NEVER errors: serve active and say why.
   let pinned: number | null = null;
@@ -595,6 +666,7 @@ export async function readDocument(
       corpusId: inst.corpusId,
       tenantId: inst.tenantId,
       instanceDigest: ctx.instanceDigest,
+      viewer: viewerOf(ctx),
     });
     if (verdict.generation !== null) pinned = verdict.generation;
     else refreshed = `refreshed (${verdict.reason ?? "invalid"})`;
@@ -621,7 +693,7 @@ export async function readDocument(
       ctx.pool,
       inst.tenantId,
       (client) => servableGenerations(client, inst.corpusId),
-      audienceScope(ctx),
+      servingScope(ctx),
     );
     if (!servable.includes(pinned)) {
       refreshed = "refreshed (withdrawn)";
@@ -640,7 +712,7 @@ export async function readDocument(
       const pinnedScope = { ...scope, pinnedGeneration: found.generation };
       return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
     },
-    audienceScope(ctx),
+    servingScope(ctx),
   );
   if (chunks.length === 0) {
     throw new Error(`document ${JSON.stringify(slug)} has no readable content`);
@@ -783,7 +855,7 @@ export async function outlineDocuments(
   // absolute heading paths). search and readDocument already refuse; outline
   // must too, or an uncalibrated corpus that says REFUSING still leaks its
   // shape (review 2026-08-19).
-  if (inst.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  assertGateMeasured(inst);
   const actor = ctx.actor?.() ?? "anonymous";
   const root = options.node ?? null;
   // Drill-down default: a named node with no explicit depth gets depth=1. An
@@ -804,7 +876,7 @@ export async function outlineDocuments(
     ctx.pool,
     inst.tenantId,
     (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1, offset }),
-    audienceScope(ctx),
+    servingScope(ctx),
   );
   const has_more = rows.length > limit;
   if (has_more) rows.length = limit;

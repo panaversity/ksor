@@ -13,7 +13,7 @@
  * just answered from — nothing can mint for a building generation.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /** 30 minutes; GC grace is TTL + 10 min. */
 export const TOKEN_TTL_S: number = 30 * 60;
@@ -97,6 +97,31 @@ export interface SnapshotScope {
   readonly corpusId: string;
   readonly tenantId: string;
   readonly instanceDigest: string;
+  /**
+   * The viewer list the door is serving (record spec §2.4).
+   *
+   * A pin re-serves the generation a search answered from, so without the
+   * viewer in the binding a token minted for a public caller re-serves that
+   * generation to an internal one and back — the caller's own follow-up read
+   * being the one route where a value the CALLER holds could widen or narrow
+   * what they are shown. Folded into the digest rather than added as a field,
+   * so a mismatch lands on the existing `foreign_deployment` path, which
+   * already fails soft to `snapshot: "refreshed"` and never errors.
+   */
+  readonly viewer: readonly string[];
+}
+
+/**
+ * What the payload's `instance_digest` actually carries: the deployment AND
+ * the viewer list, order-insensitive (a list is a set; ["public","internal"]
+ * and ["internal","public"] are the same viewer).
+ */
+function boundDigest(scope: SnapshotScope): string {
+  return createHash("sha256")
+    .update(scope.instanceDigest)
+    .update("\u001f")
+    .update([...scope.viewer].sort().join("\u001f"))
+    .digest("hex");
 }
 
 export function mint(
@@ -112,7 +137,7 @@ export function mint(
     corpus_id: scope.corpusId,
     tenant_id: scope.tenantId,
     generation,
-    instance_digest: scope.instanceDigest,
+    instance_digest: boundDigest(scope),
     expires_at: expiresAt,
     key_id: ring.active,
   };
@@ -142,7 +167,7 @@ export function validate(
   const got = Buffer.from(parts[1] ?? "", "base64url");
   if (got.length !== expected.length || !timingSafeEqual(got, expected)) return invalid;
   if (payload.corpus_id !== scope.corpusId || payload.tenant_id !== scope.tenantId) return invalid;
-  if (payload.instance_digest !== scope.instanceDigest) {
+  if (payload.instance_digest !== boundDigest(scope)) {
     return { generation: null, reason: "foreign_deployment" };
   }
   const expires = Date.parse(payload.expires_at);

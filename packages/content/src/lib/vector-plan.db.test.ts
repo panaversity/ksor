@@ -100,8 +100,8 @@ describe.runIf(adminDsn !== "")("the serving query opens the vector index (db)",
       [TENANT],
     );
     await pool.query(
-      "INSERT INTO content_nodes (tenant_id, generation, stable_id, slug, title, kind, position, status)" +
-        " VALUES ($1, 1, 'n', 'n', 'N', 'document', 1, 'published')",
+      "INSERT INTO content_nodes (tenant_id, generation, stable_id, slug, title, kind, position, status, audience, doc_status)" +
+        " VALUES ($1, 1, 'n', 'n', 'N', 'document', 1, 'published', ARRAY['public'], 'stable')",
       [TENANT],
     );
     await pool.query(

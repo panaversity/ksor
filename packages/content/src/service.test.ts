@@ -40,6 +40,7 @@ import {
   UncalibratedFloorError,
   type ServiceContext,
 } from "./service.js";
+import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
 import { keyRingFromEnv } from "./lib/snapshot.js";
 
 describe("a declared-but-uncalibrated floor refuses to serve (fail closed, representable)", () => {
@@ -86,7 +87,7 @@ describe("an empty query from the embed door re-raises as a client error, not a 
       corpusId: "c",
       tenantId: "c",
       dsnEnv: "X",
-      abstain: { vectorFloor: 0.6, keywordFloor: null },
+      abstain: { vectorFloor: 0.6, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
       maximumResponseCharacters: 120_000,
       instructions: "",
       embeddingProvider: "fake",

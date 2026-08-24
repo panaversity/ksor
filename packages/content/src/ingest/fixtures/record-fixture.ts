@@ -154,7 +154,7 @@ export function instanceOf(
     description: `The ${corpusId} record.`,
     toolchain: null,
     dsnEnv: "KSOR_DB_URL",
-    abstain: { vectorFloor: null, keywordFloor: null },
+    abstain: { vectorFloor: null, keywordFloor: null, floorDigest: null },
     textSearchConfig: "english",
     maximumResponseCharacters: 120_000,
     instructions: "",

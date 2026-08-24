@@ -42,3 +42,21 @@ export async function servingPolicy(
     };
   });
 }
+
+/**
+ * The widest viewer list this record has: `public` plus every audience the
+ * ingested policy registers.
+ *
+ * Calibration binds it, because a floor is a property of the RECORD and not of
+ * one caller's tier — and binds THIS rather than the `*` sentinel, because the
+ * sentinel is a scope no door ever serves through. A record whose run carries
+ * no policy (no active generation yet) has nothing registered, which is
+ * `[public]`: the level-0 shape, and the whole record.
+ */
+export async function widestViewer(
+  pool: pg.Pool,
+  instance: ContentInstance,
+): Promise<readonly string[]> {
+  const policy = await servingPolicy(pool, instance);
+  return ["public", ...(policy?.registry ?? [])];
+}

@@ -127,7 +127,12 @@ export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 
 export { runContentCli } from "./commands.js";
 
-export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
+export {
+  AUDIENCE_CASES,
+  RANKED_AUDIENCE_CASES,
+  type AudienceCase,
+  type RankedAudienceCase,
+} from "./lib/audience-conformance.js";
 export { decideVisible, type AudienceModel as SiteAudienceModel } from "./lib/audience-rule.js";
 export { withProbeDeadline, ProbeDeadlineError } from "./db.js";
 export {
@@ -202,6 +207,6 @@ export { manifestToJson, type Manifest, type ManifestNode } from "./ingest/manif
 export { governanceOf, sectionGovernance, type NodeGovernance } from "./ingest/governance.js";
 export { applyLedger, foldLedger, unmergedLines } from "./ingest/ledger-apply.js";
 export { overlaps, mayReach } from "./lib/audience-rule.js";
-export { OVERLAP_CASES, WIDENING_CASES } from "./lib/audience-conformance.js";
+export { WIDENING_CASES } from "./lib/audience-conformance.js";
 export { admitsLifecycle, type LifecycleDoc, type Surface } from "./lib/lifecycle-rule.js";
 export { LIFECYCLE_CASES } from "./lib/lifecycle-conformance.js";

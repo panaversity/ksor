@@ -54,6 +54,8 @@ import { buildGeneration, flipRefusal, RecordRefused, type BuildReport } from ".
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
+import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
+import { widestViewer } from "./lib/policy-row.js";
 import { overlapAdvice } from "./calibrate/overlap.js";
 import { GeminiTextGenerator } from "./lib/providers/gemini.js";
 import { runGc } from "./ingest/gc.js";
@@ -741,10 +743,16 @@ async function calibrateCommand(args: string[]): Promise<number> {
       ? null
       : parseQueriesFile(readFileSync(values["ooc-file"], "utf8"));
 
-  const report = await withPool(dsn, (pool) =>
+  const report = await withPool(dsn, async (pool) =>
     runCalibration(pool, {
       tenantId: instance.tenantId,
       corpusId: instance.corpusId,
+      // The floor is a property of the RECORD, not of one caller's tier, so
+      // calibration measures the widest viewer there is: `public` plus every
+      // audience the ingested policy registers. Named rather than left to the
+      // `*` sentinel, because the sentinel is a scope no door ever binds and a
+      // floor must be measured on a set the door can actually serve.
+      viewer: await widestViewer(pool, instance),
       provider,
       generation: parseGeneration(values.generation),
       queries,
@@ -756,7 +764,7 @@ async function calibrateCommand(args: string[]): Promise<number> {
         values["min-chars"] === undefined ? undefined : intFlag("--min-chars", values["min-chars"]),
     }),
   );
-  process.stdout.write(renderReport(report) + "\n");
+  process.stdout.write(renderReport(report, GATE_PREDICATE_DIGEST) + "\n");
   const advice = overlapAdvice(report);
   if (advice !== null) process.stdout.write(advice);
   return 0;

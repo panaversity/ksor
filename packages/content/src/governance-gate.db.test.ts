@@ -50,8 +50,8 @@ describe.runIf(adminDsn !== "")("the governance boot gate (db)", () => {
         [TENANT, TENANT, opts.generation, opts.schemaVersion, opts.ledgerIds ?? null],
       );
       await client.query(
-        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, audience)" +
-          " VALUES ($1, $1, $2, $3, $4, 'Doc', 'document', 0, ARRAY['public'])" +
+        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, audience, doc_status)" +
+          " VALUES ($1, $1, $2, $3, $4, 'Doc', 'document', 0, ARRAY['public'], 'stable')" +
           // Several rows re-seed the SAME generation to vary only what the run
           // remembers; the node is identical each time, so re-seeding it is a
           // no-op rather than a duplicate-key error.
@@ -227,8 +227,8 @@ describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () =>
         [T, generation],
       );
       await client.query(
-        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, audience)" +
-          " VALUES ($1,$1,$2,$3,'doc','Doc','document',0,ARRAY['public'])",
+        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, audience, doc_status)" +
+          " VALUES ($1,$1,$2,$3,'doc','Doc','document',0,ARRAY['public'],'stable')",
         [T, generation, stableId],
       );
     });

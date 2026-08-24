@@ -78,8 +78,13 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
         position: number,
       ): Promise<string> => {
         const r = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, status)
-           VALUES ($1, 1, $2, $3, $4, $5, $5, $6, 'published') RETURNING node_id`,
+          // A SECTION carries no governance of its own (record spec §1) — it is
+          // admitted through a visible descendant — so only the leaves get an
+          // audience and a lifecycle status here.
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, status, audience, doc_status)
+           VALUES ($1, 1, $2, $3, $4, $5, $5, $6, 'published',
+                   CASE WHEN $4 = 'section' THEN NULL ELSE ARRAY['public'] END,
+                   CASE WHEN $4 = 'section' THEN NULL ELSE 'stable' END) RETURNING node_id`,
           [TENANT, stableId, parent, kind, slug, position],
         );
         return String(r.rows[0].node_id);
