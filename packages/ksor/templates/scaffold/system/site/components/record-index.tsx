@@ -47,9 +47,7 @@ export function RecordIndex({
     <section className="mt-14">
       {/* The head of the list stays a register head: this is a label, and a
           label is machine-facing furniture whatever the rows below it are. */}
-      <h2 className="mb-3 font-mono text-xs tracking-[0.18em] text-fd-muted-foreground uppercase">
-        {heading}
-      </h2>
+      <h2 className="ksor-section-label mb-3">{heading}</h2>
 
       <ul className="grid gap-3">
         {entries.map((entry) => {

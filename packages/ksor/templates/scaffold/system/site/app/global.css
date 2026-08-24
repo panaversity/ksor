@@ -818,3 +818,23 @@ html > body[data-scroll-locked] {
   color: var(--color-fd-foreground);
   font-weight: 500;
 }
+
+/* A SECTION LABEL: the eyebrow that names a region of the page — Teaching aid,
+   In this section, Sources.
+
+   One class, three readers. It was the same Tailwind string typed out in each
+   component, which is how "Teaching aid" ended up accent-coloured and the
+   other two grey: nothing tied them together, so they drifted apart one edit
+   at a time. The accent is what makes these read as the page's own structure
+   rather than as small grey text (owner, 2026-08-24).
+
+   Not for the sidebar or the table-of-contents rail — those label the chrome
+   around the document, and this labels the document. */
+.ksor-section-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-fd-primary);
+}
