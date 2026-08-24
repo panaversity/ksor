@@ -1,5 +1,101 @@
 # @panaversity/ksor
 
+## 0.0.40
+
+### Patch Changes
+
+- cd42f81: Three readability changes to a document's page.
+
+  A long line in a code block can be **unwrapped by the reader**, with a button
+  that appears only on a block that actually overflows. The record's commands run
+  to hundreds of characters, and in a docs column that was a scrollbar with the
+  left edge of every line going out of view. Wrapping is not the default, because
+  it is worse for the blocks that do not need it.
+
+  A table's rows **alternate**, faintly, so a row holds together across three
+  columns of wrapped prose.
+
+  A callout carries a **rule down its left edge**, in its kind's colour — the
+  same device a verbatim block uses, so "this passage is set apart" looks the
+  same everywhere it happens.
+
+- e19f226: A passage a reader must not miss can now be a callout. Write GitHub's alert
+  syntax — a blockquote whose first line is `[!WARNING]` — and the site renders a
+  styled panel tinted with that kind's own colour:
+
+  ```markdown
+  > [!TIP]
+  > Climb one rung at a time, and only when something has gone wrong without it.
+  ```
+
+  It stays a plain blockquote everywhere else the record is read, carrying a
+  visible label, and `/md/` and `llms-full.txt` keep the author's blockquote
+  rather than this site's component.
+
+  Not `:::warning`: a dialect renders as literal punctuation everywhere outside
+  this site.
+
+- 704e949: A document can now show something running, where the prose puts it. Give a link
+  the title `embed` and the site renders it as a click-to-load frame:
+
+  ```markdown
+  [Play run-until-done](goal-loop.sim.html "embed")
+  ```
+
+  It stays an ordinary CommonMark link everywhere else — GitHub, a plain editor,
+  `/md/`, `llms-full.txt` — so nothing was added to `knowledge/`.
+
+  Prefer carrying the page in. A `<name>.sim.html` beside its document, exactly
+  like a figure, is published by the build and served from your own site: it
+  works offline, tells nobody outside what someone is reading, and is versioned
+  with the document. An `https:` link works too, but many hosts send
+  `X-Frame-Options: SAMEORIGIN` and a browser will refuse to frame them.
+
+  Nothing is requested until a reader clicks, so a built page still makes zero
+  external requests. A carried page is measured, so the frame is exactly as tall
+  as what it holds — you never write a height into a document.
+
+- a55e93e: A numbered list now counts in the record's accent, and the term a list item
+  defines takes it too — `**Heartbeat:** a schedule that…` puts the term in
+  accent and leaves the sentence in ink. The markers were grey at regular weight,
+  lighter than the text they counted, so a list of six steps read as six
+  paragraphs that happened to start with digits.
+- a59a7af: The documented way to run `ksor init` pins a version, so a stale runner cache
+  can no longer decide which ksor an adopter meets.
+
+  `npx @panaversity/ksor init my-sor` is spec `*`, and any cached version
+  satisfies it — so npx runs whatever that machine already has without consulting
+  the registry. Found live on a Windows box following the README: it replayed
+  `0.0.0`, the name-reservation stub published on the first day of the project,
+  whose whole implementation prints "the name is reserved; this is not a release"
+  and exits 2. Thirty-nine releases later, the first command in the README
+  produced a placeholder, and nothing in that output points at the cause.
+
+  Both READMEs now say `@panaversity/ksor@latest`. The three "Start here" forms
+  change together — `pnpm dlx` reuses its cache for 24 hours by default and
+  `bunx` resolves from the install cache before the registry, so pinning only npx
+  would have left two of the three supported managers in the trap. `npm install
+-g` is unchanged: an install resolves the `latest` dist-tag by definition.
+
+  If you have run ksor before, your own cache is still warm. Run the `@latest`
+  form once and it resolves the current release.
+
+- 9e92e9e: A document with no summary no longer carries an empty view strip. The reading
+  time moved into the governance row, beside the owner and the effective date,
+  so the commonest document — one with no summary — gets one bar of facts rather
+  than a second bar holding a single number at the far end of a rule.
+- d723487: A table's head now reads as a head: the record's accent as a wash behind it,
+  the column labels in that accent's ink, and an accent rule under the band. They
+  were grey on near-white, so on a three-column table the eye had to work out
+  which row was the label.
+- 8ec1a10: A fenced block with no language is set as a passage to reproduce rather than as
+  code: prose leading, and the record's accent down its left edge. Prompts,
+  commands to say and messages to paste were arriving as walls of tight
+  monospace, set for scanning columns of code when what is in them is sentences.
+
+  Nothing to author — the highlighter's own output is the signal, so a block that
+  was never highlighted is the one that changes.
+
 ## 0.0.39
 
 ### Patch Changes
