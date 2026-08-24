@@ -74,8 +74,15 @@ export function Embed({
     );
     if (blocks.length === 0) return;
     const bottom = Math.max(...blocks.map((el) => el.offsetTop + el.offsetHeight));
-    const padding = Number.parseFloat(getComputedStyle(body).paddingBottom) || 0;
-    const measured = Math.ceil(bottom + padding);
+    // The body's own bottom edge, padding AND margin. A page that does not
+    // reset `body { margin }` keeps the user agent's 8px, and leaving the
+    // margin out left exactly that much overflowing — one scrollbar, on the
+    // one sim of seven whose stylesheet omits the reset (found live).
+    // `offsetTop` already carries the top margin.
+    const style = getComputedStyle(body);
+    const edge =
+      (Number.parseFloat(style.paddingBottom) || 0) + (Number.parseFloat(style.marginBottom) || 0);
+    const measured = Math.ceil(bottom + edge);
     // GROW-ONLY. A running page changes height every beat — measured
     // oscillating 504 to 562 on one sim — and following it exactly would
     // shift everything below the frame while someone is reading. The high
@@ -120,13 +127,14 @@ export function Embed({
   return (
     <figure
       className="not-prose my-8"
-      // Wider than the prose measure. A page built to be interactive is laid
-      // out for a screen, not for a 60-character column: constrained to the
-      // measure it either scrolls in a box or under-fills the height its
-      // author stated (both seen live). Centred on the column and clamped to
-      // the viewport, so it never causes a horizontal scroll.
+      // A little wider than the prose measure, not a lot. A page built to be
+      // interactive is laid out for a screen rather than for a 60-character
+      // column, so it reads cramped at the measure — but 64rem overshot far
+      // enough that the block stopped belonging to the document around it.
+      // Centred on the column and clamped to the viewport, so it never causes
+      // a horizontal scroll.
       style={{
-        width: "min(64rem, calc(100vw - 3rem))",
+        width: "min(56rem, calc(100vw - 3rem))",
         marginLeft: "50%",
         transform: "translateX(-50%)",
       }}
@@ -137,15 +145,18 @@ export function Embed({
         // than they are wide, and a narrow window would otherwise letterbox
         // an interactive thing down to a strip.
         className="relative w-full overflow-hidden rounded-lg border border-fd-border bg-fd-muted"
-        // The invitation is a card; the frame takes the page's own height once
-        // it has one. Until it is measured — and always, for a frame we may
-        // not measure — a ratio with a floor.
+        // The invitation is a card. Once the page is measured the height goes
+        // on the FRAME instead and this box wraps it: put on the box, the
+        // border is inside that height, so the frame came out two pixels short
+        // and every single embed carried a scrollbar (found live — content 862
+        // in a frame of 860). Until it is measured, and always for a frame we
+        // may not measure, a ratio with a floor.
         style={
           !loaded
             ? { height: "14rem" }
             : height === null
               ? { aspectRatio: "16 / 10", minHeight: "26rem" }
-              : { height }
+              : undefined
         }
       >
         {loaded ? (
@@ -163,7 +174,11 @@ export function Embed({
             // reader out of the record or collect anything from inside it.
             sandbox="allow-scripts allow-same-origin allow-popups"
             loading="lazy"
-            className="absolute inset-0 size-full"
+            // Absolute only while the box owns the height, which is the ratio
+            // case. With a measured height the frame owns it and lays out in
+            // flow, so the box is exactly as tall as the page plus its border.
+            className={height === null ? "absolute inset-0 size-full" : "block w-full"}
+            style={height === null ? undefined : { height }}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
