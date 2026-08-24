@@ -11,6 +11,9 @@ system/site/.staged-knowledge/
 # and the lock that keeps one evaluation of a build staging at a time; it only
 # outlives a build that was killed mid-stage, and the next build clears it
 system/site/.staged-knowledge.lock
+# a build's copy of every `.sim.html` in the record, put where it can be
+# SERVED; the record owns the sim, this is only where the site publishes it
+system/site/public/sims/
 *.tsbuildinfo
 
 # secrets never enter the record — system/ is their future home (serve)
