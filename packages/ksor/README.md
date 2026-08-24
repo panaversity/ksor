@@ -40,14 +40,17 @@ that document's page and nowhere else:
 | File                    | What it is                                             |
 | ----------------------- | ------------------------------------------------------ |
 | `<doc>.summary.md`      | a précis, shown as a second tab beside the document     |
-| `<doc>.slides.yaml`     | a presentation, at the top of the page                  |
+| `<doc>.slides.yaml`     | a presentation, after the document's introduction        |
 | `<doc>.flashcards.yaml` | a recall deck, at the end                               |
 | `<doc>.quiz.yaml`       | a multiple-choice check, at the end                     |
 
-Ask your coding agent — `make slides for knowledge/expenses/approvals.md` —
-and the `make-slides` skill writes the deck from the document, checks every
-claim and number back against it, and reports what it left out because the
-document did not support it.
+Ask your coding agent — `make slides for knowledge/expenses/approvals.md`, or
+`summarise knowledge/expenses/approvals.md` — and the `make-slides` and
+`make-summary` skills write the attachment from the document, check every claim
+and number back against it, and report what they left out because the document
+did not support it. A summary is checked section by section, because one that
+covers the opening and trails off leaves a reader believing they have the whole
+document.
 
 An attachment is **part of its document**: no URL, no sidebar row, no
 `llms.txt` line, and no id an agent can cite. It takes its `visibility:` and

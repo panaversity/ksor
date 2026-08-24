@@ -48,9 +48,7 @@ export function Slides({ slides }: { slides: SlidesEntry }): ReactElement {
           weaker one — the label carries the accent so it reads as a marker,
           and the title sits one step below the document's. */}
       <header className="mb-6">
-        <p className="font-mono text-xs font-medium tracking-[0.12em] text-fd-primary uppercase">
-          Teaching aid
-        </p>
+        <p className="ksor-section-label">Teaching aid</p>
         <h2 className="mt-2 font-(family-name:--font-display) text-2xl font-semibold tracking-tight text-fd-foreground">
           {slides.title}
         </h2>

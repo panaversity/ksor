@@ -135,6 +135,38 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       const linked = await fetch(`${base}${firstLink}`);
       expect(linked.status, `GET ${firstLink} from the static export`).toBe(200);
 
+      // WHERE AM I, on every document. The shell's own breadcrumb renders the
+      // folders above a page and nothing else, so a top-level document got no
+      // trail at all and the block above the title appeared and disappeared as
+      // a reader moved through the record. Asserted on BOTH shapes, because
+      // the nested one was never broken and would have stayed green alone.
+      const crumbOn = (route: string): string => {
+        const html = readFileSync(path.join(outDir, route, "index.html"), "utf8");
+        const found = /<nav[^>]*class="ksor-breadcrumb[^"]*"[^>]*>(?<trail>.*?)<\/nav>/s.exec(html);
+        expect(found, `no breadcrumb on /${route}`).not.toBeNull();
+        const trail = found?.groups?.trail ?? "";
+        // The home link is the first item and it must resolve: the record's
+        // front door is `/`, and there is no `/docs` route at all — an earlier
+        // cut linked there and served a 404 from every page's first crumb.
+        expect(trail, `no home link on /${route}`).toContain('href="/"');
+        // The document itself is the last item and is never a link to the page
+        // the reader is already on.
+        expect(trail, `no you-are-here on /${route}`).toContain('aria-current="page"');
+        // The named steps, in order. Icons carry no text and drop out.
+        return [...trail.matchAll(/<(?:a|span)\b[^>]*>([^<]+)<\/(?:a|span)>/g)]
+          .map((match) => (match[1] ?? "").trim())
+          .filter(Boolean)
+          .join(" > ");
+      };
+      // The trail ENDS IN THE DOCUMENT, so every page carries a full address
+      // and not just the folders above it.
+      expect(crumbOn(path.join("docs", "surfaces", "for-agents"))).toBe(
+        "Surfaces > The agent surface",
+      );
+      expect(crumbOn(path.join("docs", "what-is-a-ksor"))).toBe(
+        "What a Knowledge System of Record is",
+      );
+
       const backgrounds: Record<string, string> = {};
       for (const colorScheme of ["light", "dark"] as const) {
         const context = await browser.newContext({ colorScheme });
@@ -575,6 +607,79 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       expect(page, "no tablist rendered — the remark plugin did not run").toContain('role="tab"');
     } finally {
       rmSync(doc, { force: true });
+    }
+  }, 300_000);
+
+  /**
+   * The trail is DERIVED, and this is what proves it.
+   *
+   * A breadcrumb that reads correctly on the record it was written against
+   * tells you nothing — the seeded record is two levels deep, and a hard-coded
+   * two-level trail would pass every assertion in this file. So this writes a
+   * folder tree the site has never seen, four levels down, and asks for the
+   * address of a document at the bottom of it.
+   */
+  it("derives the trail from the record's own folders, however deep", () => {
+    const knowledge = path.join(project, "knowledge");
+    const nested = path.join(knowledge, "handbook", "policies", "returns");
+    const doc = (file: string, title: string, order: number): void =>
+      writeFileSync(
+        path.join(knowledge, file),
+        `---\ntitle: ${title}\nstatus: approved\norder: ${order}\n---\n\nOne line.\n`,
+      );
+
+    try {
+      mkdirSync(nested, { recursive: true });
+      doc(path.join("handbook", "index.md"), "The handbook", 20);
+      doc(path.join("handbook", "policies", "index.md"), "Policies", 1);
+      doc(path.join("handbook", "policies", "returns", "index.md"), "Returns", 1);
+      doc(path.join("handbook", "policies", "returns", "window.md"), "The thirty-day window", 1);
+
+      const built = buildScaffold(project);
+      expect(built.status, `${built.stdout}${built.stderr}`.slice(-2000)).toBe(0);
+
+      const outDir = path.join(project, "system", "site", "out");
+      const trailOn = (route: string): { steps: string[]; hrefs: string[] } => {
+        const html = readFileSync(path.join(outDir, route, "index.html"), "utf8");
+        const nav = /<nav[^>]*class="ksor-breadcrumb[^"]*"[^>]*>(?<trail>.*?)<\/nav>/s.exec(html);
+        expect(nav, `no breadcrumb on /${route}`).not.toBeNull();
+        const trail = nav?.groups?.trail ?? "";
+        return {
+          steps: [...trail.matchAll(/<(?:a|span)\b[^>]*>([^<]*?)(?:<|$)/g)]
+            .map((match) => (match[1] ?? "").trim())
+            .filter(Boolean),
+          hrefs: [...trail.matchAll(/href="([^"]+)"/g)].map((match) => match[1] ?? ""),
+        };
+      };
+
+      // Every folder between the record's front door and the document, named
+      // by its own title rather than by its directory name.
+      const deep = trailOn(path.join("docs", "handbook", "policies", "returns", "window"));
+      expect(deep.steps).toEqual(["The handbook", "Policies", "Returns", "The thirty-day window"]);
+      // …and each ancestor is a working link, the document itself is not.
+      expect(deep.hrefs).toEqual([
+        "/",
+        "/docs/handbook/",
+        "/docs/handbook/policies/",
+        "/docs/handbook/policies/returns/",
+      ]);
+      for (const href of deep.hrefs.slice(1)) {
+        expect(
+          existsSync(path.join(outDir, href.replace(/^\/|\/$/g, ""), "index.html")),
+          `breadcrumb links to ${href}, which the export does not contain`,
+        ).toBe(true);
+      }
+
+      // The trail shortens as it climbs — a fixed-depth implementation passes
+      // the case above and fails these.
+      expect(trailOn(path.join("docs", "handbook", "policies", "returns")).steps).toEqual([
+        "The handbook",
+        "Policies",
+        "Returns",
+      ]);
+      expect(trailOn(path.join("docs", "handbook")).steps).toEqual(["The handbook"]);
+    } finally {
+      rmSync(path.join(knowledge, "handbook"), { recursive: true, force: true });
     }
   }, 300_000);
 

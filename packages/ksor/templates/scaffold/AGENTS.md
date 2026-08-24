@@ -511,10 +511,11 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   after it, in the same folder: `<doc>.summary.md` (a short précis),
   `<doc>.slides.yaml` (a presentation), `<doc>.flashcards.yaml` (a recall deck)
   and `<doc>.quiz.yaml` (a multiple-choice check). The summary appears as a
-  second tab beside the document's own words; the presentation appears at the
-  TOP of the page, before the document, because a deck is the shape of the
-  thing and gives the detail somewhere to land; the deck and the quiz appear at
-  the END, because those are used after reading. None of them appears anywhere
+  second tab beside the document's own words; the presentation appears after
+  the document's INTRODUCTION — everything before its first `##` section —
+  because a deck is the shape of the thing and belongs where the reader has
+  just been told what the thing is; the deck and the quiz appear at the END,
+  because those are used after reading. None of them appears anywhere
   else in the site.
 
   An attachment is **part of its document**, not a document. It has no URL of
@@ -686,6 +687,7 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 - `.agents/skills/add-sources/` — turn source material (documents, pages,
   notes) into governed knowledge.
 - `.agents/skills/make-slides/` — generate a presentation from one document
+- `.agents/skills/make-summary/` — write a document's summary and attach it
   and attach it, so it renders on that document's page.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.

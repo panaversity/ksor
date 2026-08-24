@@ -36,8 +36,15 @@ export function RecordShell({ children }: { children: ReactNode }): ReactElement
       // After the spread: a future sidebar key in baseOptions must not
       // silently swallow the attribution (review finding, 2026-08-18).
       sidebar={{
+        // `key`, because the shell renders this footer as one child of an
+        // ARRAY (fumadocs-ui 16.14.5, layouts/docs/slots/sidebar.js — the
+        // branch that also holds the language select, icon links and theme
+        // switch). Without it React logs "Each child in a list should have a
+        // unique key prop" naming RecordShell, on every page. Invisible in a
+        // production build, which is why it survived: it only shows in the
+        // dev server, where the adopter meets it first.
         footer: (
-          <div className="mt-3 flex flex-col gap-2">
+          <div key="record-footer" className="mt-3 flex flex-col gap-2">
             {/* The record's own identity, on every page rather than only the
                 home page: the slug is what citations carry and llms.txt is the
                 door an agent is told to read. The sidebar had three links and

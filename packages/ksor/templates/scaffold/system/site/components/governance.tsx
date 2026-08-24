@@ -215,9 +215,7 @@ export function Provenance({ entries }: { entries: readonly string[] }): ReactEl
 
   return (
     <section className="mt-10 border-t border-fd-border pt-5 text-sm">
-      <h2 className="mb-2 font-mono text-xs tracking-[0.18em] text-fd-muted-foreground uppercase">
-        Sources
-      </h2>
+      <h2 className="ksor-section-label mb-2">Sources</h2>
       {/* break-words, because a citation is often a long unbroken URL: on a
           phone it overflowed its row by 175px under an ancestor with
           `overflow-x: clip`, so the middle of the source was clipped away with

@@ -14,6 +14,7 @@ import {
 } from "@/components/governance";
 import { predecessorsOf, readGovernance, resolveSuccessorUrl } from "@/lib/governance";
 import { showGovernance } from "@/lib/shared";
+import { RecordBreadcrumb } from "@/components/record-breadcrumb";
 import { RecordToc, TocItems } from "@/components/record-toc";
 import { RecordViews } from "@/components/record-views";
 import { Flashcards } from "@/components/flashcards";
@@ -96,7 +97,12 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         // headings AHEAD of the reader. The observer's options are not
         // configurable and the observer is not exported, so the selection could
         // only be replaced — `slots.toc.main` is the seam for that.
+        // The breadcrumb is ours for one reason, recorded in the component:
+        // the shell's renders nothing at all on a top-level document, so the
+        // block above the title came and went as a reader moved through the
+        // record.
         slots={{
+          breadcrumb: RecordBreadcrumb,
           toc: {
             provider: TOCProvider,
             main: RecordToc,
@@ -126,12 +132,6 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
         {showGovernance ? (
           <GovernanceMeta governance={governance} replaces={replaces} markdownUrl={markdownUrl} />
         ) : null}
-        {/* BEFORE the document, not after it. The deck is the shape of the
-          thing — five minutes of slides gives the detail somewhere to land —
-          so it belongs where a reader meets it first, which is also where the
-          predecessor puts its own. The recall aids stay at the end, because
-          those are used AFTER reading. */}
-        {presentation === null ? null : <Slides slides={presentation} />}
         {/* grow-0, against the shell's own `flex-1`: the article is a flex column
           stretched to the viewport, so the body inflated from ~150px of text to
           402px and pushed Sources and everything after it to the bottom of the
@@ -159,6 +159,14 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
                 // relative links between documents in knowledge/ resolve to
                 // their rendered pages
                 a: createRelativeLink(source, page),
+                // The deck, rendered where the record's own shape puts it:
+                // after the introduction, before the first section. The
+                // rehype plugin marks the place on every document and this
+                // decides whether there is anything to put there — so "does
+                // this document have a teaching aid" stays one question,
+                // answered by the attachment, not two.
+                TeachingAid: () =>
+                  presentation === null ? null : <Slides slides={presentation} />,
               })}
             />
           </RecordViews>

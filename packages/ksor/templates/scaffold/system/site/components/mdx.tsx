@@ -26,6 +26,12 @@ function BrandedTabsTrigger({
 export function getMDXComponents(components?: MDXComponents) {
   return {
     ...defaultMdxComponents,
+    // The teaching-aid marker, rendering NOTHING unless a caller supplies a
+    // deck. The rehype plugin inserts the marker into every document, and MDX
+    // throws on a component it was not given — so the default has to exist
+    // here or a document whose page forgot to pass one serves a 500 rather
+    // than a page without an aid.
+    TeachingAid: () => null,
     // `remarkCodeTab` (source.config.ts) rewrites consecutive fenced blocks
     // that declare `tab="…"` into these, so they have to be in the map or the
     // build fails on an unknown component rather than at authoring time.

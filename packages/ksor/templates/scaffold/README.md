@@ -39,8 +39,9 @@ The `make-slides` skill reads the document whole, writes the deck into
 `knowledge/expenses/approvals.slides.yaml`, checks every claim and every
 number back against the document, and tells you what it left out because the
 document did not support it — which is usually how you find out a document has
-a gap. The deck then renders at the top of that document's page: click through
-it inline, or **Present** for fullscreen. Presenter notes stay off the screen.
+a gap. The deck then renders on that document's page, straight after its
+introduction: click through it inline, or **Present** for fullscreen.
+Presenter notes stay off the screen.
 
 The slides live in the record, so they are reviewed in the same pull request
 as the document, versioned with it, and withdrawn when it is withdrawn. There
@@ -48,6 +49,28 @@ is no third party and no link to rot. If you already keep a deck in Google
 Slides, Canva or SlideShare you can point at it instead — `slides.url:` rather
 than `deck:` — and the page will offer it as a link with a frame the reader
 loads on click, so nothing is requested from the host until somebody asks.
+
+### Summarising a document
+
+Long documents get a **Summary** tab beside their own words, and your agent
+writes it the same way:
+
+```
+summarise knowledge/expenses/approvals.md
+```
+
+The `make-summary` skill reads the document whole, writes
+`knowledge/expenses/approvals.summary.md`, and checks every line back against
+the document — every number, every rule, and every `##` section, because a
+summary that covers the opening and trails off is worse than none: a reader who
+used it believes they have the whole document. It reports what it left out
+because the document did not support it.
+
+The summary is part of its document, not a document of its own: no route, no
+sidebar row, no line in `llms.txt`, and it takes its governance from its
+parent. Ask for one only where there is something to compress — under about two
+screens, a summary that restates the page teaches readers the tab is not worth
+opening, and the skill will say so rather than write one.
 
 ### Serving to agents
 
@@ -183,7 +206,7 @@ different coding agent's way of finding the same working contract.
 | `instance.md`                    | what this record is authoritative for; its `name:` is the identity every surface publishes (read at server/build start — restart `pnpm dev` after renaming). This prose IS the agent surface's system prompt — `ksor serve` wires it into the MCP server's instructions. |
 | `AGENTS.md`                      | the working contract every coding agent reads first — the rules for writing knowledge here.                                                                                                                                      |
 | `CLAUDE.md`                      | one line, pointing at `AGENTS.md`. Claude Code looks for this filename, not that one.                                                                                                                                            |
-| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `make-slides` (generate a presentation from a document and attach it), `format-checker` (the rules, as a program).                                                        |
+| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `make-slides` (generate a presentation from a document and attach it), `make-summary` (write a document's summary and attach it), `format-checker` (the rules, as a program).                                                        |
 | `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                                                                             |
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                                                 |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
