@@ -68,9 +68,9 @@ instance declares an `audiences:` model, documents may carry a
 `visibility:` key and per-audience builds (`KSOR_AUDIENCE=<tier> pnpm
 build`) stage only what that tier may see — publication, not authorship:
 anyone who can clone reads everything. The site shell
-at `system/site/` is replaceable behind a five-clause surface contract; a
-Docusaurus conformance shell lives in the ksor repository under
-`workbench/shells/docusaurus/` with its swap recipe.
+at `system/site/` is replaceable behind a five-clause surface contract — the
+shell is a slot, and the contract (render the record, `llms.txt`, per-page md
+artifacts, browser smoke, no authored content) is what a replacement must meet.
 
 ## Where truth lives
 

@@ -104,7 +104,9 @@ swapping shells must require no change outside `system/site/`:
 Fumadocs is the reference implementation core ships; a Docusaurus shell, a
 bare Next.js app, or any registry-distributed alternative that satisfies
 all five is equally conformant. **The contract proves itself with two
-implementations**: the conformance shell at `workbench/shells/docusaurus/`
+implementations** (RETIRED 2026-08-24, decision 9 revision — the suite now
+runs one shell; what follows describes what the proof covered while it ran):
+the conformance shell at `workbench/shells/docusaurus/`
 (based on the predecessor's de-branded shell under decision 6, never
 feature parity) swaps into any scaffolded project by the recipe in its
 README, and one shell-agnostic suite —

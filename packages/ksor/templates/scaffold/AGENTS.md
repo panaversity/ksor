@@ -708,8 +708,8 @@ You own `system/site/` outright — these are the seams, cheapest first:
   documentation shell around it stay one palette.
 - **Anything deeper** — edit the site like the Next.js app it is; the only
   rule that survives customization is critical rule 1. The whole shell is
-  replaceable behind a five-clause contract (a themed Docusaurus shell with
-  a swap recipe lives in the ksor repository under `workbench/shells/`).
+  replaceable behind a five-clause contract: render the record, `llms.txt`,
+  per-page md artifacts, browser smoke, and no authored content.
 
 ## What this project owns
 

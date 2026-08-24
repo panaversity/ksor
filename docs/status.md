@@ -222,7 +222,8 @@ either stops being true.
   gated browser e2e drives the built site in real Chromium.
 
 - **The shell swap seam, proven with two implementations** — a Docusaurus
-  conformance shell at `workbench/shells/docusaurus/` (predecessor-based,
+  conformance shell at `workbench/shells/docusaurus/` — RETIRED 2026-08-24
+  (decision 9 revision); the suite now runs one shell — (predecessor-based,
   decision 6) swaps into any scaffolded project by its README recipe, and
   one shell-agnostic suite runs the surface contract's five clauses, the
   `order:` translation, and the base-path build against both shells in CI.

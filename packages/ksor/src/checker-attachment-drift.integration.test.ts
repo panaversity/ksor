@@ -54,21 +54,10 @@ describe("the checker's near-misses match the canonical rule", () => {
   });
 });
 
-/** The alternative shell cannot import the rule either — it is a separate app. */
-describe("the alternative shell's copies match the canonical rule", () => {
-  for (const file of ["lib/record.ts", "lib/visibility.ts"]) {
-    it(`workbench/shells/docusaurus/${file} names the same suffixes`, () => {
-      const shellSource = readFileSync(
-        fileURLToPath(new URL(`../../../workbench/shells/docusaurus/${file}`, import.meta.url)),
-        "utf8",
-      );
-      const match = /const ATTACHMENT_SUFFIXES = \[([^\]]*)\]/.exec(shellSource);
-      expect(match, `ATTACHMENT_SUFFIXES not found in ${file}`).not.toBeNull();
-      const found = [...(match?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1] ?? "");
-      expect(found).toEqual(ATTACHMENT_SUFFIXES.map((e) => e.suffix));
-    });
-  }
-});
+// The alternative shell's copies were asserted here until 2026-08-24, when the
+// second shell was retired (decision 9 revision). The rule still has two copies
+// that cannot import each other — the canonical one and the format checker's —
+// and both are asserted above. A shell added back adds its copy here.
 
 describe("the two shipped copies of the checker agree", () => {
   it(".claude/skills mirrors .agents/skills byte for byte", () => {
