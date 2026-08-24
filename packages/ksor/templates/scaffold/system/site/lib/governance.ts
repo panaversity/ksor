@@ -8,12 +8,17 @@
 // a document and where it came from, or the site is showing them prose while
 // the agent surface answers with citations.
 //
-// Import-free on purpose: this is the pure half, so it is unit-tested directly
-// (packages/ksor/src/site-governance.test.ts) without a site install. Anything
-// needing the Fumadocs loader — resolving a successor to its route — lives
-// outside it.
+// Free of VALUE imports on purpose: this is the pure half, so it is unit-tested
+// directly (packages/ksor/src/site-governance.test.ts) without a site install.
+// Anything needing the Fumadocs loader — resolving a successor to its route —
+// lives outside it.
+//
+// The one import is a TYPE, and it alone carries the `.js` that the package's
+// Node-ESM program wants, while every other module here is extensionless
+// because Turbopack resolves neither form onto a `.ts` file. `import type` is
+// erased before any bundler sees it, so the two rules never meet on this line.
 
-import type { LifecycleBadge } from "./lifecycle-rule";
+import type { LifecycleBadge } from "./lifecycle-rule.js";
 
 export interface Source {
   readonly id: string | null;

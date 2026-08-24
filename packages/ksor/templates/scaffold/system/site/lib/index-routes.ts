@@ -14,7 +14,22 @@
  * package tests live.
  */
 
-import type { IndexEntry } from "../record/index-file";
+/**
+ * One bullet of a parsed index: exactly the three fields this module reads.
+ *
+ * Structural rather than the record's own `IndexEntry`, so this rule keeps no
+ * relative import at all — it is unit-tested from the package
+ * (packages/ksor/src/index-routes.test.ts), whose Node-ESM program cannot
+ * typecheck the extensionless specifiers the site's modules must use, and the
+ * record's `parseIndex` output satisfies this by shape. Widening is impossible
+ * in the dangerous direction: a field dropped from the record's type fails at
+ * the call site.
+ */
+export interface IndexBullet {
+  readonly title: string;
+  readonly href: string;
+  readonly description: string | null;
+}
 
 export interface Listing {
   readonly kind: "concept" | "folder";
@@ -47,7 +62,7 @@ export function dirOfRoute(url: string): string | null {
  * (`""` at the root). A bullet's href is either `file.md` (a concept) or
  * `name/` (a folder) — the two shapes the generator writes.
  */
-export function listingOf(dir: string, entries: readonly IndexEntry[]): Listing[] {
+export function listingOf(dir: string, entries: readonly IndexBullet[]): Listing[] {
   const prefix = dir === "" ? "" : `${dir}/`;
   return entries.flatMap((entry): Listing[] => {
     const href = decodeURIComponent(entry.href);
@@ -77,7 +92,7 @@ export function listingOf(dir: string, entries: readonly IndexEntry[]): Listing[
  * directory to its parsed index; a folder bullet whose index is missing is
  * listed and not entered.
  */
-export function readingOrder(indexes: ReadonlyMap<string, readonly IndexEntry[]>): string[] {
+export function readingOrder(indexes: ReadonlyMap<string, readonly IndexBullet[]>): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const item of listingOf(dir, indexes.get(dir) ?? [])) {
