@@ -1,4 +1,6 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
+
+import { SignIn } from "@/components/sign-in";
 import { appTitle } from "./shared";
 
 export function baseOptions(): BaseLayoutProps {
@@ -13,5 +15,9 @@ export function baseOptions(): BaseLayoutProps {
         </span>
       ),
     },
+    // `secondary` puts it at the navbar's trailing edge, beside the theme
+    // toggle. SignIn renders null when no issuer is configured, so a record
+    // that does not offer sign-in shows nothing rather than an empty slot.
+    links: [{ type: "custom", secondary: true, children: <SignIn /> }],
   };
 }
