@@ -66,6 +66,7 @@ export {
   type AdmissionConcept,
   type Drafts,
 } from "./lock.js";
+export { git, historicLedger, type HistoricLedger } from "./git-ledger.js";
 export { generateIndexes, parseIndex, humanise, type IndexInput } from "./index-file.js";
 export { checkFootnotes, linkTargets, resolveLink } from "./citations.js";
 export { checkRecord, type RecordFiles, type CheckOptions, type CheckResult } from "./check.js";

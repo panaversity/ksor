@@ -26,8 +26,15 @@ import {
 import { checkRecord } from "../record/check";
 import { linkTargets } from "../record/citations";
 import { splitFrontmatter } from "../record/frontmatter";
+import { historicLedger } from "../record/git-ledger";
 import { generateIndexes } from "../record/index-file";
-import { inForce, denies, parseLedger } from "../record/ledger";
+import {
+  inForce,
+  denies,
+  parseLedger,
+  type LedgerBaseline,
+  type LedgerBaselineEntry,
+} from "../record/ledger";
 import { loadRecord } from "../record/load";
 import type { Refusal } from "../record/refusal";
 
@@ -149,8 +156,7 @@ function planStage(recordDir: string, development: boolean): StagePlan {
   // elsewhere — a red record refuses HERE, by its slug, before any byte moves.
   const checked = checkRecord(record, {
     mode: "build",
-    ledgerBaselines:
-      lock === null ? [] : [{ source: "build.lock.json", entries: lock.ledger_entries }],
+    ledgerBaselines: lock === null ? [] : ledgerBaselines(lock.ledger_entries),
   });
   if (checked.refusals.length > 0 || checked.policy === null) refuseRecord(checked.refusals);
   const policy = checked.policy;
@@ -280,6 +286,35 @@ function planStage(recordDir: string, development: boolean): StagePlan {
       pages,
     },
   };
+}
+
+/**
+ * BOTH baselines the ledger is judged against — the lock's, and git history's.
+ *
+ * The lock alone is not enough here, and the reason is the reason the emitted
+ * checker reads history too: the lock is hand-editable and travels in the SAME
+ * change as the ledger, so deleting an entry, recomputing `ledger_sha256` and
+ * emptying `ledger_entries` leaves the two agreeing about a denial that is
+ * gone. Walked: the denied document was staged again, exit 0.
+ *
+ * History it cannot read is SAID, not assumed away. A build that refused every
+ * shallow CI checkout would be turned off, and `ksor build` refuses that state
+ * outright — so this is a note beside the verdict, not a second refusal.
+ */
+function ledgerBaselines(fromLock: readonly LedgerBaselineEntry[]): LedgerBaseline[] {
+  const lockBaseline: LedgerBaseline = { source: "build.lock.json", entries: fromLock };
+  const history = historicLedger(projectRoot);
+  if (!history.repository) return [lockBaseline];
+  if (history.entries === null) {
+    console.error(
+      "ksor-ledger-unverifiable: .ksor/takedowns.yaml — the ledger's history could not be read " +
+        `(${history.unreadable === "shallow" ? "this is a shallow clone" : "git could not read the file's log"}), ` +
+        "so this build checked the ledger against the committed lock alone — an artefact that travels in the same change.\n" +
+        "  fix: `git fetch --unshallow` (or check out with fetch-depth: 0) and build again; `ksor build` refuses this state outright",
+    );
+    return [lockBaseline];
+  }
+  return [{ source: "git history", entries: history.entries }, lockBaseline];
 }
 
 function walkFiles(dir: string): string[] {

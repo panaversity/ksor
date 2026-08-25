@@ -731,6 +731,52 @@ describe("the lock's freshness claim covers the control files", () => {
     expect(r.stderr).toContain("2026-08-20T10:00:00Z-aaaaaa");
   });
 
+  /**
+   * The lock is hand-editable and travels in the SAME change as the ledger, so
+   * it cannot prove on its own that an entry was never deleted — the reasoning
+   * that gave the emitted checker a git-history baseline. The site is the
+   * surface that publishes, and it had only the lock: recorded a denial,
+   * committed it, deleted the entry, recomputed `ledger_sha256` and emptied
+   * `ledger_entries`, and the denied document was staged again with exit 0.
+   */
+  it("a denial deleted from BOTH the ledger and the lock is caught by git history", () => {
+    const repo = path.join(work, "history");
+    const f = writeRecord(repo);
+    const git = (...args: string[]): void => {
+      const r = spawnSync("git", args, { cwd: f.root, encoding: "utf8" });
+      if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+    };
+    git("init", "-q");
+    git("config", "user.email", "t@example.com");
+    git("config", "user.name", "T");
+    git("add", "-A");
+    git("commit", "-qm", "record with the denial in the ledger");
+
+    const rel = ".ksor/takedowns.yaml";
+    const ledger = readFileSync(path.join(f.root, rel), "utf8");
+    writeFileSync(
+      path.join(f.root, rel),
+      ledger.replace(
+        `- id: 2026-08-20T10:00:00Z-aaaaaa
+  stable_id: knowledge/denied
+  scope: node
+  expected: present
+  by: human:ciso
+  at: 2026-08-20T10:00:00Z
+`,
+        "",
+      ),
+    );
+    // The forgery: a lock that AGREES with the shrunken ledger.
+    writeLock(f.root);
+    const r = stage(f);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr).toContain("ksor-ledger-shrank");
+    expect(r.stderr).toContain("2026-08-20T10:00:00Z-aaaaaa");
+    expect(r.stderr).toContain("git history");
+    expect(existsSync(f.stage)).toBe(false);
+  });
+
   it("an as_of that is not an instant refuses instead of admitting everything", () => {
     // NaN made every date comparison false, which is fail-OPEN on both sides:
     // a policy effective in 2030 was published as current and carried no badge.

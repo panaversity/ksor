@@ -183,7 +183,16 @@ lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development.
 `ledger_entries` are passed to the checker as a `ksor-ledger-amended`
 baseline. Without that, a takedown was lifted by deleting four lines and the
 committed lock still validated (reproduced 2026-08-25) — a freshness claim
-that cannot see the ledger is not a freshness claim. The drafts switch must
+that cannot see the ledger is not a freshness claim. The site reads GIT
+HISTORY as the second baseline, exactly as the emitted checker does (record
+spec §5): the lock is hand-editable and travels in the same change as the
+ledger, so on its own it cannot see an entry DELETED — recomputing
+`ledger_sha256` and emptying `ledger_entries` made the two agree about a
+denial that was gone, and the denied document staged again (reproduced
+2026-08-25). Outside a repository, and on a shallow clone, the site says
+`ksor-ledger-unverifiable` beside the build and falls back to the lock alone
+rather than refusing every shallow CI checkout — `ksor build` refuses that
+state outright. The drafts switch must
 agree in BOTH directions: a `drafts: shown` lock refuses a build that did not
 ask for drafts, because one preview lock accidentally committed would
 otherwise publish every draft on every later production deploy. `as_of` and
