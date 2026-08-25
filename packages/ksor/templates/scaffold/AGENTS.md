@@ -511,8 +511,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   `generated`, `ksor.approval` and `ksor.deprecated` — anything else there is
   refused. `ksor.owner` is not checked for its shape: write an actor or
   `team:<id>` by convention, but it is free text, so a bare word passes and can
-  then never be the `ksor.deprecated.by` that deprecates the document. Every timestamp is an ISO 8601 instant with an offset
-  (`2026-08-25T09:00:00Z`) — never a bare date. Unknown keys are preserved, unless
+  then never be the `ksor.deprecated.by` that deprecates the document. Every
+  timestamp is an ISO 8601 instant with an offset (`2026-08-25T09:00:00Z`) —
+  never a bare date. Unknown keys are preserved, unless
   the name is one edit from a profile key — `stale_afer:` is refused rather
   than kept, because a preserved near miss is the key it meant, failing open.
   The `ksor:` block's own key set is closed. The pre-profile keys
