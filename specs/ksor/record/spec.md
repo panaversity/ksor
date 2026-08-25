@@ -290,9 +290,16 @@ id whose TEXT moved is `ksor-ledger-amended`. Ids alone are not enough: a
 committed denial could be RETARGETED in place, keeping its id and its actor,
 which republished the denied document and denied an innocent one with nothing
 red on any surface. A historic version that does not parse today still counts
-for shrink, with no digest. When history is unavailable (a shallow clone) it
-refuses unless `--allow-unverifiable-ledger` is explicit; the scaffold's
-`validate.yml` fetches full depth.
+for shrink, with no digest. Two baselines and not one, because the LOCK
+travels in the same pull request as the ledger and is hand-editable: emptying
+both together printed "ok" from a checker that read only the lock. A lock that
+does not parse is `ksor-lock-invalid` rather than an empty baseline, which was
+the other way to hold nothing. When history is unavailable (a shallow clone)
+`ksor build` refuses unless `--allow-unverifiable-ledger` is explicit; the
+emitted checker takes no arguments, so it prints `ksor-ledger-unverifiable`
+beside its verdict and falls back to the lock alone — a checker that refused
+every shallow checkout would be turned off, and silence would be worse than
+either. The scaffold's `validate.yml` fetches full depth.
 
 **Dangling.** `ksor-takedown-dangling` applies to in-force (unrevoked)
 entries: a `present` `node` entry whose stable_id resolves to no concept,
@@ -303,8 +310,9 @@ when the path **reappears** (`ksor-takedown-readded`).
 ## 6 · The checker
 
 One rule set, in `packages/content/src/record/`, run by `ksor build` and
-`ksor ingest`, and **built** — a second tsdown entry with
-`noExternal: ['yaml']` and a banner carrying the parser's ISC notice — into
+`ksor ingest`, and **built** — a second tsdown entry
+bundling everything but Node builtins, with a banner carrying the `yaml`
+(ISC) and `zod` (MIT) notices — into
 the emitted `check.mjs` in both skill copies at package-build time, gitignored
 in the templates like `schema/`, with a drift test running the §7 fixture
 through the kernel rules and the emitted file. `pnpm check` is read-only and
