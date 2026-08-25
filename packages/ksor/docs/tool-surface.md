@@ -22,19 +22,21 @@ numbers are exact for every record:
 
 |                            | chars  | ~tokens |                     |
 | -------------------------- | ------ | ------- | ------------------- |
-| all three tool definitions | 14,334 | 3,584   | **always resident** |
+| all three tool definitions | 16,214 | 4,054   | **always resident** |
 | `search` alone             | 7,602  | 1,901   | always resident     |
-| `outline` + `read`         | 6,731  | 1,683   | always resident     |
+| `outline` + `read`         | 8,608  | 2,152   | always resident     |
 
 They grew: `search` was 5,383 chars before the trust floor and the governance
-each hit now carries. That is the price of an agent being able to tell a
-reviewed document from an unreviewed one, and it is charged once per session.
+each hit now carries, and `read` 3,396 before it carried the same governance
+block beside the frontmatter. That is the price of an agent being able to tell
+a reviewed document from an unreviewed one, and it is charged once per session.
 
 **Replies** depend on your record's passages, so these are the 2026-08-23
 measurement against a live 81-document record (6,963 chunks), plus the
-governance block every hit now carries — measured exactly at **262 chars** for a
-document with a verification and an approval, **133** where a level-0 record has
-neither. They were NOT re-measured against that record:
+governance block every hit — and every `read` reply — now carries: measured
+exactly at **262 chars** for a document with a verification and an approval,
+**133** where a level-0 record has neither. They were NOT re-measured against
+that record:
 
 |                                | ~chars | ~tokens |          |
 | ------------------------------ | ------ | ------- | -------- |
@@ -42,7 +44,7 @@ neither. They were NOT re-measured against that record:
 | one `search`, `k=5`            | 9,319  | 2,330   | per call |
 | one `search`, `k=3`            | 4,939  | 1,235   | per call |
 
-An agent with five records attached carries ~18,000 tokens of definitions before
+An agent with five records attached carries ~20,000 tokens of definitions before
 doing any work.
 
 ## The three edits that pay
@@ -50,7 +52,7 @@ doing any work.
 ### 1. Delete a tool nothing calls
 
 The biggest win, and the easiest — delete its `registerTool` block. Dropping
-`outline` and `read` takes **6,731 chars (~1,683 tokens)** off every session,
+`outline` and `read` takes **8,608 chars (~2,152 tokens)** off every session,
 whether or not the agent would ever have called them.
 
 ### 2. Say what the record covers
@@ -69,6 +71,10 @@ Your prose goes **above** `FLOOR.search`, never instead of it — see below.
 
 `k` is the lever on reply size: 10 costs ~4,200 tokens a call, 5 costs ~2,300.
 The caller can always ask for more, so make the default what you usually need.
+
+**`budgets.maximum_response_characters` is not this lever.** It defaults to
+120,000 and at ~1,700 chars a hit cannot bind before the 50-hit ceiling. Tune
+`k`, as in the schema below.
 
 ```ts
 inputSchema: z.object({
@@ -94,9 +100,6 @@ has reviewed. ...
 ```
 
 A notice, not a refusal: nothing is broken, something is absent.
-
-**`budgets.maximum_response_characters` is not this lever.** It defaults to
-120,000 and at ~1,400 chars a hit cannot bind before the 50-hit ceiling. Tune `k`.
 
 ## Adding your own tools
 

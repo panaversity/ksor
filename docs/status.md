@@ -254,10 +254,12 @@ tool definitions cost ~2,990 always-resident tokens and one default `search`
 call ~3,541 — an agent pays for a record's tool surface out of its context
 window, so the record's owner decides what it says. Re-measured 2026-08-25
 after the trust floor and the per-hit governance landed: the definitions are
-**14,334 chars / ~3,584 tokens** (exact, they depend on the code alone);
+**16,214 chars / ~4,054 tokens** (exact, they depend on the code alone);
 the per-call figures were NOT re-measured against that record, and
 `packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
-measurement plus the governance block's exactly-measured 262 chars a hit.
+measurement plus the governance block's exactly-measured 262 chars a hit. The
+same block rides on every `read` reply, beside the authored frontmatter and
+labelled as the half the record checked.
 
 ### One auth switch, spelled like what it does (0.0.29)
 

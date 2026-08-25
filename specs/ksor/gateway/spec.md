@@ -23,13 +23,14 @@ are exact for every record:
 
 |                             | chars  | ~tokens |                                |
 | --------------------------- | ------ | ------- | ------------------------------ |
-| tool definitions, all three | 14,334 | 3,584   | **always resident in context** |
+| tool definitions, all three | 16,214 | 4,054   | **always resident in context** |
 | `search` alone              | 7,602  | 1,901   | always resident                |
-| `outline` + `read`          | 6,731  | 1,683   | always resident                |
+| `outline` + `read`          | 8,608  | 2,152   | always resident                |
 
 **Replies** depend on the record's passages. These are the 2026-08-23
 measurement against the live book record (81 documents, 6,963 chunks) plus the
-`governance` block each hit now carries — measured exactly at 262 chars for a
+`governance` block each hit — and each `read` reply — now carries, measured
+exactly at 262 chars for a
 document with a verification and an approval, 133 for a level-0 record with
 neither. NOT re-measured against that record:
 
@@ -40,12 +41,13 @@ neither. NOT re-measured against that record:
 | one `search`, `k=3`            | 4,939  | 1,235   | per call |
 
 The definitions grew — `search` was 5,383 chars before the trust floor and the
-per-hit governance — which is the price of an agent being able to tell a
+per-hit governance, `read` 3,396 before it carried the same block — which is
+the price of an agent being able to tell a
 reviewed document from an unreviewed one, charged once per session.
 
 Two consequences set the scope:
 
-1. **Dropping an unused tool is the largest win** — ~1,683 tokens for the whole
+1. **Dropping an unused tool is the largest win** — ~2,152 tokens for the whole
    session, whether or not the agent would ever have called them.
 2. **`k` is the result lever; `budgets.maximum_response_characters` is not.** It
    defaults to 120,000 and at ~1,700 chars a hit cannot bind before
