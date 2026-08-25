@@ -16,7 +16,7 @@ import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
 import { audienceGucs } from "./lib/audience.js";
-import { trustGucs } from "./lib/trust.js";
+import { tierOrdinal, trustGucs } from "./lib/trust.js";
 import { TRUST_TIERS, type TrustTier } from "./record/profile.js";
 import {
   GATE_PREDICATE_DIGEST,
@@ -130,6 +130,34 @@ function servingScope(ctx: ServiceContext): Readonly<Record<string, string>> {
 /** The viewer this door serves; absent is `[public]`, the safe default. */
 function viewerOf(ctx: ServiceContext): readonly string[] {
   return ctx.viewer ?? ["public"];
+}
+
+/**
+ * The SCOPE every §7 audit row carries: what this act was allowed to see.
+ *
+ * Without it a row proves an act happened and not what it was permitted to
+ * return, so an auditor cannot tell a public answer from an internal one after
+ * the fact — and a leak found later has no trail saying which requests could
+ * have carried it.
+ *
+ * What it deliberately does NOT carry is content, or the query. A trail that
+ * accumulated passages would be a SECOND copy of the record, with no audience
+ * predicate over it, no takedown seam bound to it and no generation pointer —
+ * exactly the shadow store the governance argument exists to prevent. The
+ * query is the caller's, and its LENGTH is what an operator needs.
+ */
+function actScope(
+  ctx: ServiceContext,
+  floor: TrustTier | number | undefined = ctx.minTrustTier,
+): Record<string, unknown> {
+  const tier = floor === undefined ? 0 : typeof floor === "number" ? floor : tierOrdinal(floor);
+  return {
+    audience: [...viewerOf(ctx)],
+    // The floor that APPLIED, never the one that was asked for: a row naming
+    // the request's floor would misreport every act on a door configured
+    // tighter than its caller.
+    min_trust_tier: TRUST_TIERS[tier] ?? TRUST_TIERS[0],
+  };
 }
 
 /**
@@ -519,6 +547,9 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       // (review 2026-08-19).
       ...(generation === undefined ? {} : { generation }),
       detail: {
+        ...actScope(ctx),
+        abstained: true,
+        result_count: 0,
         query_chars: queryChars,
         k,
         k_effective: kb,
@@ -631,6 +662,9 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     chunkPolicyVersion: CHUNK_POLICY,
     embeddingModel: inst.embeddingModel,
     detail: {
+      ...actScope(ctx),
+      abstained: false,
+      result_count: shaped.length,
       query_chars: queryChars,
       k,
       k_effective: kb,
@@ -875,7 +909,7 @@ export async function readDocument(
     action: "content_served",
     instanceDigest: ctx.instanceDigest,
     generation: node.generation,
-    detail: { slug: node.slug, chars: textChars, windowed },
+    detail: { ...actScope(ctx), slug: node.slug, chars: textChars, windowed },
   });
 
   return {
@@ -984,7 +1018,7 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { node: root, returned: rows.length, has_more, offset },
+    detail: { ...actScope(ctx), node: root, returned: rows.length, has_more, offset },
   });
   // Titles and heading paths are corpus-authored text and reach the agent
   // exactly as passage content does. `search` and `read` both flag directive-

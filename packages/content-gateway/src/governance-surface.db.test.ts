@@ -279,6 +279,70 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     }
   });
 
+  it("records the SCOPE of every act in retrieval_log — and never its content", async () => {
+    // R20/§8.3.1: the trail must say what the act was allowed to see, or an
+    // auditor cannot tell a public answer from an internal one after the fact.
+    // And it must stay a trail: telemetry that carried the passages back would
+    // be a second, ungoverned copy of the record — one with no audience
+    // predicate, no takedown seam and no generation pointer.
+    await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+    await searchAs(doorAt("machine-confirmed"), { min_trust_tier: "human-reviewed" });
+
+    const rows = await pool.query<{
+      action: string;
+      generation: string | null;
+      detail: Record<string, unknown>;
+    }>(
+      "SELECT action, generation, detail FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+      [TENANT],
+    );
+    expect(rows.rows.length, JSON.stringify(rows.rows)).toBe(1);
+    const row = rows.rows[0]!;
+    expect(row.action).toBe("similarity_searched");
+    expect(row.generation, "the generation the act answered from").toBe("1");
+    expect(row.detail["audience"]).toEqual(["public"]);
+    // The floor that ACTUALLY applied, not the one the caller asked for: the
+    // deployment's is machine-confirmed, the request raised it to
+    // human-reviewed, and the row has to say which one decided the answer.
+    expect(row.detail["min_trust_tier"]).toBe("human-reviewed");
+    expect(row.detail["abstained"]).toBe(false);
+    expect(row.detail["result_count"]).toBe(1);
+
+    const serialized = JSON.stringify(row.detail);
+    // The query text and the passages, by the two things they would contain.
+    expect(serialized).not.toContain("compensation");
+    expect(serialized).not.toContain(QUERY);
+  });
+
+  it("an abstention records the same scope, and says it abstained", async () => {
+    // A floor nothing in the record satisfies: the arms return nothing, so the
+    // honest answer is the abstention — and the row has to say that, or an
+    // operator reading the trail cannot tell "we declined" from "we answered".
+    await pool.query("UPDATE content_nodes SET trust_tier = 0 WHERE tenant_id = $1", [TENANT]);
+    try {
+      await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+      const body = await searchAs(doorAt(undefined), { min_trust_tier: "human-reviewed" });
+      expect(body.ok, JSON.stringify(body)).toBe(false);
+
+      const rows = await pool.query<{ action: string; detail: Record<string, unknown> }>(
+        "SELECT action, detail FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+        [TENANT],
+      );
+      const row = rows.rows[0]!;
+      expect(row.action).toBe("search_abstained");
+      expect(row.detail["audience"]).toEqual(["public"]);
+      expect(row.detail["min_trust_tier"]).toBe("human-reviewed");
+      expect(row.detail["abstained"]).toBe(true);
+      expect(row.detail["result_count"]).toBe(0);
+      expect(JSON.stringify(row.detail)).not.toContain("compensation");
+    } finally {
+      await pool.query(
+        "UPDATE content_nodes SET trust_tier = CASE slug WHEN 'human-reviewed' THEN 2 WHEN 'machine-confirmed' THEN 1 ELSE 0 END WHERE tenant_id = $1",
+        [TENANT],
+      );
+    }
+  });
+
   it("defaults to unverified — an argument-less call sees every tier", async () => {
     expect(await slugsFrom(doorAt(undefined))).toEqual([
       "human-reviewed",
