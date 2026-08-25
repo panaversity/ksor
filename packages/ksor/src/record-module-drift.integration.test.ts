@@ -42,8 +42,19 @@ const RECORD_FILES: readonly string[] = readdirSync(path.join(KERNEL, "record"))
   .filter((name) => name.endsWith(".ts") && !name.includes(".test."))
   .sort();
 
-/** Pinned exactly: the record module reads YAML with it, in the site and in the kernel alike. */
-const YAML_VERSION = "2.9.0";
+/**
+ * Pinned exactly: the record module reads YAML with `yaml` and validates with
+ * `zod`, in the site and in the kernel alike. TWO deps, not one — `zod` was
+ * unpinned and unasserted here while `instance.ts`, `ledger.ts`, `lock.ts`,
+ * `policy.ts` and `profile.ts` all import it, so the catalog's `^4.4.3` and
+ * the site's exact `4.4.3` would have split on the first 4.5.0 release: two
+ * halves of one rule set validating the same frontmatter under two different
+ * validators, with nothing red.
+ */
+const PINNED: readonly (readonly [string, string])[] = [
+  ["yaml", "2.9.0"],
+  ["zod", "4.4.3"],
+];
 
 /** The leaf rules under `lib/` the record module and the site both read, held identical here. */
 const LIB_FILES = ["audience-rule.ts", "lifecycle-rule.ts"] as const;
@@ -56,6 +67,20 @@ describe("the record module is one rule set", () => {
     expect(RECORD_FILES).toContain("check.ts");
     expect(RECORD_FILES).toContain("index-file.ts");
     expect(RECORD_FILES.length).toBeGreaterThanOrEqual(12);
+  });
+
+  // The list is derived from the KERNEL's directory, so a file the kernel
+  // DELETES simply leaves the list — and its copy ships to every adopter
+  // forever, unasserted. The set is compared both ways.
+  it("carries no record file the kernel no longer has", () => {
+    const site = readdirSync(path.join(SITE, "record"))
+      .filter((name) => name.endsWith(".ts"))
+      .sort();
+    expect(
+      site,
+      "system/site/record must hold exactly the kernel's record modules — delete the extras, " +
+        "or copy the missing ones over",
+    ).toEqual([...RECORD_FILES]);
   });
 
   for (const name of RECORD_FILES) {
@@ -75,6 +100,23 @@ describe("the record module is one rule set", () => {
       ).toBe(text(path.join(KERNEL, "lib", name)));
     });
   }
+
+  it("imports no third-party package the site does not pin", () => {
+    // The `../` allowlist below covers relative imports only, so a new bare
+    // specifier in the kernel's record module — a second validator, a date
+    // library — would reach the site's copy with nothing declaring it.
+    const pinned = new Set(PINNED.map(([name]) => name));
+    for (const name of RECORD_FILES) {
+      for (const m of text(path.join(KERNEL, "record", name)).matchAll(/from "([^".][^"]*)"/g)) {
+        const specifier = m[1]!;
+        if (specifier.startsWith("node:")) continue;
+        expect(
+          pinned,
+          `record/${name} imports "${specifier}"; pin it in system/site/package.json and add it to PINNED`,
+        ).toContain(specifier);
+      }
+    }
+  });
 
   it("the record module reaches outside itself only for the lib leaves and its declared deps", () => {
     // A new import from `../something` in the kernel would silently break the
@@ -103,32 +145,52 @@ describe("the record module is one rule set", () => {
  * module); the LOCK half is the silent one, and it is the half that breaks an
  * adopter whose CI installs frozen.
  */
-describe("the site carries the record module's one runtime dependency", () => {
+describe("the site carries the record module's runtime dependencies", () => {
   const SITE_MANIFEST = path.join(SITE, "package.json");
   const LOCK = path.resolve(here, "..", "templates", "scaffold", "pnpm-lock.yaml");
+  const CATALOG = path.resolve(here, "..", "..", "..", "pnpm-workspace.yaml");
 
-  it(`declares yaml at exactly ${YAML_VERSION}`, () => {
-    const manifest = JSON.parse(text(SITE_MANIFEST)) as {
-      dependencies?: Record<string, string>;
-    };
-    expect(
-      manifest.dependencies?.yaml,
-      "system/site/package.json must declare yaml — record/frontmatter.ts and record/yaml-file.ts import it",
-    ).toBe(YAML_VERSION);
-  });
-
-  it("carries that version in the committed lockfile, so a frozen install resolves", () => {
-    // The site importer's own dependency block, not merely the word appearing
-    // somewhere in a 5,000-line lock.
+  /** The site importer's own dependency block, not the word appearing anywhere in a 5,000-line lock. */
+  const importerBlock = (): string => {
     const lock = text(LOCK);
     const importer = lock.slice(lock.indexOf("\n  system/site:") + 1);
     // The importer ends where the next one begins: a line at exactly two
     // spaces of indent. Cutting on "\n  " alone cuts at the first nested key.
     const end = /\n {2}\S/.exec(importer.slice(1))?.index;
-    const block = end === undefined ? importer : importer.slice(0, end + 1);
-    expect(
-      /\n {6}yaml:\n {8}specifier: (.+)\n {8}version: (.+)\n/.exec(block)?.slice(1, 3),
-      `system/site's importer in ${path.basename(LOCK)} does not resolve yaml — run pnpm install in an emitted scaffold and commit the lock`,
-    ).toEqual([YAML_VERSION, YAML_VERSION]);
-  });
+    return end === undefined ? importer : importer.slice(0, end + 1);
+  };
+
+  for (const [name, version] of PINNED) {
+    it(`declares ${name} at exactly ${version}`, () => {
+      const manifest = JSON.parse(text(SITE_MANIFEST)) as {
+        dependencies?: Record<string, string>;
+      };
+      expect(
+        manifest.dependencies?.[name],
+        `system/site/package.json must declare ${name} — the copied record module imports it`,
+      ).toBe(version);
+    });
+
+    it(`carries ${name} in the committed lockfile, so a frozen install resolves`, () => {
+      const pattern = new RegExp(`\\n {6}${name}:\\n {8}specifier: (.+)\\n {8}version: (.+)\\n`);
+      expect(
+        pattern.exec(importerBlock())?.slice(1, 3),
+        `system/site's importer in ${path.basename(LOCK)} does not resolve ${name} — run pnpm install in an emitted scaffold and commit the lock`,
+      ).toEqual([version, version]);
+    });
+
+    // The half that was missing. The kernel resolves these through the
+    // workspace CATALOG; a range there and an exact pin in the site is one
+    // rule set validated by two different versions, which is decision 18's
+    // failure mode wearing a semver caret.
+    it(`resolves ${name} to the same version in the kernel's catalog`, () => {
+      const catalog = text(CATALOG);
+      const declared = new RegExp(`\\n  ${name}: (\\S+)`).exec(catalog)?.[1];
+      expect(
+        declared,
+        `pnpm-workspace.yaml's catalog must pin ${name} to exactly ${version} — the kernel and ` +
+          "the site's byte-identical copy must validate with one version, not two",
+      ).toBe(version);
+    });
+  }
 });
