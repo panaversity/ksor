@@ -316,7 +316,7 @@ takedown_authorities:
 
     it("clause 2: a draft is on no surface of a build", () => {
       // The starter's own documents are drafts (research/okf-native.md §1.1),
-      // and so is nothing this suite wrote — so their titles are the probe.
+      // and nothing this suite wrote is — so the starter's are the probe.
       const knowledge = path.join(project, "knowledge");
       const drafts = readdirSync(knowledge, { recursive: true, encoding: "utf8" })
         .filter(
@@ -333,11 +333,23 @@ takedown_authorities:
         expect(existsSync(path.join(outDir, "docs", slug, "index.html")), `${file} built`).toBe(
           false,
         );
+        const llms = readFileSync(path.join(outDir, "llms.txt"), "utf8");
+        // The ROUTE, because a route is the identity (product principle 3) and
+        // nothing else in the file can spell it. A TITLE cannot carry this on
+        // its own: the starter's first document is titled with the opening
+        // words of the record's own description, which `llms.txt` publishes as
+        // the record's scope line — so the title probe failed on a build that
+        // had correctly excluded every draft (found 2026-08-25).
+        expect(llms, `${file} reached llms.txt`).not.toContain(`/docs/${slug}`);
+        // …and the title still has to stay out of the DOCUMENT LIST, which is
+        // where a leaked draft would appear.
+        const at = llms.indexOf("## Documents");
+        expect(at, "llms.txt has no document list at all").toBeGreaterThan(-1);
         const title =
           /^title:[ \t]*(.*)$/m
             .exec(readFileSync(path.join(knowledge, file), "utf8"))?.[1]
             ?.trim() ?? "";
-        expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).not.toContain(title);
+        expect(llms.slice(at), `${file} is listed as a document`).not.toContain(title);
       }
     });
 
