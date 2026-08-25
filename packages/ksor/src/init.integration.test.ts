@@ -174,9 +174,9 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
       pkgVersion,
     );
     // First ingest must --flip or serve answers from an unactivated generation
-    // (empty server); ingest needs --instance + --knowledge (no CLI defaults).
+    // (empty server); ingest needs --instance (the record root supplies the rest).
     expect(pkg.scripts?.["ingest"], "a local ingest command that activates").toBe(
-      "ksor ingest --instance instance.md --knowledge knowledge --flip",
+      "ksor ingest --instance instance.md --flip",
     );
     expect(pkg.scripts?.["schema"], "a local schema command").toBe(
       "ksor schema --instance instance.md --apply",

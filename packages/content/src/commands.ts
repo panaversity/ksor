@@ -487,7 +487,6 @@ async function ingestCommand(args: string[]): Promise<number> {
     args,
     options: {
       instance: { type: "string" },
-      knowledge: { type: "string" },
       flip: { type: "boolean", default: false },
       "source-commit": { type: "string" },
     },
@@ -495,18 +494,13 @@ async function ingestCommand(args: string[]): Promise<number> {
   const instance = loadInstance(values.instance);
   if (typeof instance === "number") return instance;
   // The record root is where instance.md lives: `knowledge/`, `.ksor/` and
-  // build.lock.json resolve from it (build spec §1). `--knowledge` survives for
-  // the scaffold's scripts, but it can only ever name that one directory.
+  // build.lock.json resolve from it (build spec §1). `--knowledge` is GONE —
+  // it could only ever name that one directory, and a flag that works while
+  // being absent from `--help` is a trap. Passing it now refuses as any
+  // unknown flag does, and `ksor migrate` strips it from the scripts the old
+  // scaffold shipped.
   const recordRoot = dirname(resolve(values.instance!));
   const knowledgeDir = join(recordRoot, "knowledge");
-  if (values.knowledge !== undefined && resolve(values.knowledge) !== knowledgeDir) {
-    return fail(
-      REFUSED,
-      `--knowledge ${values.knowledge} is not the record's knowledge/ directory (${knowledgeDir})\n` +
-        "  why: the record is read whole — instance, policy, ledger, lock and bundle — from the directory holding instance.md\n" +
-        "  fix: drop --knowledge, or point it at the record's own knowledge/ directory",
-    );
-  }
   // Resolved once and REPORTED: this is the last link in the provenance chain
   // (answer -> passage -> document -> generation -> commit -> reviewed source).
   // Leaving it silent is how every adopter shipped "unspecified" without

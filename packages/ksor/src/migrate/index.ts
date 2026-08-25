@@ -604,7 +604,7 @@ function checkerChanges(root: string, templatesDir: string): FileChange[] {
 }
 
 /**
- * The one root script this release breaks. `export-denylist` ran
+ * The root scripts this release breaks. `export-denylist` ran
  * `ksor takedown --export`, a flag the committed ledger retired, and the
  * scaffold's own `build` calls it first — so the adopter's build died on
  * `error: bad-args` with nothing saying the flag was removed. Structured, not
@@ -626,14 +626,21 @@ function manifestChange(root: string): FileChange | null {
   const scripts = manifest["scripts"];
   if (typeof scripts !== "object" || scripts === null || Array.isArray(scripts)) return null;
   const table = scripts as Record<string, unknown>;
-  if (!("export-denylist" in table)) return null;
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(table)) {
     if (key === "export-denylist") continue;
+    if (typeof value !== "string") {
+      next[key] = value;
+      continue;
+    }
+    // `--knowledge` is gone too: the record root beside instance.md supplies
+    // it, and the flag now refuses like any other unknown one — so a script
+    // left carrying it would fail the adopter's first `ingest` after upgrading.
+    const stripped = value.replace(/\s+--knowledge(?:=|\s+)[^\s"]+/, "");
     next[key] =
-      key === "build" && typeof value === "string"
-        ? value.replace(/^.*?export-denylist\s*&&\s*/, "ksor build && ")
-        : value;
+      key === "build"
+        ? stripped.replace(/^.*?export-denylist\s*&&\s*/, "ksor build && ")
+        : stripped;
   }
   const after = `${JSON.stringify({ ...manifest, scripts: next }, null, 2)}\n`;
   return before === after ? null : { path: "package.json", before, after };

@@ -132,7 +132,7 @@ try {
   //    container does at boot — the whole point of the serve/ingest split.
   ksor(["schema", "--instance", "instance.md", "--apply"]);
   ksor(["grant", "--instance", "instance.md"]);
-  ksor(["ingest", "--instance", "instance.md", "--knowledge", "knowledge", "--flip"]);
+  ksor(["ingest", "--instance", "instance.md", "--flip"]);
 
   // 4b. Customize the tool surface, so the walk proves the registration file
   //     actually REACHES the image. It did not once: .dockerignore excluded all

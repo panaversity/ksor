@@ -50,6 +50,11 @@ describe("ksor CLI (built artifact)", () => {
     expect(result.stdout, "the verb's own flags").toContain("--instance");
     expect(result.stdout, "the verb's own flags").toContain("--flip");
     expect(result.stdout, "the record root supplies it now").not.toContain("--knowledge");
+    // …and passing it refuses rather than being quietly tolerated: a flag that
+    // works while absent from `--help` is a trap. `ksor migrate` strips it from
+    // the scripts the pre-profile scaffold shipped.
+    const retired = runCli(["ingest", "--instance", "instance.md", "--knowledge", "knowledge"]);
+    expect(retired.status, `${retired.stdout}${retired.stderr}`).toBe(1);
   });
 
   it("a mistyped flag is REFUSED (exit 1), not reported as a broken environment", () => {
