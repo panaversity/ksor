@@ -155,7 +155,15 @@ takedown_authorities:
     "public-policy.md",
     STABLE("Public policy PUBTITLE1", "PUBDESC1 in one line", "public", "", "1"),
   );
-  w("public-policy.summary.md", "---\ntype: Summary\n---\n\nSUMMARYBODY1\n");
+  // A summary that references an asset the PARENT's body never mentions. The
+  // checker validates a companion's links (record/check.ts), so this image is
+  // in the lock and inside `build_id` — and the stage used to scan the concept's
+  // body only, so the byte never arrived and the export died on it.
+  w(
+    "public-policy.summary.md",
+    "---\ntype: Summary\n---\n\nSUMMARYBODY1\n\n![s](./sumchart.png)\n",
+  );
+  w("sumchart.png", PNG);
   w(
     "internal-note.md",
     STABLE("Internal note CANARYTITLE", "CANARYDESC internal only", "internal", "", "2"),
@@ -392,6 +400,7 @@ describe("staging on the profile (build spec §3)", () => {
       "public-policy.summary.md",
       "revoked.md",
       "stale.md",
+      "sumchart.png",
     ]);
 
     // Acceptance 3: no byte of the internal concept's title, path or

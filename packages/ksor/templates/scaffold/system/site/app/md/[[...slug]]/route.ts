@@ -48,5 +48,5 @@ export async function GET(
   const page = source.getPage([...slug.slice(0, -1), last.slice(0, -".md".length)]);
   if (!page || !machineAdmits(page.path)) notFound();
 
-  return new Response(await getLLMText(page), { headers });
+  return new Response(getLLMText(page), { headers });
 }

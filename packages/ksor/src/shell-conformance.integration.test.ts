@@ -187,10 +187,17 @@ takedown_authorities:
       // canonical reading order: the index generator's (build spec §1) — ONE
       // bullet list, concepts and folders together, by `order:` then name.
       const knowledge = path.join(project, "knowledge");
+      // A BUNDLE-ABSOLUTE image, the other OKF §6.1 form (record spec §2.3).
+      // The checker accepts it and staging resolves it against `knowledge/`,
+      // while fumadocs' `remarkImage` resolved a `/`-rooted src against
+      // `<cwd>/public` — a directory this scaffold does not have — so the
+      // export died with "Module not found" on a record the tooling called
+      // valid. source.config.ts now points it at the stage.
       writeFileSync(
         path.join(knowledge, "beta.md"),
-        concept("Beta policy", "first by order", "Beta body.", 0),
+        concept("Beta policy", "first by order", "Beta body.\n\n![logo](/logo.png)", 0),
       );
+      writeFileSync(path.join(knowledge, "logo.png"), TINY_PNG);
       mkdirSync(path.join(knowledge, "hr"));
       // A folder's prose is a concept INSIDE it (record spec §1: `index.md` is
       // generated, never authored), with a real image beside it — the SME
@@ -422,7 +429,18 @@ takedown_authorities:
         expect(existsSync(twin), `${target} has no twin`).toBe(true);
         expect(readFileSync(twin, "utf8")).toMatch(/^build_id: sha256:/m);
       }
+      // The twin is the record's OWN bytes, not fumadocs' processed markdown:
+      // an image reaches it as the author's `![alt](path)`. It used to arrive
+      // as `<img alt="chart" src="__img0" />` — a generated binding no consumer
+      // can resolve — while the MCP door over the SAME build returned the
+      // authored line, so two machine surfaces of one publication disagreed
+      // about one document (product principle 2).
+      const overviewTwin = readFileSync(path.join(outDir, "md", "hr", "overview.md"), "utf8");
+      expect(overviewTwin).toContain("![chart](./chart.png)");
+      const betaTwin = readFileSync(path.join(outDir, "md", "beta.md"), "utf8");
+      expect(betaTwin).toContain("![logo](/logo.png)");
       expect(existsSync(path.join(outDir, "llms-full.txt"))).toBe(true);
+      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).not.toContain("__img");
       expect(readFileSync(path.join(outDir, "md", "index.md"), "utf8")).toMatch(
         /^okf_version: "0.2"$/m,
       );

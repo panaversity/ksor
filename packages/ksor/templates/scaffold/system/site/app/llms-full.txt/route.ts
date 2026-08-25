@@ -13,6 +13,6 @@ export const revalidate = false;
  */
 export async function GET(): Promise<Response> {
   const head = `---\ntitle: ${JSON.stringify(appTitle)}\nname: ${appName}\n${stampLines(readStageManifest().stamps).join("\n")}\n---`;
-  const scanned = await Promise.all(getMachinePages().map((page) => getLLMText(page)));
+  const scanned = getMachinePages().map((page) => getLLMText(page));
   return new Response([head, ...scanned].join("\n\n"));
 }
