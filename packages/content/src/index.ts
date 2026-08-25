@@ -134,7 +134,7 @@ export {
 } from "./calibrate/math.js";
 export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 
-export { runContentCli } from "./commands.js";
+export { instancePathOf, runContentCli } from "./commands.js";
 
 export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
 // The canonical attachment rule, for the surfaces OUTSIDE this package that

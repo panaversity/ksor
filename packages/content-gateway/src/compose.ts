@@ -36,6 +36,7 @@ import {
   parseInstanceText,
   type ContentInstance,
   type ServiceContext,
+  instancePathOf,
 } from "@panaversity/ksor-content";
 
 import { bootHeader, bootLine } from "./boot-report.js";
@@ -93,7 +94,13 @@ export interface Composition {
   readonly bootVerified: () => boolean;
 }
 
-export async function compose(instancePath: string, version: string): Promise<Composition> {
+export async function compose(rawInstancePath: string, version: string): Promise<Composition> {
+  // `--instance` accepts a DIRECTORY everywhere else — `build` documents it and
+  // the write-plane verbs were fixed to match. Reading the argument directly
+  // meant `serve --instance .` answered `EISDIR`, a raw errno naming no rule and
+  // no fix, on the one flag a person is most likely to type as `.`. One
+  // resolver, every verb (found on a live walk, 2026-08-25).
+  const instancePath = instancePathOf(rawInstancePath);
   let instanceText: string;
   try {
     instanceText = readFileSync(instancePath, "utf8");

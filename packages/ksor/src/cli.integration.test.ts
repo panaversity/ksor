@@ -100,6 +100,33 @@ describe("ksor CLI (built artifact)", () => {
     }
   });
 
+  it("serve takes `--instance <dir>`, the same as every other verb", () => {
+    // `--instance` accepts a directory everywhere else — `build` documented it
+    // and `schema`/`grant`/`ingest` were fixed to match. `serve` resolved its
+    // own path and answered `EISDIR: illegal operation on a directory, read`:
+    // a raw errno naming no rule, no reason and no fix, on the one flag a
+    // person is most likely to type as `.` (found on a live walk, 2026-08-25).
+    // It must reach the SAME refusal the other verbs reach — about the record,
+    // not about the filesystem.
+    const cwd = mkdtempSync(path.join(tmpdir(), "ksor-serve-dir-"));
+    try {
+      writeFileSync(
+        path.join(cwd, "instance.md"),
+        "---\nformat: 2\nname: dirflag\ntitle: Dir flag\ndescription: One sentence.\n---\n\nScope.\n",
+      );
+      const result = spawnSync(process.execPath, [distCli, "serve", "--instance", "."], {
+        cwd,
+        encoding: "utf8",
+        env: { ...process.env, KSOR_AUTH: "disabled-local" },
+      });
+      expect(result.stderr, "a raw errno reached the operator").not.toContain("EISDIR");
+      // The record has no `database:`, which is what it should now be told.
+      expect(result.stderr).toContain("database");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("answers --version with the version and exit 0", () => {
     const result = runCli(["--version"]);
     expect(result.status).toBe(0);
