@@ -5,6 +5,9 @@
  * repository it cannot read — a shallow clone has no history to verify
  * against, which is a refusal upstream, never a silent pass.
  */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import {
   git as run,
   historicLedger,
@@ -38,6 +41,29 @@ export interface GitFacts {
    * a diagnosis stated for a state nobody distinguished.
    */
   readonly historyUnreadable: "shallow" | "unreadable" | null;
+}
+
+/**
+ * The governance files git has been told to ignore. `.ksor/` was one ignored
+ * DIRECTORY before the profile, and the policy and the ledger now live inside
+ * it — so `git add -A` stages neither, the migration commits green locally,
+ * and the clone CI builds from has no policy at all. What is invisible to a
+ * clone is invisible to every surface, so the build says so by name.
+ */
+export function ignoredGovernance(root: string): readonly string[] {
+  // Only files that are THERE: `git check-ignore` answers about a pattern, not
+  // about a file, so asking about the ledger of a record that has never had a
+  // takedown would refuse a level-0 record for a file it does not want.
+  const paths = [".ksor/governance.yaml", ".ksor/takedowns.yaml"].filter((rel) =>
+    existsSync(join(root, rel)),
+  );
+  if (paths.length === 0) return [];
+  const out = run(root, ["check-ignore", "--", ...paths]);
+  if (out === null) return [];
+  return out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => paths.includes(line));
 }
 
 export function gitFacts(root: string): GitFacts {

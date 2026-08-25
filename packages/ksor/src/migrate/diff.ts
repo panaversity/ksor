@@ -12,6 +12,12 @@ export interface FileChange {
   readonly before: string | null;
   /** null when the file is deleted. */
   readonly after: string | null;
+  /**
+   * A file BUILT from ksor's rules that the adopter is told never to edit (the
+   * emitted checker). It is replaced wholesale, and a 1,400-line hunk of a
+   * bundle is not review — it is noise that buries the diffs that ARE review.
+   */
+  readonly generated?: boolean;
 }
 
 const CONTEXT = 3;
@@ -30,6 +36,13 @@ export function unifiedDiff(change: FileChange): string {
   const header =
     `--- ${change.before === null ? "/dev/null" : `a/${change.path}`}\n` +
     `+++ ${change.after === null ? "/dev/null" : `b/${change.path}`}\n`;
+  if (change.generated === true) {
+    return (
+      header +
+      `@@ generated @@ replaced wholesale: ${before.length} line(s) become ${after.length}. ` +
+      "This file is built from ksor's own rules and is never hand-edited.\n"
+    );
+  }
   return header + hunks(before, after);
 }
 

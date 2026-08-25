@@ -22,7 +22,7 @@ import {
 } from "@panaversity/ksor-content/record";
 
 import { exitCodes } from "../index.js";
-import { gitFacts } from "./git.js";
+import { gitFacts, ignoredGovernance } from "./git.js";
 
 export interface BuildIo {
   readonly out: (text: string) => void;
@@ -142,6 +142,15 @@ export function runBuild(
         : "check that `git log` works in this checkout, or pass --allow-unverifiable-ledger to build anyway",
     );
   }
+  const ignored = facts.repository ? ignoredGovernance(root) : [];
+  if (ignored.length > 0) {
+    return refuse(
+      io,
+      "ksor-governance-ignored",
+      `git ignores ${ignored.join(" and ")}, so ${ignored.length === 1 ? "it is" : "they are"} in no commit — the policy and the takedown ledger ARE the record, and a clone (your CI, your deploy) would build without ${ignored.length === 1 ? "it" : "them"}`,
+      "un-ignore them in .gitignore — the directory form `.ksor/` cannot be negated, so use `.ksor/*` plus `!.ksor/governance.yaml` and `!.ksor/takedowns.yaml` — then commit them (`ksor migrate` offers that edit)",
+    );
+  }
   if (parsed.strict && facts.dirty) {
     return refuse(
       io,
@@ -180,13 +189,38 @@ export function runBuild(
     return exitCodes.refused;
   }
 
+  // What the write pass WOULD do, computed before the lock is composed. The
+  // indexes are inputs `gitFacts` watched (`knowledge` is INPUTS[0]), so a
+  // build that regenerates a committed-but-stale index makes the tree dirty
+  // AFTER `dirty` was read: `--strict`, which promises to stamp only committed
+  // content, exited 0 having stamped a `source_commit` that does not contain
+  // the tree it just published.
+  const pendingIndexes = [...result.indexes]
+    .filter(([rel, text]) => record.files.get(rel) !== text)
+    .map(([rel]) => rel);
+  // An index committed for a directory that earns none is stale forever; remove it.
+  const staleIndexes = [...record.files.keys()].filter(
+    (rel) => rel.startsWith("knowledge/") && rel.endsWith("/index.md") && !result.indexes.has(rel),
+  );
+  if (parsed.strict && (pendingIndexes.length > 0 || staleIndexes.length > 0)) {
+    return refuse(
+      io,
+      "ksor-build-dirty",
+      `generating the indexes would change ${[...pendingIndexes, ...staleIndexes].sort().join(", ")}, which is uncommitted output, and --strict stamps only committed content`,
+      "run `ksor build` without --strict, commit the indexes it writes, and rebuild",
+    );
+  }
+
   const ledgerText = record.files.get(".ksor/takedowns.yaml") ?? null;
   const ledger = parseLedger(ledgerText, ".ksor/takedowns.yaml");
   const denials = ledger.ok ? inForce(ledger.ledger) : [];
   const lock = composeLock({
     ksorVersion: options.version,
     sourceCommit: facts.sourceCommit,
-    dirty: facts.dirty,
+    // The build's OWN writes count: an index this run regenerates is published
+    // content that is in no commit, so a lock claiming `dirty: false` beside it
+    // would be a false provenance claim (invariant: provenance is load-bearing).
+    dirty: facts.dirty || pendingIndexes.length > 0 || staleIndexes.length > 0,
     asOf: parsed.asOf ?? Date.now(),
     drafts: options.drafts,
     instanceText: record.files.get("instance.md") ?? "",
@@ -213,27 +247,17 @@ export function runBuild(
   });
 
   // Write only what changed, so a no-op build leaves git quiet.
-  const written: string[] = [];
-  for (const [rel, text] of result.indexes) {
-    if (record.files.get(rel) === text) continue;
-    writeFileSync(path.join(root, rel), text);
-    written.push(rel);
+  for (const rel of pendingIndexes) {
+    writeFileSync(path.join(root, rel), result.indexes.get(rel)!);
   }
-  // An index committed for a directory that earns none is stale forever; remove it.
-  const removed: string[] = [];
-  for (const rel of record.files.keys()) {
-    if (rel.startsWith("knowledge/") && rel.endsWith("/index.md") && !result.indexes.has(rel)) {
-      unlinkSync(path.join(root, rel));
-      removed.push(rel);
-    }
-  }
+  for (const rel of staleIndexes) unlinkSync(path.join(root, rel));
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 
   const admitted = lock.documents.filter((d) => d.admitted.length > 0).length;
   io.out(
     `ksor build: ${lock.documents.length} document(s), ${admitted} admitted to a machine surface at ${lock.as_of}` +
       `${lock.dirty ? " (dirty)" : ""}\n` +
-      `${written.map((w) => `  wrote ${w}\n`).join("")}${removed.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
+      `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,
   );
   return 0;

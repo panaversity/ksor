@@ -298,6 +298,22 @@ describe("migrateInstance", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.refusals[0]!.slug).toBe("ksor-migrate-underivable");
+    expect(r.refusals[0]!.why).toContain("the directory name (Acme Record)");
+  });
+
+  // The refusal blamed the DIRECTORY whichever half was wrong, so a record in
+  // a perfectly legal directory was told its directory was illegal and to add
+  // a `name:` it already had — a falsehood and an inapplicable fix at once.
+  it("blames the DECLARED name when that is the unusable one", () => {
+    const r = migrateInstance("---\nname: My_Record\n---\n\n# Acme\n\nWhat Acme knows.\n", {
+      directory: "acme",
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals[0]!.slug).toBe("ksor-migrate-underivable");
+    expect(r.refusals[0]!.why).toContain("`name: My_Record` is not");
+    expect(r.refusals[0]!.why).not.toContain("the directory name");
+    expect(r.refusals[0]!.fix).toBe("correct `name:` in instance.md and run it again");
   });
 
   it("leaves a format-2 instance byte-identical", () => {

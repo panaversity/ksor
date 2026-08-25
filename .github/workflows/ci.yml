@@ -204,9 +204,17 @@ jobs:
       # thing Windows found was one of them failing on line endings rather than
       # on drift (.gitattributes pins the templates to LF; the kernel's copies
       # take the platform default). They moved from the unit tier to this one
-      # — AGENTS.md assigns repo-tree scans here — so name them explicitly or
-      # Windows stops running the checks it is best placed to catch.
-      - run: pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/audience-rule-drift.integration.test.ts packages/ksor/src/denial-rule-drift.integration.test.ts packages/ksor/src/scaffold-scripts.integration.test.ts packages/ksor/src/discovery-document.integration.test.ts
+      # — AGENTS.md assigns repo-tree scans here — so Windows has to run them
+      # or it stops running the checks it is best placed to catch.
+      #
+      # `drift.integration.test.ts` is a SUBSTRING filter over every one of
+      # them, not a list. The list silently rotted: it named a file the tree no
+      # longer had (vitest drops a filter that matches nothing as long as
+      # another filter matches something, so four files named ran three, green
+      # and without a warning) and it never gained the two drift suites that
+      # arrived with the profile. ci-workflow.integration.test.ts asserts that
+      # this filter still covers every `*-drift.integration.test.ts` there is.
+      - run: pnpm exec vitest run --config vitest.integration.config.ts drift.integration.test.ts packages/ksor/src/scaffold-scripts.integration.test.ts packages/ksor/src/discovery-document.integration.test.ts
       # The stage lock rests on three primitives whose Windows semantics are
       # the whole question: exclusive create (`wx`), pid liveness, and removing
       # a file another process may hold. Named here for the same reason as the

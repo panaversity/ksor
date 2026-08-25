@@ -280,6 +280,36 @@ describe("ksor build — acceptance 3: refusals write nothing", () => {
     expect(loose.status, loose.stderr).toBe(0);
     expect(lockOf(root).dirty).toBe(true);
   });
+
+  /**
+   * `dirty` was read BEFORE the indexes were rewritten, and `knowledge/` is
+   * one of the four inputs it is read over — so a build that regenerated a
+   * committed-but-stale index stamped `dirty: false` and a `source_commit`
+   * that does not contain the tree it had just published, and `--strict`,
+   * documented as stamping only committed content, exited 0 having made the
+   * working tree dirty. The state is ordinary: a stale index is never a
+   * refusal in build mode, so a title edit committed without a rebuild
+   * reaches this exactly.
+   */
+  it("a stale COMMITTED index is uncommitted output: --strict refuses it, and a loose build stamps dirty", () => {
+    const root = repo();
+    writeFileSync(path.join(root, "knowledge/index.md"), "# stale\n");
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "commit the stale index");
+    expect(git(root, "status", "--porcelain")).toBe("");
+
+    const strict = build(root, "--strict", "--as-of", AS_OF);
+    expect(strict.status, strict.stdout + strict.stderr).toBe(1);
+    expect(strict.stderr.split("\n")[0]).toBe("error: ksor-build-dirty");
+    expect(strict.stderr).toContain("knowledge/index.md");
+    // A refusal writes nothing, the tree included.
+    expect(git(root, "status", "--porcelain")).toBe("");
+
+    const loose = build(root, "--as-of", AS_OF);
+    expect(loose.status, loose.stderr).toBe(0);
+    expect(loose.stdout).toContain("wrote knowledge/index.md");
+    expect(lockOf(root).dirty).toBe(true);
+  });
 });
 
 describe("ksor build — assets are part of what was checked", () => {

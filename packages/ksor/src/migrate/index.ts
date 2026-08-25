@@ -32,16 +32,19 @@ import {
 } from "@panaversity/ksor-content/record";
 
 import { exitCodes } from "../index.js";
-import { readDbDenials, type DbDenial } from "./denials.js";
+import { applyProse, type PackageManager } from "../init/manager.js";
+import { DenialReadError, readDbDenials, type DbDenial } from "./denials.js";
 import { renderLedger, toLedgerEntries, type LedgerDenial } from "./ledger-out.js";
 import { renderDiff, type FileChange } from "./diff.js";
 import {
+  instanceNameOf,
   migrateConcept,
   migrateInstance,
   migrateSummary,
   modelOf,
   NO_AUDIENCE_MODEL,
   type AudienceModel,
+  type InstanceNameResult,
 } from "./rules.js";
 
 export interface MigrateIo {
@@ -80,7 +83,8 @@ name (ksor-migrate-underivable), and so is a denial it cannot attribute.
   --generated-at <instant>
                       stamp every document's \`generated.at\` with this instant
                       instead of the last commit that touched it
-  --write-site        offer the site's byte-copied rule modules too
+  --write-site        offer every file of system/site this ksor emits, so the
+                      adopter-owned site can read the record this run writes
 `;
 
 interface Parsed {
@@ -137,6 +141,9 @@ const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 // decision 8). The `index.mdx` and `.mdx` branches this file used to carry were
 // unreachable in both directions.
 const RESERVED = new Set(["index.md", "README.md"]);
+
+/** Stands in for `--actor` in a dry run, and is never written to a file. */
+const PLACEHOLDER_ACTOR = "human:<you>";
 
 /** A generated index: no governance frontmatter, and every body line a heading or a bullet. */
 function isGeneratedIndex(text: string, path: string): boolean {
@@ -197,7 +204,7 @@ export async function runMigrate(
   const oldFm = instanceSplit.ok ? (instanceSplit.frontmatter ?? {}) : {};
   const policyPath = ".ksor/governance.yaml";
   const hadPolicy = record.files.has(policyPath);
-  if (!hadPolicy && parsed.actor === null) {
+  if (!hadPolicy && parsed.actor === null && parsed.write) {
     return badArgs(
       io,
       "this record has no `.ksor/governance.yaml`, so migrate has to write one — and a policy names\n" +
@@ -205,7 +212,14 @@ export async function runMigrate(
         "migration. A governance act never names an actor the tool guessed (decision 21).",
     );
   }
+  // The dry run writes nothing, so it needs an actor to APPLY the migration,
+  // not to SHOW it — and the documented first step of the upgrade path is the
+  // bare form. The placeholder is only ever substituted when nothing will be
+  // written, so no file can carry it, and it is rendered in the diff rather
+  // than hidden, because "who" is the one thing the owner is being asked for.
+  const actor = parsed.actor ?? (parsed.write ? null : PLACEHOLDER_ACTOR);
 
+  const identity = instanceNameOf(oldFm, path.basename(root));
   const changes: FileChange[] = [];
   const refusals: Refusal[] = [];
   const registry = new Set<string>();
@@ -222,12 +236,16 @@ export async function runMigrate(
   const instantNow = new Date().toISOString().replace(/\.\d+Z$/, "Z");
   const ctx = {
     version: options.version,
-    actor: parsed.actor,
+    actor,
     approveBy: parsed.approveBy,
     instant: parsed.generatedAt ?? instantNow,
     model,
   };
   const conceptIds = new Set<string>();
+  /** Concept id → path, for every `approved` document this run turns into a `draft`. */
+  const demoted = new Map<string, string>();
+  /** Every `ksor.superseded_by` this run would write, by the document writing it. */
+  const pointers: { readonly path: string; readonly successor: string }[] = [];
   for (const [rel, text] of [...record.files].sort()) {
     if (!rel.startsWith("knowledge/") || !rel.endsWith(".md")) continue;
     const name = rel.slice(rel.lastIndexOf("/") + 1);
@@ -261,7 +279,12 @@ export async function runMigrate(
       continue;
     }
     for (const a of out.outcome.audiences) registry.add(a);
-    conceptIds.add(target.slice("knowledge/".length).replace(/\.md$/, ""));
+    const conceptId = target.slice("knowledge/".length).replace(/\.md$/, "");
+    conceptIds.add(conceptId);
+    if (out.outcome.demoted) demoted.set(conceptId, target);
+    if (out.outcome.successor !== null) {
+      pointers.push({ path: target, successor: out.outcome.successor });
+    }
     if (target !== rel) {
       // A reserved name is emptied and its prose lands in a concept beside it;
       // `ksor build` regenerates index.md from the tree at the next build.
@@ -270,6 +293,23 @@ export async function runMigrate(
     } else if (out.outcome.changed) {
       changes.push({ path: rel, before: text, after: out.outcome.text });
     }
+  }
+
+  // The commonest pre-profile shape is a withdrawn document pointing at the
+  // approved one that replaced it. Demoting that successor to `draft` — which
+  // is what happens without `--approve-by` — leaves a tree `ksor build` refuses
+  // as `ksor-supersession-strands`, so the published runbook ended RED on it.
+  // Migrate already refuses the neighbouring stray-pointer case up front; this
+  // is the one it creates itself, so it refuses it the same way.
+  for (const pointer of pointers) {
+    const target = demoted.get(pointer.successor);
+    if (target === undefined) continue;
+    refusals.push({
+      slug: "ksor-migrate-underivable",
+      path: target,
+      why: `\`${pointer.path}\` is withdrawn in favour of this document, and without \`--approve-by\` an \`approved\` document becomes a \`draft\` (R25) — the checker then refuses that tree as \`ksor-supersession-strands\`, because a reader sent to a draft successor is stranded`,
+      fix: "re-run with `--approve-by human:<id>` — the person approving these documents — so every `approved` document becomes `stable` and the pointer resolves",
+    });
   }
 
   // ── the takedown ledger ────────────────────────────────────────────────
@@ -281,7 +321,7 @@ export async function runMigrate(
   const hadLedger = record.files.has(".ksor/takedowns.yaml");
   const denials = hadLedger
     ? []
-    : await collectDenials(root, oldFm, parsed.attributions, refusals, io);
+    : await collectDenials(identity, oldFm, parsed.attributions, refusals, io);
   const takedownActors = new Set<string>(denials.map((d) => d.by));
   if (denials.length > 0) {
     changes.push({
@@ -295,7 +335,7 @@ export async function runMigrate(
   const policyBefore = record.files.get(policyPath) ?? null;
   const policyAfter = renderPolicy({
     before: policyBefore,
-    actor: parsed.actor,
+    actor,
     approveBy: parsed.approveBy,
     registry: [...registry].sort(),
     takedownActors: [...takedownActors].sort(),
@@ -305,8 +345,28 @@ export async function runMigrate(
     changes.push({ path: policyPath, before: policyBefore, after: policyAfter });
   }
 
-  // ── the site's byte-copied rule modules ────────────────────────────────
-  if (parsed.writeSite) changes.push(...siteRuleChanges(root, options.templatesDir));
+  // ── .gitignore ─────────────────────────────────────────────────────────
+  const gitignore = gitignoreChange(root);
+  if (gitignore !== null) changes.push(gitignore);
+
+  // ── the emitted checker and the manifest that runs it ──────────────────
+  // Neither is behind a flag: a stale checker REFUSES the record this run
+  // writes (and the shipped validate.yml runs that exact file), and the root
+  // `build` script calls a `ksor takedown` flag this release removed. An
+  // upgrade that leaves the adopter's own gate red is not an upgrade.
+  changes.push(...checkerChanges(root, options.templatesDir));
+  const manifest = manifestChange(root);
+  if (manifest !== null) changes.push(manifest);
+
+  // ── the site, which the adopter owns and only this can update ──────────
+  if (parsed.writeSite) {
+    changes.push(
+      ...siteChanges(root, options.templatesDir, {
+        name: identity.ok ? identity.name : path.basename(root),
+        version: options.version,
+      }),
+    );
+  }
 
   if (refusals.length > 0) return refusal(io, refusals);
   if (changes.length === 0) {
@@ -316,7 +376,12 @@ export async function runMigrate(
   if (!parsed.write) {
     io.out(renderDiff(changes));
     io.out(
-      `\nksor migrate: ${changes.length} file(s) would change. Re-run with --write to apply.\n`,
+      `\nksor migrate: ${changes.length} file(s) would change. Re-run with --write to apply.\n` +
+        (parsed.actor === null
+          ? `The diff names \`${PLACEHOLDER_ACTOR}\` where the person running this migration goes;\n` +
+            "applying it needs --actor human:<id> (a governance act never names an actor the tool\n" +
+            "guessed — decision 21).\n"
+          : ""),
     );
     return 0;
   }
@@ -351,7 +416,7 @@ function generatedAtOf(root: string, rel: string, override: string | null): stri
 
 /** Reads the database's denylist, or refuses; an empty list when the record declares none. */
 async function collectDenials(
-  root: string,
+  identity: InstanceNameResult,
   fm: Readonly<Record<string, unknown>>,
   attributions: ReadonlyMap<string, string>,
   refusals: Refusal[],
@@ -361,6 +426,9 @@ async function collectDenials(
   if (typeof database !== "object" || database === null || Array.isArray(database)) return [];
   const dsnEnv = (database as Record<string, unknown>)["dsn_env"];
   if (typeof dsnEnv !== "string" || dsnEnv === "") return [];
+  // A record with no readable identity has no rows to scope a query by;
+  // `migrateInstance` has already refused it by name, so say nothing twice.
+  if (!identity.ok) return [];
   const dsn = process.env[dsnEnv];
   if (dsn === undefined || dsn === "") {
     refusals.push({
@@ -373,12 +441,26 @@ async function collectDenials(
   }
   let rows: readonly DbDenial[];
   try {
-    rows = await readDbDenials(path.join(root, "instance.md"), dsn);
+    rows = await readDbDenials({ tenantId: identity.name, corpusId: identity.name }, dsn);
   } catch (error) {
+    // A refusal raised by the transcription itself is already a what/why/fix;
+    // nesting it inside another one's `why:` printed two `why:` lines at two
+    // indents and blamed the database for a decision about a row.
+    if (error instanceof DenialReadError) {
+      refusals.push({
+        slug: "ksor-migrate-underivable",
+        path: ".ksor/takedowns.yaml",
+        why: error.why,
+        fix: error.fix,
+      });
+      return [];
+    }
     refusals.push({
       slug: "ksor-migrate-underivable",
       path: "instance.md",
-      why: `the takedown denials could not be read from ${dsnEnv}: ${error instanceof Error ? error.message : String(error)}`,
+      // One line: a driver error's own multi-line detail nested inside a
+      // refusal reads as a second, malformed refusal.
+      why: `the takedown denials could not be read from ${dsnEnv}: ${firstLine(error)}`,
       fix: `make the database reachable and run it again — the ledger is the record's copy of those rows and cannot be derived without them`,
     });
     return [];
@@ -387,6 +469,11 @@ async function collectDenials(
   const outcome = toLedgerEntries(rows, attributions);
   refusals.push(...outcome.refusals);
   return outcome.entries;
+}
+
+function firstLine(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split("\n")[0] ?? "";
 }
 
 interface PolicyInput {
@@ -450,26 +537,186 @@ function renderPolicy(input: PolicyInput): string | null {
   return `${lines.join("\n")}\n`;
 }
 
+/** Every spelling of "ignore the whole `.ksor` directory" a pre-profile scaffold carried. */
+const BARE_DOTKSOR_PATTERNS = new Set([".ksor/", ".ksor", "/.ksor/", "/.ksor"]);
+
+const GOVERNANCE_IGNORE_BLOCK = [
+  "# ksor's working directory — build output and scratch, never the record.",
+  "# The two governance files inside it ARE the record (the policy and the",
+  "# takedown ledger) and are un-ignored by name: the directory form `.ksor/`",
+  "# cannot be negated, so the glob is `.ksor/*`.",
+  ".ksor/*",
+  "!.ksor/governance.yaml",
+  "!.ksor/takedowns.yaml",
+];
+
 /**
- * The site's rule modules are BYTE-COPIED from the kernel (decision 18), so an
- * upgrade has to offer the new bytes: the adopter owns `system/site`
- * (decision 4) and nothing else can update it. The set is every `*-rule.ts` in
- * the CLI's own template — computed, not listed, so a rule module added later
- * is offered without anyone remembering to add it here.
+ * The one adopter-owned file the migration itself invalidates. Every scaffold
+ * ever emitted ignores `.ksor/` WHOLESALE, and this migration writes the
+ * policy and (from the denylist) the ledger into that directory — so `git add
+ * -A` stages neither, the migration commits green locally, and the clone CI
+ * builds from refuses `ksor-policy-missing`. A directory pattern cannot be
+ * negated, so the bare line is replaced rather than appended to, and the stale
+ * comment above it goes with it.
  */
-function siteRuleChanges(root: string, templatesDir: string): FileChange[] {
-  const from = path.join(templatesDir, "system", "site", "lib");
-  // Only ever an UPDATE. A record with no site of its own is not one that
-  // wants a `system/site/lib` conjured into it by a migration.
-  if (!existsSync(from) || !existsSync(path.join(root, "system", "site"))) return [];
+function gitignoreChange(root: string): FileChange | null {
+  const abs = path.join(root, ".gitignore");
+  if (!existsSync(abs)) return null;
+  const before = readFileSync(abs, "utf8");
+  const lines = before.split("\n");
+  const at = lines.findIndex((line) => BARE_DOTKSOR_PATTERNS.has(line.trim()));
+  if (at === -1) return null;
+  let from = at;
+  while (from > 0 && lines[from - 1]!.trimStart().startsWith("#")) from -= 1;
+  const after = [...lines.slice(0, from), ...GOVERNANCE_IGNORE_BLOCK, ...lines.slice(at + 1)].join(
+    "\n",
+  );
+  return { path: ".gitignore", before, after };
+}
+
+/**
+ * The emitted format checker, in BOTH skill trees. It is a build product of
+ * the CLI, generated from the same rule set `ksor build` runs, and its own
+ * skill tells the adopter never to edit it because a ksor upgrade replaces
+ * it — which nothing did. So a migrated record was refused by the adopter's
+ * own `check` script and by their shipped `validate.yml`, with printed fixes
+ * that undo the migration key by key.
+ *
+ * Never a creation: a record that does not carry the skill is not handed one.
+ */
+function checkerChanges(root: string, templatesDir: string): FileChange[] {
   const out: FileChange[] = [];
-  for (const name of readdirSync(from).sort()) {
-    if (!name.endsWith("-rule.ts")) continue;
-    const rel = `system/site/lib/${name}`;
-    const abs = path.join(root, rel);
-    const before = existsSync(abs) ? readFileSync(abs, "utf8") : null;
-    const after = readFileSync(path.join(from, name), "utf8");
-    if (before !== after) out.push({ path: rel, before, after });
+  for (const tree of [".agents", ".claude"]) {
+    for (const [name, generated] of [
+      ["check.mjs", true],
+      ["SKILL.md", false],
+    ] as const) {
+      const rel = `${tree}/skills/format-checker/${name}`;
+      const src = path.join(templatesDir, rel);
+      const abs = path.join(root, rel);
+      if (!existsSync(src) || !existsSync(abs)) continue;
+      const before = readFileSync(abs, "utf8");
+      const after = readFileSync(src, "utf8");
+      if (before !== after) out.push({ path: rel, before, after, generated });
+    }
   }
   return out;
+}
+
+/**
+ * The one root script this release breaks. `export-denylist` ran
+ * `ksor takedown --export`, a flag the committed ledger retired, and the
+ * scaffold's own `build` calls it first — so the adopter's build died on
+ * `error: bad-args` with nothing saying the flag was removed. Structured, not
+ * string surgery: the manifest is the one file where a half-applied edit
+ * would still parse and then lie.
+ */
+function manifestChange(root: string): FileChange | null {
+  const abs = path.join(root, "package.json");
+  if (!existsSync(abs)) return null;
+  const before = readFileSync(abs, "utf8");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(before);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const manifest = parsed as Record<string, unknown>;
+  const scripts = manifest["scripts"];
+  if (typeof scripts !== "object" || scripts === null || Array.isArray(scripts)) return null;
+  const table = scripts as Record<string, unknown>;
+  if (!("export-denylist" in table)) return null;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(table)) {
+    if (key === "export-denylist") continue;
+    next[key] =
+      key === "build" && typeof value === "string"
+        ? value.replace(/^.*?export-denylist\s*&&\s*/, "ksor build && ")
+        : value;
+  }
+  const after = `${JSON.stringify({ ...manifest, scripts: next }, null, 2)}\n`;
+  return before === after ? null : { path: "package.json", before, after };
+}
+
+/** What a text file of the template is; the site's icon has no diff to review. */
+const SITE_TEXT_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".js",
+  ".json",
+  ".css",
+  ".md",
+  ".yaml",
+  ".yml",
+  ".txt",
+]);
+
+/**
+ * The whole of `system/site`, which the adopter owns (decision 4) and which
+ * nothing else can update. Offering only `*-rule.ts` left every other file
+ * this release changed — the 18 copied record modules, `source.config.ts`,
+ * the staging library — at the pre-profile version, so a correctly migrated
+ * record could not be built at all. The set is WALKED, not listed, so a file
+ * added to the template later is offered without anyone remembering to.
+ *
+ * Rendered through the same two substitutions `ksor init` applies, because a
+ * template's raw bytes carry `KSOR-STAMP-…` placeholders and pnpm spellings
+ * that an npm or bun scaffold cannot run.
+ */
+function siteChanges(root: string, templatesDir: string, stamps: Stamps): FileChange[] {
+  const from = path.join(templatesDir, "system", "site");
+  // Only ever an UPDATE. A record with no site of its own is not one that
+  // wants a `system/site` conjured into it by a migration.
+  if (!existsSync(from) || !existsSync(path.join(root, "system", "site"))) return [];
+  const manager = managerOf(root);
+  const out: FileChange[] = [];
+  const walk = (dir: string, rel: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+    )) {
+      if (entry.name === "node_modules") continue;
+      const abs = path.join(dir, entry.name);
+      const child = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(abs, child);
+        continue;
+      }
+      if (!SITE_TEXT_EXTENSIONS.has(path.extname(entry.name))) continue;
+      const after = applyProse(
+        readFileSync(abs, "utf8")
+          .replaceAll("KSOR-STAMP-NAME", stamps.name)
+          .replaceAll("KSOR-STAMP-VERSION", stamps.version),
+        manager,
+      );
+      const target = path.join(root, child);
+      const before = existsSync(target) ? readFileSync(target, "utf8") : null;
+      if (before !== after) out.push({ path: child, before, after });
+    }
+  };
+  walk(from, "system/site");
+  return out;
+}
+
+interface Stamps {
+  readonly name: string;
+  readonly version: string;
+}
+
+/**
+ * Which manager this repository was scaffolded for, from what it committed.
+ * `ksor init` reads `npm_config_user_agent` — the run that scaffolds is the
+ * run that knows — but a migration is a different run, so it reads the tree.
+ * An unrecognized tree falls back to pnpm, exactly as init does.
+ */
+function managerOf(root: string): PackageManager {
+  if (existsSync(path.join(root, "pnpm-workspace.yaml"))) return "pnpm";
+  if (existsSync(path.join(root, "bun.lock")) || existsSync(path.join(root, "bun.lockb"))) {
+    return "bun";
+  }
+  if (existsSync(path.join(root, "package-lock.json")) || existsSync(path.join(root, ".npmrc"))) {
+    return "npm";
+  }
+  return "pnpm";
 }

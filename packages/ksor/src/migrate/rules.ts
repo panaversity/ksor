@@ -167,6 +167,10 @@ export interface ConceptOutcome {
   /** Non-`public` identifiers this concept names, for the policy's registry. */
   readonly audiences: readonly string[];
   readonly changed: boolean;
+  /** An `approved` document that became a `draft` for want of `--approve-by` (R25). */
+  readonly demoted: boolean;
+  /** The concept id this document's `ksor.superseded_by` names, when it names one. */
+  readonly successor: string | null;
 }
 
 export type ConceptResult =
@@ -192,7 +196,16 @@ export function migrateConcept(
   // Shape, not validity — a profile document that is separately WRONG is the
   // checker's to refuse, and re-running migrate over it must not move it.
   if (hasProfileShape(fm)) {
-    return { ok: true, outcome: { text, audiences: audiencesOf(fm), changed: false } };
+    return {
+      ok: true,
+      outcome: {
+        text,
+        audiences: audiencesOf(fm),
+        changed: false,
+        demoted: false,
+        successor: successorOf(fm),
+      },
+    };
   }
 
   const doc = split.frontmatter === null ? emptyFrontmatterDoc() : parseFrontmatterDoc(split.block);
@@ -369,6 +382,8 @@ export function migrateConcept(
       text: renderDocument(doc, stripDuplicateHeading(split.body, title!)),
       audiences: audience.filter((a) => a !== "public"),
       changed: true,
+      demoted: oldStatus === "approved" && status === "draft",
+      successor: typeof ksor["superseded_by"] === "string" ? ksor["superseded_by"] : null,
     },
   };
 }
@@ -382,10 +397,21 @@ export function migrateSummary(path: string, text: string): ConceptResult {
     split.frontmatter !== null &&
     Object.keys(split.frontmatter).length === 1 &&
     split.frontmatter["type"] === "Summary";
-  if (already) return { ok: true, outcome: { text, audiences: [], changed: false } };
+  if (already) {
+    return {
+      ok: true,
+      outcome: { text, audiences: [], changed: false, demoted: false, successor: null },
+    };
+  }
   return {
     ok: true,
-    outcome: { text: `---\ntype: Summary\n---\n${body}`, audiences: [], changed: true },
+    outcome: {
+      text: `---\ntype: Summary\n---\n${body}`,
+      audiences: [],
+      changed: true,
+      demoted: false,
+      successor: null,
+    },
   };
 }
 
@@ -421,6 +447,41 @@ const INSTANCE_ORDER = [
   "version",
 ];
 
+export type InstanceNameResult =
+  | { readonly ok: true; readonly name: string }
+  | { readonly ok: false; readonly why: string; readonly fix: string };
+
+/**
+ * The record's machine identity, from the pre-profile frontmatter or — when it
+ * declared none — the directory it lives in. ONE derivation, because the
+ * database read needs the same answer the rewritten instance will carry
+ * (`name:` is `tenant_id` and `corpus_id` both, in format 1 as in format 2).
+ *
+ * The two failing states get two messages. Blaming the directory for a
+ * declared-but-invalid `name:` states a falsehood about a directory that is
+ * fine and prescribes adding a key that is already there (product principle 4).
+ */
+export function instanceNameOf(
+  fm: Readonly<Record<string, unknown>>,
+  directory: string,
+): InstanceNameResult {
+  const declared = str(fm["name"]);
+  if (declared !== null) {
+    if (INSTANCE_NAME.test(declared)) return { ok: true, name: declared };
+    return {
+      ok: false,
+      why: `\`name: ${declared}\` is not ${INSTANCE_NAME.source} — it is the machine identity every citation carries, so it is ascii lowercase letters, digits and hyphens`,
+      fix: "correct `name:` in instance.md and run it again",
+    };
+  }
+  if (INSTANCE_NAME.test(directory)) return { ok: true, name: directory };
+  return {
+    ok: false,
+    why: `no usable \`name:\` — it is the machine identity every citation carries, and the directory name (${directory}) is not ${INSTANCE_NAME.source}`,
+    fix: "add `name: <this-record>` (ascii lowercase letters, digits and hyphens) to instance.md and run it again",
+  };
+}
+
 export function migrateInstance(text: string, ctx: InstanceContext): InstanceResult {
   const path = "instance.md";
   const refusals: Refusal[] = [];
@@ -450,13 +511,9 @@ export function migrateInstance(text: string, ctx: InstanceContext): InstanceRes
     };
   }
 
-  const name = str(fm["name"]) ?? (INSTANCE_NAME.test(ctx.directory) ? ctx.directory : null);
-  if (name === null || !INSTANCE_NAME.test(name)) {
-    refuse(
-      `no usable \`name:\` — it is the machine identity every citation carries, and the directory name (${ctx.directory}) is not ${INSTANCE_NAME.source}`,
-      "add `name: <this-record>` (ascii lowercase letters, digits and hyphens) to instance.md and run it again",
-    );
-  }
+  const identity = instanceNameOf(fm, ctx.directory);
+  const name = identity.ok ? identity.name : null;
+  if (!identity.ok) refuse(identity.why, identity.fix);
   const title = str(fm["title"]) ?? firstHeading(split.body);
   if (title === null) {
     refuse(
@@ -516,6 +573,14 @@ function hasProfileShape(fm: Readonly<Record<string, unknown>>): boolean {
   const ksor = fm["ksor"];
   if (typeof ksor !== "object" || ksor === null || Array.isArray(ksor)) return false;
   return Array.isArray((ksor as Record<string, unknown>)["audience"]);
+}
+
+/** A profile-shaped document's `ksor.superseded_by`, or null. */
+function successorOf(fm: Readonly<Record<string, unknown>>): string | null {
+  const ksor = fm["ksor"];
+  if (typeof ksor !== "object" || ksor === null || Array.isArray(ksor)) return null;
+  const successor = (ksor as Record<string, unknown>)["superseded_by"];
+  return typeof successor === "string" ? successor : null;
 }
 
 function audiencesOf(fm: Readonly<Record<string, unknown>>): readonly string[] {

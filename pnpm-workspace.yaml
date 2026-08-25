@@ -9,9 +9,14 @@ catalog:
   # guard-invariants rule 6 enforces that.
   typescript: 7.0.2
   vitest: ^4.1.10
-  # Reserved pins, not yet consumed by any package: zod and Standard Schema
-  # land with the first validated public API (research/primitives-proposal.md §2).
-  zod: ^4.4.3
+  # zod: EXACT pin, for the same reason `yaml` is one. The record module is
+  # copied byte-for-byte into the scaffold's site (decision 18), the site pins
+  # its own dependencies exactly, and the two halves of ONE rule set validating
+  # the same frontmatter under two different zod versions is precisely the
+  # state that decision exists to prevent. Under `^4.4.3` the first 4.5.0 split
+  # them with nothing red; record-module-drift now asserts catalog, site
+  # manifest and scaffold lock are the same string.
+  zod: 4.4.3
   "@standard-schema/spec": ^1.1.0
   "@types/node": ^24.13.3
   # yaml (ISC, zero deps): the record is real YAML — the profile's `ksor:` block
