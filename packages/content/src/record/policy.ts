@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { actorKind } from "./actor.js";
+import { nearest } from "./near-miss.js";
 import type { Refusal } from "./refusal.js";
 import { parseYamlFile } from "./yaml-file.js";
 
@@ -59,32 +60,12 @@ function isMapping(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Edit distance, capped: only a near miss earns a "did you mean". */
-function distance(a: string, b: string): number {
-  let previous = [...Array(b.length + 1).keys()];
-  for (let i = 1; i <= a.length; i += 1) {
-    const row = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      row[j] = Math.min(
-        (previous[j] ?? 0) + 1,
-        (row[j - 1] ?? 0) + 1,
-        (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    previous = row;
-  }
-  return previous[b.length] ?? 0;
-}
-
 function closedKeys(value: unknown, where: string, path: string, refusals: Refusal[]): void {
   if (!isMapping(value)) return;
   const allowed = POLICY_KEYS[where] ?? [];
   for (const key of Object.keys(value)) {
     if (allowed.includes(key)) continue;
-    const near = allowed
-      .map((a) => [a, distance(a, key)] as const)
-      .filter(([, d]) => d <= 2)
-      .sort((x, y) => x[1] - y[1])[0]?.[0];
+    const near = nearest(key, allowed, 2) ?? undefined;
     refusals.push({
       slug: SLUG,
       path,

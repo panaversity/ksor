@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { isIndividualActor } from "./actor.js";
 import { parseInstant } from "./instant.js";
+import { nearest } from "./near-miss.js";
 import { sortRefusals, type Refusal, type RefusalSlug } from "./refusal.js";
 
 export const RESERVED_TYPES = [
@@ -171,34 +172,6 @@ const PROFILE_KEYS = [
   "stale_after",
   "ksor",
 ] as const;
-
-/** Edit distance — only a NEAR miss earns a refusal, so a genuine extension key is kept. */
-function distance(a: string, b: string): number {
-  let previous = [...Array(b.length + 1).keys()];
-  for (let i = 1; i <= a.length; i += 1) {
-    const row = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      row[j] = Math.min(
-        (previous[j] ?? 0) + 1,
-        (row[j - 1] ?? 0) + 1,
-        (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    previous = row;
-  }
-  return previous[b.length] ?? 0;
-}
-
-/** The allowed key nearest to `key`, within `max` edits; null when none is close. */
-function nearest(key: string, allowed: readonly string[], max: number): string | null {
-  let best: readonly [string, number] | null = null;
-  for (const candidate of allowed) {
-    if (candidate === key) return null;
-    const d = distance(candidate, key);
-    if (d <= max && (best === null || d < best[1])) best = [candidate, d];
-  }
-  return best === null ? null : best[0];
-}
 
 export function conceptIdOf(path: string): string {
   return path.replace(/^knowledge\//, "").replace(/\.md$/, "");
