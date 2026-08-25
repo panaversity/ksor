@@ -20,7 +20,10 @@ Governance:
   and `llms-full.txt`. Every target kind is judged now.
 - A section whose every document had been taken down stayed in the door's
   `outline` with `child_count: 0`, while the site pruned the folder entirely.
-  Denial binds inside the admission walk, so both surfaces refuse it.
+  Denial binds inside the admission walk, so both surfaces refuse it. **This
+  moves the serving predicate's digest**, so a record with a calibrated
+  `vector_floor` will refuse to boot until `ksor calibrate` is re-run — the
+  candidate set search sees is unchanged, but the tripwire cannot know that.
 
 Reading order — the site and the door disagreed three ways, and now share one
 rule asserted row by row: folders interleave with documents instead of
