@@ -45,7 +45,7 @@ import {
   UNDESCRIBED_RECORD,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
-import { refusalBody } from "./refusal-body.js";
+import { notReadyReason, refusalBody } from "./refusal-body.js";
 import { buildServer, recordIsUndescribed } from "./server.js";
 import type { Composition } from "./compose.js";
 
@@ -147,6 +147,58 @@ export function resolveSecurity(bind: { host: string; port: number }): Security 
   return { hosts, origins };
 }
 
+/**
+ * The DNS-rebind decision, as a value: `null` to proceed, or the refusal.
+ *
+ * Pulled out of the middleware so it can be tested at all — and because both
+ * halves of it were wrong in the same way. The comparison is CASE-FOLDED, since
+ * a Host is case-insensitive (RFC 9110 §4.2.3) and an origin's scheme and host
+ * are too (RFC 6454 §4), while the allowlist is an exact `Set` lookup: a door
+ * bound to `localhost` refused a client that wrote `LocalHost`. And the refusal
+ * now carries its remedy, like every other refusal this door issues — the pair
+ * used to answer `{"error":"host not allowed"}`, naming neither the value seen
+ * nor the variable that decides, which is how a case-folding bug presents as an
+ * unexplained total outage (review finding 4).
+ *
+ * The offending value is echoed because it is the CALLER's own header; the
+ * allowlist is not, because that is the operator's configuration and they can
+ * read it where they set it.
+ */
+export function rebindRefusal(
+  security: Security,
+  host: string | undefined,
+  origin: string | undefined,
+): { status: 421 | 403; body: { error: string } } | null {
+  if (security.hosts !== null && !security.hosts.has((host ?? "").toLowerCase())) {
+    return {
+      status: 421,
+      body: {
+        error:
+          `host not allowed: ${JSON.stringify(host ?? "")} is not in this door's Host allowlist. ` +
+          "This gate exists so a browser cannot reach a loopback server through a rebound DNS " +
+          "name. Set KSOR_ALLOWED_HOSTS to the host(s) clients use, or reach the door on the " +
+          "address it is bound to.",
+      },
+    };
+  }
+  // A same-origin or non-browser request carries no Origin at all; only a
+  // request that names one has to be on the list.
+  if (security.origins !== null && origin !== undefined) {
+    if (!security.origins.has(origin.toLowerCase())) {
+      return {
+        status: 403,
+        body: {
+          error:
+            `origin not allowed: ${JSON.stringify(origin)} is not in this door's Origin ` +
+            "allowlist. Set KSOR_ALLOWED_ORIGINS to the browser origin(s) that may call this " +
+            "server; a non-browser client sends no Origin and is unaffected.",
+        },
+      };
+    }
+  }
+  return null;
+}
+
 export async function runHttp(composition: Composition): Promise<ServerType> {
   const auth: Auth = buildAuth(process.env);
   // Say where the signing keys come from, at BOOT. Appending one vendor's path
@@ -188,8 +240,7 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     );
   }
   const security = resolveSecurity(bind);
-  const { ctx, instance, pool, spaceSkipReason, requestedViewer, version, verifyBoot } =
-    composition;
+  const { ctx, bootVerified, instance, pool, requestedViewer, version, verifyBoot } = composition;
 
   // Fail-soft env (envInt), never Number(env ?? default): a set-but-empty
   // var (routine with `gcloud --set-env-vars`) or a typo must fall back, not
@@ -216,15 +267,26 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // concurrent checkouts, and /ready is unauthenticated and outside /mcp's
   // in-flight cap — the pool-exhaustion amplifier this was written to prevent,
   // rebuilt by an off-by-one-field (round-4 review of #43).
-  let readyProbe: { settledAt: number | null; verdict: Promise<boolean> } | null = null;
-  const readiness = (): Promise<boolean> => {
+  // The verdict CARRIES the rejection, rather than collapsing it to a boolean:
+  // `false` threw away the only thing that distinguishes "the database is
+  // asleep" from "this record's governance cannot be honoured", and the handler
+  // then guessed — always the same way, always the network. `compose` learned
+  // this lesson when it stopped deferring refusals; the probe had not (review
+  // finding 1).
+  //
+  // A discriminated result, not "the error, or null for ready": something that
+  // rejected with a falsy value would then read as READY, which is the one
+  // direction a readiness gate must never fail in.
+  type Verdict = { readonly ok: true } | { readonly ok: false; readonly error: unknown };
+  let readyProbe: { settledAt: number | null; verdict: Promise<Verdict> } | null = null;
+  const readiness = (): Promise<Verdict> => {
     if (readyProbe !== null) {
       // In flight: share it, however long it takes.
       if (readyProbe.settledAt === null) return readyProbe.verdict;
       // Settled recently: serve the cached verdict.
       if (Date.now() - readyProbe.settledAt < READY_TTL_MS) return readyProbe.verdict;
     }
-    const entry: { settledAt: number | null; verdict: Promise<boolean> } = {
+    const entry: { settledAt: number | null; verdict: Promise<Verdict> } = {
       settledAt: null,
       // An instance whose boot checks could not run is NOT ready —
       // that is what the word means, and reporting green let a platform route
@@ -245,8 +307,8 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
           ),
         ),
       ).then(
-        () => true,
-        () => false,
+        () => ({ ok: true }) as const,
+        (error: unknown) => ({ ok: false, error }) as const,
       ),
     };
     // Stamp on COMPLETION, so the TTL measures the age of an ANSWER.
@@ -271,27 +333,19 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // DNS-rebinding validation as middleware — Host AND Origin (the shape the
   // SDK points to; its transport-level option is deprecated).
   app.use("*", async (c, next) => {
-    if (security.hosts !== null && !security.hosts.has(c.req.header("host") ?? "")) {
-      return c.json({ error: "host not allowed" }, 421);
-    }
-    if (security.origins !== null) {
-      const origin = c.req.header("origin");
-      // A same-origin/non-browser request carries no Origin; a cross-origin
-      // request carries one and must be on the allowlist.
-      if (origin !== undefined && !security.origins.has(origin)) {
-        return c.json({ error: "origin not allowed" }, 403);
-      }
-    }
+    const refusal = rebindRefusal(security, c.req.header("host"), c.req.header("origin"));
+    if (refusal !== null) return c.json(refusal.body, refusal.status);
     await next();
   });
 
   app.get("/live", (c) => c.json({ live: true }));
 
-  app.get("/ready", async (c) =>
-    (await readiness())
+  app.get("/ready", async (c) => {
+    const verdict = await readiness();
+    return verdict.ok
       ? c.json({ ready: true })
-      : c.json({ ready: false, reason: "content store unreachable" }, 503),
-  );
+      : c.json({ ready: false, reason: notReadyReason(verdict.error) }, 503);
+  });
 
   // /health discloses corpus internals AND the calibrated floor VALUE — the
   // measured gate constant an attacker would tune probes against. Wherever
@@ -323,16 +377,27 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     }
     return c.json({
       corpus_id: instance.corpusId,
-      abstain_gate:
-        instance.abstain.vectorFloor === null
-          ? "OFF (no floor declared — will not refuse out-of-corpus questions)"
-          : instance.abstain.vectorFloor === "uncalibrated"
-            ? "REFUSING (declared but uncalibrated — run calibrate and paste the floor)"
-            : `floor ${instance.abstain.vectorFloor}`,
+      // A deferred instance refuses 100% of requests and this body otherwise
+      // read entirely normal — corpus, gate, auth, all fine. /ready knows, but
+      // /ready answers a load balancer; /health is what a person curls when
+      // they want to know what is wrong (review finding 5).
+      boot_checks: bootVerified()
+        ? "passed"
+        : "NOT PASSED — every request is being refused until schema, governance, the audience " +
+          "list and the embedding space all verify; the reason is in this server's logs",
+      // The SAME decision as the boot line, taken by the same function: this
+      // was a second hand-written copy of the ladder and it had the same hole —
+      // a floor with no digest reported as `floor 0.631` on a door refusing
+      // every search (review, 2026-08-25).
+      abstain_gate: abstainPosture(instance.abstain.vectorFloor, instance.abstain.floorDigest),
+      // Read from the composition PER REQUEST, not destructured at boot: the
+      // guard runs inside the deferred set now, so a value copied here would
+      // report "unverified" for the life of an instance that had since
+      // verified.
       embedding_space:
-        spaceSkipReason === null
+        composition.spaceSkipReason === null
           ? `${instance.embeddingModel}/d${instance.embeddingDim} ok`
-          : `${instance.embeddingModel}/d${instance.embeddingDim} unverified (check skipped: ${spaceSkipReason})`,
+          : `${instance.embeddingModel}/d${instance.embeddingDim} unverified (check skipped: ${composition.spaceSkipReason})`,
       auth: auth.mode,
     });
   });
@@ -439,7 +504,18 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
 
   const mcp = bodyLimit({
     maxSize: maxBodyBytes,
-    onError: (c) => c.json({ error: "request body too large" }, 413),
+    // The limit and the knob, not just the verdict: a caller told only "too
+    // large" cannot tell whether to split their request or ask the operator to
+    // raise the cap (review finding 6).
+    onError: (c) =>
+      c.json(
+        {
+          error:
+            `request body too large — this door accepts at most ${maxBodyBytes} bytes. ` +
+            "Send a smaller request, or raise KSOR_MAX_BODY_BYTES on the server.",
+        },
+        413,
+      ),
   });
 
   /**
@@ -616,7 +692,9 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   // Only when the assumption behind the default has stopped holding.
   const snapshot = snapshotPosture(ctx.ring.active, loopback);
   if (snapshot !== null) console.error(bootLine("snapshot", snapshot));
-  console.error(bootLine("abstain", abstainPosture(instance.abstain.vectorFloor)));
+  console.error(
+    bootLine("abstain", abstainPosture(instance.abstain.vectorFloor, instance.abstain.floorDigest)),
+  );
   console.error(bootLine("serving", `http://${bind.host}:${bind.port}/mcp`));
 
   // Drain: close the listener FIRST, then the pool in its callback — the pool

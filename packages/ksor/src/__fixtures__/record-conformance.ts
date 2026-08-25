@@ -307,6 +307,15 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-deprecator-unauthorised knowledge/bad.md"],
   },
   {
+    // Accepted in silence before decision 27's row retired: the orphan rule
+    // asks whether the parent FILE is in the tree and the generated `index.md`
+    // is committed, so it passed — and then no surface published it, because
+    // staging gathers companions of admitted CONCEPTS and an index is not one.
+    name: "ksor-attachment-of-index",
+    files: base({ "knowledge/policies/index.summary.md": "---\ntype: Summary\n---\n\nShort.\n" }),
+    expected: ["ksor-attachment-of-index knowledge/policies/index.summary.md"],
+  },
+  {
     // The state that used to PASS: the document names itself as its owner and
     // withdraws itself. `knowledge/bad.md` sits outside the POLICY's only
     // `ownership` scope (`policies`), so the record resolves no owner for it —

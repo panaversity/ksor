@@ -233,6 +233,20 @@ CREATE TABLE takedown_denylist (
     applied_at        TIMESTAMPTZ,
     revoked_ledger_id TEXT,
     revoked_at        TIMESTAMPTZ,
+    -- What the ledger expects of the FILE, as the latest amendment left it
+    -- (record spec §5). `present` is the ordinary case. `removed` says the
+    -- document was withdrawn and then deliberately deleted — a state the boot
+    -- gate must not read as an orphaned denial, because the honest answer to
+    -- "is there still a node with this id?" is no, forever. Without this column
+    -- every such denial refused `ksor ingest` and `ksor serve` permanently, and
+    -- the remedy the refusal printed (`--removed`) moves no row, so the only
+    -- escape was to un-withdraw the document (review 2026-08-25).
+    --
+    -- It does NOT weaken the denial: `removed` rows stay in force and the
+    -- DENIED seam never reads this column. It records what happened to the
+    -- FILE, not whether the withdrawal still stands.
+    expected   TEXT NOT NULL DEFAULT 'present'
+                 CONSTRAINT takedown_expected_values CHECK (expected IN ('present','removed')),
     PRIMARY KEY (tenant_id, corpus_id, stable_id)
 );
 

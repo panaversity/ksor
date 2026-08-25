@@ -133,7 +133,7 @@ describe.runIf(adminDsn !== "")(
       );
       await migrated.query(
         "ALTER TABLE takedown_denylist DROP COLUMN ledger_id, DROP COLUMN actor," +
-          " DROP COLUMN applied_at, DROP COLUMN revoked_ledger_id, DROP COLUMN revoked_at",
+          " DROP COLUMN applied_at, DROP COLUMN revoked_ledger_id, DROP COLUMN revoked_at, DROP COLUMN expected",
       );
       await migrated.query("ALTER TABLE sources DROP COLUMN frontmatter");
       await migrated.query("DROP POLICY IF EXISTS takedown_write ON takedown_denylist");

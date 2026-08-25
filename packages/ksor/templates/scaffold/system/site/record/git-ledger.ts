@@ -100,8 +100,25 @@ export function historicLedger(root: string): HistoricLedger {
  * it. Taking the NEWEST would have done the opposite on both counts.
  */
 function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
+  // TWO paths for one file, because git means two different things by "path"
+  // here and each call is right on its own:
+  //
+  //   `git show <rev>:<path>` and `ls-tree --full-tree` read a path relative to
+  //   the REPOSITORY ROOT — hence `atRoot`, built from `--show-prefix`.
+  //
+  //   a `git log -- <pathspec>` is relative to the CWD, and the cwd is already
+  //   the record root — hence `LEDGER`, bare.
+  //
+  // Prefixing both asked `git log` for `docs-sor/docs-sor/.ksor/takedowns.yaml`
+  // whenever a record sat below its repository root, which is an ordinary
+  // shape. A pathspec matching nothing is not an ERROR: `git log` exits 0 and
+  // prints nothing, so the baseline came back EMPTY and non-null — verified,
+  // holding nothing — and a deleted denial republished with the build exiting
+  // 0. Every case in the test file was `mkdtemp` + `git init` in ONE directory,
+  // where the prefix is always empty, so no number of cases in that shape could
+  // have caught it (found in review, 2026-08-25).
   const prefix = (git(root, ["rev-parse", "--show-prefix"]) ?? "").trim();
-  const file = `${prefix}${LEDGER}`;
+  const atRoot = `${prefix}${LEDGER}`;
   // `--full-history` because `git log -- <path>` SIMPLIFIES by default: a merge
   // TREESAME to a parent is followed through that parent alone, so a branch
   // whose net effect on the ledger was nil is pruned whole — a denial added and
@@ -114,11 +131,11 @@ function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
   // newer one, and across branches the default ordering is by commit DATE,
   // which need not follow ancestry. Topological order does, so "oldest" means
   // the ancestor rather than whichever machine's clock was behind.
-  const commits = git(root, ["log", "--full-history", "--topo-order", "--format=%H", "--", file]);
+  const commits = git(root, ["log", "--full-history", "--topo-order", "--format=%H", "--", LEDGER]);
   if (commits === null) return null;
   const seen = new Map<string, LedgerBaselineEntry>();
   for (const sha of commits.split("\n").filter((s) => s !== "")) {
-    const text = git(root, ["show", `${sha}:${file}`]);
+    const text = git(root, ["show", `${sha}:${atRoot}`]);
     if (text === null) {
       // `git show` failing means one of two things, and they used to be one
       // silent `continue`: the commit DELETED the ledger (expected — it has no
@@ -127,7 +144,7 @@ function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
       // prints nothing when the path is absent — so an unreadable version stops
       // being counted as a verified empty one. Asked only on failure, so the
       // ordinary walk still costs one git call per commit.
-      const listed = git(root, ["ls-tree", "--full-tree", "--name-only", sha, "--", file]);
+      const listed = git(root, ["ls-tree", "--full-tree", "--name-only", sha, "--", atRoot]);
       if (listed !== null && listed.trim() === "") continue;
       return null;
     }

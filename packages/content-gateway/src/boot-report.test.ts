@@ -105,7 +105,7 @@ describe("authPosture", () => {
 
 describe("abstainPosture — the line that decides whether answers can be trusted", () => {
   it("spells out the CONSEQUENCE of no floor, not just the state", () => {
-    const out = abstainPosture(null);
+    const out = abstainPosture(null, null);
     expect(out).toContain("OFF");
     // "OFF (no floor)" told the operator a status. What they need to know is
     // that an out-of-corpus question comes back answered and cited.
@@ -113,13 +113,27 @@ describe("abstainPosture — the line that decides whether answers can be truste
   });
 
   it("distinguishes a declared-but-uncalibrated floor from an absent one", () => {
-    expect(abstainPosture("uncalibrated")).toContain("REFUSING");
-    expect(abstainPosture("uncalibrated")).not.toBe(abstainPosture(null));
+    expect(abstainPosture("uncalibrated", null)).toContain("REFUSING");
+    expect(abstainPosture("uncalibrated", null)).not.toBe(abstainPosture(null, null));
   });
 
   it("states the number and what it means", () => {
-    expect(abstainPosture(0.631)).toContain("0.631");
-    expect(abstainPosture(0.631)).toContain("abstains");
+    expect(abstainPosture(0.631, "sha256:abc")).toContain("0.631");
+    expect(abstainPosture(0.631, "sha256:abc")).toContain("abstains");
+  });
+
+  it("does NOT claim an armed gate for a floor whose digest is gone", () => {
+    // A floor measured against a predicate that has since changed is not a
+    // floor: the gate reports `uncalibrated` and every search is refused. The
+    // line said "floor 0.631 — below it, this record abstains", so the operator
+    // was told the record was abstaining at a measured threshold while the door
+    // was in fact answering nothing at all — the honest state reported as the
+    // healthy one, which is "honest absence, never silent weakness" inverted.
+    // It is also the FIRST state a real adopter meets after upgrading.
+    const out = abstainPosture(0.631, null);
+    expect(out, "must not read as armed").not.toMatch(/below it, this record abstains/);
+    expect(out).toContain("REFUSING");
+    expect(out, "and the way out").toContain("ksor calibrate");
   });
 });
 

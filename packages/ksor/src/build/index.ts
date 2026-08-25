@@ -21,6 +21,8 @@ import {
   type Refusal,
 } from "@panaversity/ksor-content/record";
 
+import { attachmentKindOf } from "@panaversity/ksor-content";
+
 import { exitCodes } from "../index.js";
 import { gitFacts, ignoredGovernance } from "./git.js";
 
@@ -236,8 +238,12 @@ export function runBuild(
       audience: c.audience,
       text: record.files.get(c.path) ?? "",
     })),
+    // The CANONICAL rule, never a copy of it (decision 18). The regex that used
+    // to be here was the fourth hand copy of the suffix list and carried the
+    // same `.summary.mdx` gap as the third, which this branch had just removed.
+    // It also matched on the PATH, where the rule is about the base name.
     companions: [...record.files]
-      .filter(([p]) => /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(p))
+      .filter(([p]) => attachmentKindOf(path.basename(p)) !== null)
       .map(([p, text]) => ({ path: p.slice("knowledge/".length), text })),
     assets: [...(record.assets ?? new Map())].map(([p, bytes]) => ({
       path: p.slice("knowledge/".length),

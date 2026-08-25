@@ -170,12 +170,34 @@ export function snapshotPosture(activeKeyId: string, loopback: boolean): string 
  * corpus does not cover. Say that in the words an operator would use to decide,
  * not as a status code.
  */
-export function abstainPosture(floor: number | "uncalibrated" | null): string {
+export function abstainPosture(
+  floor: number | "uncalibrated" | null,
+  /**
+   * The predicate the floor was MEASURED against. `null` beside a number is the
+   * stale state: the number exists and the gate does not honour it.
+   */
+  floorDigest: string | null,
+): string {
   if (floor === null) {
     return "OFF — no floor calibrated; out-of-corpus questions will be answered, not refused";
   }
   if (floor === "uncalibrated") {
     return "REFUSING EVERYTHING — instance.md declares vector_floor: uncalibrated";
+  }
+  // A NUMBER is not a calibration. Without the digest of the predicate it was
+  // measured against, the gate treats this floor as uncalibrated and refuses
+  // every search — and this line printed "floor 0.631 — below it, this record
+  // abstains", telling the operator the record was abstaining at a measured
+  // threshold while the door was answering nothing at all. The honest state
+  // reported as the healthy one, which is this product's own rule inverted; and
+  // it is the FIRST state an adopter meets after the predicate changes under a
+  // floor they already had.
+  if (floorDigest === null) {
+    return (
+      `REFUSING EVERYTHING — vector_floor: ${floor} carries no digest, so it was measured ` +
+      "against a predicate that has since changed and is not honoured; run `ksor calibrate` " +
+      "and paste the new floor"
+    );
   }
   return `floor ${floor} — below it, this record abstains`;
 }

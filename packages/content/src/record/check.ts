@@ -164,7 +164,27 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     const kind = attachmentKindOf(base);
     if (kind === null) continue;
     const dir = path.slice(0, path.lastIndexOf("/") + 1);
-    const parentId = conceptIdOf(`${dir}${parentDocumentOf(base)!}`);
+    const parentName = parentDocumentOf(base)!;
+    const parentId = conceptIdOf(`${dir}${parentName}`);
+    // A generated index is not a document (record spec §1): no route, no node,
+    // no llms.txt line, no governance of its own — so nothing can attach to it,
+    // and decision 27 retires the `index.summary.md` row from the canonical
+    // table with the authored index. Refused BY NAME rather than left to the
+    // orphan rule, which cannot see it: the orphan rule asks whether the parent
+    // FILE is in the tree, and the generated `index.md` is committed, so it
+    // passed. Everything downstream then declined to publish it — staging
+    // gathers companions of admitted CONCEPTS only, and `index.md` is not one —
+    // so the file was accepted, stamped into the lock's `companions[]` and into
+    // `build_id`, and rendered nowhere, ever, in silence.
+    if (parentName === "index.md") {
+      refusals.push({
+        slug: "ksor-attachment-of-index",
+        path,
+        why: `\`${dir}index.md\` is a GENERATED index, not a document — it has no route, no node and no governance of its own, so nothing can be attached to it; this file would be accepted here, stamped into \`build.lock.json\` and published on no surface at all`,
+        fix: `attach it to a document instead: move the prose into a named concept such as \`${dir}overview.md\` and rename this to \`${dir}overview.summary.md\`, or delete it`,
+      });
+      continue;
+    }
     if (!concepts.has(parentId) && !record.files.has(`${KNOWLEDGE}${parentId}.md`)) {
       refusals.push({
         slug: "ksor-attachment-orphan",
@@ -249,7 +269,17 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   } else {
     const ledger = ledgerResult.ledger;
     ledgerEntries = ledgerDigests(ledger);
-    if (policy !== null) refusals.push(...checkLedgerActors(ledger, policy.takedownActors));
+    // The baselines are the WHOLE of the departed-authority rule, and this call
+    // used to omit them — two arguments, so `baselines` took its default and the
+    // accepted set was always empty, while `options.ledgerBaselines` sat right
+    // here and was forwarded to `checkLedgerAppendOnly` one line below. The
+    // parameter is required now, so the next caller that forgets does not
+    // compile instead of quietly getting the strict rule.
+    if (policy !== null) {
+      refusals.push(
+        ...checkLedgerActors(ledger, policy.takedownActors, options.ledgerBaselines ?? []),
+      );
+    }
     refusals.push(
       ...checkLedgerAgainstTree(ledger, {
         documentIds: new Set([...concepts.keys(), ...unreadable]),

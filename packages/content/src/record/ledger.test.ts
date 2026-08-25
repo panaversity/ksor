@@ -228,11 +228,11 @@ describe("checkLedgerActors", () => {
 
   it("every entry's `by` — denial, revocation, amendment — must be a takedown authority", () => {
     const l = ledgerOf(DENIAL + REVOCATION + AMENDMENT);
-    const r = checkLedgerActors(l, ["human:ciso"]);
+    const r = checkLedgerActors(l, ["human:ciso"], []);
     expect(r.map((x) => x.slug)).toEqual(["ksor-takedown-unauthorised"]);
     expect(r[0]?.why).toMatch(/human:cfo/);
     expect(r[0]?.why).toMatch(/2026-08-26T10:00:00Z-d4e5f6/);
-    expect(checkLedgerActors(l, ["human:ciso", "human:cfo"])).toEqual([]);
+    expect(checkLedgerActors(l, ["human:ciso", "human:cfo"], [])).toEqual([]);
   });
 
   /**

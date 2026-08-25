@@ -203,9 +203,13 @@ lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development.
 **Fresh covers the CONTROL files, not only the documents**: `instance.md`,
 `.ksor/governance.yaml` and `.ksor/takedowns.yaml` are hashed against
 `instance_sha256`, `policy_sha256` and `ledger_sha256`, every asset against
-`assets[]`, and the lock's
+`assets[]`, every COMMITTED `index.md` against `indexes[]` — the same four
+lists `ksor ingest` compares, so the two surfaces refuse the same tree — and
+the lock's
 `ledger_entries` are passed to the checker as a `ksor-ledger-amended`
-baseline. Without that, a takedown was lifted by deleting four lines and the
+baseline. The index comparison is against the committed bytes, never against
+the per-viewer set the stage regenerates: the lock records the WHOLE record's
+indexes, so a restricted build's shorter index is correct and must not refuse. Without that, a takedown was lifted by deleting four lines and the
 committed lock still validated (reproduced 2026-08-25) — a freshness claim
 that cannot see the ledger is not a freshness claim. The site reads GIT
 HISTORY as the second baseline, exactly as the emitted checker does (record

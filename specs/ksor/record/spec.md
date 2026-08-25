@@ -443,7 +443,9 @@ timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-footnote-unkeyed`,
 `ksor-reserved-name`, `ksor-index-stale` (check only),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
-`ksor-attachment-orphan`, `ksor-link-widens` (a link to a concept whose
+`ksor-attachment-orphan`, `ksor-attachment-of-index` (a companion named after
+a directory's generated `index.md`, which is not a document and can carry
+nothing — decision 27), `ksor-link-widens` (a link to a concept whose
 audience this document's readers do not reach — and a link to an ASSET whose
 NEAREST ANCESTOR DIRECTORY holding any concept holds not one reachable: an
 asset declares no audience, so it inherits one by position, and a public

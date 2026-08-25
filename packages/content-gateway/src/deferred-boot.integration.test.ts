@@ -53,6 +53,26 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     ).toBeLessThan(handler.indexOf("mcpHandler.fetch"));
   });
 
+  it("/health says the boot checks have not passed, instead of reading normal", () => {
+    // During a deferred boot the door refuses 100% of requests and /health
+    // reported a perfectly ordinary posture — corpus, gate, auth — with nothing
+    // saying so. /ready knows, but /ready answers a load balancer; /health is
+    // what a person curls (review finding 5).
+    const health = HTTP.slice(
+      HTTP.indexOf('app.get("/health"'),
+      HTTP.indexOf('app.get("/.well-known'),
+    );
+    expect(health, "the state must be ON the body").toContain("boot_checks");
+  });
+
+  it("the 413 names the knob that raises it", () => {
+    // "request body too large" and nothing else: not the limit, not the
+    // variable (review finding 6). Errors are documentation.
+    const limit = HTTP.slice(HTTP.indexOf("const mcp = bodyLimit"), HTTP.indexOf("const isListen"));
+    expect(limit).toContain("KSOR_MAX_BODY_BYTES");
+    expect(limit, "and the value it is set to").toContain("maxBodyBytes");
+  });
+
   it("builds the refusal body through the one function that decides what may leave", () => {
     // Deliberately NOT an assertion about the body's contents. This file greps
     // source, which is the right instrument for "does the check sit before
@@ -103,21 +123,32 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     expect(calls, "one call, inside bootChecks (plus the import)").toBe(1);
   });
 
-  it("a refusal is never deferred — the whole class, not two names", () => {
-    // AudienceError and TextSearchConfigMismatch are decided by rows the store
-    // ANSWERED with: deferring them printed "content store unreachable
-    // (AudienceError)" about a database that had just replied, and left the
-    // door retrying forever a check no retry can change.
+  it("a refusal is never deferred, and decides that with the SHARED table", () => {
+    // This used to spell the classes out here, and `refusal-body.ts` spelled a
+    // DIFFERENT set out for the wire — so two of them were refused by one and
+    // unrecognised by the other, and a governance verdict was served to callers
+    // as "the content store is unavailable". The membership itself is asserted
+    // where the table lives (`refusal-body.test.ts`); what belongs here is that
+    // compose reads that table rather than keeping a second copy.
     const guard = COMPOSE.slice(COMPOSE.indexOf("await withPgRetry(bootChecks"));
     const beforeDeferral = guard.slice(0, guard.indexOf("boot checks DEFERRED:"));
-    for (const refusal of [
-      "SchemaVersionError",
-      "GovernanceGateError",
-      "AudienceError",
-      "TextSearchConfigMismatch",
-    ]) {
-      expect(beforeDeferral, `${refusal} must be re-thrown, not deferred`).toContain(refusal);
-    }
+    expect(beforeDeferral, "the shared predicate, not a re-listed set").toContain(
+      "if (isRefusal(error)) throw error;",
+    );
+    expect(
+      COMPOSE.split("instanceof SchemaVersionError").length - 1,
+      "no second copy of the list",
+    ).toBe(0);
+  });
+
+  it("logs the WHOLE deferred cause, not just its class", () => {
+    // `pg` reports most connection failures as a bare `Error`, so "content
+    // store unreachable (Error)" told an operator nothing — not the host, the
+    // user, or whether it was DNS, TLS or a password. The detail existed only
+    // from the first REQUEST onwards, so an instance nobody called never
+    // explained itself at all.
+    const deferral = COMPOSE.slice(COMPOSE.indexOf("boot checks DEFERRED:"));
+    expect(deferral.slice(0, deferral.indexOf("let verified"))).toContain("error.stack");
   });
 
   /**
@@ -136,8 +167,12 @@ describe("deferred boot checks gate the door, not just the probe", () => {
       storedTextSearchConfig: "deferred",
       assertGovernanceServable: "deferred",
       servingPolicy: "deferred",
-      // Its own try/catch: an unreachable store is a warning that rides /health.
-      checkEmbeddingSpace: "caught",
+      // Moved into the set (review finding 3): it was the one fail-closed check
+      // that a cold start turned OFF for the life of the process, so a door that
+      // recovered served cosine across two embedding spaces with the calibrated
+      // floor measured in a space the record no longer used — and /ready said
+      // true throughout.
+      checkEmbeddingSpace: "deferred",
       // Never throws — Promise.allSettled, logs what it could not open.
       prewarmPool: "opt-in",
     };
@@ -221,6 +256,15 @@ describe("a cold start against an unreachable store comes up NOT READY — it do
         // …and the ask is remembered, so the boot report can state what this
         // door will serve once the store answers.
         expect(composition.requestedViewer).toEqual(["public", "internal"]);
+        // The embedding-space guard is the one fail-closed check a cold start
+        // used to switch off permanently: caught, reduced to a skip reason, and
+        // never retried, so /ready answered true on an instance whose vectors
+        // had never been compared with the space its floor was calibrated in.
+        // While the checks are deferred it must say it has not RUN — a reason
+        // that reads like a verdict is what let this sit unnoticed.
+        expect(composition.spaceSkipReason, "not a verdict — it has not run").toMatch(
+          /not yet verified/i,
+        );
       } finally {
         await composition.pool.end();
       }

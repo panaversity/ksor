@@ -30,12 +30,40 @@ export type ViewerRefusal =
   | "ksor-viewer-unregistered"
   | "ksor-audience-identifier-invalid";
 
+/**
+ * A refusal about WHO this door serves.
+ *
+ * Same two-audience shape as `GovernanceGateError`, for the same reason: the
+ * OPERATOR needs to see what the record actually registers, and a CALLER — who
+ * under `KSOR_AUTH=disabled-public` is anyone who can reach the port — does not
+ * need the record's audience vocabulary read out to them because the operator
+ * mistyped an environment variable. The names of a record's audiences are its
+ * governance structure, not a public fact about it.
+ *
+ * So `registered` arrives through its own parameter and lands on `message`
+ * alone; `wire` is the text this constructor was handed. The viewer list itself
+ * is NOT record content — it is the operator's own env — and stays in both.
+ */
 export class AudienceError extends Error {
   override readonly name: string = "AudienceError";
   readonly slug: ViewerRefusal;
-  constructor(slug: ViewerRefusal, message: string) {
-    super(`${slug}: ${message}`);
+  /** The refusal minus the record's own audience registry. */
+  readonly wire: string;
+
+  constructor(slug: ViewerRefusal, wire: string, registered: readonly string[] | null = null) {
+    const text = `${slug}: ${wire}`;
+    super(
+      registered === null
+        ? text
+        : // "none registered" is not padding: it separates a record with no
+          // policy row from one whose policy simply lacks this entry, which are
+          // different fixes.
+          `${text}\n  this record registers, for your logs: ${
+            registered.length === 0 ? "(none registered)" : registered.join(", ")
+          }`,
+    );
     this.slug = slug;
+    this.wire = text;
   }
 }
 
@@ -69,8 +97,9 @@ export function validateViewer(registry: readonly string[], viewer: readonly str
   if (unknown.length > 0) {
     throw new AudienceError(
       "ksor-viewer-unregistered",
-      `the viewer list names ${unknown.map((u) => `\`${u}\``).join(", ")}, which the policy's registry (${registry.length === 0 ? "none registered" : registry.join(", ")}) does not declare — serving an unknown identifier would have to guess how much of the record it may show\n` +
+      `the viewer list names ${unknown.map((u) => `\`${u}\``).join(", ")}, which this record's audience registry does not declare — serving an unknown identifier would have to guess how much of the record it may show\n` +
         "  fix: use registered audiences, or register it in .ksor/governance.yaml and re-ingest",
+      registry,
     );
   }
   return [...viewer];

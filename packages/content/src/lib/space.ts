@@ -2,9 +2,17 @@
  * The boot-time embedding-space guard (oracle SC/lib/space.py, the
  * load-bearing slice): one database = one embedding space. Serving cosine
  * against vectors from a different model or dimension is nonsense wearing
- * a similarity score, so a PROVEN mismatch refuses to serve; an
- * unreachable or half-applied database is a SKIP with a named reason —
- * "slow, not down" — never a boot loop.
+ * a similarity score, so a PROVEN mismatch refuses to serve; a half-applied
+ * database is a SKIP with a named reason — "slow, not down" — never a boot
+ * loop.
+ *
+ * An UNREACHABLE database used to be the same kind of skip, and that is the
+ * one case where "skip" was the wrong word: the guard had not run, so the
+ * skip was not a verdict about the space but the absence of one — and the
+ * caller could not tell the two apart. `storeUnreachable` separates them.
+ * The door's deferred-boot machinery, which did not exist when this was
+ * converted, gives a third option between refusing to boot and giving up
+ * for the life of the process: report NOT READY and try again.
  */
 
 import type pg from "pg";
@@ -36,6 +44,13 @@ export class EmbeddingSpaceMismatch extends Error {
 
 export interface SpaceCheck {
   readonly checked: boolean;
+  /**
+   * The guard could not RUN — the statement itself failed, so this says nothing
+   * about the embedding space. Required, not optional: a caller has to decide
+   * between "retry" and "conclude", and every other `checked: false` here is a
+   * real answer about a half-provisioned database.
+   */
+  readonly storeUnreachable: boolean;
   readonly reason: string | null;
   /**
    * The TYPED half-applied-schema signal (oracle parity — review round 2,
@@ -66,6 +81,7 @@ export async function checkEmbeddingSpace(
     // The reason rides an unauthenticated /health body — class name only.
     return {
       checked: false,
+      storeUnreachable: true,
       reason: `guard statement failed (${error instanceof Error ? error.name : "Error"})`,
       missingTables: [],
     };
@@ -74,6 +90,7 @@ export async function checkEmbeddingSpace(
   if (!byTable.has("chunks")) {
     return {
       checked: false,
+      storeUnreachable: false,
       reason: "chunks.embedding not found (schema not applied to this database?)",
       missingTables: [],
     };
@@ -101,10 +118,11 @@ export async function checkEmbeddingSpace(
   if (!byTable.has("node_centroids")) {
     return {
       checked: false,
+      storeUnreachable: false,
       reason:
         "node_centroids.embedding not found (schema half-applied — apply the rest of the DDL)",
       missingTables: ["node_centroids"],
     };
   }
-  return { checked: true, reason: null, missingTables: [] };
+  return { checked: true, storeUnreachable: false, reason: null, missingTables: [] };
 }

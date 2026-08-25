@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ATTACHMENT_SUFFIXES } from "../lib/attachment-rule.js";
-import { checkRecord, type RecordFiles } from "./check.js";
+import { checkRecord, type CheckOptions, type RecordFiles } from "./check.js";
+import { ledgerDigests, parseLedger } from "./ledger.js";
 
 const POLICY = `version: "0.1"
 audiences:
@@ -226,6 +227,58 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     },
   );
 
+  /**
+   * `index.md` is GENERATED (record spec §1): no route, no node, no llms.txt
+   * line, no governance of its own. So it cannot carry a summary, and decision
+   * 27 retires the `index.summary.md` row from the canonical table with it.
+   *
+   * Nothing refused it. `check.ts` skips `index.md` as a concept, so the
+   * companion pass read `finance/index.summary.md` as a summary of
+   * `finance/index` — and the orphan check passed, because the GENERATED
+   * `index.md` is committed and therefore present in the tree. Link-widening
+   * was skipped too (`concepts.get(parentId)` is undefined). Staging only
+   * gathers companions of admitted CONCEPTS and `index.md` is not one, so the
+   * file was never staged, never rendered, and ingest made no node: `pnpm
+   * check` called the record well-formed and the summary appeared nowhere,
+   * ever, silently — while still landing in `build.lock.json`'s `companions[]`
+   * and inside `build_id`, stamped as published content that is not published.
+   */
+  it("index.summary.md is refused by name — a generated index carries no summary", () => {
+    const SUMMARY = "---\ntype: Summary\n---\n\nShort.\n";
+    const base = { "knowledge/a.md": doc("A", PUBLIC), "knowledge/finance/b.md": doc("B", PUBLIC) };
+    const dirs = ["knowledge/finance"];
+    // The generated indexes are COMMITTED, which is what a real checkout holds
+    // and what made this state pass: `checkRecord` skips `index.md` as a
+    // concept, so the orphan check asks only whether the FILE is in the tree —
+    // and it is. Building the record first and committing what it generates is
+    // the only way this test meets the state an author would actually create.
+    const indexes = checkRecord(record(base, dirs), { mode: "build" }).indexes;
+    const withIndexes = { ...base, ...Object.fromEntries(indexes) };
+    expect(
+      slugs(withIndexes, dirs, "check"),
+      "the committed indexes must be fresh, or this test is measuring staleness",
+    ).toEqual([]);
+
+    const out = checkRecord(
+      record({ ...withIndexes, "knowledge/finance/index.summary.md": SUMMARY }, dirs),
+      { mode: "build" },
+    );
+    expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
+      "ksor-attachment-of-index knowledge/finance/index.summary.md",
+    ]);
+    // The remedy has to be actionable: attach it to a document, not to the map.
+    expect(out.refusals[0]?.fix).toMatch(/overview/);
+    // Never mistaken for an ORPHAN — the parent file is right there, which is
+    // exactly why the orphan rule could not catch this.
+    expect(out.refusals.map((r) => r.slug)).not.toContain("ksor-attachment-orphan");
+    // At the bundle root too, where the id has no directory in front of it.
+    expect(
+      checkRecord(record({ ...withIndexes, "knowledge/index.summary.md": SUMMARY }, dirs), {
+        mode: "build",
+      }).refusals.map((r) => r.slug),
+    ).toEqual(["ksor-attachment-of-index"]);
+  });
+
   it("a dotfile with no stem is no companion — it falls through to the honest refusal", () => {
     // `attachmentKindOf(".summary.md")` is null by the canonical rule (it has no
     // parent to attach to), where the regex matched it and invented a parent
@@ -317,6 +370,56 @@ describe("checkRecord — one rule set (record spec §6)", () => {
         slugs({ "knowledge/a.md": withPointer(status), "knowledge/b.md": doc("B", PUBLIC) }),
       ).toEqual(["ksor-supersession-strands knowledge/a.md"]);
     }
+  });
+
+  /**
+   * A departed takedown authority must not hold the record hostage — the whole
+   * point of `checkLedgerActors`'s `accepted` baseline (`ledger.ts`: "history
+   * is not re-litigated, and that is the whole of the rule").
+   *
+   * It was DEAD. `checkRecord` called `checkLedgerActors(ledger,
+   * policy.takedownActors)` with two arguments, so `baselines` took its `= []`
+   * default and the accepted set was always empty — while `options
+   * .ledgerBaselines` sat right there and was forwarded to
+   * `checkLedgerAppendOnly` on the very next line. `ledger.test.ts` passes
+   * baselines directly and was green throughout, which is decision 18's shape
+   * again: each side internally consistent, the seam between them untested.
+   *
+   * The refusal also stated the dead branch as fact — its `fix` promised "an
+   * entry an earlier build accepted is history and is never judged again" when
+   * nothing could accept anything. That is product principle 4 inverted, so it
+   * is asserted here as TEXT and not only as behaviour.
+   *
+   * This is the `mode: "build"` seam `ksor build` itself calls, so a record
+   * that gets past it is a record that builds.
+   */
+  it("a departed takedown authority's accepted entry BUILDS; nothing accepted still refuses", () => {
+    const entry = `- id: 2026-08-25T10:00:00Z-aaaaaa\n  stable_id: knowledge/a\n  scope: node\n  expected: present\n  by: human:departed\n  at: 2026-08-25T10:00:00Z\n`;
+    const files = { "knowledge/a.md": doc("A", PUBLIC), ".ksor/takedowns.yaml": entry };
+    // The policy names only the CURRENT authority — the personnel change.
+    const current = POLICY.replace("actors: [human:ciso]", "actors: [human:current]");
+    const parsed = parseLedger(entry, ".ksor/takedowns.yaml");
+    if (!parsed.ok) throw new Error("fixture ledger does not parse");
+    const entries = ledgerDigests(parsed.ledger);
+
+    const run = (ledgerBaselines: CheckOptions["ledgerBaselines"]): string[] =>
+      checkRecord(
+        {
+          files: new Map(
+            Object.entries({ "instance.md": INSTANCE, ".ksor/governance.yaml": current, ...files }),
+          ),
+          dirs: [],
+        },
+        { mode: "build", ledgerBaselines },
+      ).refusals.map((r) => r.slug);
+
+    // The lock says a build PASSED on this exact text: history, never re-judged.
+    expect(run([{ source: "build.lock.json", entries, accepted: true }])).toEqual([]);
+    // Git history proves only that a line was committed, which anyone with
+    // write access can do — so it grants nothing, and neither does no baseline.
+    expect(run([{ source: "git history", entries }])).toEqual(["ksor-takedown-unauthorised"]);
+    expect(run([])).toEqual(["ksor-takedown-unauthorised"]);
+    expect(run(undefined)).toEqual(["ksor-takedown-unauthorised"]);
   });
 
   it("the ledger: an unauthorised actor, a dangling entry, and a shrink against a baseline", () => {

@@ -283,6 +283,9 @@ function writeLock(
   const documents: { path: string; sha256: string }[] = [];
   const companions: { path: string; sha256: string }[] = [];
   const assets: { path: string; sha256: string }[] = [];
+  // The §8 indexes: the only files under knowledge/ the build WRITES rather
+  // than reads, so the lock records the bytes it wrote (record/lock.ts).
+  const indexes: { path: string; sha256: string }[] = [];
   const walk = (dir: string, prefix: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const rel = `${prefix}${entry.name}`;
@@ -294,6 +297,8 @@ function writeLock(
       if (entry.isDirectory()) walk(path.join(dir, entry.name), `${rel}/`);
       else if (/\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(entry.name)) {
         companions.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
+      } else if (entry.name === "index.md") {
+        indexes.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
       } else if (entry.name.endsWith(".md") && entry.name !== "index.md") {
         documents.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
       } else if (!entry.name.endsWith(".md")) {
@@ -322,6 +327,7 @@ function writeLock(
         documents,
         companions,
         assets,
+        indexes,
       },
       null,
       2,
@@ -1329,5 +1335,90 @@ describe("the stage lock refuses rather than waiting forever", () => {
     rmSync(lockFile, { force: true });
     expect(await exited, stderr).toBe(0);
     expect(walkFiles(fixture.stage)).toContain("public-policy.md");
+  });
+});
+
+/**
+ * The lock's freshness claim has to cover the INDEXES, which are the one thing
+ * under `knowledge/` the build writes rather than reads — and the one thing the
+ * site never copies, because it regenerates its own per-viewer set. So nothing
+ * else in this file would notice a committed index that no longer matches what
+ * `ksor build` wrote, and the site published it while `ksor ingest` refused the
+ * same tree `ksor-lock-stale` (2026-08-25 review). Fail-closed on the door
+ * side, but decision 19 asks what the OTHER surface does, in both directions.
+ */
+describe("the lock's freshness claim covers the generated indexes", () => {
+  let work: string;
+  let fixture: Fixture;
+  let committed: string;
+
+  /** What `ksor build` would have written and committed for `guides/`. */
+  const GUIDES_INDEX =
+    "# Guides\n\n* [Getting started GUIDETITLE](getting-started.md) - GUIDEDESC\n";
+  /**
+   * …and for the record root, where `ksor build` lists the WHOLE record —
+   * the internal concept included, because the lock is a statement about the
+   * record and not about any one viewer's slice of it.
+   */
+  const ROOT_INDEX =
+    "# Acme Handbook\n\n* [Public policy PUBTITLE1](public-policy.md) - PUBDESC1 in one line\n* [Internal note CANARYTITLE](internal-note.md) - CANARYDESC internal only\n";
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-lock-indexes-")));
+    fixture = writeRecord(path.join(work, "record"));
+    committed = path.join(fixture.root, "knowledge", "guides", "index.md");
+    writeFileSync(committed, GUIDES_INDEX);
+    writeFileSync(path.join(fixture.root, "knowledge", "index.md"), ROOT_INDEX);
+    writeLock(fixture.root);
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  it("an index edited since the lock refuses, naming it", () => {
+    // The shape that produces this: a merge resolution leaves one branch's
+    // bytes in place and nobody re-runs `ksor build`.
+    writeFileSync(committed, `${GUIDES_INDEX}* [A document from the other branch](other.md)\n`);
+    const r = stage(fixture);
+    writeFileSync(committed, GUIDES_INDEX);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain("guides/index.md");
+    expect(existsSync(fixture.stage), "a refused build left a stage").toBe(false);
+  });
+
+  it("an index the lock never saw refuses too", () => {
+    const extra = path.join(fixture.root, "knowledge", "secret", "index.md");
+    writeFileSync(extra, "# Secret\n");
+    const r = stage(fixture);
+    rmSync(extra);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain("secret/index.md");
+  });
+
+  /**
+   * …and the comparison is against the COMMITTED bytes, never against the ones
+   * the stage is about to write. The lock records what `ksor build` generated
+   * for the WHOLE record; a per-viewer stage regenerates a SHORTER index by
+   * design — `[public]` here omits the internal concept and the internal
+   * folder. Comparing the staged bytes would therefore refuse every correct
+   * build of any record that has a restricted document, which is most of them.
+   */
+  it("…and a viewer whose staged index is legitimately shorter still builds", () => {
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    const staged = readFileSync(path.join(fixture.stage, "index.md"), "utf8");
+    // The two are different objects, and only one of them is the lock's
+    // business: the committed index lists the internal concept, the [public]
+    // stage's regenerated one may not. Comparing the staged bytes against the
+    // lock would refuse this build — a correct build — by design.
+    expect(staged, "the staged index is the whole record's, so this proves nothing").not.toContain(
+      "CANARYTITLE",
+    );
+    expect(readFileSync(path.join(fixture.root, "knowledge", "index.md"), "utf8")).toContain(
+      "CANARYTITLE",
+    );
+    expect(staged).not.toBe(ROOT_INDEX);
+    // …and staging left the committed indexes exactly where the lock left them.
+    expect(readFileSync(committed, "utf8")).toBe(GUIDES_INDEX);
   });
 });

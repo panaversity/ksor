@@ -34,6 +34,18 @@ export interface DenialState {
   readonly stableId: string;
   readonly denial: Denial;
   /**
+   * What the ledger expects of the FILE, as the latest AMENDMENT left it —
+   * which is not `denial.expected`, the value the author first wrote.
+   *
+   * `inForce` is the only thing that applies amendments, and it keys by entry
+   * id, so this is read from there rather than re-derived. Carrying the
+   * authored value instead is what left `expected` stranded in the file: every
+   * piece was locally correct and the amended value simply never reached the
+   * row, so a deliberately deleted document looked like an orphaned denial to
+   * the boot gate forever (review 2026-08-25).
+   */
+  readonly expected: Denial["expected"];
+  /**
    * The revocation entry that lifted it, or null while it is in force.
    *
    * `by` is here because the §7 row for a lifted denial must name the person
@@ -47,7 +59,12 @@ export interface DenialState {
 
 /** The state each denied stable_id ends in after the whole ledger, in first-seen order. */
 export function foldLedger(ledger: Ledger): DenialState[] {
-  const live = new Set(inForce(ledger).map((d) => d.id));
+  const standing = inForce(ledger);
+  const live = new Set(standing.map((d) => d.id));
+  // `expected` as amendments left it, by entry id. A revoked denial is absent
+  // here and falls back to what it declared; the orphan check never reads a
+  // revoked row, so that fallback decides nothing.
+  const amended = new Map(standing.map((d) => [d.id, d.expected]));
   const revocations = new Map<
     string,
     { readonly id: string; readonly by: string; readonly at: string }
@@ -61,17 +78,18 @@ export function foldLedger(ledger: Ledger): DenialState[] {
   const byStableId = new Map<string, DenialState>();
   for (const entry of ledger.entries) {
     if (entry.kind !== "denial") continue;
-    const standing = live.has(entry.id);
+    const inForceNow = live.has(entry.id);
     const current = byStableId.get(entry.stableId);
     // A stable_id is denied while ANY denial naming it is in force, so a revoked
     // later entry must not overwrite an earlier one that still stands.
-    if (current !== undefined && current.revokedBy === null && !standing) continue;
+    if (current !== undefined && current.revokedBy === null && !inForceNow) continue;
     byStableId.set(entry.stableId, {
       stableId: entry.stableId,
       denial: entry,
+      expected: amended.get(entry.id) ?? entry.expected,
       // `inForce` drops a denial only on revocation, so a denial that is not
       // live has a revocation naming it.
-      revokedBy: standing ? null : (revocations.get(entry.id) ?? null),
+      revokedBy: inForceNow ? null : (revocations.get(entry.id) ?? null),
     });
   }
   return [...byStableId.values()];
@@ -153,13 +171,14 @@ export async function applyLedger(
     const d = state.denial;
     const r = await client.query(
       `INSERT INTO takedown_denylist
-         (tenant_id, corpus_id, stable_id, scope, reason, ledger_id, actor, applied_at, revoked_ledger_id, revoked_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9::timestamptz)
+         (tenant_id, corpus_id, stable_id, scope, reason, ledger_id, actor, applied_at, revoked_ledger_id, revoked_at, expected)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9::timestamptz, $10)
        ON CONFLICT (tenant_id, corpus_id, stable_id) DO UPDATE
          SET scope = EXCLUDED.scope,
              reason = EXCLUDED.reason,
              ledger_id = EXCLUDED.ledger_id,
              actor = EXCLUDED.actor,
+             expected = EXCLUDED.expected,
              applied_at = CASE WHEN takedown_denylist.ledger_id IS DISTINCT FROM EXCLUDED.ledger_id
                                THEN now() ELSE takedown_denylist.applied_at END,
              revoked_ledger_id = EXCLUDED.revoked_ledger_id,
@@ -169,6 +188,7 @@ export async function applyLedger(
           OR takedown_denylist.ledger_id IS DISTINCT FROM EXCLUDED.ledger_id
           OR takedown_denylist.actor IS DISTINCT FROM EXCLUDED.actor
           OR takedown_denylist.revoked_ledger_id IS DISTINCT FROM EXCLUDED.revoked_ledger_id
+          OR takedown_denylist.expected IS DISTINCT FROM EXCLUDED.expected
        RETURNING (xmax = 0) AS inserted`,
       [
         instance.tenantId,
@@ -180,6 +200,7 @@ export async function applyLedger(
         d.by,
         state.revokedBy?.id ?? null,
         state.revokedBy?.at ?? null,
+        state.expected,
       ],
     );
     if (r.rowCount === 0) continue;

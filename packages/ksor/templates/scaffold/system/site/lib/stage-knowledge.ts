@@ -131,13 +131,18 @@ function planStage(recordDir: string, development: boolean): StagePlan {
 
   const documents = new Map<string, string>();
   const companions = new Map<string, string>();
+  // The COMMITTED indexes. Nothing else here reads them — the stage regenerates
+  // its own — so they exist in this map for one reason: the lock says which
+  // bytes `ksor build` wrote into them, and a build looking at different ones is
+  // looking at a record nothing checked.
+  const indexFiles = new Map<string, string>();
   for (const file of record.files.keys()) {
     if (!file.startsWith(KNOWLEDGE)) continue;
     const rel = file.slice(KNOWLEDGE.length);
     const name = path.basename(rel);
     if (COMPANION.test(name)) companions.set(rel, path.join(recordDir, rel));
-    else if (name.endsWith(".md") && name !== "index.md")
-      documents.set(rel, path.join(recordDir, rel));
+    else if (name === "index.md") indexFiles.set(rel, path.join(recordDir, rel));
+    else if (name.endsWith(".md")) documents.set(rel, path.join(recordDir, rel));
   }
   // The lock covers every asset, because this build publishes its bytes — so
   // the stage's asset set must be the SET THE LOCK WAS BUILT FROM, not a second
@@ -190,7 +195,14 @@ function planStage(recordDir: string, development: boolean): StagePlan {
   // LAST, whether the lock describes this tree file by file. A tree that is not
   // a legal record is not eligible for that question: it was refused above by
   // the rule it actually breaks (see `assertLockCoversTree`).
-  if (lock !== null) assertLockCoversTree(lock, { documents, companions, assets: assetFiles });
+  if (lock !== null) {
+    assertLockCoversTree(lock, {
+      documents,
+      companions,
+      assets: assetFiles,
+      indexes: indexFiles,
+    });
+  }
   const policy = checked.policy;
   // Lifecycle is evaluated at the lock's `as_of` for a build (staleness leaves
   // the open web on the next build; a scheduled rebuild is the operator's

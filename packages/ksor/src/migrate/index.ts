@@ -33,6 +33,8 @@ import {
   type Refusal,
 } from "@panaversity/ksor-content/record";
 
+import { attachmentKindOf } from "@panaversity/ksor-content";
+
 import { exitCodes } from "../index.js";
 import { applyProse, type PackageManager } from "../init/manager.js";
 import { ACTOR_FORM, isWritableActor } from "./actor.js";
@@ -170,7 +172,6 @@ function parseArgs(args: readonly string[]): Parsed | string {
   return { instance, write, actor, approveBy, generatedAt, writeSite, attributions };
 }
 
-const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 // `.md` only. `loadRecord` reads `.md` and `.yaml` as text and nothing else, so
 // an `.mdx` never enters `record.files` at all — and the record checker refuses
 // one under `knowledge/` by name (`ksor-file-type`: the bundle is CommonMark,
@@ -290,8 +291,13 @@ export async function runMigrate(
     if (!rel.startsWith("knowledge/") || !rel.endsWith(".md")) continue;
     const name = rel.slice(rel.lastIndexOf("/") + 1);
     if (name === "log.md") continue;
-    if (COMPANION.test(name)) {
-      if (!name.endsWith(".summary.md")) continue;
+    // The canonical rule, never a copy of the suffix list (decision 18): this
+    // was the FIFTH hand copy, with the same `.summary.mdx` gap as the rest.
+    const kind = attachmentKindOf(name);
+    if (kind !== null) {
+      // Every other kind is `.yaml` and cannot reach here anyway — the loop
+      // takes `.md` only — but the rule decides that, not this branch.
+      if (kind !== "summary") continue;
       const out = migrateSummary(rel, text);
       // Its refusals were DROPPED here, so a summary declaring governance was
       // silently left alone by the one branch that had just decided to refuse

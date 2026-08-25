@@ -59,6 +59,7 @@ const lockSchema = z
     documents: z.array(hashed.loose()),
     companions: z.array(hashed.loose()),
     assets: z.array(hashed.loose()),
+    indexes: z.array(hashed.loose()),
   })
   .loose();
 
@@ -197,6 +198,8 @@ export function assertLockCoversTree(
     readonly documents: ReadonlyMap<string, string>;
     readonly companions: ReadonlyMap<string, string>;
     readonly assets: ReadonlyMap<string, string>;
+    /** The COMMITTED `knowledge/**\/index.md`, not the ones this build will stage. */
+    readonly indexes: ReadonlyMap<string, string>;
   },
 ): void {
   const stale = firstStale(lock, files);
@@ -216,6 +219,7 @@ function firstStale(
     readonly documents: ReadonlyMap<string, string>;
     readonly companions: ReadonlyMap<string, string>;
     readonly assets: ReadonlyMap<string, string>;
+    readonly indexes: ReadonlyMap<string, string>;
   },
 ): string | null {
   for (const [kind, entries, tree] of [
@@ -225,6 +229,18 @@ function firstStale(
     // record whose diagrams carry the substance a lock that stops at the
     // markdown does not cover what the build actually serves.
     ["asset", lock.assets, files.assets],
+    // …and the INDEXES, which are the one thing under `knowledge/` the build
+    // WRITES rather than reads. The site never copies them — it regenerates a
+    // per-viewer set — so this comparison is the only thing that can see a
+    // committed index drift away from the bytes `ksor build` wrote (a merge
+    // resolution, and nobody re-ran the build). `ksor ingest` has always
+    // compared them; the site published what the door then refused.
+    //
+    // Against the COMMITTED bytes, never against the staged ones: the lock
+    // records the WHOLE record's indexes, and a per-viewer stage regenerates a
+    // legitimately shorter one, so comparing what the stage is about to write
+    // would refuse every correct build of a record that restricts anything.
+    ["index", lock.indexes, files.indexes],
   ] as const) {
     const locked = new Map(entries.map((e) => [e.path, e.sha256] as const));
     for (const [rel, abs] of tree) {

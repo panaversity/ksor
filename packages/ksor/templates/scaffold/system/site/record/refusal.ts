@@ -28,6 +28,7 @@ export const REFUSAL_SLUGS = [
   "ksor-index-stale",
   "ksor-attachment-frontmatter",
   "ksor-attachment-orphan",
+  "ksor-attachment-of-index",
   "ksor-link-widens",
   "ksor-supersession-strands",
   "ksor-takedown-unauthorised",

@@ -88,10 +88,18 @@ ALTER TABLE takedown_denylist
     ADD COLUMN IF NOT EXISTS actor             TEXT,
     ADD COLUMN IF NOT EXISTS applied_at        TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS revoked_ledger_id TEXT,
-    ADD COLUMN IF NOT EXISTS revoked_at        TIMESTAMPTZ;
+    ADD COLUMN IF NOT EXISTS revoked_at        TIMESTAMPTZ,
+    -- A carried row predates the ledger entirely, so `present` is the only
+    -- honest default: nothing in the repository yet says the file was deleted.
+    -- The first ingest folds the ledger and writes what it actually says.
+    ADD COLUMN IF NOT EXISTS expected          TEXT NOT NULL DEFAULT 'present';
+ALTER TABLE takedown_denylist
+    ADD CONSTRAINT takedown_expected_values CHECK (expected IN ('present','removed'));
 
 COMMENT ON COLUMN takedown_denylist.ledger_id IS
   'The .ksor/takedowns.yaml entry that wrote this row. NULL = written before the ledger existed; the boot gate refuses it (ksor-takedown-unledgered) until an ingest attaches one by stable_id.';
+COMMENT ON COLUMN takedown_denylist.expected IS
+  'What the ledger expects of the FILE, as the latest amendment left it: present, or removed for a document withdrawn and then deliberately deleted. The orphan check skips `removed`; the DENIED seam never reads it, so a removed document stays denied.';
 COMMENT ON COLUMN takedown_denylist.revoked_at IS
   'Set by a revocation entry; the DENIED seam denies only rows where this is NULL. A re-denial clears it — the ledger holds the history, the row holds the state.';
 

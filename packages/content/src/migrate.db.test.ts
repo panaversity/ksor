@@ -85,7 +85,7 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
       "ALTER TABLE ingestion_runs DROP COLUMN build_id, DROP COLUMN policy, DROP COLUMN policy_sha256, DROP COLUMN ledger_ids",
     );
     await pool.query(
-      "ALTER TABLE takedown_denylist DROP COLUMN ledger_id, DROP COLUMN actor, DROP COLUMN applied_at, DROP COLUMN revoked_ledger_id, DROP COLUMN revoked_at",
+      "ALTER TABLE takedown_denylist DROP COLUMN ledger_id, DROP COLUMN actor, DROP COLUMN applied_at, DROP COLUMN revoked_ledger_id, DROP COLUMN revoked_at, DROP COLUMN expected",
     );
     // …and back past 2.3 and 2.4 too, or those steps run against a database
     // that ALREADY has what they add. Each of the ADDITIVE steps is written so

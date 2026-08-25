@@ -137,6 +137,9 @@ export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 export { runContentCli } from "./commands.js";
 
 export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
+// The canonical attachment rule, for the surfaces OUTSIDE this package that
+// must not hand-copy it (decision 18) — the CLI's build lock and migrate.
+export { attachmentKindOf, type AttachmentKind } from "./lib/attachment-rule.js";
 export { withProbeDeadline, ProbeDeadlineError } from "./db.js";
 export {
   assertGovernanceServable,

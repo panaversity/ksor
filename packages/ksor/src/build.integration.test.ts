@@ -4,7 +4,15 @@
  * repository with a first commit — the shape the spec's acceptance names.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -288,6 +296,69 @@ describe("ksor build — what `as_of` does and does not move", () => {
     const b = lockOf(root);
     expect(b.build_id).toBe(a.build_id);
     expect({ ...b, as_of: "" }).toEqual({ ...a, as_of: "" });
+  });
+});
+
+/**
+ * The attachment rule has ONE implementation (`packages/content/src/lib/
+ * attachment-rule.ts`, whose header calls itself canonical) and this package
+ * must not carry a hand copy of the suffix list.
+ *
+ * It has now regressed FOUR times. This branch already removed "a third hand
+ * copy of the attachment list that had already drifted", and two more were
+ * still here afterwards — `build/index.ts`'s lock filter and `migrate/index.ts`'s
+ * `COMPANION` — each carrying the SAME `.summary.mdx` gap the removed one had.
+ *
+ * Neither was observable: `loadRecord` admits only `/\.(md|yaml)$/` (load.ts),
+ * so `.mdx` never reaches `record.files`, and `hygiene.ts` refuses a
+ * dot-prefixed base name, so the other divergence (`attachmentKindOf` requires a
+ * stem, a regex does not) cannot be reached either. Both masks live in
+ * DIFFERENT modules from the copies they hide, which is decision 18's shape
+ * exactly — each side internally consistent, the rule drifting between them.
+ * A behavioural test therefore cannot catch this; the existence of a copy is
+ * the defect, so the copy is what is asserted against.
+ */
+describe("the attachment rule is not re-implemented in this package", () => {
+  /**
+   * Two or more of these on ONE line is a hand-written attachment list. The
+   * leading dot is left off and backslashes are stripped first, so the regex
+   * form (`\\.(summary\\.md|flashcards\\.yaml|…)`) and a plain array of
+   * suffixes are both caught by the same rule. `summary.mdx` is not listed
+   * separately: it CONTAINS `summary.md`, so listing both would score a line
+   * that names only the mdx form twice.
+   */
+  const MARKERS = ["summary.md", "flashcards.yaml", "quiz.yaml", "slides.yaml"];
+  /** Comments blanked, backslashes dropped: prose ABOUT the rule is not a copy OF it. */
+  const code = (text: string): string =>
+    text
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "")
+      .replaceAll("\\", "");
+
+  const sources = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...sources(abs));
+      else if (entry.name.endsWith(".ts") && !entry.name.includes(".test.")) out.push(abs);
+    }
+    return out;
+  };
+
+  it("no module spells the suffix list out for itself", () => {
+    const src = fileURLToPath(new URL(".", import.meta.url));
+    const offenders = sources(src).flatMap((file) =>
+      code(readFileSync(file, "utf8"))
+        .split("\n")
+        .map((line, i) => ({ line: line.trim(), at: i + 1 }))
+        .filter(({ line }) => MARKERS.filter((m) => line.includes(m)).length >= 2)
+        .map(({ line, at }) => `${path.relative(src, file)}:${at}  ${line}`),
+    );
+    expect(
+      offenders,
+      "each of these re-implements the attachment rule — import `attachmentKindOf` from " +
+        "`@panaversity/ksor-content` instead, so there is one list to keep right",
+    ).toEqual([]);
   });
 });
 

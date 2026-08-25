@@ -836,6 +836,63 @@ describe("ksor migrate — the derived description skips fenced code", () => {
   });
 });
 
+/**
+ * The leak: ONE stray legacy key on an already-profiled document makes
+ * `hasProfileShape` false, and the checker's printed remedy for that is "run
+ * `ksor migrate`". Migrate then rebuilt the whole `ksor:` block from scratch
+ * from the pre-profile keys — so a declared `ksor.audience: [internal]` became
+ * `[public]` (no `visibility:`, so `expandTier` fell to the record default),
+ * `ksor.approval` was deleted, and `generated` was overwritten with
+ * `ksor-migrate/<version>` at now. Exit 0, one `rewrote` line, and `pnpm check`
+ * afterwards said the record was well-formed.
+ *
+ * Critical rule 1 and decision 18's audience leak, reached by obeying the tool.
+ */
+describe("ksor migrate — an existing ksor: block is governance, not scratch", () => {
+  const profiled = (extra: string): readonly (readonly [string, string])[] => [
+    [
+      "instance.md",
+      "---\nformat: 1\nname: acme\naudiences: [public, internal]\n---\n\n# Acme\n\nOne sentence of scope.\n",
+    ],
+    [
+      "knowledge/pay.md",
+      "---\ntype: Document\ntitle: Pay\ndescription: How pay works.\nstatus: stable\n" +
+        "generated: { by: human:kim, at: 2026-08-01T00:00:00Z }\n" +
+        "ksor: { audience: [internal], approval: { by: human:ciso, at: 2026-08-02T00:00:00Z } }\n" +
+        `${extra}---\n\nBody.\n`,
+    ],
+  ];
+
+  it("keeps the declared audience, the approval and the generated stamp", () => {
+    const root = repo(profiled("owner: policy-team\n"));
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(0);
+    const doc = fm(root, "knowledge/pay.md");
+    const ksor = doc["ksor"] as Record<string, unknown>;
+    expect(ksor["audience"], "a restricted document was widened to public").toEqual(["internal"]);
+    expect(ksor["approval"], "the approval an authorised actor gave was deleted").toEqual({
+      by: "human:ciso",
+      at: "2026-08-02T00:00:00Z",
+    });
+    expect(doc["generated"], "migrate claimed it generated content it reformatted").toEqual({
+      by: "human:kim",
+      at: "2026-08-01T00:00:00Z",
+    });
+    // The stray legacy key is what it was asked to move, and it moved.
+    expect(ksor["owner"]).toBe("policy-team");
+  });
+
+  it("refuses when visibility: and an existing ksor.audience name different readers", () => {
+    const root = repo(profiled("visibility: public\n"));
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("ksor-migrate-underivable");
+    expect(r.stderr).toContain("internal");
+    expect(tree(root), "migrate wrote despite refusing").toEqual(before);
+  });
+});
+
 describe("ksor migrate — two reserved names in one directory", () => {
   const collision = (): string =>
     repo([

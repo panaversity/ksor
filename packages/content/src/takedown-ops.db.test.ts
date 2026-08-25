@@ -36,6 +36,21 @@ const LEDGER = `- id: "2026-08-25T10:00:00Z-aaa111"
   reason: "legal request 2026-08"
 `;
 
+/**
+ * The revocation is signed by a DIFFERENT person from the denial, deliberately.
+ *
+ * `ledger-apply` picks the §7 actor with `revoked ? state.revokedBy.by : d.by`
+ * — one expression deciding both the actor and the action — and with one name
+ * in the fixture, changing it to `d.by` produces an identical row. So the
+ * inversion this file exists to catch would be invisible to it (review
+ * finding 7).
+ */
+const REVOKER = "human:dpo";
+const REVOKED_LEDGER =
+  LEDGER +
+  `- id: "2026-08-25T11:00:00Z-bbb222"\n  revokes: "2026-08-25T10:00:00Z-aaa111"\n` +
+  `  by: "${REVOKER}"\n  at: "2026-08-25T11:00:00Z"\n`;
+
 describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
   let pool: pg.Pool;
   let admin: pg.Pool;
@@ -78,12 +93,7 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
    * leak look like correct behaviour instead of surfacing it.
    */
   it("a revoked row is not listed — the list is what is IN FORCE", async () => {
-    const revoked = parseLedger(
-      LEDGER +
-        `- id: "2026-08-25T11:00:00Z-bbb222"\n  revokes: "2026-08-25T10:00:00Z-aaa111"\n` +
-        `  by: "human:ciso"\n  at: "2026-08-25T11:00:00Z"\n`,
-      ".ksor/takedowns.yaml",
-    );
+    const revoked = parseLedger(REVOKED_LEDGER, ".ksor/takedowns.yaml");
     if (!revoked.ok) throw new Error(JSON.stringify(revoked.refusals));
     await runIngest(pool, TENANT, (c) => applyLedger(c, instance, revoked.ledger));
     expect(await listTakedowns(pool, instance)).toEqual([]);
@@ -103,8 +113,60 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
     const act = rows.find((r) => r.action === "takedown_applied");
     expect(act, "the act left a row").toBeDefined();
     expect(act?.actor).toBe("human:ciso");
-    expect(act?.detail.stable_id).toBe("knowledge/withdrawn");
-    expect(act?.detail.ledger_id).toBe("2026-08-25T10:00:00Z-aaa111");
+    expect(act).toMatchObject({
+      actor: "human:ciso",
+      action: "takedown_applied",
+      detail: {
+        stable_id: "knowledge/withdrawn",
+        ledger_id: "2026-08-25T10:00:00Z-aaa111",
+        // WHY it was withdrawn is half of what a governance trail is for, and
+        // the check for it was dropped when this file replaced an older one
+        // (review finding 8).
+        reason: "legal request 2026-08",
+      },
+    });
+  });
+
+  /**
+   * A REVOCATION is a governance act in its own right, and it was asserted
+   * nowhere that runs.
+   *
+   * `ledger-apply.ts` chooses the actor and the action in a single expression;
+   * the only `takedown_revoked` assertion in the repository is over `ledgerActs`
+   * — a pure function on a parsed file, a different code path that never reaches
+   * `applyLedger` or a database. So changing the actor back to the DENIER left
+   * every test green: a lifted denial would have been attributed, in the audit
+   * trail, to the person who imposed it (review finding 7).
+   */
+  it("a revocation's §7 row names the REVOKER, not the person who imposed the denial", async () => {
+    const revoked = parseLedger(REVOKED_LEDGER, ".ksor/takedowns.yaml");
+    if (!revoked.ok) throw new Error(JSON.stringify(revoked.refusals));
+    // Parsed BEFORE the try, so the restore in `finally` cannot throw: a throw
+    // there replaces whichever assertion actually failed, which is the one
+    // thing this test exists to report.
+    const restore = parseLedger(LEDGER, ".ksor/takedowns.yaml");
+    if (!restore.ok) throw new Error(JSON.stringify(restore.refusals));
+    const restored = restore.ledger;
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, revoked.ledger));
+    try {
+      const rows = await readLedger(pool, instance, 50);
+      const act = rows.find((r) => r.action === "takedown_revoked");
+      expect(act, "the revocation left a row of its own").toBeDefined();
+      expect(act).toMatchObject({
+        actor: REVOKER,
+        action: "takedown_revoked",
+        detail: {
+          stable_id: "knowledge/withdrawn",
+          revoked_ledger_id: "2026-08-25T11:00:00Z-bbb222",
+          change: "revoked",
+        },
+      });
+      // The two acts are distinguishable by actor, which is the whole point of
+      // recording one: they must not both name the denier.
+      expect(act?.actor, "the revoker is not the denier").not.toBe("human:ciso");
+    } finally {
+      await runIngest(pool, TENANT, (c) => applyLedger(c, instance, restored));
+    }
   });
 
   it("the ledger is scoped to THIS record, not just the tenant", async () => {

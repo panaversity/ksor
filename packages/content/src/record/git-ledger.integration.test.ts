@@ -10,20 +10,42 @@ import { checkLedgerAppendOnly, parseLedger } from "./ledger.js";
 
 const LEDGER = ".ksor/takedowns.yaml";
 
+const IDENTITY = [
+  ["init.defaultBranch", "main"],
+  ["user.email", "walk@example.test"],
+  ["user.name", "Walk"],
+  ["commit.gpgsign", "false"],
+] as const;
+
 /** A repository of its own per test, with an identity, so no global git config is read. */
 function newRepo(): string {
   const root = mkdtempSync(path.join(tmpdir(), "ksor-git-ledger-"));
   execFileSync("git", ["init", "-q"], { cwd: root, stdio: "pipe" });
   mkdirSync(path.join(root, ".ksor"), { recursive: true });
-  for (const [key, value] of [
-    ["init.defaultBranch", "main"],
-    ["user.email", "walk@example.test"],
-    ["user.name", "Walk"],
-    ["commit.gpgsign", "false"],
-  ] as const) {
+  for (const [key, value] of IDENTITY) {
     execFileSync("git", ["config", "--local", key, value], { cwd: root, stdio: "pipe" });
   }
   return root;
+}
+
+/**
+ * A repository whose RECORD lives one directory DOWN, so `git rev-parse
+ * --show-prefix` is non-empty.
+ *
+ * That is the shape every other case in this file misses, and the miss is
+ * structural rather than unlucky: `mkdtempSync` + `git init` in the SAME
+ * directory always leaves the prefix empty, so a path bug that only appears
+ * with a prefix could not fail here however many cases were added.
+ */
+function newNestedRepo(sub: string): { readonly repo: string; readonly record: string } {
+  const repo = mkdtempSync(path.join(tmpdir(), "ksor-git-nested-"));
+  execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "pipe" });
+  for (const [key, value] of IDENTITY) {
+    execFileSync("git", ["config", "--local", key, value], { cwd: repo, stdio: "pipe" });
+  }
+  const record = path.join(repo, sub);
+  mkdirSync(path.join(record, ".ksor"), { recursive: true });
+  return { repo, record };
 }
 
 function run(root: string, ...args: string[]): string {
@@ -176,5 +198,54 @@ describe("the git baseline is complete, or it says it is not", () => {
     const history = historicLedger(root);
     expect(history.entries?.map((e) => e.id)).toEqual(["td-1"]);
     expect(refusalsIn(root, "[]\n")).toEqual(["ksor-ledger-shrank"]);
+  });
+});
+
+/**
+ * A record is not always its repository's root — `<repo>/docs-sor/` is an
+ * ordinary shape, and it is the one this module got wrong. Two git calls here
+ * need two DIFFERENT paths, which is easy to miss because each is right on its
+ * own: `git show <rev>:<path>` and `ls-tree --full-tree` read a path relative
+ * to the REPOSITORY ROOT, while a `git log -- <pathspec>` is relative to the
+ * CWD, which is already the record root. Prefixing both asked `git log` for
+ * `docs-sor/docs-sor/.ksor/takedowns.yaml`.
+ *
+ * The damage is that a pathspec matching nothing is not an ERROR: `git log`
+ * exits 0 and prints nothing, so `commits` was `""` rather than null, and the
+ * baseline came back EMPTY AND VERIFIED. Delete a denial, delete the lock, and
+ * `ksor build` exits 0 with the denied document published again — the exact
+ * failure this module's header says only history can catch.
+ */
+describe("the git baseline for a record BELOW its repository root", () => {
+  let repo = "";
+
+  afterEach(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("finds the ledger's history, and holds the entry rather than nothing", () => {
+    const nested = newNestedRepo("docs-sor");
+    repo = nested.repo;
+    const { record } = nested;
+    commitTo(record, entry("td-1", "personal data"), "record the denial");
+
+    const history = historicLedger(record);
+    expect(history.repository).toBe(true);
+    // Not `not.toBeNull()`: an EMPTY baseline is non-null, and empty is the bug.
+    expect(
+      history.entries?.map((e) => e.id),
+      "the history baseline is empty for a record below the repo root",
+    ).toEqual(["td-1"]);
+    // A digest proves the VERSION was read, not merely that the id was seen —
+    // so `git show`'s repo-root-relative path still resolves from down here.
+    expect(history.entries?.[0]?.digest, "the version was not read, only its id").not.toBeNull();
+
+    // The refusal that was unreachable: the denial is gone from the ledger.
+    expect(refusalsIn(record, "[]\n")).toEqual(["ksor-ledger-shrank"]);
+  });
+
+  it("still refuses an entry edited in place from down here", () => {
+    const nested = newNestedRepo("teams/legal/record");
+    repo = nested.repo;
+    commitTo(nested.record, entry("td-1", "personal data"), "record the denial");
+    expect(refusalsIn(nested.record, entry("td-1", "tampered"))).toEqual(["ksor-ledger-amended"]);
   });
 });

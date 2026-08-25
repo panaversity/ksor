@@ -19,6 +19,8 @@ import { contentPool, runIngest } from "./db.js";
 import { assertGovernanceServable, GovernanceGateError } from "./governance-gate.js";
 import { grantIngest } from "./grant.js";
 import { instanceOf } from "./ingest/fixtures/record-fixture.js";
+import { applyLedger } from "./ingest/ledger-apply.js";
+import { parseLedger } from "./record/ledger.js";
 import { applySchema } from "./schema.js";
 import type pg from "pg";
 
@@ -293,5 +295,122 @@ describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () =>
       );
     });
     await expect(assertGovernanceServable(pool, instance)).resolves.toBeUndefined();
+  }, 60_000);
+});
+
+/**
+ * The document that was withdrawn AND THEN DELETED — the sequence record spec
+ * §5 sanctions, the scaffold's AGENTS.md documents, and `ksor migrate --write`
+ * produces on its own.
+ *
+ * `takedown_denylist` carried no `expected`, so the orphan check asked only
+ * "does a node with this stable_id exist in this generation?" — and for a
+ * deliberately deleted document the honest answer is no, forever. The denial
+ * stays IN FORCE (an amendment does not revoke, it records what happened to the
+ * file), so the gate fired on every boot and every ingest, permanently. The
+ * printed remedy is `--removed`, which by design moves no row
+ * (`takedown-verb.db.test.ts`), so following it changed nothing: the only state
+ * that cleared the refusal was a REVOCATION — un-withdrawing the document.
+ * `ksor build` and the site stayed green throughout, because
+ * `checkLedgerAgainstTree` accepts `expected: removed` with the path absent, so
+ * this was decision 19's forbidden state with the surfaces INVERTED: the
+ * checker admitted what the door refused (found in review, 2026-08-25).
+ *
+ * Driven through the real chain — `parseLedger` -> `applyLedger` -> the gate —
+ * rather than a hand-seeded row, because the bug lived in the seam between
+ * them: every piece was locally correct and `expected` simply never crossed.
+ */
+describe.runIf(adminDsn !== "")("a denial whose document was deliberately deleted (db)", () => {
+  const DB3 = "ksor_gate_removed";
+  const T3 = "removed-corp";
+  const instance = instanceOf(T3, T3);
+  let pool: pg.Pool;
+  let admin: pg.Pool;
+
+  const DENIED = "knowledge/legal/withdrawn";
+  const KEPT = "knowledge/legal/kept";
+  const entry = (body: string): string =>
+    `- id: ${body.split("\n")[0]!.trim()}\n  by: human:ciso\n  at: 2026-08-25T10:00:00Z\n${body
+      .split("\n")
+      .slice(1)
+      .join("\n")}`;
+  const DENIAL = entry(
+    `d1\n  stable_id: ${DENIED}\n  scope: node\n  expected: present\n  reason: court order\n`,
+  );
+  const AMENDMENT = entry(`a1\n  amends: d1\n  expected: removed\n  reason: file deleted\n`);
+
+  /** The generation as it is AFTER the deletion: the denied document is simply gone. */
+  const putGeneration = async (): Promise<void> => {
+    await runIngest(pool, T3, async (client) => {
+      await client.query(
+        "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1,$1,1)" +
+          " ON CONFLICT (tenant_id, corpus_id) DO UPDATE SET active_generation = 1",
+        [T3],
+      );
+      await client.query(
+        "INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit," +
+          " instance_bundle_sha256, schema_version, ledger_ids)" +
+          " VALUES ($1,$1,1,'active','seed','seed','2.5', ARRAY['d1','a1'])" +
+          " ON CONFLICT (tenant_id, corpus_id, generation) DO NOTHING",
+        [T3],
+      );
+      await client.query(
+        "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind," +
+          " position, audience, doc_status) VALUES ($1,$1,1,$2,'kept','Kept','document',0,ARRAY['public'],'stable')" +
+          " ON CONFLICT DO NOTHING",
+        [T3, KEPT],
+      );
+    });
+  };
+
+  const applyText = async (text: string): Promise<void> => {
+    const parsed = parseLedger(text, ".ksor/takedowns.yaml");
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.refusals));
+    await runIngest(pool, T3, (client) => applyLedger(client, instance, parsed.ledger));
+  };
+
+  beforeAll(async () => {
+    const { Pool } = (await import("pg")).default;
+    admin = new Pool({ connectionString: adminDsn });
+    await admin.query(`DROP DATABASE IF EXISTS ${DB3} WITH (FORCE)`).catch(() => undefined);
+    await admin.query(`CREATE DATABASE ${DB3}`);
+    const url = new URL(adminDsn);
+    url.pathname = `/${DB3}`;
+    pool = contentPool(url.toString(), 4);
+    await applySchema(pool, 1536);
+    await grantIngest(pool, T3);
+    await putGeneration();
+  }, 180_000);
+
+  afterAll(async () => {
+    await pool?.end().catch(() => undefined);
+    await admin?.query(`DROP DATABASE IF EXISTS ${DB3} WITH (FORCE)`).catch(() => undefined);
+    await admin?.end().catch(() => undefined);
+  });
+
+  it("REFUSES while the ledger still expects the document to be present", async () => {
+    // The genuine orphan — a withdrawn document that was RENAMED — must keep
+    // refusing. This half is the guarantee the fix must not trade away.
+    await applyText(DENIAL);
+    await expect(assertGovernanceServable(pool, instance)).rejects.toThrow(/match no document/);
+  }, 60_000);
+
+  it("RESOLVES once an amendment records the document as removed", async () => {
+    await applyText(DENIAL + AMENDMENT);
+    await expect(
+      assertGovernanceServable(pool, instance),
+      "a deletion the record itself documented is not an orphan — and no remedy the refusal " +
+        "prints could ever clear it, because `--removed` moves no row",
+    ).resolves.toBeUndefined();
+  }, 60_000);
+
+  it("the denial is still IN FORCE — recording the deletion never un-withdraws it", async () => {
+    const rows = await runIngest(pool, T3, (client) =>
+      client.query<{ stable_id: string; revoked_at: Date | null }>(
+        "SELECT stable_id, revoked_at FROM takedown_denylist WHERE tenant_id = $1",
+        [T3],
+      ),
+    );
+    expect(rows.rows).toEqual([{ stable_id: DENIED, revoked_at: null }]);
   }, 60_000);
 });

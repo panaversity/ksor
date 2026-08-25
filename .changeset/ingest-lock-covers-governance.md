@@ -29,6 +29,18 @@ containing the list separator, or spelled `*`, is refused
 (`ksor-audience-identifier-invalid`) rather than silently read as a different set
 of audiences.
 
+**A withdrawn-then-deleted document no longer bricks the record.** Deleting a
+document after withdrawing it is the sequence the record spec sanctions, and
+`ksor migrate --write` produces it on its own for any denial whose document is
+already gone. The denylist row carried no record of that, so the boot check read
+"no document with this id" as an orphaned denial and refused `ksor ingest` and
+`ksor serve` permanently — while `ksor build` and the website stayed green. The
+remedy it printed could not clear it: `ksor takedown --removed` records what
+happened to the FILE and moves no row, so the only escape was to un-withdraw the
+document. The row now carries `expected`, and a document the record itself
+documents as removed is no longer read as an orphan. It stays withdrawn: the
+serving predicate never reads that column.
+
 **A migrated database is now the same database as a fresh one.** Nothing compared
 the two; a schema-parity check across columns, constraints, indexes, policies,
 privileges and triggers found the profile's two CHECK constraints carrying

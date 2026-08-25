@@ -29,10 +29,21 @@ export type TransportSecuritySettings = {
  * null when both are unset (no gate; the deployment edge fronts the service).
  */
 export function transportSecurityFromEnv(env: Env = process.env): TransportSecuritySettings | null {
+  // LOWER-CASED, not merely trimmed. A Host is case-insensitive (RFC 9110
+  // §4.2.3) and so are an origin's scheme and host (RFC 6454 §4), while the
+  // gate that reads these is an exact `Set` lookup — so
+  // `KSOR_ALLOWED_HOSTS=MCP.Acme.com`, an ordinary way to write a hostname,
+  // 421'd every client that ever resolved it. A total outage from a valid
+  // setting, and the refusal named neither the value nor this variable
+  // (review finding 4). The door lower-cases the incoming header to match.
+  //
+  // Only the ASCII case folding a hostname can carry: `toLowerCase` is enough
+  // for host names and schemes, which are ASCII by the time they are on the
+  // wire, and an origin has no path whose case could matter.
   const split = (raw: string | undefined): string[] =>
     (raw ?? "")
       .split(",")
-      .map((item) => item.trim())
+      .map((item) => item.trim().toLowerCase())
       .filter((item) => item !== "");
   const allowedHosts = split(env.KSOR_ALLOWED_HOSTS);
   const allowedOrigins = split(env.KSOR_ALLOWED_ORIGINS);

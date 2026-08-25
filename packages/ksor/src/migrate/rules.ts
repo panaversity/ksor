@@ -279,7 +279,7 @@ export function migrateConcept(
       "add `description:` to the frontmatter and run it again",
     );
   }
-  if (generatedAt === null) {
+  if (generatedAt === null && fm["generated"] === undefined) {
     refuse(
       "`generated.at` is the last commit that touched this file, and there is no commit to read — this record is not in a git repository (or the file has never been committed)",
       "commit the record first, or pass --generated-at <instant> to stamp every document with one instant",
@@ -326,25 +326,64 @@ export function migrateConcept(
   if (refusals.length > 0) return { ok: false, refusals };
 
   const id = conceptIdOf(path);
-  const audience = expandTier(ctx.model, str(fm["visibility"]));
+  // A document may ALREADY carry a `ksor:` block and still reach here: ONE
+  // stray legacy key makes `hasProfileShape` false, and the checker's own
+  // printed remedy for that is "run `ksor migrate`". Building the block from
+  // scratch then silently overwrote every governance fact on it — a declared
+  // `ksor.audience: [internal]` became `[public]`, because `visibility:` was
+  // absent and `expandTier` fell through to the record default. That is the
+  // audience leak decision 18 exists for, reached by obeying the tool. So the
+  // EXISTING block is the seed and the legacy keys only overlay it.
+  const existing = mapping(fm["ksor"]);
+  const declared = Array.isArray(existing["audience"])
+    ? existing["audience"].filter((a): a is string => typeof a === "string")
+    : null;
+  const visibility = str(fm["visibility"]);
+  const widened = visibility === null ? null : expandTier(ctx.model, visibility);
+  // Two answers to "who may read this" and no way to know which the author
+  // meant. Migrate refuses by name rather than letting either win (decision 27),
+  // because one of the two silently loses a restriction.
+  if (declared !== null && widened !== null && declared.join() !== widened.join()) {
+    return {
+      ok: false,
+      refusals: [
+        {
+          slug: SLUG,
+          path,
+          why: `this document declares BOTH \`ksor.audience: [${declared.join(", ")}]\` and the pre-profile \`visibility: ${visibility}\` (which expands to [${widened.join(", ")}]) — they name different readers, and migrating keeps one`,
+          fix: `delete whichever is wrong: keep \`ksor.audience\` and drop \`visibility:\`, or drop \`ksor.audience\` and let \`visibility:\` expand — then run \`ksor migrate\` again`,
+        },
+      ],
+    };
+  }
+  const audience = declared ?? expandTier(ctx.model, visibility);
 
   // ── the concept keys ───────────────────────────────────────────────────
   doc.set("type", str(fm["type"]) ?? "Document");
   doc.set("title", title!);
   doc.set("description", description!);
   doc.set("status", status);
-  setValue(doc, "generated", { by: `ksor-migrate/${ctx.version}`, at: generatedAt! });
-  setFlow(doc, ["generated"]);
+  // `generated` records WHO produced the text and WHEN. Migrate reformats a
+  // document, it does not generate one, so overwriting an existing stamp with
+  // `ksor-migrate/<version>` at `now` asserted an act that never happened and
+  // destroyed the original actor and instant (decision 21 read backwards).
+  if (fm["generated"] === undefined) {
+    setValue(doc, "generated", { by: `ksor-migrate/${ctx.version}`, at: generatedAt! });
+    setFlow(doc, ["generated"]);
+  }
 
   const sources = sourcesFrom(fm["provenance"]);
   if (sources !== null) setValue(doc, "sources", sources);
   doc.delete("provenance");
 
   // ── the ksor block ─────────────────────────────────────────────────────
-  const ksor: Record<string, unknown> = { audience: [...audience] };
+  const ksor: Record<string, unknown> = { ...existing, audience: [...audience] };
   const owner = str(fm["owner"]);
   if (owner !== null) ksor["owner"] = owner;
-  if (status === "stable" && ctx.approveBy !== null) {
+  // Never over an approval the record already carries: that row names an
+  // authorised actor and an instant, and replacing it with the migrating
+  // operator's is a governance act the tool would be inventing.
+  if (status === "stable" && ctx.approveBy !== null && ksor["approval"] === undefined) {
     ksor["approval"] = { by: ctx.approveBy, at: ctx.instant };
   }
   const effective = str(fm["effective"]);
@@ -383,7 +422,7 @@ export function migrateConcept(
     }
     ksor["superseded_by"] = resolved;
   }
-  if (status === "deprecated") {
+  if (status === "deprecated" && ksor["deprecated"] === undefined) {
     ksor["deprecated"] = { by: ctx.actor!, at: ctx.instant };
   }
   // `id` and `name` only ever restated the path, which is the identity now, so
@@ -691,6 +730,13 @@ function sourcesFrom(raw: unknown): readonly Record<string, string>[] | null {
     used.add(id);
     return { id, title: s, resource: s };
   });
+}
+
+/** A frontmatter value as a plain mapping, or an empty one — never an array or a scalar. */
+function mapping(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
 }
 
 function str(value: unknown): string | null {

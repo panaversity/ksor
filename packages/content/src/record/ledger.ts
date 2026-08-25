@@ -262,7 +262,13 @@ export function inForce(ledger: Ledger): readonly Denial[] {
 export function checkLedgerActors(
   ledger: Ledger,
   takedownActors: readonly string[],
-  baselines: readonly LedgerBaseline[] = [],
+  // REQUIRED, with no default. It had one (`= []`), and `checkRecord` then
+  // called this with two arguments for as long as the rule existed: the
+  // accepted set was always empty, every entry was judged against the PRESENT
+  // roster, and the whole departed-authority guarantee was dead code whose
+  // refusal went on describing it as fact. A caller that means "nothing is
+  // accepted" now says so, in the same shape as a caller that means it.
+  baselines: readonly LedgerBaseline[],
 ): Refusal[] {
   const accepted = acceptedEntries(baselines);
   return ledger.entries

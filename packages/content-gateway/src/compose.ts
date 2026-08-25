@@ -19,8 +19,7 @@ import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertGovernanceServable,
   assertSchemaCompatible,
-  AudienceError,
-  GovernanceGateError,
+  ContentStoreError,
   storedTextSearchConfig,
   TextSearchConfigMismatch,
   buildShippedProvider,
@@ -32,16 +31,15 @@ import {
   servingPolicy,
   validateViewer,
   embedQueryVlit,
-  EmbeddingSpaceMismatch,
   keyRingFromEnv,
   MissingProviderKeyError,
   parseInstanceText,
-  SchemaVersionError,
   type ContentInstance,
   type ServiceContext,
 } from "@panaversity/ksor-content";
 
 import { bootHeader, bootLine } from "./boot-report.js";
+import { isRefusal } from "./refusal-body.js";
 
 import { loadGateway } from "./gateway-load.js";
 import { verifyGatewaySurface } from "./gateway-verify.js";
@@ -82,6 +80,16 @@ export interface Composition {
    * word means, and they keep trying until the database answers.
    */
   readonly verifyBoot: (() => Promise<void>) | null;
+  /**
+   * Have the boot checks passed? Synchronous, so a probe can SAY so without
+   * running them.
+   *
+   * `verifyBoot` cannot answer this: it stays non-null after a successful
+   * retry, so it distinguishes "was deferred at boot" and not "is verified
+   * now" — and the only way to ask it was to await a database round trip from
+   * inside a health handler.
+   */
+  readonly bootVerified: () => boolean;
 }
 
 export async function compose(instancePath: string, version: string): Promise<Composition> {
@@ -154,6 +162,11 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // serve the restricted half of the record.
   let viewer: readonly string[] = ["public"];
 
+  // What /health says about the embedding-space guard. It starts as "has not
+  // run" rather than null, because null is what a PASS looks like and this is
+  // the state where nothing has been compared yet.
+  let spaceSkipReason: string | null = "not yet verified — boot checks have not passed";
+
   // EVERY fail-closed boot check, in one place, so that deferring them defers
   // ALL of them and retrying retries ALL of them.
   //
@@ -165,8 +178,17 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // a `visibility: internal` document in full from a record declaring no
   // audience model (round-6 review of #43 — a hole in round 5's own fix).
   //
-  // A too-old schema and a governance violation are both REFUSALS and throw
-  // from here; only an unreachable store defers.
+  // The set has grown twice since, both times because a check OUTSIDE it was
+  // found to be off for the life of a process that had merely started cold:
+  // the viewer list (which decides how much of the record may be served) and
+  // the embedding-space guard (which decides whether a similarity score means
+  // anything). Both belong to the same rule — a check decided by the DATABASE
+  // belongs to the set that defers and retries together.
+  //
+  // Everything here that is a verdict rather than an outage is a REFUSAL and
+  // throws: a too-old schema, a stemming mismatch, a governance violation, an
+  // unregistered audience, a proven embedding-space mismatch. Only an
+  // unreachable store defers.
   const bootChecks = async (): Promise<void> => {
     await assertSchemaCompatible(pool);
     // The stemming the stored column was BUILT with must match what queries
@@ -195,9 +217,40 @@ export async function compose(instancePath: string, version: string): Promise<Co
     const policy = await servingPolicy(pool, instance);
     viewer = validateViewer(policy?.registry ?? [], requestedViewer);
     console.error(bootLine("audience", viewer.join(",")));
+
+    // One database, one embedding space. This was the ONE fail-closed check a
+    // cold start switched off for the life of the process: it was caught here,
+    // reduced to a skip reason, and — unlike the checks above — never run
+    // again. So a door that booted against a sleeping database and recovered
+    // reported /ready true and then ran cosine across two embedding spaces,
+    // with the calibrated `vector_floor` measured in a space the record no
+    // longer used. Abstention, a product invariant, decided by noise; the only
+    // trace on /health, which needs a bearer, so no probe ever saw it
+    // (review finding 3).
+    //
+    // `storeUnreachable` is a TYPED field, not a reason string, because the
+    // guard swallows its own statement failures: without it a database that
+    // dropped between the query above and this one would return `checked:
+    // false` and this whole set would report SUCCESS with the space never
+    // compared — the same fail-open shape one layer down.
+    const space = await checkEmbeddingSpace(
+      pool,
+      instance.tenantId,
+      instance.embeddingModel,
+      instance.embeddingDim,
+    );
+    if (space.storeUnreachable) {
+      throw new ContentStoreError(`embedding-space guard: ${space.reason ?? "unknown"}`);
+    }
+    spaceSkipReason = space.reason;
+    if (spaceSkipReason !== null) {
+      console.error(`embedding-space check skipped: ${spaceSkipReason}`);
+    }
   };
 
   let verifyBoot: (() => Promise<void>) | null = null;
+  // Replaced by the closure's own flag on the deferred path below.
+  let bootVerified = (): boolean => true;
   try {
     // Retried like a serving read, not attempted once: a cold serverless
     // compute takes a measured 4-10s to wake and the first connection fails at
@@ -212,17 +265,27 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // "content store unreachable (TextSearchConfigMismatch)" about a database
     // that had just replied, and left the door retrying forever a verdict no
     // retry can change.
-    if (
-      error instanceof SchemaVersionError ||
-      error instanceof GovernanceGateError ||
-      error instanceof AudienceError ||
-      error instanceof TextSearchConfigMismatch
-    ) {
-      throw error;
-    }
+    if (isRefusal(error)) throw error;
     console.error(
       `boot checks DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
         "this instance reports NOT READY until schema AND governance both verify",
+    );
+    // …and the WHOLE error, to the logs.
+    //
+    // This line said only the class name, and `pg` reports most connection
+    // failures as a bare `Error` — so an operator whose deploy came up NOT
+    // READY was told "content store unreachable (Error)" and nothing about
+    // which host, which user, or whether it was DNS, TLS or a password. The
+    // detail did exist, but only from the first request onwards, in
+    // `handleMcp`'s catch: an instance nobody called never explained itself at
+    // all.
+    //
+    // Safe HERE and not on the wire, which is the same split `handleMcp` makes
+    // for the same reason: stderr is the operator's, and a driver error naming
+    // the database host is exactly what they need and exactly what a caller
+    // must not receive.
+    console.error(
+      `  cause: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
     );
     // Say what that means for the audience, rather than printing no line at
     // all: the ask is known, and what is served until the checks pass is
@@ -249,6 +312,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // after a FAILED attempt starts a fresh one, so an unreachable store is
     // still retried — just never in parallel with itself.
     let verified = false;
+    bootVerified = (): boolean => verified;
     let inFlight: Promise<void> | null = null;
     verifyBoot = async (): Promise<void> => {
       if (verified) return;
@@ -267,26 +331,6 @@ export async function compose(instancePath: string, version: string): Promise<Co
       inFlight = attempt;
       return attempt;
     };
-  }
-
-  // A proven mismatch refuses to boot; an unreachable database is a warning
-  // — serving starts and /health carries the unverified state.
-  let spaceSkipReason: string | null = null;
-  try {
-    const check = await checkEmbeddingSpace(
-      pool,
-      instance.tenantId,
-      instance.embeddingModel,
-      instance.embeddingDim,
-    );
-    spaceSkipReason = check.reason;
-    if (spaceSkipReason !== null) {
-      console.error(`embedding-space check skipped: ${spaceSkipReason}`);
-    }
-  } catch (error) {
-    if (error instanceof EmbeddingSpaceMismatch) throw error;
-    spaceSkipReason = `content store unreachable (${error instanceof Error ? error.name : "Error"})`;
-    console.error(`embedding-space check skipped: ${spaceSkipReason}`);
   }
 
   // The deployment's own trust floor — the half of "configuration tightens" a
@@ -354,10 +398,15 @@ export async function compose(instancePath: string, version: string): Promise<Co
     ctx,
     instance,
     pool,
-    spaceSkipReason,
+    // A getter, for the same reason `ctx.viewer` is one: the guard now runs
+    // inside the deferred set, so this is written after the object is built.
+    get spaceSkipReason(): string | null {
+      return spaceSkipReason;
+    },
     requestedViewer,
     version,
     verifyBoot,
+    bootVerified: () => bootVerified(),
     registration,
   };
 }

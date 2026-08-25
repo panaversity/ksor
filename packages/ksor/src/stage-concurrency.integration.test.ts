@@ -141,6 +141,11 @@ function project(root: string, options: { documents: number; audience: string })
       documents,
       companions: [],
       assets: [],
+      // This record commits no `index.md`, and a real `ksor build` would record
+      // the empty list rather than omit the key — the site's reader requires
+      // it, because a lock that cannot say what it wrote into the indexes is a
+      // lock from a ksor that did not check them.
+      indexes: [],
     }),
   );
 
