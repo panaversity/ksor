@@ -162,6 +162,25 @@ describe("checkLedgerAgainstTree", () => {
     dirs: new Set(["policies", "hr"]),
   };
 
+  /**
+   * A record-wide legal hold — `knowledge/#section` — is the shape `denies()`
+   * documents as supported ("the root covers everything"), and the tree check
+   * refused it as dangling on a directory it called `/`: the walker only ever
+   * pushes CHILD directories, so the bundle root is never in `dirs`. The two
+   * halves of one seam disagreed and the reachable half was the refusing one.
+   */
+  it("a subtree denial on the bundle root is not dangling — it is the whole record", () => {
+    const root = `- id: 2026-08-25T10:00:00Z-ffffff
+  stable_id: knowledge/#section
+  scope: subtree
+  expected: present
+  by: human:ciso
+  at: 2026-08-25T10:00:00Z
+`;
+    expect(checkLedgerAgainstTree(ledgerOf(root), tree)).toEqual([]);
+    expect(denies(inForce(ledgerOf(root)), "policies/old-threshold")).toBe(true);
+  });
+
   it("an in-force present node entry whose concept is gone is ksor-takedown-dangling", () => {
     const r = checkLedgerAgainstTree(ledgerOf(DENIAL), {
       ...tree,

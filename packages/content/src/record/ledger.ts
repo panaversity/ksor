@@ -224,7 +224,11 @@ export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal
     const path = ".ksor/takedowns.yaml";
     if (d.scope === "subtree") {
       const dir = d.stableId.slice("knowledge/".length, -"#section".length);
-      if (!tree.dirs.has(dir)) {
+      // The bundle root is a directory of the tree that `dirs` never names —
+      // the walker pushes CHILD directories only. `knowledge/#section` is the
+      // record-wide legal hold `denies()` already resolves; refusing it here as
+      // "the subtree `/` no longer exists" made that hold unrecordable.
+      if (dir !== "" && !tree.dirs.has(dir)) {
         refusals.push({
           slug: "ksor-takedown-dangling",
           path,

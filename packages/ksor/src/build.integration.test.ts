@@ -282,6 +282,32 @@ describe("ksor build — acceptance 3: refusals write nothing", () => {
   });
 });
 
+describe("ksor build — a record-wide legal hold", () => {
+  /**
+   * `knowledge/#section` is the shape `denies()` documents as covering
+   * everything, and `checkLedgerAgainstTree` refused it as "the subtree `/`,
+   * which no longer exists" — the bundle root is never in the walker's `dirs`.
+   * A legal hold over a whole record was therefore unrecordable.
+   */
+  it("a subtree denial on the bundle root builds, with every concept unadmitted", () => {
+    const root = repo();
+    writeFileSync(
+      path.join(root, ".ksor/takedowns.yaml"),
+      `${readFileSync(path.join(root, ".ksor/takedowns.yaml"), "utf8")}- id: 2026-08-25T09:00:00Z-eeeeee
+  stable_id: knowledge/#section
+  scope: subtree
+  expected: present
+  by: human:ciso
+  at: 2026-08-25T09:00:00Z
+  reason: legal hold over the whole record
+`,
+    );
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+    expect(lockOf(root).documents.every((d) => d.admitted.length === 0)).toBe(true);
+  });
+});
+
 describe("ksor build — the ledger against its history (record spec §5)", () => {
   it("a deleted ledger line is refused as ksor-ledger-shrank, naming git history as the baseline", () => {
     const root = repo();
