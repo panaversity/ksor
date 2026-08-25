@@ -368,6 +368,25 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     expect(r.stderr).toContain("2026-08-24T10:00:00Z-aaaaaa");
   });
 
+  /**
+   * The fifth of the verb's own refusals, and the only one nothing exercised —
+   * the fixture-coverage rule deliberately skips the verb's slugs. A corrupt
+   * committed lock is what a partial write or a version rollback leaves behind,
+   * and the branch that handles it had never executed.
+   */
+  it("a lock it cannot parse is ksor-lock-invalid, and nothing is written", () => {
+    for (const bad of ['{"format": 99}', "not json at all"]) {
+      const root = repo();
+      writeFileSync(path.join(root, "build.lock.json"), bad);
+      const before = readFileSync(path.join(root, "knowledge/index.md"), "utf8");
+      const r = build(root, "--as-of", AS_OF);
+      expect(r.status, `${bad}: ${r.stderr}`).toBe(1);
+      expect(r.stderr.split("\n")[0]).toBe("error: ksor-lock-invalid");
+      expect(readFileSync(path.join(root, "build.lock.json"), "utf8")).toBe(bad);
+      expect(readFileSync(path.join(root, "knowledge/index.md"), "utf8")).toBe(before);
+    }
+  });
+
   it("a shallow clone refuses ksor-ledger-unverifiable unless --allow-unverifiable-ledger is explicit", () => {
     const origin = repo();
     const shallow = mkdtempSync(path.join(tmpdir(), "ksor-shallow-"));

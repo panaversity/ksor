@@ -756,6 +756,32 @@ describe("the lock's freshness claim covers the control files", () => {
     expect(existsSync(fixture.stage)).toBe(false);
   });
 
+  /**
+   * `assetTarget` checked that the resolved LINK PATH stays under the record,
+   * then followed the link with `statSync`/`readFileSync`, so a symlink inside
+   * `knowledge/` published any file the build could read under the record's own
+   * name (real run, 2026-08-25: `TOP-SECRET-OUTSIDE-THE-RECORD` staged as
+   * `guides/leak.png`). The record loader refuses a symlink by name, so both
+   * halves are asserted here: the refusal fires, and nothing is staged.
+   */
+  it("a symlinked asset is refused as ksor-symlink and never staged", () => {
+    const outside = path.join(work, "OUTSIDE-SECRET.txt");
+    writeFileSync(outside, "TOP-SECRET-OUTSIDE-THE-RECORD\n");
+    const link = path.join(fixture.root, "knowledge", "guides", "leak.png");
+    symlinkSync(outside, link);
+    const doc = path.join(fixture.root, "knowledge", "guides", "getting-started.md");
+    const before = readFileSync(doc, "utf8");
+    writeFileSync(doc, `${before}\n![leak](./leak.png)\n`);
+    writeLock(fixture.root);
+    const r = stage(fixture);
+    rmSync(link);
+    writeFileSync(doc, before);
+    writeLock(fixture.root);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr).toContain("ksor-symlink");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
   it("still builds when every control file is the one the lock recorded", () => {
     const r = stage(fixture);
     expect(r.status, r.stderr).toBe(0);

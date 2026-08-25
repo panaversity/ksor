@@ -698,6 +698,13 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
     expect(ignored(".ksor/governance.yaml"), "the policy is the record").toBe(false);
     expect(ignored(".ksor/takedowns.yaml"), "the ledger is the record").toBe(false);
     expect(ignored("build.lock.json"), "the lock is committed provenance").toBe(false);
+    // The manifest names this build's VIEWER and every concept it staged, so
+    // committing it after a wider build publishes that viewer's page list —
+    // the same thing the rule beside it prevents for the stage directory.
+    expect(
+      ignored("system/site/.staged-knowledge.json"),
+      "the stage manifest carries the viewer's page list",
+    ).toBe(true);
   });
 
   // Absent is EMPTY, not missing: a record with no takedown yet has no ledger

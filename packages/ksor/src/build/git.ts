@@ -35,6 +35,13 @@ export interface GitFacts {
    * unreadable.
    */
   readonly historicLedger: readonly LedgerBaselineEntry[] | null;
+  /**
+   * Why `historicLedger` is null, in the caller's words. Two different states
+   * reached one refusal that asserted "this is a shallow clone" as fact — the
+   * same mistake a repository with no commit already cost us once (27352a4):
+   * a diagnosis stated for a state nobody distinguished.
+   */
+  readonly historyUnreadable: "shallow" | "unreadable" | null;
 }
 
 function run(root: string, args: readonly string[]): string | null {
@@ -51,6 +58,7 @@ export function gitFacts(root: string): GitFacts {
       sourceCommit: null,
       dirty: true,
       historicLedger: null,
+      historyUnreadable: null,
     };
   }
   const shallow = (run(root, ["rev-parse", "--is-shallow-repository"]) ?? "").trim() === "true";
@@ -66,12 +74,14 @@ export function gitFacts(root: string): GitFacts {
   // Untracked counts as dirty: an input git has never seen is not in any commit.
   const status = run(root, ["status", "--porcelain", "--untracked-files=all", "--", ...INPUTS]);
   const dirty = sourceCommit === null || status === null || status.trim() !== "";
+  const historicLedger = shallow ? null : born ? historicEntries(root) : [];
   return {
     repository: true,
     shallow,
     sourceCommit,
     dirty,
-    historicLedger: shallow ? null : born ? historicEntries(root) : [],
+    historicLedger,
+    historyUnreadable: historicLedger !== null ? null : shallow ? "shallow" : "unreadable",
   };
 }
 

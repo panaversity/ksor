@@ -2,9 +2,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  lstatSync,
   readdirSync,
   rmSync,
-  statSync,
   watch,
   writeFileSync,
 } from "node:fs";
@@ -80,7 +80,13 @@ function assetTarget(recordDir: string, documentRel: string, target: string): st
   if (!resolved.startsWith(recordDir + path.sep)) return null;
   if (/\.mdx?$/i.test(resolved)) return null;
   try {
-    return statSync(resolved).isFile() ? resolved : null;
+    // lstat, never stat: `statSync` FOLLOWS a symlink, and `readFileSync` below
+    // follows it too, so `knowledge/guides/leak.png -> /etc/secret` published
+    // whatever the build could read, under the record's own name. The checker
+    // refuses a symlink under knowledge/ by name (`ksor-symlink`) and runs
+    // before this, so the state is unreachable — this is the second lock on the
+    // same door, and the one that is local to the code that would publish it.
+    return lstatSync(resolved).isFile() ? resolved : null;
   } catch {
     return null;
   }

@@ -69,7 +69,7 @@ function historyBaseline(): LedgerBaseline[] {
   if (facts.historicLedger === null) {
     console.error(
       "ksor-ledger-unverifiable: .ksor/takedowns.yaml — the ledger's history could not be read " +
-        `(${facts.shallow ? "this is a shallow clone" : "git could not read the file's log"}), ` +
+        `(${facts.historyUnreadable === "shallow" ? "this is a shallow clone" : "git could not read the file's log"}), ` +
         "so this run checked the ledger against the committed lock alone — an artefact that travels in the same change.\n" +
         "  fix: `git fetch --unshallow` (or check out with fetch-depth: 0) and run the check again; `ksor build` refuses this state outright",
     );
