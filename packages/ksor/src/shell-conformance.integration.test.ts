@@ -165,6 +165,22 @@ describe.runIf(enabled).each(SHELLS)(
       run(process.execPath, [distCli, "init", `conform-${shellName}`], work);
       project = path.join(work, `conform-${shellName}`);
 
+      // The emitted policy names `human:you` — the placeholder the intake
+      // interview replaces with real handles (record spec §4). Every concept
+      // below is approved by `human:kim`, so the policy has to name them, or
+      // `ksor-approver-unauthorised` refuses the build before any surface is
+      // rendered and every clause here fails on the authority check rather
+      // than on what it means to test.
+      writeFileSync(
+        path.join(project, ".ksor", "governance.yaml"),
+        `version: "0.1"
+approval_authorities:
+  - actors: [human:kim]
+takedown_authorities:
+  actors: [human:ciso]
+`,
+      );
+
       // A record with explicit order, folders, unordered documents whose
       // names interleave with a folder's, and a description — enough to tell
       // "renders the record" from "renders the example", and to pin the
