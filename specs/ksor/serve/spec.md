@@ -190,7 +190,8 @@ to read from an outline has no trust signal to choose by.
 
 **Every serving act's `retrieval_log` row records its scope**: the viewer list,
 the trust floor that applied, whether it abstained, how many results it
-returned, and the generation. Never content and never the query — telemetry
+returned (`result_count` — one name for that fact across every action), and the
+generation. Never content and never the query — telemetry
 that accumulated passages would be a second copy of the record with no
 audience predicate over it and no takedown seam bound to it.
 

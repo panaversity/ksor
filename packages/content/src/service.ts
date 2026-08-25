@@ -665,11 +665,14 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     detail: {
       ...actScope(ctx),
       abstained: false,
+      // ONE name for how many rows an act returned, across every action in the
+      // trail. This row carried `result_count` and `returned` — the same value
+      // twice, on the table that is the audit trail — and outline used the
+      // second name for the same fact.
       result_count: shaped.length,
       query_chars: queryChars,
       k,
       k_effective: kb,
-      returned: shaped.length,
       slugs: [...new Set(shaped.map((h) => h.slug))],
       truncated,
       degraded: degradedReason !== undefined,
@@ -1039,7 +1042,7 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { ...actScope(ctx), node: root, returned: rows.length, has_more, offset },
+    detail: { ...actScope(ctx), node: root, result_count: rows.length, has_more, offset },
   });
   // Titles and heading paths are corpus-authored text and reach the agent
   // exactly as passage content does. `search` and `read` both flag directive-

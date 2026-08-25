@@ -326,6 +326,9 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     expect(row.detail["min_trust_tier"]).toBe("human-reviewed");
     expect(row.detail["abstained"]).toBe(false);
     expect(row.detail["result_count"]).toBe(1);
+    // One name for one fact: the row carried `result_count` AND `returned`,
+    // the same number twice, on the table that IS the audit trail.
+    expect(Object.keys(row.detail)).not.toContain("returned");
 
     const serialized = JSON.stringify(row.detail);
     // The query text and the passages, by the two things they would contain.
