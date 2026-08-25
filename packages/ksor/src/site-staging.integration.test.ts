@@ -989,6 +989,39 @@ describe("a carried sim inherits its document's governance", () => {
     expect(published, "a subtree denial's sim was published").not.toContain("ARCHIVESIMBODY");
   });
 
+  /**
+   * The order the cases above happen to run in is what makes them pass: the
+   * public build comes FIRST, so `public/sims/` has never held the internal
+   * sim when it is asserted absent. Reverse it — the documented sequence, since
+   * `KSOR_AUDIENCE=public,internal pnpm build` beside a plain `pnpm build` is
+   * how a record produces its two staged surfaces — and the internal sim is
+   * still sitting there, at a live URL, in a directory `.gitignore` hides.
+   *
+   * `publishSims` copied and never pruned, and static export ships `public/`
+   * verbatim, so the narrower build inherits every byte the wider one left.
+   * Nothing else would have gone red: the STAGE is correct in both builds, and
+   * every existing assertion reads the stage or a directory that happened to
+   * be clean (2026-08-25 review, second BLOCKING finding).
+   */
+  it("a wider build's sim does not survive into the next narrower one", () => {
+    const wide = stage(fixture, { KSOR_AUDIENCE: "public,internal" });
+    expect(wide.status, wide.stderr).toBe(0);
+    expect(
+      existsSync(path.join(publicSims, "secret", "plansim.html")),
+      "the two-audience build did not publish the internal sim, so this proves nothing",
+    ).toBe(true);
+
+    const narrow = stage(fixture);
+    expect(narrow.status, narrow.stderr).toBe(0);
+    expect(
+      existsSync(path.join(publicSims, "secret", "plansim.html")),
+      "the internal sim survived a public-only build and is served at /sims/secret/plansim.html",
+    ).toBe(false);
+    expect(bytesOf(publicSims).toString("utf8")).not.toContain("SECRETSIMBODY");
+    // …and the public one is still there, so this prunes rather than empties.
+    expect(readFileSync(path.join(publicSims, "pubsim.html"), "utf8")).toContain("PUBSIMBODY");
+  });
+
   it("a sim no document links is never published, so it is never a url", () => {
     const r = stage(fixture, { KSOR_AUDIENCE: "public,internal" });
     expect(r.status, r.stderr).toBe(0);

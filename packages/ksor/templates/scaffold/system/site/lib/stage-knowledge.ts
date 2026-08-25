@@ -647,6 +647,8 @@ const PUBLIC_SIM_DIR = "./public/sims";
 
 function publishSims(sourceDir: string): void {
   const target = path.resolve(process.cwd(), PUBLIC_SIM_DIR);
+  /** Absolute paths this build publishes — everything else under `target` is last build's. */
+  const published = new Set<string>();
 
   const walk = (dir: string, rel: string): void => {
     let entries;
@@ -664,6 +666,7 @@ function publishSims(sourceDir: string): void {
       }
       if (!entry.name.endsWith(SIM_SUFFIX)) continue;
       const to = path.join(target, publicSimPath(next));
+      published.add(path.resolve(to));
       // Same size AND same mtime is this file's own definition of unchanged
       // (see `stageHolds`). Skipping the write is what keeps the common
       // build from touching the tree at all.
@@ -687,6 +690,51 @@ function publishSims(sourceDir: string): void {
   // rethrown. Green on macOS and Linux, red on Windows CI, from a pass that
   // was correct about needing the lock and wrong about taking it again.
   walk(sourceDir, "");
+  pruneSims(target, published);
+}
+
+/**
+ * Everything under `public/sims/` that THIS build did not publish, removed.
+ *
+ * Copying without pruning made the directory cumulative, and it is the one
+ * place where that is a governance leak rather than stale bytes: a build with
+ * `KSOR_AUDIENCE=public,internal` publishes an internal document's sim, the
+ * next plain `pnpm build` stages only public documents — correctly — and the
+ * internal sim is still sitting in `public/`, which static export ships
+ * verbatim, at a live URL. `.gitignore` hides the directory, so it accumulates
+ * unseen, and every existing assertion read the STAGE, which was right in both
+ * builds. Same shape for takedown: deny a document, rebuild, its published sim
+ * survives. Found by the 2026-08-25 review and reproduced before this was
+ * written.
+ *
+ * The directory is build-owned (`system/site/public/sims/` is gitignored, and
+ * nothing else writes it), so what is not published now does not belong.
+ */
+function pruneSims(target: string, published: ReadonlySet<string>): void {
+  const walk = (dir: string): boolean => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return true;
+    }
+    let empty = true;
+    for (const entry of entries) {
+      const here = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (walk(here)) rmSync(here, { recursive: true, force: true });
+        else empty = false;
+        continue;
+      }
+      if (published.has(path.resolve(here))) {
+        empty = false;
+        continue;
+      }
+      rmSync(here, { force: true });
+    }
+    return empty;
+  };
+  walk(target);
 }
 
 export function knowledgeSourceDir(): string {
