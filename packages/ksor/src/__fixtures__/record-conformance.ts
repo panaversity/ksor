@@ -452,6 +452,25 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     }),
     expected: ["ksor-takedown-readded .ksor/takedowns.yaml"],
   },
+  // The SAME two verdicts at subtree scope. They lived in one branch that never
+  // read `expected` — a hold on a directory that does not exist yet refused the
+  // very next build, and a directory the record said was deleted could return
+  // with nothing red. One rule now decides both scopes; these are what hold it
+  // in the SHIPPED checker (decision 18).
+  {
+    name: "ksor-takedown-dangling (subtree)",
+    files: base({
+      ".ksor/takedowns.yaml": `- id: 2026-08-24T10:00:00Z-eeeeee\n  stable_id: knowledge/embargo#section\n  scope: subtree\n  expected: present\n  by: human:ciso\n  at: 2026-08-24T10:00:00Z\n`,
+    }),
+    expected: ["ksor-takedown-dangling .ksor/takedowns.yaml"],
+  },
+  {
+    name: "ksor-takedown-readded (subtree)",
+    files: base({
+      ".ksor/takedowns.yaml": `- id: 2026-08-24T10:00:00Z-ffffff\n  stable_id: knowledge/policies#section\n  scope: subtree\n  expected: removed\n  by: human:ciso\n  at: 2026-08-24T10:00:00Z\n`,
+    }),
+    expected: ["ksor-takedown-readded .ksor/takedowns.yaml"],
+  },
   {
     name: "ksor-ledger-invalid",
     files: base({

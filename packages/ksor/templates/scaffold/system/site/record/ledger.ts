@@ -308,62 +308,104 @@ export interface TreeShape {
   readonly dirs: ReadonlySet<string>;
 }
 
-/** Dangling and re-added entries, evaluated on the in-force denials only. */
+/**
+ * Is the thing this denial names in the tree? ONE question, and the only one
+ * `expected` is an answer to — asked here for BOTH scopes so the two can never
+ * mean different things again. A `node` entry names a document; a `subtree`
+ * entry names the directory behind its `#section` anchor (decision 14: the
+ * container, so a descendant a later change adds is covered too).
+ */
+export function targetPresent(
+  denial: Pick<Denial, "stableId" | "scope">,
+  tree: TreeShape,
+): boolean {
+  return denial.scope === "subtree"
+    ? tree.dirs.has(denial.stableId.slice("knowledge/".length, -"#section".length))
+    : tree.documentIds.has(denial.stableId.slice("knowledge/".length));
+}
+
+/**
+ * The `expected` a denial written against THIS tree carries — what the verb
+ * records at the moment of the act, and what anything transcribing a denial
+ * into a ledger must write instead of assuming (`ksor migrate` assumed
+ * `present` for every subtree denial, so its very first build could refuse).
+ */
+export function expectedIn(denial: Pick<Denial, "stableId" | "scope">, tree: TreeShape): Expected {
+  return targetPresent(denial, tree) ? "present" : "removed";
+}
+
+/**
+ * Dangling and re-added entries, evaluated on the in-force denials only.
+ *
+ * ONE rule for both scopes (decision 18's shape): `expected` is compared with
+ * what the tree actually holds, and the scope decides only how the refusal
+ * READS. It used to decide the verdict as well — the subtree branch refused on
+ * absence alone and never consulted `expected` — and that made an ordinary act
+ * unrecordable. `ksor takedown --scope subtree knowledge/embargo` on a
+ * directory that does not exist yet is sanctioned (a denial may precede what it
+ * names, decision 14); the verb wrote `expected: removed` and exited 0, and the
+ * next `ksor build` exited 1 with `ksor-takedown-dangling` — with no honest
+ * exit, because the ledger is append-only, `--revoke` records a lift that never
+ * happened, and git cannot commit an empty directory back into the tree. The
+ * same act at node scope was green. Meanwhile the SERVING half had read
+ * `expected` scope-blind all along (`governance-gate.ts`: `d.expected <>
+ * 'removed'`), so the two surfaces disagreed about which records are
+ * publishable — decision 19's forbidden state, inverted (2026-08-25).
+ */
 export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal[] {
   const refusals: Refusal[] = [];
+  const path = ".ksor/takedowns.yaml";
   for (const d of inForce(ledger)) {
-    const path = ".ksor/takedowns.yaml";
-    if (d.scope === "subtree") {
-      const dir = d.stableId.slice("knowledge/".length, -"#section".length);
-      // The record ROOT, `knowledge/#section`. Only ONE surface can carry it
-      // out: `denies()` reads the empty prefix as "everything", so the site
-      // goes dark, while the serving side walks `parent_id` from the node the
-      // denylist row NAMES (decision 14) and there is no node for the root —
-      // top-level sections carry `parent_id IS NULL` — so the seed is empty and
-      // the door serves every document. The surfaces INVERT: the visible one
-      // goes dark, which reads as confirmation, and the invisible one keeps
-      // answering. That is decision 19's forbidden state, so the hold is
-      // refused rather than half-performed. (Refused here and not in
-      // `parseEntry` on purpose: the entry must stay READABLE, because the exit
-      // this names — `--revoke` — loads the ledger through `parseLedger`, and
-      // append-only means the line cannot simply be deleted.)
-      if (dir === "") {
-        refusals.push({
-          slug: "ksor-takedown-dangling",
-          path,
-          why: `entry \`${d.id}\` denies the subtree \`${d.stableId}\` — the record root, which is no node: top-level sections are \`knowledge/<section>#section\` with no parent, so the serving side's \`parent_id\` walk seeds EMPTY and denies nothing, while the site's prefix test denies EVERYTHING. A hold that darkens the website and goes on serving every document to every agent is worse than no hold, because the dark website reads as confirmation`,
-          fix: `deny each top-level section instead — \`ksor takedown --scope subtree knowledge/<section>\`, one per section — and then lift this one with \`ksor takedown --revoke ${d.id}\``,
-        });
-        continue;
-      }
-      if (!tree.dirs.has(dir)) {
-        refusals.push({
-          slug: "ksor-takedown-dangling",
-          path,
-          why: `entry \`${d.id}\` denies the subtree \`${dir}/\`, which no longer exists — a renamed folder would otherwise republish`,
-          fix: "restore the directory, or revoke the entry with `ksor takedown --revoke <id>` and deny the new path",
-        });
-      }
-      continue;
-    }
-    const id = d.stableId.slice("knowledge/".length);
-    // Both directions read the same presence: an unreadable document is here,
-    // so `present` does not dangle — and `removed` is still contradicted by a
-    // file at that path, which is the direction that must never go quiet.
-    const present = tree.documentIds.has(id);
-    if (d.expected === "present" && !present) {
+    /** The directory a subtree entry names, or null for a node entry. */
+    const dir =
+      d.scope === "subtree" ? d.stableId.slice("knowledge/".length, -"#section".length) : null;
+    // The record ROOT, `knowledge/#section`. Only ONE surface can carry it
+    // out: `denies()` reads the empty prefix as "everything", so the site
+    // goes dark, while the serving side walks `parent_id` from the node the
+    // denylist row NAMES (decision 14) and there is no node for the root —
+    // top-level sections carry `parent_id IS NULL` — so the seed is empty and
+    // the door serves every document. The surfaces INVERT: the visible one
+    // goes dark, which reads as confirmation, and the invisible one keeps
+    // answering. That is decision 19's forbidden state, so the hold is
+    // refused rather than half-performed, whatever `expected` says: the form is
+    // unhonourable, not merely out of step with the tree. (Refused here and not
+    // in `parseEntry` on purpose: the entry must stay READABLE, because the
+    // exit this names — `--revoke` — loads the ledger through `parseLedger`,
+    // and append-only means the line cannot simply be deleted.)
+    if (dir === "") {
       refusals.push({
         slug: "ksor-takedown-dangling",
         path,
-        why: `entry \`${d.id}\` denies \`${d.stableId}\`, which resolves to no concept — a renamed denied document would otherwise republish under its new path`,
-        fix: "restore the file, or record its removal with `ksor takedown --removed <id>` (and deny the new path if it was renamed)",
+        why: `entry \`${d.id}\` denies the subtree \`${d.stableId}\` — the record root, which is no node: top-level sections are \`knowledge/<section>#section\` with no parent, so the serving side's \`parent_id\` walk seeds EMPTY and denies nothing, while the site's prefix test denies EVERYTHING. A hold that darkens the website and goes on serving every document to every agent is worse than no hold, because the dark website reads as confirmation`,
+        fix: `deny each top-level section instead — \`ksor takedown --scope subtree knowledge/<section>\`, one per section — and then lift this one with \`ksor takedown --revoke ${d.id}\``,
       });
-    } else if (d.expected === "removed" && present) {
+      continue;
+    }
+    // Presence is read the same way in both directions: an unreadable document
+    // is still HERE, so `present` does not dangle — and `removed` is still
+    // contradicted by something at that path, which is the direction that must
+    // never go quiet.
+    if (expectedIn(d, tree) === d.expected) continue;
+    const what = dir === null ? `\`${d.stableId}\`` : `the subtree \`${dir}/\``;
+    const it = dir === null ? "file" : "directory";
+    if (d.expected === "present") {
+      refusals.push({
+        slug: "ksor-takedown-dangling",
+        path,
+        why:
+          dir === null
+            ? `entry \`${d.id}\` denies ${what}, which resolves to no concept — a renamed denied document would otherwise republish under its new path`
+            : `entry \`${d.id}\` denies ${what}, which no longer exists — a renamed folder would otherwise republish`,
+        // `--removed`, never `--revoke`: a revocation records a lift that never
+        // happened, and drops the hold if the path ever comes back.
+        fix: `restore the ${it}, or record its removal with \`ksor takedown --removed ${d.id}\` (and deny the new path if it was renamed)`,
+      });
+    } else {
       refusals.push({
         slug: "ksor-takedown-readded",
         path,
-        why: `entry \`${d.id}\` recorded \`${d.stableId}\` as removed, and the path is back`,
-        fix: "delete the file again, or revoke the entry with `ksor takedown --revoke <id>` in a reviewed change",
+        why: `entry \`${d.id}\` recorded ${what} as removed, and the ${dir === null ? "path" : "directory"} is back`,
+        fix: `delete the ${it} again, or revoke the entry with \`ksor takedown --revoke ${d.id}\` in a reviewed change`,
       });
     }
   }

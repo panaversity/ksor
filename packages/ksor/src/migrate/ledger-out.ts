@@ -6,7 +6,7 @@
  */
 import { createHash } from "node:crypto";
 
-import type { Refusal } from "@panaversity/ksor-content/record";
+import { expectedIn, type Refusal, type TreeShape } from "@panaversity/ksor-content/record";
 
 import { ACTOR_FORM, isWritableActor } from "./actor.js";
 import type { DbDenial } from "./denials.js";
@@ -140,23 +140,25 @@ export function toLedgerEntries(
   return { entries, refusals };
 }
 
-/** The committed file. `expected` is `present` when the record still holds the concept. */
-export function renderLedger(
-  entries: readonly LedgerDenial[],
-  conceptIds: ReadonlySet<string>,
-): string {
+/**
+ * The committed file. `expected` is derived from the POST-MIGRATION tree, with
+ * `expectedIn` — the same function the checker judges the finished ledger with,
+ * so what migrate writes is what the next `ksor build` accepts.
+ *
+ * It used to hardcode `present` for every subtree denial, on the reasoning that
+ * a container is not a concept. But the checker asks the tree about a container
+ * exactly as it asks about a document, so transcribing a denial whose directory
+ * is gone wrote a ledger whose FIRST build refused `ksor-takedown-dangling` —
+ * in an append-only file the adopter may not delete, and whose only other exit
+ * (`--revoke`) records a lift that never happened.
+ */
+export function renderLedger(entries: readonly LedgerDenial[], tree: TreeShape): string {
   const lines = [
     "# The takedown ledger — append-only, written by `ksor takedown` (record spec §5).",
     "# These entries were transcribed from the database's denylist by `ksor migrate`.",
   ];
   for (const d of entries) {
-    // A subtree denial names a directory anchor, never a concept, so it is
-    // always `present`: what it governs is the container and its future
-    // descendants (decision 14).
-    const expected =
-      d.scope === "subtree" || conceptIds.has(d.stableId.slice("knowledge/".length))
-        ? "present"
-        : "removed";
+    const expected = expectedIn(d, tree);
     lines.push(
       `- id: ${JSON.stringify(d.id)}`,
       `  stable_id: ${JSON.stringify(d.stableId)}`,

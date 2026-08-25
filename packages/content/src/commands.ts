@@ -1069,7 +1069,10 @@ function describe(entry: LedgerEntry): string {
     return `${entry.stableId} denied (scope: ${entry.scope}, expected: ${entry.expected})`;
   }
   if (entry.kind === "revocation") return `revoked \`${entry.revokes}\``;
-  return `\`${entry.amends}\` amended: the document is recorded as removed`;
+  // Not "the document": `--removed` reaches a SUBTREE denial too, where what
+  // was deleted is a directory. The entry does not carry the scope, and the
+  // line does not need it — what the denial names is what is recorded gone.
+  return `\`${entry.amends}\` amended: what it denies is recorded as removed`;
 }
 
 async function gcCommand(args: string[]): Promise<number> {

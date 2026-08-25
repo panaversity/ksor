@@ -1,4 +1,4 @@
-import { parseLedger } from "@panaversity/ksor-content/record";
+import { checkLedgerAgainstTree, parseLedger } from "@panaversity/ksor-content/record";
 import { describe, expect, it } from "vitest";
 
 import type { DbDenial } from "./denials.js";
@@ -9,6 +9,15 @@ import {
   toLedgerEntries,
   type ReservedFate,
 } from "./ledger-out.js";
+
+/** The tree shape `renderLedger` and the checker both read: documents, and directories. */
+const TREE_OF = (
+  docs: readonly string[],
+  dirs: readonly string[],
+): { documentIds: ReadonlySet<string>; dirs: ReadonlySet<string> } => ({
+  documentIds: new Set(docs),
+  dirs: new Set(dirs),
+});
 
 const row = (over: Partial<DbDenial> = {}): DbDenial => ({
   stableId: "knowledge/policies/old",
@@ -94,28 +103,70 @@ describe("toLedgerEntries", () => {
 });
 
 describe("renderLedger", () => {
+  const TREE = { documentIds: new Set(["policies/old"]), dirs: new Set(["policies"]) };
+  const EMPTY = { documentIds: new Set<string>(), dirs: new Set<string>() };
+
   it("marks a denial `removed` when the record no longer holds the concept", () => {
     const entries = toLedgerEntries([row()], new Map(), NONE).entries;
-    expect(renderLedger(entries, new Set(["policies/old"]))).toContain("expected: present");
-    expect(renderLedger(entries, new Set())).toContain("expected: removed");
+    expect(renderLedger(entries, TREE)).toContain("expected: present");
+    expect(renderLedger(entries, EMPTY)).toContain("expected: removed");
   });
 
-  // A subtree denial names a container and its future descendants (decision 14),
-  // so there is no concept for it to be present as.
-  it("always calls a subtree denial present", () => {
+  /**
+   * A subtree denial was hardcoded `present`, on the reasoning that it names a
+   * container rather than a concept — but the checker asks the tree the same
+   * question for a container as for a document, so a transcription of a denial
+   * whose DIRECTORY is gone wrote a ledger whose very first `ksor build`
+   * refused `ksor-takedown-dangling`, in a file the adopter may not delete
+   * (append-only). `expected` is derived here for both scopes, from the same
+   * `expectedIn` the checker judges with.
+   */
+  it("derives a subtree denial's expected from whether the directory is there", () => {
     const entries = toLedgerEntries(
       [row({ stableId: "knowledge/policies#section", scope: "subtree" })],
       new Map(),
       NONE,
     ).entries;
-    expect(renderLedger(entries, new Set())).toContain("expected: present");
+    expect(renderLedger(entries, TREE)).toContain("expected: present");
+    expect(renderLedger(entries, EMPTY)).toContain("expected: removed");
+  });
+
+  /** What migrate writes is what the checker accepts — for every scope, both ways. */
+  it.each([
+    {
+      scope: "node",
+      there: true,
+      stableId: "knowledge/policies/old",
+      dirs: [],
+      docs: ["policies/old"],
+    },
+    { scope: "node", there: false, stableId: "knowledge/policies/old", dirs: [], docs: [] },
+    {
+      scope: "subtree",
+      there: true,
+      stableId: "knowledge/policies#section",
+      dirs: ["policies"],
+      docs: [],
+    },
+    { scope: "subtree", there: false, stableId: "knowledge/policies#section", dirs: [], docs: [] },
+  ] as const)("a $scope denial migrate writes builds green (target there=$there)", (c) => {
+    const entries = toLedgerEntries(
+      [row({ stableId: c.stableId, scope: c.scope })],
+      new Map(),
+      NONE,
+    ).entries;
+    const tree = { documentIds: new Set<string>(c.docs), dirs: new Set<string>(c.dirs) };
+    const parsed = parseLedger(renderLedger(entries, tree), ".ksor/takedowns.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+    if (!parsed.ok) return;
+    expect(checkLedgerAgainstTree(parsed.ledger, tree)).toEqual([]);
   });
 
   it("writes entries the ledger reader accepts", async () => {
     const { parseLedger } = await import("@panaversity/ksor-content/record");
     const entries = toLedgerEntries([row()], new Map(), NONE).entries;
     const parsed = parseLedger(
-      renderLedger(entries, new Set(["policies/old"])),
+      renderLedger(entries, TREE_OF(["policies/old"], [])),
       ".ksor/takedowns.yaml",
     );
     expect(parsed.ok).toBe(true);
@@ -152,20 +203,14 @@ describe("toLedgerEntries — a subtree row must name a container", () => {
   it("accepts a subtree row already anchored, and its rendered file parses", () => {
     const out = toLedgerEntries([dbRow("knowledge/policies#section", "subtree")], new Map(), NONE);
     expect(out.refusals).toEqual([]);
-    const parsed = parseLedger(
-      renderLedger(out.entries, new Set<string>()),
-      ".ksor/takedowns.yaml",
-    );
+    const parsed = parseLedger(renderLedger(out.entries, TREE_OF([], [])), ".ksor/takedowns.yaml");
     expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
 
   it("an /index subtree row is repointed to the container anchor and parses", () => {
     const out = toLedgerEntries([dbRow("knowledge/policies/index", "subtree")], new Map(), NONE);
     expect(out.entries[0]?.stableId).toBe("knowledge/policies#section");
-    const parsed = parseLedger(
-      renderLedger(out.entries, new Set<string>()),
-      ".ksor/takedowns.yaml",
-    );
+    const parsed = parseLedger(renderLedger(out.entries, TREE_OF([], [])), ".ksor/takedowns.yaml");
     expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
 
@@ -175,7 +220,10 @@ describe("toLedgerEntries — a subtree row must name a container", () => {
       new Map([]),
       new Map([["knowledge/b/index", "moved"]]),
     );
-    const parsed = parseLedger(renderLedger(out.entries, new Set(["a"])), ".ksor/takedowns.yaml");
+    const parsed = parseLedger(
+      renderLedger(out.entries, TREE_OF(["a"], [])),
+      ".ksor/takedowns.yaml",
+    );
     expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
 });
@@ -226,7 +274,7 @@ describe("repoint — only where migrate actually moved the prose", () => {
     const out = toLedgerEntries([dbRow("knowledge/hr/index")], new Map(), new Map());
     expect(out.refusals).toEqual([]);
     expect(out.entries[0]?.stableId).toBe("knowledge/hr/index");
-    expect(renderLedger(out.entries, new Set())).toContain("expected: removed");
+    expect(renderLedger(out.entries, TREE_OF([], []))).toContain("expected: removed");
   });
 
   it("still anchors a subtree denial at the container, whatever became of the file", () => {

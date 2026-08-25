@@ -288,13 +288,16 @@ snapshot token bind to a row, and the served container never needs the file.
 (`<at>-<6 random>`, unique or `ksor-ledger-invalid`). Entry kinds:
 
 - a **denial** `{ id, stable_id, scope: node | subtree, expected: present |
-removed, by, at, reason }` — `expected` is `present` when the verb saw the
-  file and `removed` when it did not (a denial may precede the document it
-  names, decision 14);
+removed, by, at, reason }` — `expected` is `present` when the verb saw what
+  the entry names and `removed` when it did not (a denial may precede the
+  document it names, decision 14). What it names depends on the scope: a
+  `node` entry names a document, a `subtree` entry names the directory behind
+  its `#section` anchor, and `expected` is judged against that target at both
+  scopes;
 - a **revocation** `{ id, revokes: <id>, by, at, reason }`;
 - an **amendment** `{ id, amends: <id>, expected: removed, by, at, reason }`
-  — the sanctioned way to delete a denied file: amend, then delete, in the
-  same change.
+  — the sanctioned way to delete what a denial names, at either scope: amend,
+  then delete, in the same change.
 
 **An entry is exactly one act.** Two of `stable_id`, `revokes` and `amends` in
 one entry is `ksor-ledger-invalid`: dispatching on whichever key was found
@@ -391,19 +394,36 @@ every shallow checkout would be turned off, and silence would be worse than
 either. The scaffold's `validate.yml` fetches full depth.
 
 **Dangling.** `ksor-takedown-dangling` applies to in-force (unrevoked)
-entries: a `present` `node` entry whose stable_id resolves to no document in
-the tree, and a `subtree` entry whose directory no longer exists — a rename of
-a denied document goes red instead of republishing. A `removed` entry refuses
-when the path **reappears** (`ksor-takedown-readded`). It also refuses a
-`subtree` entry naming the record ROOT, `knowledge/#section`: only the site can
-carry that out — `denies()` reads the empty prefix as everything, while the
-serving side walks `parent_id` from the node the denylist row names and the
-root is no node, so its seed is empty and the door serves the whole record. A
-hold that darkens the website and answers every agent is worse than none,
-because the dark website reads as confirmation. The refusal names the form that
-works — one `subtree` entry per top-level section — and it is raised on the
-IN-FORCE set rather than at parse time, so the entry stays readable and
-`--revoke`, which loads the file through `parseLedger`, remains the exit.
+entries, and `expected` decides both directions at **both scopes** — a `node`
+entry against the document its stable_id names, a `subtree` entry against the
+directory behind its `#section` anchor. A `present` entry whose target is not
+in the tree is `ksor-takedown-dangling`, so a rename goes red instead of
+republishing; a `removed` entry whose target **reappears** is
+`ksor-takedown-readded`, so a hold cannot quietly stop covering a path that
+came back. One rule, both scopes: the subtree branch used to refuse on absence
+alone and never read `expected`, which made `ksor takedown --scope subtree` on
+a directory that does not exist yet — sanctioned by decision 14, a denial may
+precede what it names — record `expected: removed` and exit 0, and the NEXT
+`ksor build` exit 1 on it, with no honest exit at all (the ledger is
+append-only, `--revoke` records a lift that never happened, and git cannot
+commit an empty directory back). The serving half had read `expected`
+scope-blind throughout (`governance-gate.ts` excludes `expected = 'removed'`
+from its orphan check), so the two surfaces disagreed about which records are
+publishable — decision 19's forbidden state, inverted. The dangling refusal
+names `--removed` as the exit at both scopes; only the `readded` one names
+`--revoke`, because only there was the hold actually lifted.
+
+It also refuses a `subtree` entry naming the record ROOT, `knowledge/#section`:
+only the site can carry that out — `denies()` reads the empty prefix as
+everything, while the serving side walks `parent_id` from the node the denylist
+row names and the root is no node, so its seed is empty and the door serves the
+whole record. A hold that darkens the website and answers every agent is worse
+than none, because the dark website reads as confirmation. That form is refused
+whatever `expected` says: it is unhonourable, not merely out of step with the
+tree. The refusal names the form that works — one `subtree` entry per top-level
+section — and it is raised on the IN-FORCE set rather than at parse time, so
+the entry stays readable and `--revoke`, which loads the file through
+`parseLedger`, remains the exit.
 
 Presence is asked of the **tree**, not of the concept set: a document that
 fails to parse is not a concept but is still there, and judging it absent made

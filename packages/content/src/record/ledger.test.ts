@@ -384,6 +384,84 @@ describe("checkLedgerAgainstTree", () => {
       checkLedgerAgainstTree(ledgerOf(DENIAL + AMENDMENT), { ...tree, documentIds: new Set() }),
     ).toEqual([]);
   });
+
+  /**
+   * `scope` x `expected` x presence, as ONE table — decision 18's shape applied
+   * to a rule that HAD two branches and only one of them tested.
+   *
+   * The subtree branch refused on absence alone and never read `expected`, so a
+   * single ordinary command wrote a ledger the tool's own checker then refused,
+   * with no honest exit: `ksor takedown --scope subtree knowledge/embargo` on a
+   * directory that does not exist yet — which decision 14 sanctions, a denial
+   * may precede what it names — recorded `expected: removed` and exited 0, and
+   * the NEXT `ksor build` exited 1 with `ksor-takedown-dangling`. The identical
+   * act at node scope built green. Append-only means the line cannot be
+   * deleted, `--revoke` records a lift that never happened (and drops the hold
+   * if the path returns), and "restore the directory" does not survive a clone
+   * because git cannot commit an empty one. Reproduced on an emitted scaffold,
+   * 2026-08-25.
+   *
+   * The mirror gap is the same defect facing the other way: `expected: removed`
+   * at subtree scope had no `readded` arm, so a directory the record says was
+   * deleted could come back with nothing red — while the SERVING side has read
+   * `expected` scope-blind all along (`governance-gate.ts`: `d.expected <>
+   * 'removed'`). One rule, both scopes, every combination named here.
+   */
+  const COMBINATIONS = [
+    { scope: "node", expected: "present", present: true, slug: null },
+    { scope: "node", expected: "present", present: false, slug: "ksor-takedown-dangling" },
+    { scope: "node", expected: "removed", present: true, slug: "ksor-takedown-readded" },
+    { scope: "node", expected: "removed", present: false, slug: null },
+    { scope: "subtree", expected: "present", present: true, slug: null },
+    { scope: "subtree", expected: "present", present: false, slug: "ksor-takedown-dangling" },
+    { scope: "subtree", expected: "removed", present: true, slug: "ksor-takedown-readded" },
+    { scope: "subtree", expected: "removed", present: false, slug: null },
+  ] as const;
+
+  it.each(COMBINATIONS)(
+    "a $scope denial expecting $expected, target present=$present -> $slug",
+    ({ scope, expected, present, slug }) => {
+      const stableId = scope === "subtree" ? "knowledge/embargo#section" : "knowledge/embargo/memo";
+      const entry = `- id: 2026-08-25T12:00:00Z-abcdef
+  stable_id: ${stableId}
+  scope: ${scope}
+  expected: ${expected}
+  by: human:ciso
+  at: 2026-08-25T12:00:00Z
+  reason: legal hold
+`;
+      const here = present
+        ? {
+            documentIds: new Set([...tree.documentIds, "embargo/memo"]),
+            dirs: new Set([...tree.dirs, "embargo"]),
+          }
+        : tree;
+      const got = checkLedgerAgainstTree(ledgerOf(entry), here);
+      expect(got.map((x) => x.slug)).toEqual(slug === null ? [] : [slug]);
+      // A refusal names the entry and an exit that does not lie about the act
+      // (product principle 4): `--removed` records the removal, it does not
+      // pretend the hold was lifted.
+      if (slug === "ksor-takedown-dangling") {
+        expect(got[0]?.why).toContain("2026-08-25T12:00:00Z-abcdef");
+        expect(got[0]?.fix).toContain("--removed");
+      }
+      if (slug === "ksor-takedown-readded") {
+        expect(got[0]?.why).toContain("2026-08-25T12:00:00Z-abcdef");
+        expect(got[0]?.fix).toContain("--revoke");
+      }
+    },
+  );
+
+  /**
+   * The record ROOT is refused whatever `expected` says: the form is
+   * unhonourable by the serving half, not merely out of step with the tree.
+   */
+  it("the root hold is refused at expected: removed too", () => {
+    const removedRoot = ROOT_HOLD.replace("expected: present", "expected: removed");
+    expect(checkLedgerAgainstTree(ledgerOf(removedRoot), tree).map((x) => x.slug)).toEqual([
+      "ksor-takedown-dangling",
+    ]);
+  });
 });
 
 describe("checkLedgerAppendOnly — the ledger is append-only in ids AND in text", () => {

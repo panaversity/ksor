@@ -392,9 +392,11 @@ documents added later. `--revoke` takes the id of a LEDGER ENTRY, not a stable
 id: the ledger is append-only, so a lift is a new entry rather than a deleted
 line. The id is printed by the denial that created it, listed by `--ledger`,
 and written in `.ksor/takedowns.yaml` — three ways to the same string, none of
-which needs a database. `--removed <entry-id>` records that a denied
-document was deleted, and `--apply` writes the rows for entries that reached
-the database late.
+which needs a database. `--removed <entry-id>` records that what a denial
+names was deleted — a document, or at `--scope subtree` the directory — and
+`--apply` writes the rows for entries that reached the database late. Record
+the deletion; do not revoke instead: a revocation says the hold was LIFTED,
+which is a different act, and it stops covering the path if it ever returns.
 
 `--actor` names who performed the act, and a denial, a revocation or an
 amendment is REFUSED without it. There is no default: a name taken from the

@@ -40,6 +40,8 @@ export {
   checkLedgerActors,
   checkLedgerAgainstTree,
   checkLedgerAppendOnly,
+  targetPresent,
+  expectedIn,
   entryDigest,
   ledgerDigests,
   denies,
@@ -48,6 +50,9 @@ export {
   type LedgerBaseline,
   type LedgerBaselineEntry,
   type Denial,
+  type Expected,
+  type Scope,
+  type TreeShape,
 } from "./ledger";
 export {
   composeLock,

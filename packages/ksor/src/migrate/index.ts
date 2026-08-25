@@ -405,7 +405,17 @@ export async function runMigrate(
     changes.push({
       path: ".ksor/takedowns.yaml",
       before: null,
-      after: renderLedger(denials, conceptIds),
+      // The tree as it will be AFTER this run — the one the next `ksor build`
+      // judges the ledger against. Migrate renames files inside a directory and
+      // never adds or removes one, so the loaded `dirs` are already that tree's.
+      after: renderLedger(denials, {
+        documentIds: conceptIds,
+        dirs: new Set(
+          record.dirs
+            .filter((d) => d.startsWith("knowledge/"))
+            .map((d) => d.slice("knowledge/".length)),
+        ),
+      }),
     });
   }
 
