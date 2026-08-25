@@ -215,16 +215,26 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
 
 export async function generateStaticParams() {
   const params = source.generateParams();
-  if (params.length === 0) {
-    // Without this, Next fails the empty-record build with an error that
-    // names neither the record nor the rule (found live, 2026-08-18).
-    throw new Error(
-      "the record has no documents — a KSoR is never empty; add one to knowledge/ or restore one from git history (pnpm check says the same).",
-    );
-  }
   // Every directory this viewer's stage holds an index for is a page too —
   // the root included, which is the record's own map.
-  return [...params, ...folderSlugs().map((slug) => ({ slug }))];
+  const folders = folderSlugs().map((slug) => ({ slug }));
+  if (params.length === 0 && folders.length === 0) {
+    // Without this, Next fails the empty-record build with an error that
+    // names neither the record nor the rule (found live, 2026-08-18).
+    //
+    // NOT the same state as "this build publishes no document". The emitted
+    // starter is all drafts by design (R25), and build spec §4 acceptance 4
+    // requires it to BUILD and publish none of them — so a stage with the root
+    // index and no page is a record waiting for its first approval, and
+    // throwing here failed `pnpm build` on every freshly scaffolded project
+    // (found live 2026-08-25 through the scaffold e2e). What is left is the
+    // genuinely impossible state: no page AND no index, which means the stage
+    // itself is missing.
+    throw new Error(
+      "the staged record holds neither a document nor a folder index — the stage is missing or empty; run `ksor build` and check knowledge/ (`pnpm check` says the same).",
+    );
+  }
+  return [...params, ...folders];
 }
 
 export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): Promise<Metadata> {

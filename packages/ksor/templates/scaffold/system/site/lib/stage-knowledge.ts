@@ -115,7 +115,11 @@ function planStage(recordDir: string, development: boolean): StagePlan {
     const name = path.basename(rel);
     if (COMPANION.test(name)) {
       if (!companions.has(rel)) companions.set(rel, file);
-    } else if (!name.endsWith(".md")) {
+    } else if (!/\.(md|yaml)$/.test(name)) {
+      // `.md` and `.yaml` are what the record READER reads as text, so the
+      // kernel counts neither as an asset; matching it exactly keeps the lock's
+      // asset list the same set on both sides. A non-companion `.yaml` is
+      // refused by the checker (`ksor-file-type`), not staged as bytes.
       assetFiles.set(rel, file);
     }
   }

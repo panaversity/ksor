@@ -165,6 +165,20 @@ describe.runIf(enabled).each(SHELLS)(
       run(process.execPath, [distCli, "init", `conform-${shellName}`], work);
       project = path.join(work, `conform-${shellName}`);
 
+      // Every concept below is approved by `human:kim`, and `ksor init` emits a
+      // policy naming `human:you` — so the policy has to say who may approve
+      // here, exactly as `visibility-conformance` does. Without it the whole
+      // suite refused `ksor-approver-unauthorised` before a page was built.
+      writeFileSync(
+        path.join(project, ".ksor", "governance.yaml"),
+        `version: "0.1"
+approval_authorities:
+  - actors: [human:kim]
+takedown_authorities:
+  actors: [human:ciso]
+`,
+      );
+
       // A record with explicit order, folders, unordered documents whose
       // names interleave with a folder's, and a description — enough to tell
       // "renders the record" from "renders the example", and to pin the
@@ -321,7 +335,18 @@ describe.runIf(enabled).each(SHELLS)(
           /^title:[ \t]*(.*)$/m
             .exec(readFileSync(path.join(knowledge, file), "utf8"))?.[1]
             ?.trim() ?? "";
-        expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).not.toContain(title);
+        // Per ENTRY, not per substring. `llms.txt` opens with the record's own
+        // description, and the starter's description contains its draft's title
+        // word for word ("What a Knowledge System of Record is…") — so a bare
+        // `not.toContain(title)` asserts something no implementation can
+        // satisfy, and says "the draft leaked" about the record's scope
+        // sentence. What the clause means is that the draft contributes no
+        // line: no link to its route, and no entry carrying its title.
+        const entries = readFileSync(path.join(outDir, "llms.txt"), "utf8")
+          .split("\n")
+          .filter((line) => line.trimStart().startsWith("- ["));
+        expect(entries.filter((line) => line.includes(`](/docs/${slug})`))).toEqual([]);
+        expect(entries.filter((line) => line.includes(title))).toEqual([]);
       }
     });
 

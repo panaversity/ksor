@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isAttachment } from "../templates/scaffold/system/site/lib/attachment-rule.js";
 import { buildScaffold } from "./e2e-build.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 
@@ -26,13 +27,39 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // and hot-reloads a knowledge edit. Heavy (pnpm install + chromium), so gated:
 //   KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts
 //
-// NOT YET CONVERTED: the documents this suite writes still carry pre-profile
-// frontmatter (`status: approved`, a top-level `owner:`, `superseded_by:`),
-// because every assertion below is about what the SITE renders and the site
-// has not moved to the KSoR Profile yet. It converts with the site, in the
-// same work package.
+// Every document this suite writes is legal KSoR Profile content (record spec
+// §2), through the `concept()` helper below: a site that renders something no
+// adopter could author proves nothing, and the checker now refuses the
+// pre-profile shapes this file used to write (`status: approved`, a top-level
+// `owner:`, `superseded_by:`).
 const enabled = process.env.KSOR_E2E === "1";
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
+
+/**
+ * Turn the starter's drafts into approved, stable concepts — the first
+ * governance act an adopter performs, and the state every clause about pages,
+ * twins and `llms.txt` describes.
+ */
+function approveStarter(knowledge: string): void {
+  for (const rel of readdirSync(knowledge, { recursive: true, encoding: "utf8" })) {
+    const file = path.join(knowledge, rel);
+    const name = path.basename(rel);
+    if (!name.endsWith(".md") || name === "index.md" || isAttachment(name)) continue;
+    const text = readFileSync(file, "utf8");
+    if (!/^status: draft$/m.test(text)) continue;
+    writeFileSync(
+      file,
+      text
+        .replace(/^status: draft$/m, "status: stable")
+        // The approval instant must not precede `generated.at` (R23), and the
+        // starter's is a fixed 2026-08-25 — so this approves the day after.
+        .replace(
+          /^(\s*audience: .*)$/m,
+          '$1\n  approval: { by: "human:kim", at: 2026-08-26T00:00:00Z }',
+        ),
+    );
+  }
+}
 
 describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
   let work: string;
@@ -72,6 +99,40 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // …and prove it was OUR build, not the published package of the same version.
     expectLocalKsorResolved(project, localKsor);
     cleanupLocalKsor(localKsor);
+
+    // The emitted policy names `human:you`; every concept this suite writes is
+    // approved by `human:kim`, so the policy has to say so — the same setup
+    // `visibility-conformance` does. Without it the record refuses
+    // `ksor-approver-unauthorised` before a page is built.
+    writeFileSync(
+      path.join(project, ".ksor", "governance.yaml"),
+      `version: "0.1"
+approval_authorities:
+  - actors: [human:kim, human:you]
+takedown_authorities:
+  actors: [human:ciso]
+`,
+    );
+    // And the STARTER ships every document as a draft (R25), which a build
+    // publishes nowhere — correctly. This suite's first clause is about what a
+    // reader and an agent see, so it performs the adopter's first real act:
+    // approve what the starter shipped. Every other clause writes its own
+    // concepts.
+    approveStarter(path.join(project, "knowledge"));
+    // `ksor init` leaves a repository with NO commit, and `source_commit` is
+    // null there — honestly (build spec §2). The stamps clause is about a
+    // published record, so this commits the scaffold first, which is what its
+    // own README tells the adopter to do.
+    for (const args of [
+      ["config", "user.email", "e2e@example.com"],
+      ["config", "user.name", "e2e"],
+      ["config", "commit.gpgsign", "false"],
+      ["add", "-A"],
+      ["commit", "-q", "-m", "scaffold"],
+    ]) {
+      const r = spawnSync("git", args, { cwd: project, encoding: "utf8" });
+      expect(r.status, `git ${args.join(" ")}: ${r.stderr}`).toBe(0);
+    }
   }, 300_000);
 
   afterAll(() => {
@@ -132,10 +193,21 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       // The agent-facing index: headed by THIS instance's name (not a generic
       // "# Docs"), and every link it advertises must actually resolve.
       const llms = await (await fetch(`${base}/llms.txt`)).text();
+      // The record's DISPLAY title (instance.md `title:`), not its machine
+      // name: the profile separates them (record spec §3), and the starter
+      // ships a title of its own that `ksor init` does not stamp over.
+      const title =
+        /^title:[ \t]*(.*)$/m
+          .exec(readFileSync(path.join(project, "instance.md"), "utf8"))?.[1]
+          ?.trim() ?? "";
+      expect(title, "instance.md declares no title").not.toBe("");
       expect(
         llms.split("\n")[0],
         `llms.txt first line: ${JSON.stringify(llms.slice(0, 120))}`,
-      ).toBe("# walkthrough");
+      ).toBe(`# ${title}`);
+      // …and the machine name is carried as a stamp, so both identities are
+      // present and neither is mistaken for the other.
+      expect(llms).toContain("- name: walkthrough");
       const firstLink = /^- \[[^\]]*]\((?<url>[^)]+)\)/m.exec(llms)?.groups?.url;
       expect(firstLink, `llms.txt body: ${JSON.stringify(llms.slice(0, 300))}`).toBeDefined();
       const linked = await fetch(`${base}${firstLink}`);
@@ -239,10 +311,18 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // detached: SIGTERM to the pnpm wrapper alone orphans `next dev`, which
     // keeps the port and lets a re-run's poll green-light the stale server
     // (review finding, 2026-08-18) — kill the whole process group instead.
+    // NODE_ENV explicitly: vitest sets it to `test`, the child inherits it, and
+    // Next keeps a non-standard value rather than overriding it — so the "dev"
+    // server came up on the site's PRODUCTION path, where the record is staged
+    // once from the lock and never watched. It served pages, so the clause read
+    // green-ish for the wrong reason and the hot-reload assertion could never
+    // pass (`stage-knowledge.ts` gates both the watcher and the no-lock path on
+    // `NODE_ENV === "development"`).
     const dev = spawn("pnpm", ["dev", "--port", "3217"], {
       cwd: project,
       stdio: "ignore",
       detached: true,
+      env: { ...process.env, NODE_ENV: "development" },
     });
     try {
       // Wait for the dev server, then confirm the page, then edit and poll.
@@ -260,16 +340,36 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
           { timeout: 120_000, interval: 1_000 },
         )
         .toBe(200);
-      // The slug lives in llms.txt (pages now show the display title), and
-      // the slug is the identity this guard exists to check.
+      // The MACHINE name lives in llms.txt as a stamp, and it is the identity
+      // this guard exists to check — the first line is the DISPLAY title, which
+      // the starter ships and `ksor init` does not stamp over (record spec §3
+      // keeps the two apart).
       expect(
-        (await (await fetch("http://localhost:3217/llms.txt")).text()).split("\n")[0],
+        (await (await fetch("http://localhost:3217/llms.txt")).text()).includes(
+          "- name: walkthrough",
+        ),
         "the dev server must be this project's",
-      ).toBe("# walkthrough");
+      ).toBe(true);
       const marker = "hot-reload-proof-4173";
       appendFileSync(path.join(project, "knowledge", "what-is-a-ksor.md"), `\n${marker}\n`);
+      // Tolerant of a refused connection, like the poll above: Next tears the
+      // route down while it recompiles, so one `ECONNREFUSED` in the middle of
+      // a hot reload is the reload happening — and an untried `fetch` here
+      // THROWS out of the poll on the first attempt instead of retrying.
       await expect
-        .poll(async () => (await fetch(url)).text(), { timeout: 60_000, interval: 2_000 })
+        .poll(
+          async () => {
+            try {
+              return await (await fetch(url)).text();
+            } catch {
+              return "";
+            }
+          },
+          // Generous: this poll waits on a Turbopack recompile of a project
+          // that has just finished a production build in the same suite, and a
+          // slow reload is not a broken one.
+          { timeout: 120_000, interval: 2_000 },
+        )
         .toContain(marker);
     } finally {
       try {
@@ -308,7 +408,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     try {
       // Byte-identity is the sharpest form of "the parent is untouched": capture
       // the markdown twin and both agent surfaces BEFORE the attachments exist.
-      writeFileSync(parent, "---\ntitle: Attach host\nstatus: approved\n---\n\nHost body text.\n");
+      writeFileSync(
+        parent,
+        concept({
+          title: "Attach host",
+          description: "The document its attachments hang from.",
+          body: "Host body text.",
+        }),
+      );
       expect(buildScaffold(project).status, "baseline build").toBe(0);
       const before = {
         md: readFileSync(path.join(outDir, "md", "attach-host.md"), "utf8"),
@@ -318,7 +425,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
 
       const SUMMARY_MARK = "zzsummarymarkerzz";
       const CARD_MARK = "zzcardmarkerzz";
-      writeFileSync(path.join(knowledge, "attach-host.summary.md"), `A precis ${SUMMARY_MARK}.\n`);
+      // A summary's frontmatter is exactly `type: Summary` — it inherits its
+      // parent's governance and may claim none of its own (record spec §2).
+      writeFileSync(
+        path.join(knowledge, "attach-host.summary.md"),
+        `---\ntype: Summary\n---\n\nA precis ${SUMMARY_MARK}.\n`,
+      );
       writeFileSync(
         path.join(knowledge, "attach-host.flashcards.yaml"),
         `deck:\n  title: Host deck\ncards:\n  - front: Q ${CARD_MARK}?\n    back: A ${CARD_MARK}.\n`,
@@ -326,9 +438,15 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       expect(buildScaffold(project).status, "build with attachments").toBe(0);
 
       // The parent's own bytes did not move.
-      expect(readFileSync(path.join(outDir, "md", "attach-host.md"), "utf8")).toBe(before.md);
-      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).toBe(before.llms);
-      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).toBe(before.llmsFull);
+      expect(unstamped(readFileSync(path.join(outDir, "md", "attach-host.md"), "utf8"))).toBe(
+        unstamped(before.md),
+      );
+      expect(unstamped(readFileSync(path.join(outDir, "llms.txt"), "utf8"))).toBe(
+        unstamped(before.llms),
+      );
+      expect(unstamped(readFileSync(path.join(outDir, "llms-full.txt"), "utf8"))).toBe(
+        unstamped(before.llmsFull),
+      );
 
       // No route, no markdown twin.
       expect(existsSync(path.join(outDir, "docs", "attach-host.summary"))).toBe(false);
@@ -388,7 +506,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const parent = path.join(knowledge, "quiz-host.md");
     const quizFile = path.join(knowledge, "quiz-host.quiz.yaml");
     try {
-      writeFileSync(parent, "---\ntitle: Quiz host\nstatus: approved\n---\n\nHost body.\n");
+      writeFileSync(
+        parent,
+        concept({
+          title: "Quiz host",
+          description: "The document a quiz hangs from.",
+          body: "Host body.",
+        }),
+      );
       expect(buildScaffold(project).status, "baseline build").toBe(0);
       const before = {
         md: readFileSync(path.join(outDir, "md", "quiz-host.md"), "utf8"),
@@ -411,9 +536,15 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       expect(buildScaffold(project).status, "build with a well-formed quiz").toBe(0);
 
       // The parent's own bytes did not move.
-      expect(readFileSync(path.join(outDir, "md", "quiz-host.md"), "utf8")).toBe(before.md);
-      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).toBe(before.llms);
-      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).toBe(before.llmsFull);
+      expect(unstamped(readFileSync(path.join(outDir, "md", "quiz-host.md"), "utf8"))).toBe(
+        unstamped(before.md),
+      );
+      expect(unstamped(readFileSync(path.join(outDir, "llms.txt"), "utf8"))).toBe(
+        unstamped(before.llms),
+      );
+      expect(unstamped(readFileSync(path.join(outDir, "llms-full.txt"), "utf8"))).toBe(
+        unstamped(before.llmsFull),
+      );
 
       // No route, no markdown twin.
       expect(existsSync(path.join(outDir, "docs", "quiz-host.quiz"))).toBe(false);
@@ -475,7 +606,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const parent = path.join(knowledge, "deck-host.md");
     const deckFile = path.join(knowledge, "deck-host.slides.yaml");
     try {
-      writeFileSync(parent, "---\ntitle: Deck host\nstatus: approved\n---\n\nHost body.\n");
+      writeFileSync(
+        parent,
+        concept({
+          title: "Deck host",
+          description: "The document a deck hangs from.",
+          body: "Host body.",
+        }),
+      );
       expect(buildScaffold(project).status, "baseline build").toBe(0);
       const before = {
         md: readFileSync(path.join(outDir, "md", "deck-host.md"), "utf8"),
@@ -510,9 +648,15 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       expect(page, "an owned deck must not ship an iframe").not.toContain("<iframe");
 
       // The parent's own bytes did not move.
-      expect(readFileSync(path.join(outDir, "md", "deck-host.md"), "utf8")).toBe(before.md);
-      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).toBe(before.llms);
-      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).toBe(before.llmsFull);
+      expect(unstamped(readFileSync(path.join(outDir, "md", "deck-host.md"), "utf8"))).toBe(
+        unstamped(before.md),
+      );
+      expect(unstamped(readFileSync(path.join(outDir, "llms.txt"), "utf8"))).toBe(
+        unstamped(before.llms),
+      );
+      expect(unstamped(readFileSync(path.join(outDir, "llms-full.txt"), "utf8"))).toBe(
+        unstamped(before.llmsFull),
+      );
 
       // No route, no markdown twin.
       expect(existsSync(path.join(outDir, "docs", "deck-host.slides"))).toBe(false);
@@ -566,10 +710,14 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     try {
       writeFileSync(
         doc,
-        "---\ntitle: Surface host\nstatus: approved\n---\n\n" +
-          "> [!WARNING]\n> zzalertbodyzz\n\n" +
-          "| Head | Other |\n| --- | --- |\n| zzcellzz | second |\n\n" +
-          "```text\nzzverbatimzz\n```\n",
+        concept({
+          title: "Surface host",
+          description: "Every reading affordance a fresh record gets for free.",
+          body:
+            "> [!WARNING]\n> zzalertbodyzz\n\n" +
+            "| Head | Other |\n| --- | --- |\n| zzcellzz | second |\n\n" +
+            "```text\nzzverbatimzz\n```",
+        }),
       );
       expect(buildScaffold(project).status, "build with the affordances").toBe(0);
 
@@ -622,23 +770,21 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     try {
       writeFileSync(
         doc,
-        [
-          "---",
-          "title: Tabbed",
-          "status: approved",
-          "---",
-          "",
-          "Pick one.",
-          "",
-          '```bash tab="Alpha Tool" tab-group="picker"',
-          "zzalphacmdzz --version",
-          "```",
-          "",
-          '```bash tab="Beta Tool" tab-group="picker"',
-          "zzbetacmdzz --version",
-          "```",
-          "",
-        ].join("\n"),
+        concept({
+          title: "Tabbed",
+          description: "One instruction, two tools.",
+          body: [
+            "Pick one.",
+            "",
+            '```bash tab="Alpha Tool" tab-group="picker"',
+            "zzalphacmdzz --version",
+            "```",
+            "",
+            '```bash tab="Beta Tool" tab-group="picker"',
+            "zzbetacmdzz --version",
+            "```",
+          ].join("\n"),
+        }),
       );
       expect(buildScaffold(project).status, "build with tabs").toBe(0);
 
@@ -687,14 +833,17 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     const doc = (file: string, title: string, order: number): void =>
       writeFileSync(
         path.join(knowledge, file),
-        `---\ntitle: ${title}\nstatus: approved\norder: ${order}\n---\n\nOne line.\n`,
+        concept({ title, description: `${title}, one line.`, order, body: "One line." }),
       );
 
     try {
       mkdirSync(nested, { recursive: true });
-      doc(path.join("handbook", "index.md"), "The handbook", 20);
-      doc(path.join("handbook", "policies", "index.md"), "Policies", 1);
-      doc(path.join("handbook", "policies", "returns", "index.md"), "Returns", 1);
+      // A folder's own prose is a NAMED document inside it: `index.md` is
+      // generated by `ksor build` and never authored (record spec §1), so a
+      // folder is labelled by its directory rather than by an authored index.
+      doc(path.join("handbook", "overview.md"), "The handbook", 20);
+      doc(path.join("handbook", "policies", "overview.md"), "Policies overview", 1);
+      doc(path.join("handbook", "policies", "returns", "overview.md"), "Returns overview", 1);
       doc(path.join("handbook", "policies", "returns", "window.md"), "The thirty-day window", 1);
 
       const built = buildScaffold(project);
@@ -714,10 +863,12 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
         };
       };
 
-      // Every folder between the record's front door and the document, named
-      // by its own title rather than by its directory name.
+      // Every folder between the record's front door and the document. A
+      // FOLDER is named by its directory now, not by an authored index —
+      // `index.md` is generated by `ksor build` and is not a page (record spec
+      // §1) — and the document by its own title.
       const deep = trailOn(path.join("docs", "handbook", "policies", "returns", "window"));
-      expect(deep.steps).toEqual(["The handbook", "Policies", "Returns", "The thirty-day window"]);
+      expect(deep.steps).toEqual(["Handbook", "Policies", "Returns", "The thirty-day window"]);
       // …and each ancestor is a working link, the document itself is not.
       expect(deep.hrefs).toEqual([
         "/",
@@ -735,11 +886,11 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       // The trail shortens as it climbs — a fixed-depth implementation passes
       // the case above and fails these.
       expect(trailOn(path.join("docs", "handbook", "policies", "returns")).steps).toEqual([
-        "The handbook",
+        "Handbook",
         "Policies",
         "Returns",
       ]);
-      expect(trailOn(path.join("docs", "handbook")).steps).toEqual(["The handbook"]);
+      expect(trailOn(path.join("docs", "handbook")).steps).toEqual(["Handbook"]);
     } finally {
       rmSync(path.join(knowledge, "handbook"), { recursive: true, force: true });
     }
@@ -777,6 +928,17 @@ ${body}
 
   const write = (name: string, text: string): void =>
     writeFileSync(path.join(project, "knowledge", `${name}.md`), text);
+
+  /**
+   * A published artefact with its publication stamp blanked.
+   *
+   * "The parent's own bytes did not move" is about CONTENT: an attachment adds
+   * no line to its parent's twin, `llms.txt` or `llms-full.txt`. It is not
+   * about `build_id`, which SHOULD move — a companion's bytes are in the lock
+   * and in the id (build spec §2), so adding one is a different publication and
+   * an id that stayed put would be the bug.
+   */
+  const unstamped = (text: string): string => text.replace(/sha256:[0-9a-f]{64}/g, "sha256:…");
 
   /** The visible text of a built page's article, tags and scripts stripped. */
   const visible = (route: string): string => {
@@ -1009,8 +1171,12 @@ ${body}
     // Regression (found live, 2026-08-20): a route cannot tell a FILE from a
     // FOLDER INDEX, so resolving the successor pointer on routes had to guess
     // and refused to link a record `pnpm check` calls well-formed. Here
-    // `knowledge/legal.md` points at its sibling `terms` while a
-    // `knowledge/legal/terms.md` also exists — the link must go to the sibling.
+    // `knowledge/legal-notice.md` points at the root-level `terms` while a
+    // `knowledge/legal/terms.md` also exists — the link must go to the root
+    // one. The withdrawn document was `legal.md` beside `legal/` until the
+    // profile's hygiene refused that shape by name (`ksor-name-collides`: two
+    // documents on one route); the decoy that makes the case is the
+    // same-named folder CHILD, which is unchanged.
     write(
       "terms",
       concept({ title: "Terms", description: "The sibling.", order: 8, body: "The sibling." }),
@@ -1026,22 +1192,22 @@ ${body}
       }),
     );
     write(
-      "legal",
+      "legal-notice",
       concept({
         title: "Legal",
-        description: "Points at its sibling.",
+        description: "Points at the root-level terms.",
         status: "deprecated",
         order: 7,
         ksor: `  superseded_by: terms
   deprecated: { by: "human:ciso", at: 2026-08-10T00:00:00Z }
 `,
-        body: "Points at its sibling.",
+        body: "Points at the root-level terms.",
       }),
     );
 
     const result = buildScaffold(project);
     expect(result.status, `${result.stdout}${result.stderr}`.slice(-2000)).toBe(0);
-    const html = built(path.join("docs", "legal", "index.html"));
+    const html = built(path.join("docs", "legal-notice", "index.html"));
     const notice = /<aside[^>]*role="region"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? "";
     expect(notice).toMatch(/href="\/docs\/terms\/?"/);
     expect(notice).toContain("Terms");
@@ -1074,7 +1240,10 @@ ${body}
       expect(plain).not.toContain("Owner team:finance");
       expect(plain).not.toContain("Trust");
       expect(plain).not.toContain("Sources");
-      expect(plain).not.toContain("Board minutes");
+      // The source's TEXT still appears — it is a GFM footnote in the body, and
+      // a footnote is content the author wrote, not a governance panel the site
+      // renders. What `site.governance: false` hides is the Sources block above.
+      expect(plain).toContain("Board minutes");
       expect(plain).toContain("Deprecated");
       expect(plain).toContain("Refund policy v5");
 
