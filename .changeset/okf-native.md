@@ -8,8 +8,9 @@ weeks and the code did not hold. One rule set reads it: the CLI, the site and
 the MCP door all check the same frontmatter through the same module, so a
 document that publishes on one surface can no longer be refused on another.
 
-This release is `minor` rather than `patch` because it changes surfaces
-adopters depend on. In one place, what moves:
+It stays a `patch` — the record format is still finding its shape and the
+0.0.x band says so — but it changes surfaces adopters depend on, so read the
+upgrade path below before taking it. In one place, what moves:
 
 - **A document's frontmatter.** `type`, `title`, `description`, `status`
   (`draft | stable | deprecated`) and `ksor.audience` (a list) are required;
