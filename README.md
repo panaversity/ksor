@@ -4,11 +4,46 @@
 
 # KSoR
 
-**Open, vendor-neutral knowledge infrastructure for AI-native organizations.**
+**Open, vendor-neutral knowledge infrastructure for predictable enterprise and education agentic systems.**
 
-A **Knowledge System of Record (KSoR)** is an open, vendor-neutral knowledge infrastructure framework. It gives an organization **one governed, authoritative knowledge record** and open, replaceable ways to publish, retrieve, discover, exchange, secure, verify, and observe that knowledge.
+A company cannot expect predictable AI-agent behavior if its agents operate from scattered, conflicting, or outdated knowledge.
 
-Traditional Systems of Record establish what is true about the current state of a business. A KSoR establishes **what the organization knows and how it should operate**.
+An education institution cannot deliver an organized AI-assisted course if its tutors, teaching assistants, and assessment agents operate from different curricula, sources, or rules.
+
+> **You cannot build predictable AI systems on an undefined source of truth.**
+
+A **Knowledge System of Record (KSoR)** solves that problem by giving an organization **one governed, authoritative knowledge record** that humans and AI agents operate from.
+
+For an enterprise, that record can contain approved:
+
+- policies,
+- procedures,
+- rules,
+- methods,
+- standards,
+- definitions,
+- controls,
+- decision criteria,
+- and institutional knowledge.
+
+For an education institution, it can contain approved:
+
+- curriculum,
+- learning objectives,
+- concepts and definitions,
+- pedagogy,
+- course sequence,
+- source material,
+- assessment rules,
+- grading criteria,
+- and the current course version.
+
+The AI can still reason, explain, personalize, and adapt. What it should not have to invent is **which institutional or academic knowledge is authoritative**.
+
+> **Enterprise agents need a KSoR so they operate from the same governed institutional truth.**  
+> **Education agents need a KSoR so they teach from the same governed academic truth.**
+
+KSoR does not make a probabilistic language model deterministic. It makes the **knowledge environment governed, bounded, traceable, and testable**: which source is authoritative, which version is current, who approved it, who may see it, which knowledge may be retrieved, and when an agent must abstain instead of improvising.
 
 The framework reduces to three commitments:
 
@@ -20,15 +55,9 @@ And one operating principle:
 
 > **Govern knowledge once. Project it many ways.**
 
-> **You cannot build predictable AI systems on an undefined source of truth.**
-
-KSoR does not make a probabilistic language model deterministic. It makes the **knowledge environment predictable and governed**: which source is authoritative, which version is current, who approved it, who may see it, which knowledge may be retrieved, and when an agent must abstain rather than improvise.
-
-Humans, AI systems, agents, and other knowledge systems then reach the same institutional truth through different governed surfaces. Development tooling such as `AGENTS.md` and reusable skills can help maintain that record, but it never becomes a competing source of truth.
-
 The result is not merely a documentation site, knowledge base, vector database, RAG system, or MCP wrapper.
 
-> **KSoR is an open knowledge infrastructure framework for the AI-native organization.**
+> **KSoR is an open knowledge infrastructure framework that makes governed knowledge usable by people, AI agents, and other knowledge systems without giving any one vendor ownership of the record.**
 
 ---
 
@@ -93,21 +122,21 @@ to the practical reference, jump to [Requirements](#requirements).
 
 ## Why KSoR Exists
 
-Enterprises have relied on **Systems of Record** for decades.
+Organizations already understand the value of a **System of Record**.
 
-An accounting system is authoritative for financial transactions.
-A CRM is authoritative for customer records.
-An HRIS is authoritative for employee records.
+An accounting system is authoritative for financial transactions. A CRM is authoritative for customer records. An HRIS is authoritative for employee records.
 
 When a spreadsheet disagrees with the accounting ledger, the ledger wins.
 
-These systems answer an important question:
+These systems answer:
 
-> **What is the authoritative operational state of the business?**
+> **What is the authoritative operational state of the organization?**
 
-AI agents introduce a second problem.
+AI agents create a second requirement:
 
-Agents also need to know:
+> **What is the authoritative knowledge the organization allows them to operate from?**
+
+That includes questions such as:
 
 - What policies apply?
 - What rules govern this decision?
@@ -119,28 +148,23 @@ Agents also need to know:
 - What sources support this answer?
 - What should the agent do when the answer is not known?
 
-That knowledge is usually fragmented across:
+In education, the same authority problem appears in a different form:
 
-- documents,
-- wikis,
-- PDFs,
-- slide decks,
-- websites,
-- policies,
-- manuals,
-- repositories,
-- employee experience,
-- prompts,
-- RAG indexes,
-- and model context.
+- What curriculum is current?
+- Which learning objectives govern this course?
+- Which definitions and explanations are canonical?
+- Which sequence should be taught?
+- Which sources are approved?
+- Which assessment and grading rules apply?
+- What may an AI tutor personalize, and what must remain fixed?
 
-There is often no authoritative answer to:
+Without a KSoR, this knowledge is commonly fragmented across documents, wikis, PDFs, slide decks, websites, instructor notes, repositories, prompts, RAG indexes, model context, and human memory.
 
-> **Which knowledge should the AI trust?**
+A model can rank what looks relevant. It cannot reliably manufacture organizational or academic authority when the institution itself has not defined it.
 
-A model cannot reliably infer institutional authority when the institution itself has not defined it. Better prompting, a larger context window, or a more accurate embedding model does not resolve that missing source of truth.
+> **The problem is not simply finding knowledge. The problem is establishing which knowledge wins.**
 
-KSoR exists to solve that problem.
+KSoR exists to establish that authority and make it usable across human, AI, agent, and machine-facing surfaces.
 
 ---
 
@@ -148,7 +172,9 @@ KSoR exists to solve that problem.
 
 The more autonomy an AI agent receives, the more important its knowledge boundary becomes.
 
-A KSoR does **not** make the underlying model fully deterministic. Models may still vary in wording, reasoning paths, and generated explanations. What KSoR makes controlled and testable is the environment the agent is allowed to operate from:
+KSoR separates two things that are often confused: **model variability** and **knowledge authority**. Models may vary in wording, reasoning paths, explanations, and personalization. The authoritative knowledge they are permitted to use should not vary arbitrarily.
+
+KSoR makes that knowledge environment controlled and testable:
 
 - which knowledge is authoritative,
 - which version is in force,
@@ -197,7 +223,7 @@ With a KSoR:
 
 The agent may still reason probabilistically, but it reasons from a controlled institutional truth rather than choosing among conflicting versions of that truth.
 
-> **A company cannot expect predictable AI-agent behavior while its agents operate from unpredictable knowledge.**
+> **A company cannot build predictable agentic operations on unpredictable knowledge.**
 
 ### In education
 
@@ -245,6 +271,8 @@ But the KSoR can keep stable:
 - and the current course version.
 
 > **Personalization should vary the teaching path, not the authoritative curriculum.**
+>
+> An education institution cannot run an organized AI-assisted class if every tutor or teaching agent is free to choose a different source of truth.
 
 So the same architectural principle applies in both settings:
 
@@ -255,8 +283,13 @@ So the same architectural principle applies in both settings:
 
 ## The KSoR Framework: Nine Responsibilities
 
-KSoR is an **open, vendor-neutral knowledge infrastructure framework**,
-built around three commitments:
+The product idea is simple:
+
+- **one place defines the knowledge,**
+- **governance decides what is authoritative and who may use it,**
+- **open interfaces make the same governed truth available wherever it is needed.**
+
+The technical architecture implements that idea through an **open, vendor-neutral knowledge infrastructure framework**, built around three commitments:
 
 > **One authoritative record.**  
 > **One governance boundary.**  
@@ -308,8 +341,7 @@ it:
 | Publication integrity | SLSA / Sigstore                     | proof of which source and build produced a published artifact                 |
 | Observability         | OpenTelemetry                       | what the infrastructure did, without becoming another knowledge store         |
 
-The same model as a stack, each line resting on the one beneath it — which
-is why OKF sits _under_ KSoR, not beside it:
+The same architecture can be explained as a dependency stack. This is not a second list of responsibilities; it shows how the pieces relate, and why OKF sits _under_ KSoR rather than beside it:
 
 > **Markdown is the authoritative medium.**  
 > **OKF makes that record open and portable.**  
@@ -701,7 +733,7 @@ Assessment KSoR
 Professional Certification KSoR
 ```
 
-An education KSoR lets AI tutors and teaching agents personalize instruction while remaining grounded in the same approved curriculum, learning objectives, source material, and assessment rules.
+An education KSoR lets AI tutors, teaching assistants, and assessment agents personalize instruction while remaining grounded in the same approved curriculum, learning objectives, source material, course sequence, and assessment rules. The teaching can adapt to the student without allowing the authoritative course itself to drift from student to student.
 
 ### Domain KSoRs
 
@@ -1777,11 +1809,11 @@ See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 ## The Idea in One Sentence
 
-> **A traditional System of Record tells an AI system what is true about the business; a Knowledge System of Record tells humans, agents, and software what the organization knows and how it should operate.**
+> **A traditional System of Record tells an AI system what is true about the organization; a Knowledge System of Record tells humans and AI what the organization knows and how they are allowed to operate.**
 
 > **You cannot build predictable AI systems on an undefined source of truth.**
 
-KSoR makes the knowledge environment **authoritative, governed, traceable, human-readable, agent-readable, machine-readable, and vendor-neutral**, so AI can adapt and reason without inventing which institutional or academic truth it should operate from.
+For enterprises, KSoR gives agents one governed institutional truth. For education, it gives teaching agents one governed academic truth. The AI may reason, adapt, and personalize, but it does not get to invent which knowledge is authoritative.
 
 ---
 
