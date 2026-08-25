@@ -52,7 +52,7 @@ const DOCS = [
     slug: "human-reviewed",
     title: "Compensation bands, reviewed by a person",
     tier: 2,
-    verified: [{ by: "human:kim", at: "2026-08-22T09:00:00Z" }],
+    verified: [{ by: "human:kim", at: "2026-08-22T09:00:00.000Z" }],
     content:
       "Compensation bands are reviewed every fiscal year by the compensation committee and published to all staff.",
   },
@@ -61,7 +61,7 @@ const DOCS = [
     slug: "machine-confirmed",
     title: "Compensation bands, confirmed by a process",
     tier: 1,
-    verified: [{ by: "process:nightly-finance", at: "2026-08-22T09:00:00Z" }],
+    verified: [{ by: "process:nightly-finance", at: "2026-08-22T09:00:00.000Z" }],
     content:
       "Compensation band figures are confirmed nightly against the finance ledger and published to all staff.",
   },
@@ -175,8 +175,8 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
             doc.title,
             doc.tier,
             doc.verified === null ? null : JSON.stringify(doc.verified),
-            JSON.stringify({ by: "human:cfo", at: "2026-08-21T09:00:00Z" }),
-            JSON.stringify({ by: "fixture/1", at: "2026-08-20T09:00:00Z" }),
+            JSON.stringify({ by: "human:cfo", at: "2026-08-21T09:00:00.000Z" }),
+            JSON.stringify({ by: "fixture/1", at: "2026-08-20T09:00:00.000Z" }),
           ],
         );
         await c.query(
@@ -238,23 +238,29 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     expect(byslug.get("human-reviewed")).toEqual({
       status: "stable",
       trust_tier: "human-reviewed",
-      // The acts are JSONB: the instant is the one the AUTHOR wrote, byte-exact.
-      verified: { by: "human:kim", at: "2026-08-22T09:00:00Z" },
+      // The acts are JSONB, and the instants in them are the ones INGEST stored:
+      // the profile parses an authored instant to epoch ms and the adapter
+      // renders it back with `toISOString()`, so a record that wrote
+      // `2026-08-22T09:00:00Z` is served `...09:00:00.000Z`. These rows are
+      // hand-inserted, so they carry that shape deliberately — a fixture
+      // pinning the authored bytes would pin a wire shape no record produces.
+      verified: { by: "human:kim", at: "2026-08-22T09:00:00.000Z" },
       effective_from: "2026-08-21T00:00:00.000Z",
       stale_after: null,
       // `effective_from` is a TIMESTAMPTZ column, so it is the instant Postgres
-      // holds, normalised — not the authored text. The two forms are the two
-      // storage shapes, and both are the same instant.
+      // holds. Both channels therefore normalise, by two different routes —
+      // the acts through the adapter, the columns through the driver — and
+      // only `read`'s `frontmatter` is the author's own unnormalised bytes.
       // `checked: "policy"` is the honest half: the approver was checked
       // against the Governance Policy's authority list, and NOT yet against
       // change control (phase B). The envelope says which it is, the way
       // `gate` says whether the record can abstain at all.
-      approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z", checked: "policy" },
+      approval: { by: "human:cfo", at: "2026-08-21T09:00:00.000Z", checked: "policy" },
     });
     expect(byslug.get("machine-confirmed")?.trust_tier).toBe("machine-confirmed");
     expect(byslug.get("machine-confirmed")?.verified).toEqual({
       by: "process:nightly-finance",
-      at: "2026-08-22T09:00:00Z",
+      at: "2026-08-22T09:00:00.000Z",
     });
     // Unverified is a REAL state, not a missing one: the tier is named and the
     // verification is null. Reporting it as absent would let an agent read
@@ -269,9 +275,9 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
       [
         TENANT,
         JSON.stringify([
-          { by: "process:old", at: "2026-01-02T00:00:00Z" },
-          { by: "process:newest", at: "2026-06-01T00:00:00Z" },
-          { by: "process:middle", at: "2026-03-04T00:00:00Z" },
+          { by: "process:old", at: "2026-01-02T00:00:00.000Z" },
+          { by: "process:newest", at: "2026-06-01T00:00:00.000Z" },
+          { by: "process:middle", at: "2026-03-04T00:00:00.000Z" },
         ]),
       ],
     );
@@ -282,7 +288,7 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
       // one that says how current the review is.
       expect(hit?.governance.verified).toEqual({
         by: "process:newest",
-        at: "2026-06-01T00:00:00Z",
+        at: "2026-06-01T00:00:00.000Z",
       });
     } finally {
       await pool.query(
