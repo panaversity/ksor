@@ -27,7 +27,7 @@ export { envInt } from "./env.js";
 export type { Env, WarnLog } from "./env.js";
 export { RequiredEnvError, requireEnv, resolveBind } from "./serve.js";
 export type { Bind } from "./serve.js";
-export { transportSecurityFromEnv } from "./transport-security.js";
+export { TransportSecurityError, transportSecurityFromEnv } from "./transport-security.js";
 export type { TransportSecuritySettings } from "./transport-security.js";
 export { metadataUrls, resolveJwks } from "./jwks-discovery.js";
 export type { JwksResolution, JwksSource } from "./jwks-discovery.js";

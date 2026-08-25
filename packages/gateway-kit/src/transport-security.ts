@@ -18,6 +18,11 @@
 
 import type { Env } from "./env.js";
 
+/** A malformed transport-security value, refused at boot rather than at the first request. */
+export class TransportSecurityError extends Error {
+  override readonly name: string = "TransportSecurityError";
+}
+
 export type TransportSecuritySettings = {
   enableDnsRebindingProtection: true;
   allowedHosts: string[];
@@ -46,7 +51,26 @@ export function transportSecurityFromEnv(env: Env = process.env): TransportSecur
       .map((item) => item.trim().toLowerCase())
       .filter((item) => item !== "");
   const allowedHosts = split(env.KSOR_ALLOWED_HOSTS);
-  const allowedOrigins = split(env.KSOR_ALLOWED_ORIGINS);
+  // An origin is scheme + host + port and NOTHING else, so it is normalised
+  // through the parser rather than by string handling. `https://a.com/` — the
+  // form anyone copies out of a browser bar — became the allowlist entry
+  // "https://a.com/", while a browser sends `Origin: https://a.com`, and the
+  // exact `Set.has` in the door then 403'd every browser client. Same class as
+  // the case-folding defect fixed in this diff: fails closed, so it is
+  // availability rather than exposure, and it is a total outage from a valid
+  // setting either way. A value that is not a URL at all is refused here rather
+  // than silently never matching.
+  const allowedOrigins = split(env.KSOR_ALLOWED_ORIGINS).map((value) => {
+    try {
+      return new URL(value).origin.toLowerCase();
+    } catch {
+      throw new TransportSecurityError(
+        `KSOR_ALLOWED_ORIGINS contains ${JSON.stringify(value)}, which is not an origin. ` +
+          "Each entry is scheme://host[:port] — for example https://app.example.com — with no " +
+          "path; an unparseable entry would match nothing and refuse every browser client.",
+      );
+    }
+  });
   if (allowedHosts.length === 0 && allowedOrigins.length === 0) return null;
   return { enableDnsRebindingProtection: true, allowedHosts, allowedOrigins };
 }

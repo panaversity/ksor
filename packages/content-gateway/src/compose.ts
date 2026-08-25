@@ -44,6 +44,7 @@ import { isRefusal } from "./refusal-body.js";
 import { loadGateway } from "./gateway-load.js";
 import { verifyGatewaySurface } from "./gateway-verify.js";
 import { buildServer } from "./server.js";
+import { tallyHandlers } from "./tools.js";
 import type { Registration } from "./server.js";
 
 export interface Composition {
@@ -392,7 +393,11 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // healthy while its agent quietly stops abstaining. Built on a throwaway
   // server: the door constructs a fresh one per request, so closing this one
   // touches nothing. Costs no database round trip.
-  await verifyGatewaySurface(buildServer(ctx, version, registration));
+  // The tally is taken around the BUILD, so the check can tell a record that
+  // dropped a tool from one serving a ksor handler behind a surface it cannot
+  // inspect (`ksor-gateway-unverifiable`).
+  const built = tallyHandlers(() => buildServer(ctx, version, registration));
+  await verifyGatewaySurface(built.value, { registered: built.registered });
 
   return {
     ctx,

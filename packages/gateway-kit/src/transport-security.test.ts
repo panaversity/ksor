@@ -58,3 +58,27 @@ describe("the allowlist matches the way HTTP compares these values", () => {
     expect(settings?.allowedOrigins).toEqual(["https://mcp.acme.com"]);
   });
 });
+
+describe("an origin is normalised through the parser, not by string handling", () => {
+  it("accepts the form people copy out of a browser bar", () => {
+    // `https://a.com/` became the allowlist entry "https://a.com/" while a
+    // browser sends `Origin: https://a.com`, so the exact Set lookup in the
+    // door 403'd every browser client — a total outage from a valid setting
+    // (security review, 2026-08-25).
+    expect(
+      transportSecurityFromEnv({ KSOR_ALLOWED_ORIGINS: "https://a.com/" })?.allowedOrigins,
+    ).toEqual(["https://a.com"]);
+  });
+
+  it("keeps a non-default port, which IS part of an origin", () => {
+    expect(
+      transportSecurityFromEnv({ KSOR_ALLOWED_ORIGINS: "https://a.com:8443/" })?.allowedOrigins,
+    ).toEqual(["https://a.com:8443"]);
+  });
+
+  it("refuses a value that is not an origin at all, rather than never matching", () => {
+    expect(() => transportSecurityFromEnv({ KSOR_ALLOWED_ORIGINS: "a.com" })).toThrowError(
+      /not an origin/,
+    );
+  });
+});

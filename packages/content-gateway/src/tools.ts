@@ -359,7 +359,55 @@ export interface SearchArgs {
   readonly min_trust_tier?: TrustTier | undefined;
 }
 
+/**
+ * How many ksor handlers a registration created — the half of the boot check
+ * that a renamed or absent output schema cannot hide.
+ *
+ * The surface check recognises a ksor tool by the SHAPE of its output schema,
+ * because the NAME is exactly what an adopter is invited to change. Two
+ * registrations defeat that without meaning to: one renaming the output
+ * schema's fields, and one omitting `outputSchema` altogether — which the MCP
+ * SDK permits and is the most ordinary field to leave off a hand-written
+ * registration. Either way the tool is unrecognised, and an unrecognised tool is
+ * indistinguishable from a tool the record deliberately dropped, so the floor
+ * check was skipped and the door booted clean while the connecting agent was
+ * never told to abstain, never told what `gate: "off"` means, and never told
+ * that hit content is untrusted — which is the injection defence itself
+ * (security review, 2026-08-25, confirmed by execution).
+ *
+ * Counting the HANDLERS answers the question the schema cannot: dropping a tool
+ * creates no handler and is still allowed, while wiring a real ksor handler
+ * behind a surface this check cannot inspect is refused.
+ *
+ * A module-level slot rather than an argument, because the handlers are called
+ * by ADOPTER code we do not control the signature of. Saved and restored around
+ * the body so a nested build cannot clobber an outer tally, and synchronous
+ * throughout — `registration(ctx, version)` and `buildServer` both are.
+ */
+export type HandlerKind = "search" | "outline" | "read";
+
+let tally: Record<HandlerKind, number> | null = null;
+
+function record(kind: HandlerKind): void {
+  if (tally !== null) tally[kind] += 1;
+}
+
+export function tallyHandlers<T>(body: () => T): {
+  readonly value: T;
+  readonly registered: Readonly<Record<HandlerKind, number>>;
+} {
+  const outer = tally;
+  const mine: Record<HandlerKind, number> = { search: 0, outline: 0, read: 0 };
+  tally = mine;
+  try {
+    return { value: body(), registered: mine };
+  } finally {
+    tally = outer;
+  }
+}
+
 export function searchHandler(ctx: ServiceContext): (args: SearchArgs) => Promise<CallToolResult> {
+  record("search");
   return async ({ query, k, min_trust_tier }) => {
     try {
       // The floor is decided HERE, in the package, and never in the
@@ -396,6 +444,7 @@ export interface OutlineArgs {
 export function outlineHandler(
   ctx: ServiceContext,
 ): (args: OutlineArgs) => Promise<CallToolResult> {
+  record("outline");
   return async ({ node, depth, limit, offset }) => {
     try {
       return reply(
@@ -421,6 +470,7 @@ export interface ReadArgs {
 }
 
 export function readHandler(ctx: ServiceContext): (args: ReadArgs) => Promise<CallToolResult> {
+  record("read");
   return async ({ slug, heading, from_heading, snapshot_token, token_budget }) => {
     try {
       return reply(
