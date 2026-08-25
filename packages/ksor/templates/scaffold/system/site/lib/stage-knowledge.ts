@@ -106,10 +106,18 @@ function planStage(recordDir: string, development: boolean): StagePlan {
       documents.set(rel, path.join(recordDir, rel));
   }
   // A yaml companion beside a document is a file the record reader does not
-  // load (it reads `.md` and `.yaml` alike, but the lock lists every companion).
+  // load (it reads `.md` and `.yaml` alike, but the lock lists every companion);
+  // everything that is neither a concept nor a companion is an ASSET, which the
+  // lock also covers because this build publishes its bytes.
+  const assetFiles = new Map<string, string>();
   for (const file of walkFiles(recordDir)) {
     const rel = path.relative(recordDir, file).split(path.sep).join("/");
-    if (COMPANION.test(path.basename(rel)) && !companions.has(rel)) companions.set(rel, file);
+    const name = path.basename(rel);
+    if (COMPANION.test(name)) {
+      if (!companions.has(rel)) companions.set(rel, file);
+    } else if (!name.endsWith(".md")) {
+      assetFiles.set(rel, file);
+    }
   }
 
   const draftsRequested = process.env.KSOR_DRAFTS === "show";
@@ -124,6 +132,7 @@ function planStage(recordDir: string, development: boolean): StagePlan {
         {
           documents,
           companions,
+          assets: assetFiles,
           control: {
             instance: record.files.get("instance.md") ?? "",
             policy: record.files.get(POLICY_PATH) ?? "",

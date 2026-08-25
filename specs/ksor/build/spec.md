@@ -94,7 +94,8 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
       "admitted": ["public", "internal"]
     }
   ],
-  "companions": [{ "path": "what-is-a-ksor.summary.md", "sha256": "…" }]
+  "companions": [{ "path": "what-is-a-ksor.summary.md", "sha256": "…" }],
+  "assets": [{ "path": "policies/diagram.png", "sha256": "…" }]
 }
 ```
 
@@ -117,8 +118,14 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   staleness therefore leaves the open web on the next build, and a scheduled
   rebuild is the operator's obligation (plan §5). `drafts` is `hidden` or
   `shown` (`KSOR_DRAFTS=show`, human surfaces only).
+- `assets[]` is every non-markdown file of the bundle, by bytes — images, PDFs,
+  anything the site copies. It is in the lock because the site PUBLISHES those
+  bytes: without it, replacing a diagram after the lock was written changed what
+  the site serves with no refusal anywhere, so "a projection only publishes what
+  was checked" stopped at the markdown, on records where the substance is often
+  in the diagram.
 - `build_id` = sha256 over everything a projection reads: the sorted
-  `documents[]` and `companions[]` `(path, sha256)` pairs, `instance_sha256`,
+  `documents[]`, `companions[]` and `assets[]` `(path, sha256)` pairs, `instance_sha256`,
   `policy_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each
   document's `admitted` list — the canonical viewers whose machine artefacts
   contain it at `as_of` (stable, effective, unexpired, not denied, audience
@@ -171,7 +178,8 @@ carries `rel="alternate" type="text/markdown"`; every page carries
 lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development.
 **Fresh covers the CONTROL files, not only the documents**: `instance.md`,
 `.ksor/governance.yaml` and `.ksor/takedowns.yaml` are hashed against
-`instance_sha256`, `policy_sha256` and `ledger_sha256`, and the lock's
+`instance_sha256`, `policy_sha256` and `ledger_sha256`, every asset against
+`assets[]`, and the lock's
 `ledger_entries` are passed to the checker as a `ksor-ledger-amended`
 baseline. Without that, a takedown was lifted by deleting four lines and the
 committed lock still validated (reproduced 2026-08-25) — a freshness claim

@@ -52,6 +52,7 @@ export function lockWith(
       audiences: { registry: [], viewers: {} },
       documents: [],
       companions: [],
+      assets: [],
     },
     null,
     2,

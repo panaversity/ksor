@@ -140,6 +140,7 @@ function project(root: string, options: { documents: number; audience: string })
       audiences: { registry: ["internal"] },
       documents,
       companions: [],
+      assets: [],
     }),
   );
 

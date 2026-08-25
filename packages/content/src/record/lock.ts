@@ -63,6 +63,7 @@ const lockSchema = z
         .strict(),
     ),
     companions: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
+    assets: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
   })
   .strict();
 
@@ -96,6 +97,12 @@ export interface Lock {
   };
   readonly documents: readonly LockDocument[];
   readonly companions: readonly { readonly path: string; readonly sha256: string }[];
+  /**
+   * Every non-markdown file of the bundle, by bytes. The site publishes these,
+   * so a lock that stopped at the markdown left the images and PDFs — often
+   * where a record's substance actually is — outside "what was checked".
+   */
+  readonly assets: readonly { readonly path: string; readonly sha256: string }[];
 }
 
 export type LockResult =
@@ -133,6 +140,7 @@ export interface BuildIdInputs {
     readonly admitted: readonly string[];
   }[];
   readonly companions: readonly { readonly path: string; readonly sha256: string }[];
+  readonly assets: readonly { readonly path: string; readonly sha256: string }[];
   readonly instance_sha256: string;
   readonly policy_sha256: string;
   readonly ledger_sha256: string;
@@ -148,6 +156,9 @@ export function buildIdOf(inputs: BuildIdInputs): string {
       .sort((a, b) => compare(String(a[0]), String(b[0]))),
     companions: [...inputs.companions]
       .map((c) => [c.path, c.sha256])
+      .sort((a, b) => compare(a[0] ?? "", b[0] ?? "")),
+    assets: [...inputs.assets]
+      .map((a) => [a.path, a.sha256])
       .sort((a, b) => compare(a[0] ?? "", b[0] ?? "")),
     instance_sha256: inputs.instance_sha256,
     policy_sha256: inputs.policy_sha256,
@@ -210,6 +221,8 @@ export interface LockInput {
   readonly audiences: readonly string[];
   readonly concepts: readonly (AdmissionConcept & { readonly text: string })[];
   readonly companions: readonly { readonly path: string; readonly text: string }[];
+  /** Bundle-relative path → raw bytes, for every non-markdown file of the record. */
+  readonly assets: readonly { readonly path: string; readonly bytes: Uint8Array }[];
   readonly denials: readonly Denial[];
 }
 
@@ -227,6 +240,9 @@ export function composeLock(input: LockInput): Lock {
   const companions = [...input.companions]
     .sort((a, b) => compare(a.path, b.path))
     .map((c) => ({ path: c.path, sha256: sha256Hex(c.text) }));
+  const assets = [...input.assets]
+    .sort((a, b) => compare(a.path, b.path))
+    .map((a) => ({ path: a.path, sha256: sha256Hex(a.bytes) }));
   const instance_sha256 = sha256Hex(input.instanceText);
   const policy_sha256 = sha256Hex(input.policyText);
   const ledger_sha256 = sha256Hex(input.ledgerText ?? "");
@@ -235,6 +251,7 @@ export function composeLock(input: LockInput): Lock {
     build_id: buildIdOf({
       documents,
       companions,
+      assets,
       instance_sha256,
       policy_sha256,
       ledger_sha256,
@@ -254,6 +271,7 @@ export function composeLock(input: LockInput): Lock {
     audiences: { registry: [...input.audiences].sort(), viewers },
     documents,
     companions,
+    assets,
   };
 }
 

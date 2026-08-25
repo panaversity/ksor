@@ -53,6 +53,7 @@ const lockSchema = z
     audiences: z.object({ registry: z.array(z.string().min(1)) }).loose(),
     documents: z.array(hashed.loose()),
     companions: z.array(hashed.loose()),
+    assets: z.array(hashed.loose()),
   })
   .loose();
 
@@ -92,6 +93,7 @@ export function readLock(
   files: {
     readonly documents: ReadonlyMap<string, string>;
     readonly companions: ReadonlyMap<string, string>;
+    readonly assets: ReadonlyMap<string, string>;
     readonly control: ControlTexts;
   },
   options: { readonly draftsRequested: boolean },
@@ -178,11 +180,16 @@ function firstStale(
   files: {
     readonly documents: ReadonlyMap<string, string>;
     readonly companions: ReadonlyMap<string, string>;
+    readonly assets: ReadonlyMap<string, string>;
   },
 ): string | null {
   for (const [kind, entries, tree] of [
     ["document", lock.documents, files.documents],
     ["companion", lock.companions, files.companions],
+    // Assets last and never omitted: the site publishes their bytes, and for a
+    // record whose diagrams carry the substance a lock that stops at the
+    // markdown does not cover what the build actually serves.
+    ["asset", lock.assets, files.assets],
   ] as const) {
     const locked = new Map(entries.map((e) => [e.path, e.sha256] as const));
     for (const [rel, abs] of tree) {

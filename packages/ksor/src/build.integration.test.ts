@@ -282,6 +282,33 @@ describe("ksor build — acceptance 3: refusals write nothing", () => {
   });
 });
 
+describe("ksor build — assets are part of what was checked", () => {
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  /**
+   * Assets were absent from the lock entirely, so the bytes a site publishes
+   * for every image were never compared against anything the build checked.
+   * For a record whose diagrams and PDFs carry the substance, "a projection
+   * only publishes what was checked" stopped at the markdown.
+   */
+  it("records each asset's sha256, and its bytes move the build_id", () => {
+    const root = repo();
+    writeFileSync(path.join(root, "knowledge/policies/diagram.png"), PNG);
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const first = lockOf(root);
+    expect(first.assets.map((a) => a.path)).toEqual(["policies/diagram.png"]);
+
+    writeFileSync(path.join(root, "knowledge/policies/diagram.png"), Buffer.concat([PNG, PNG]));
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const second = lockOf(root);
+    expect(second.assets[0]?.sha256).not.toBe(first.assets[0]?.sha256);
+    expect(second.build_id).not.toBe(first.build_id);
+  });
+});
+
 describe("ksor build — a record-wide legal hold", () => {
   /**
    * `knowledge/#section` is the shape `denies()` documents as covering

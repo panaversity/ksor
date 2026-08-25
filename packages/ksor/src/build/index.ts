@@ -205,6 +205,10 @@ export function runBuild(
     companions: [...record.files]
       .filter(([p]) => /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(p))
       .map(([p, text]) => ({ path: p.slice("knowledge/".length), text })),
+    assets: [...(record.assets ?? new Map())].map(([p, bytes]) => ({
+      path: p.slice("knowledge/".length),
+      bytes,
+    })),
     denials,
   });
 

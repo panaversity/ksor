@@ -257,6 +257,7 @@ function writeLock(
   const knowledge = path.join(root, "knowledge");
   const documents: { path: string; sha256: string }[] = [];
   const companions: { path: string; sha256: string }[] = [];
+  const assets: { path: string; sha256: string }[] = [];
   const walk = (dir: string, prefix: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const rel = `${prefix}${entry.name}`;
@@ -265,6 +266,8 @@ function writeLock(
         companions.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
       } else if (entry.name.endsWith(".md") && entry.name !== "index.md") {
         documents.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
+      } else if (!entry.name.endsWith(".md")) {
+        assets.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
       }
     }
   };
@@ -288,6 +291,7 @@ function writeLock(
         audiences: { registry: ["internal"], viewers: { public: ["public"] } },
         documents,
         companions,
+        assets,
       },
       null,
       2,
@@ -779,6 +783,26 @@ describe("the lock's freshness claim covers the control files", () => {
     writeLock(fixture.root);
     expect(r.status, r.stderr).not.toBe(0);
     expect(r.stderr).toContain("ksor-symlink");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  /**
+   * Assets were absent from the lock entirely, so the bytes the site publishes
+   * for every image were never compared against anything `ksor build` checked.
+   * Real run: replacing `knowledge/guides/diagram.png` after the lock was
+   * written → exit 0, tampered bytes staged and published. For a record whose
+   * diagrams and PDFs carry the substance, "a projection only publishes what
+   * was checked" stopped at the markdown.
+   */
+  it("an asset whose bytes changed since the lock refuses, naming it", () => {
+    const file = path.join(fixture.root, "knowledge", "guides", "diagram.png");
+    const before = readFileSync(file);
+    writeFileSync(file, Buffer.from("TAMPERED-ASSET-BYTES"));
+    const r = stage(fixture);
+    writeFileSync(file, before);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain("guides/diagram.png");
     expect(existsSync(fixture.stage)).toBe(false);
   });
 
