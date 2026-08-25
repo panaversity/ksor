@@ -1,5 +1,10 @@
 /**
- * The trust floor, as a caller and a deployment can both name it.
+ * What the door SAYS about a hit's governance, and what it ENFORCES.
+ *
+ * Two halves of one guarantee, on one fixture: every hit carries the
+ * governance its document declared (status, trust tier, the latest
+ * verification, effectivity, and an approval that says what it was checked
+ * against), and the trust floor decides which hits exist at all.
  *
  * `ServiceContext.minTrustTier` was a seam nothing on the wire could reach: a
  * record could carry `verified` and an agent had no way to say "answer me only
@@ -71,7 +76,24 @@ const DOCS = [
   },
 ] as const;
 
-describe.runIf(adminDsn !== "")("the trust floor on `search` (db)", () => {
+/** The half of a hit this suite is about. */
+interface WireHit {
+  readonly slug: string;
+  readonly governance: {
+    readonly status: string;
+    readonly trust_tier: string;
+    readonly verified: { readonly by: string; readonly at: string } | null;
+    readonly effective_from: string | null;
+    readonly stale_after: string | null;
+    readonly approval: {
+      readonly by: string;
+      readonly at: string;
+      readonly checked: string;
+    } | null;
+  };
+}
+
+describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () => {
   let admin: pg.Pool;
   let pool: pg.Pool;
   let dbName: string;
@@ -92,16 +114,20 @@ describe.runIf(adminDsn !== "")("the trust floor on `search` (db)", () => {
     ...(configured === undefined ? {} : { minTrustTier: configured }),
   });
 
-  /** Call the TOOL, the way the registration does, and read the slugs back. */
+  /** Call the TOOL, the way the registration does. */
+  const searchAs = async (
+    ctx: ServiceContext,
+    args: Omit<SearchArgs, "query" | "k"> = {},
+  ): Promise<{ ok: boolean; hits?: WireHit[] }> => {
+    const reply = await searchHandler(ctx)({ query: QUERY, k: 10, ...args });
+    expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
+    return reply.structuredContent as { ok: boolean; hits?: WireHit[] };
+  };
+
   const slugsFrom = async (
     ctx: ServiceContext,
     args: Omit<SearchArgs, "query" | "k"> = {},
-  ): Promise<string[]> => {
-    const reply = await searchHandler(ctx)({ query: QUERY, k: 10, ...args });
-    const body = reply.structuredContent as { ok: boolean; hits?: { slug: string }[] };
-    expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
-    return (body.hits ?? []).map((h) => h.slug).sort();
-  };
+  ): Promise<string[]> => ((await searchAs(ctx, args)).hits ?? []).map((h) => h.slug).sort();
 
   beforeAll(async () => {
     dbName = `ksor_trust_${randomBytes(4).toString("hex")}`;
@@ -188,6 +214,71 @@ describe.runIf(adminDsn !== "")("the trust floor on `search` (db)", () => {
     }
   });
 
+  it("carries every hit's governance — status, tier, verification, effectivity, approval", async () => {
+    // Governance travels WITH the passage, not on the envelope: an agent
+    // deciding whether to rely on a sentence is deciding about the document
+    // that sentence came from, and a per-response summary cannot say which of
+    // several hits was the reviewed one.
+    const hits = (await searchAs(doorAt(undefined))).hits ?? [];
+    const byslug = new Map(hits.map((h) => [h.slug, h.governance]));
+
+    expect(byslug.get("human-reviewed")).toEqual({
+      status: "stable",
+      trust_tier: "human-reviewed",
+      // The acts are JSONB: the instant is the one the AUTHOR wrote, byte-exact.
+      verified: { by: "human:kim", at: "2026-08-22T09:00:00Z" },
+      effective_from: "2026-08-21T00:00:00.000Z",
+      stale_after: null,
+      // `effective_from` is a TIMESTAMPTZ column, so it is the instant Postgres
+      // holds, normalised — not the authored text. The two forms are the two
+      // storage shapes, and both are the same instant.
+      // `checked: "policy"` is the honest half: the approver was checked
+      // against the Governance Policy's authority list, and NOT yet against
+      // change control (phase B). The envelope says which it is, the way
+      // `gate` says whether the record can abstain at all.
+      approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z", checked: "policy" },
+    });
+    expect(byslug.get("machine-confirmed")?.trust_tier).toBe("machine-confirmed");
+    expect(byslug.get("machine-confirmed")?.verified).toEqual({
+      by: "process:nightly-finance",
+      at: "2026-08-22T09:00:00Z",
+    });
+    // Unverified is a REAL state, not a missing one: the tier is named and the
+    // verification is null. Reporting it as absent would let an agent read
+    // "unknown" where the record says "nobody has reviewed this".
+    expect(byslug.get("unverified")?.trust_tier).toBe("unverified");
+    expect(byslug.get("unverified")?.verified).toBeNull();
+  });
+
+  it("reports the LATEST verification when a document carries several", async () => {
+    await pool.query(
+      "UPDATE content_nodes SET verified = $2::jsonb WHERE tenant_id = $1 AND slug = 'unverified'",
+      [
+        TENANT,
+        JSON.stringify([
+          { by: "process:old", at: "2026-01-02T00:00:00Z" },
+          { by: "process:newest", at: "2026-06-01T00:00:00Z" },
+          { by: "process:middle", at: "2026-03-04T00:00:00Z" },
+        ]),
+      ],
+    );
+    try {
+      const hits = (await searchAs(doorAt(undefined))).hits ?? [];
+      const hit = hits.find((h) => h.slug === "unverified");
+      // Authored order is not chronological order, and the newest act is the
+      // one that says how current the review is.
+      expect(hit?.governance.verified).toEqual({
+        by: "process:newest",
+        at: "2026-06-01T00:00:00Z",
+      });
+    } finally {
+      await pool.query(
+        "UPDATE content_nodes SET verified = NULL WHERE tenant_id = $1 AND slug = 'unverified'",
+        [TENANT],
+      );
+    }
+  });
+
   it("defaults to unverified — an argument-less call sees every tier", async () => {
     expect(await slugsFrom(doorAt(undefined))).toEqual([
       "human-reviewed",
@@ -230,8 +321,8 @@ describe.runIf(adminDsn !== "")("the trust floor on `search` (db)", () => {
   });
 });
 
-describe.runIf(adminDsn === "")("the trust floor on `search` (gated)", () => {
-  it("skipped — set KSOR_DB_URL to run the trust-floor walk", () => {
+describe.runIf(adminDsn === "")("the governance surface of `search` (gated)", () => {
+  it("skipped — set KSOR_DB_URL to run the governance-surface walk", () => {
     expect(adminDsn).toBe("");
   });
 });

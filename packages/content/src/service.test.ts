@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONTENT_ADVISORY,
+  hitGovernance,
   instructionLike,
+  latestAct,
   sectionVocabulary,
   stripAssetMarkup,
 } from "./service.js";
 import type { DocumentChunk } from "./lib/windowing.js";
+import type { Hit } from "./lib/search.js";
 
 describe("stripAssetMarkup", () => {
   it("replaces paired and self-closing svg with [diagram]", () => {
@@ -154,5 +157,75 @@ describe("sectionVocabulary — the error names what read will actually accept",
 
   it("says so plainly when a document has no sections at all", () => {
     expect(sectionVocabulary([chunk("")])).toMatch(/no sections/);
+  });
+});
+
+describe("latestAct", () => {
+  it("is the newest act, not the last authored one", () => {
+    expect(
+      latestAct([
+        { by: "process:old", at: "2026-01-02T00:00:00Z" },
+        { by: "process:newest", at: "2026-06-01T00:00:00Z" },
+        { by: "process:middle", at: "2026-03-04T00:00:00Z" },
+      ]),
+    ).toEqual({ by: "process:newest", at: "2026-06-01T00:00:00Z" });
+  });
+
+  it("is null for no acts at all — a real state, not a missing one", () => {
+    expect(latestAct(null)).toBeNull();
+    expect(latestAct([])).toBeNull();
+  });
+
+  it("an unparseable instant sorts last rather than emptying the signal", () => {
+    // One malformed date in one entry must not cost the document its whole
+    // verification history.
+    expect(
+      latestAct([
+        { by: "human:kim", at: "2026-06-01T00:00:00Z" },
+        { by: "human:broken", at: "not an instant" },
+      ]),
+    ).toEqual({ by: "human:kim", at: "2026-06-01T00:00:00Z" });
+  });
+});
+
+describe("hitGovernance", () => {
+  const base: Hit = {
+    chunkId: "c1",
+    sourceId: "s1",
+    stableId: "knowledge/policy",
+    slug: "policy",
+    headingPath: null,
+    content: "text",
+    score: 1,
+    generation: 3,
+    permalink: null,
+    docStatus: "stable",
+    trustTier: 2,
+    verified: [{ by: "human:kim", at: "2026-08-22T09:00:00Z" }],
+    approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+    effectiveFrom: "2026-08-21T00:00:00.000Z",
+    staleAfter: null,
+  };
+
+  it("names the tier and says what the approval was checked against", () => {
+    expect(hitGovernance(base)).toEqual({
+      status: "stable",
+      trust_tier: "human-reviewed",
+      verified: { by: "human:kim", at: "2026-08-22T09:00:00Z" },
+      effective_from: "2026-08-21T00:00:00.000Z",
+      stale_after: null,
+      // Never more than "policy" until change-control verification exists: an
+      // inflated claim about what was checked is the failure this key prevents.
+      approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z", checked: "policy" },
+    });
+  });
+
+  it("reads a NULL tier as unverified, the way the SQL predicate does", () => {
+    // NULL is a pre-2.5 carried row, and such a generation is refused at boot;
+    // what this prevents is a `null` on a wire whose schema says "a tier".
+    const carried = hitGovernance({ ...base, trustTier: null, verified: null, approval: null });
+    expect(carried.trust_tier).toBe("unverified");
+    expect(carried.verified).toBeNull();
+    expect(carried.approval).toBeNull();
   });
 });

@@ -17,13 +17,14 @@ import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
 import { audienceGucs } from "./lib/audience.js";
 import { trustGucs } from "./lib/trust.js";
-import type { TrustTier } from "./record/profile.js";
+import { TRUST_TIERS, type TrustTier } from "./record/profile.js";
 import {
   GATE_PREDICATE_DIGEST,
   hybridSearch,
   keywordSearch,
   VECTOR_TXN_GUCS,
   type Hit,
+  type HitAct,
 } from "./lib/search.js";
 import {
   mint,
@@ -130,6 +131,43 @@ function viewerOf(ctx: ServiceContext): readonly string[] {
   return ctx.viewer ?? ["public"];
 }
 
+/**
+ * What the record says about the DOCUMENT a passage came from — beside the
+ * provenance that says where it came from.
+ *
+ * The two answer different questions and neither substitutes for the other:
+ * provenance proves who-said-when, governance says what this record has done
+ * about it. An agent weighing whether to rely on a sentence is weighing the
+ * document, so the answer travels with the passage rather than on the envelope
+ * — a per-response summary cannot say which of several hits was the reviewed
+ * one.
+ */
+export interface HitGovernance {
+  /** The authored lifecycle status — `stable` for anything served. */
+  readonly status: string | null;
+  /** `unverified` · `machine-confirmed` · `human-reviewed`, derived from `verified`, never authored. */
+  readonly trust_tier: TrustTier;
+  /** The LATEST verification act, or null when nobody has reviewed this — a real state, not a missing one. */
+  readonly verified: { readonly by: string; readonly at: string } | null;
+  readonly effective_from: string | null;
+  readonly stale_after: string | null;
+  /**
+   * Who approved publication, and WHAT THAT WAS CHECKED AGAINST.
+   *
+   * `checked: "policy"` means the approver was checked against the Governance
+   * Policy's authority list and nothing more: whether the approval commit
+   * actually followed review is change-control verification, and it is not
+   * built yet. Saying so in the envelope is the same honesty `gate: "off"`
+   * carries — a claim about what was verified must never be inflated by
+   * silence.
+   */
+  readonly approval: {
+    readonly by: string;
+    readonly at: string;
+    readonly checked: "policy";
+  } | null;
+}
+
 export interface SearchHit {
   readonly slug: string;
   /** '' (empty string, never null) for a passage before the first heading. */
@@ -142,6 +180,47 @@ export interface SearchHit {
     readonly slug: string;
     readonly generation: number;
     readonly retrieved_at: string;
+  };
+  readonly governance: HitGovernance;
+}
+
+/**
+ * The newest act in a `verified` list — pure, so the "which one is latest"
+ * decision is testable without a database.
+ *
+ * Authored order is not chronological order; the newest review is the one that
+ * says how current the checking is. An unparseable instant sorts last rather
+ * than throwing: a malformed date in one entry must not empty the whole signal.
+ */
+export function latestAct(acts: readonly HitAct[] | null): HitAct | null {
+  if (acts === null || acts.length === 0) return null;
+  const at = (a: HitAct): number => {
+    const ms = Date.parse(a.at);
+    return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+  };
+  return acts.reduce((best, act) => (at(act) >= at(best) ? act : best));
+}
+
+/**
+ * A hit's governance, as the wire carries it.
+ *
+ * A NULL tier reads as `unverified` for the same reason the SQL predicate
+ * COALESCEs it: NULL is what a pre-2.5 carried row holds, such a generation is
+ * refused at boot, and a three-valued answer here would put `null` on a wire
+ * whose schema says the field is a tier.
+ */
+export function hitGovernance(hit: Hit): HitGovernance {
+  const verified = latestAct(hit.verified);
+  return {
+    status: hit.docStatus,
+    trust_tier: TRUST_TIERS[hit.trustTier ?? 0] ?? "unverified",
+    verified: verified === null ? null : { by: verified.by, at: verified.at },
+    effective_from: hit.effectiveFrom,
+    stale_after: hit.staleAfter,
+    approval:
+      hit.approval === null
+        ? null
+        : { by: hit.approval.by, at: hit.approval.at, checked: "policy" },
   };
 }
 
@@ -536,6 +615,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         generation: hit.generation,
         retrieved_at: retrievedAt,
       },
+      governance: hitGovernance(hit),
     });
   }
 
