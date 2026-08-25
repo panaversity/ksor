@@ -50,3 +50,13 @@ does.
 Also: an empty `sources:` list is the same value as no `sources:` list
 everywhere, so it no longer changes a generation's provenance digest depending
 on which side of a round trip it is read from.
+
+**A malformed argument no longer reports itself as an outage.** A value Postgres
+cannot represent — a NUL byte in a slug or a query is the reachable case — made
+every read fail with "content store temporarily unavailable". The condition is
+deterministic and harmless to the connection, but the tool guidance this door
+hands every agent says `unavailable` means retry later and never conclude the
+thing is absent, so a caller with one bad argument was told to retry forever
+while the store answered everyone else. SQLSTATE class 22 is now reported as
+what it is: the request was rejected as written, the store is healthy, and
+retrying it unchanged will not help. Connection failures are unchanged.

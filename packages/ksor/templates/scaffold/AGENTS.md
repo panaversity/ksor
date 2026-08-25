@@ -517,7 +517,10 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   (reading position), `sources` (`{ id, resource, title }`, cited in the body
   as GFM footnotes `[^id]`), `verified` (`[{ by, at }]` — sets the trust
   tier: none → unverified, machine actors → machine-confirmed, any `human:`
-  → human-reviewed), `stale_after`, `ksor.effective_from`. Actors are
+  → human-reviewed; unlike `ksor.approval`, the policy does not gate WHO may
+  appear here — it has no verification family — so a `verified` entry is a
+  claim the document makes about itself and the pull request that adds it is
+  the only thing standing behind it), `stale_after`, `ksor.effective_from`. Actors are
   `human:<id>`, `process:<id>` or `<producer>/<version>` in `verified`,
   `generated`, `ksor.approval` and `ksor.deprecated` — anything else there is
   refused. `ksor.owner` is not checked for its shape: write an actor or
@@ -550,11 +553,22 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 - **The agent surface carries them too — by EXCLUDING what it must not
   hand over.** `llms.txt` and `llms-full.txt` list only what the §2.5 table
   admits to a machine surface: stable, effective, unexpired, undenied. A
-  draft, a deprecated document and one whose `stale_after` has passed are not
-  entries at all, so an agent is never handed a withdrawn document as plain
-  prose. `llms-full.txt` serves each document's own frontmatter intact, plus
-  the derived `trust_tier` and this build's stamps — so what an agent reads
-  carries the same governance a reader sees on the page.
+  draft, a deprecated document, and one whose `stale_after` had passed **when
+  the build ran**, are not entries at all, so an agent is never handed a
+  withdrawn document as plain prose. `llms-full.txt` serves each document's own
+  frontmatter intact, plus the derived `trust_tier` and this build's stamps —
+  so what an agent reads carries the same governance a reader sees on the page.
+- **Those files are a SNAPSHOT, and keeping them true is yours.** A build
+  decides admission ONCE, at its own instant, and writes the answer into files;
+  static output cannot re-decide itself. So a document whose `stale_after`
+  passes AFTER a build keeps appearing in `llms.txt` and in its markdown twin
+  until the next build, while `ksor serve` — which evaluates the same rule per
+  request — already refuses it. `ksor build` prints the next instant at which
+  this goes out of date, and prints which documents it held back and why.
+  Nothing here rebuilds on a schedule: the shipped `validate.yml` runs the
+  checker on pull requests and `vercel.json` declares no cron. If this record
+  uses `stale_after` or `ksor.effective_from`, add a scheduled rebuild and
+  redeploy, or accept that the static half is as current as the last build.
 - **Don't want any of it on the published pages?** Set `governance: false`
   under `site:` in `instance.md`. The record keeps every key — the agent
   surface and your audit trail still read them, and `llms.txt`/`llms-full.txt`

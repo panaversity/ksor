@@ -523,15 +523,39 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     // The limit and the knob, not just the verdict: a caller told only "too
     // large" cannot tell whether to split their request or ask the operator to
     // raise the cap (review finding 6).
-    onError: (c) =>
-      c.json(
+    //
+    // `Connection: close`, because this answer is sent BEFORE the request body
+    // has been read. Hono refuses on the declared length and never drains the
+    // rest — which is right, since draining means reading a body already
+    // refused, at a size the CALLER chooses — but the response then advertised
+    // `Connection: keep-alive` on a socket about to die. Observed on the wire:
+    // `Connection: keep-alive`, `Keep-Alive: timeout=5`, then ECONNRESET. A
+    // client with a keep-alive agent put its NEXT request on that socket and
+    // lost it — measured 12 failures in 25 through Node `fetch`/undici, the
+    // mainstream MCP client stack. curl never saw it because it dials a fresh
+    // connection each time (protocol QA, 2026-08-25).
+    //
+    // RFC 9112 §9.6 is explicit: a server that responds before reading the
+    // whole body SHOULD close the connection and say so. Saying so is the
+    // entire fix — the close was always going to happen.
+    onError: (c) => {
+      // …and LOG it. The grep for this refusal in a full server log returned
+      // nothing, so the one message naming the fix was both the least likely to
+      // arrive and invisible to the operator afterwards.
+      console.error(
+        `refused a request body over ${maxBodyBytes} bytes (KSOR_MAX_BODY_BYTES); ` +
+          "the connection is closed because the body was never read",
+      );
+      return c.json(
         {
           error:
             `request body too large — this door accepts at most ${maxBodyBytes} bytes. ` +
             "Send a smaller request, or raise KSOR_MAX_BODY_BYTES on the server.",
         },
         413,
-      ),
+        { connection: "close" },
+      );
+    },
   });
 
   /**

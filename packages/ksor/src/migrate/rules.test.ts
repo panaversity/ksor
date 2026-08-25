@@ -23,13 +23,13 @@ const CTX: ConceptContext = {
   actor: "human:kim",
   approveBy: null,
   instant: "2026-08-25T12:00:00Z",
-  model: { tiers: [], defaultVisibility: null },
+  model: { tiers: [], defaultVisibility: null, lost: false },
 };
 const AT = "2026-08-20T09:00:00Z";
 const doc = (fm: string): string => `---\n${fm}---\n\nBody.\n`;
 
 describe("expandTier — the ranked model expands upward", () => {
-  const ranked = { tiers: ["public", "internal", "board"], defaultVisibility: null };
+  const ranked = { tiers: ["public", "internal", "board"], defaultVisibility: null, lost: false };
 
   it("keeps every tier at or above the declared one", () => {
     expect(expandTier(ranked, "internal")).toEqual(["internal", "board"]);
@@ -46,7 +46,9 @@ describe("expandTier — the ranked model expands upward", () => {
   });
 
   it("is [public] when the record declares no model at all", () => {
-    expect(expandTier({ tiers: [], defaultVisibility: null }, null)).toEqual(["public"]);
+    expect(expandTier({ tiers: [], defaultVisibility: null, lost: false }, null)).toEqual([
+      "public",
+    ]);
   });
 
   // Fail-closed, and visible in the diff: only that identifier can read it.
@@ -130,8 +132,11 @@ describe("the small derivations", () => {
     expect(modelOf({ audiences: ["public", "internal"], default_visibility: "internal" })).toEqual({
       tiers: ["public", "internal"],
       defaultVisibility: "internal",
+      lost: false,
     });
-    expect(modelOf({})).toEqual({ tiers: [], defaultVisibility: null });
+    // Declaring none is NOT the same as having had one deleted: this one is
+    // read off a pre-profile instance, so `[public]` is what the record meant.
+    expect(modelOf({})).toEqual({ tiers: [], defaultVisibility: null, lost: false });
   });
 });
 
@@ -346,7 +351,11 @@ describe("migrateInstance", () => {
     );
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.outcome.model).toEqual({ tiers: ["public", "internal"], defaultVisibility: null });
+    expect(r.outcome.model).toEqual({
+      tiers: ["public", "internal"],
+      defaultVisibility: null,
+      lost: false,
+    });
     expect(r.outcome.text).toBe(
       [
         "---",

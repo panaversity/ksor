@@ -12,7 +12,7 @@
  */
 
 import { isIndividualActor } from "./record/actor.js";
-import type { Expected, Scope } from "./record/ledger.js";
+import { RECORD_ROOT_DENIAL, type Expected, type Scope } from "./record/ledger.js";
 import type { Policy } from "./record/policy.js";
 
 /** A refusal from the verb: the slug is the first thing on stderr (product principle 4). */
@@ -47,6 +47,8 @@ export type Planned =
 
 const BUNDLE = "knowledge/";
 const ANCHOR = "#section";
+/** The bundle root — a directory, and the one directory no denial may name. */
+const ROOT = BUNDLE.slice(0, -1);
 
 /** Which act was asked for, and is it fully specified? Arguments only — no filesystem, no database. */
 export function planTakedown(args: TakedownArgs): Planned {
@@ -106,26 +108,61 @@ export function planTakedown(args: TakedownArgs): Planned {
       '--reason "the figure was superseded"',
     );
   }
-  const raw = args.stableId!;
-  if (!raw.startsWith(BUNDLE)) {
+  const typed = args.stableId!;
+  // The id the operator typed, reduced to its two parts ONCE: the path, and
+  // whether a `#section` anchor was on it. Everything below reads `path`.
+  //
+  // A trailing slash is never part of a concept id, and a shell puts one on
+  // every completed directory — so it arrives constantly and used to be
+  // recorded verbatim. `knowledge/policies/x/` matched no concept, so both
+  // surfaces denied nothing while the verb reported a denial, and `expected:
+  // removed` AGREED with "no such concept", leaving the checker green: a
+  // governance act reported as done with nothing red, ever.
+  // `knowledge/policies/#section` became the directory `policies//`, which
+  // every later `ksor build` refuses in an append-only ledger. Both walked live
+  // (2026-08-25).
+  // Slashes are trimmed on BOTH sides of the anchor, and the outer trim comes
+  // first: a completion can leave one after the anchor too, and testing for the
+  // anchor before trimming misses it and leaves it buried inside the path.
+  const cleaned = typed.replace(/\/+$/, "");
+  const anchored = cleaned.endsWith(ANCHOR);
+  const path = (anchored ? cleaned.slice(0, -ANCHOR.length) : cleaned).replace(/\/+$/, "");
+  // The record ROOT, in every shape a shell can hand it over, refused at the
+  // ACT rather than at the entry it would write — the ledger is append-only, so
+  // the anchored spelling used to exit 0 and leave an entry every subsequent
+  // `ksor build` refuses (`ksor-takedown-dangling`), with no exit but a
+  // revocation recording a lift that never happened; the bare one reached
+  // `join(root, null)` and exited 3, the ENVIRONMENT code, for an argument.
+  //
+  // Both scopes, one refusal, because it is one cause in two costumes: at
+  // subtree scope the two surfaces INVERT (`RECORD_ROOT_DENIAL`), and at node
+  // scope the id matches no concept at all, so `denies()` and the denylist row
+  // deny NOTHING while the verb prints `knowledge/ denied`.
+  if (path === ROOT) {
+    return refuse(
+      "ksor-takedown-record-root",
+      `\`${typed}\` names the whole record, and ${RECORD_ROOT_DENIAL.why}`,
+      RECORD_ROOT_DENIAL.fix,
+    );
+  }
+  if (!path.startsWith(BUNDLE)) {
     return refuse(
       "ksor-takedown-stable-id",
-      `\`${raw}\` is not a stable_id — every concept's id begins \`${BUNDLE}\``,
-      `name it as the record does: \`${BUNDLE}${raw.replace(/^\/+/, "")}\` (search and read report it as provenance.stable_id)`,
+      `\`${typed}\` is not a stable_id — every concept's id begins \`${BUNDLE}\``,
+      `name it as the record does: \`${BUNDLE}${path.replace(/^\/+/, "")}\` (search and read report it as provenance.stable_id)`,
+    );
+  }
+  if (scope === "node" && anchored) {
+    return refuse(
+      "ksor-takedown-stable-id",
+      `\`${typed}\` names a directory's section anchor, and the default scope denies one node`,
+      "pass --scope subtree to deny the directory and every descendant, or name a concept",
     );
   }
   // A subtree denial names the directory's `#section` anchor, because that is
   // the node the walk starts from. Appending it is not a guess: with
   // `--scope subtree` the operator has already said the id names a directory.
-  const stableId =
-    scope === "subtree" && !raw.endsWith(ANCHOR) ? `${raw.replace(/\/+$/, "")}${ANCHOR}` : raw;
-  if (scope === "node" && stableId.endsWith(ANCHOR)) {
-    return refuse(
-      "ksor-takedown-stable-id",
-      `\`${raw}\` names a directory's section anchor, and the default scope denies one node`,
-      "pass --scope subtree to deny the directory and every descendant, or name a concept",
-    );
-  }
+  const stableId = scope === "subtree" ? `${path}${ANCHOR}` : path;
   return { ok: true, mode: { kind: "deny", stableId, scope }, reason };
 }
 

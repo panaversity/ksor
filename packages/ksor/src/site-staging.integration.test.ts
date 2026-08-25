@@ -628,8 +628,11 @@ okf_version: "0.2"
     for (const rel of walkFiles(path.join(alt.root, "knowledge"))) {
       if (rel !== "draft-doc.md") rmSync(path.join(alt.root, "knowledge", rel));
     }
-    // Its denials name concepts that are gone, which is its own refusal.
-    writeFileSync(path.join(alt.root, ".ksor", "takedowns.yaml"), "");
+    // Its denials name concepts that are gone, which is its own refusal. The
+    // ledger is DELETED rather than blanked: a file that exists and holds
+    // nothing is `ksor-ledger-empty`, because that is what an interrupted write
+    // leaves — "this record has withdrawn nothing" is written by absence.
+    rmSync(path.join(alt.root, ".ksor", "takedowns.yaml"));
     writeLock(alt.root);
 
     const r = stage(alt);
@@ -646,7 +649,7 @@ okf_version: "0.2"
     for (const rel of walkFiles(path.join(alt.root, "knowledge"))) {
       if (rel !== "internal-note.md") rmSync(path.join(alt.root, "knowledge", rel));
     }
-    writeFileSync(path.join(alt.root, ".ksor", "takedowns.yaml"), "");
+    rmSync(path.join(alt.root, ".ksor", "takedowns.yaml"));
     writeLock(alt.root);
 
     const r = stage(alt);

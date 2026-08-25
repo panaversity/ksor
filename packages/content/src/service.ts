@@ -725,9 +725,16 @@ export interface ReadResult {
    *
    * It is beside `frontmatter` on purpose, and the two are not the same claim:
    * frontmatter is what the author DECLARED, untrusted corpus text like the
-   * prose under it, while this is what the record checked and stored. A read
-   * surface that offered only the authored block would be inviting an agent to
-   * read a declaration as a verification (review finding).
+   * prose under it, while this is what the record STORED. A read surface that
+   * offered only the authored block would be inviting an agent to read a
+   * declaration as a verification (review finding).
+   *
+   * "Stored", not "checked": the two are different per field, and saying
+   * "checked" of the whole block is the claim this door is not entitled to
+   * make. `approval` was checked against the Governance Policy;
+   * `trust_tier` was DERIVED from `verified` entries the document declares
+   * about itself, which the policy has no family to gate (record spec §2.3).
+   * The floor text says so to the agent; this says so to whoever edits it.
    */
   readonly governance: HitGovernance;
   readonly provenance: SearchHit["provenance"];

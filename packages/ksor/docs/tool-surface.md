@@ -22,23 +22,27 @@ numbers are exact for every record:
 
 |                                | chars  | ~tokens |                     |
 | ------------------------------ | ------ | ------- | ------------------- |
-| all three, as transmitted      | 16,214 | 4,054   | **always resident** |
-| `search` alone                 | 7,602  | 1,901   | always resident     |
+| all three, as transmitted      | 16,734 | 4,184   | **always resident** |
+| `search` alone                 | 7,932  | 1,983   | always resident     |
 | `outline` alone                | 3,332  | 833     | always resident     |
-| `read` alone                   | 5,276  | 1,319   | always resident     |
-| `outline` + `read`, if deleted | 8,608  | 2,152   | the saving below    |
+| `read` alone                   | 5,466  | 1,367   | always resident     |
+| `outline` + `read`, if deleted | 8,798  | 2,200   | the saving below    |
 
 **Two measurements, so read the first row apart from the rest.** Each tool's
 row is the JSON of that tool's own object; the first row is the JSON of the
 whole `tools` array, which carries four characters no tool's row does — its
 two brackets and the two separators between three tools. So the three tools
-sum to **16,210** and the array is **16,214**. Deleting a tool saves that
+sum to **16,730** and the array is **16,734**. Deleting a tool saves that
 tool's own row, not a share of the total.
 
 They grew: `search` was 5,383 chars before the trust floor and the governance
 each hit now carries, and `read` 3,396 before it carried the same governance
 block beside the frontmatter. That is the price of an agent being able to tell
 a reviewed document from an unreviewed one, and it is charged once per session.
+The last 520 of them are the price of that signal being HONEST: `trust_tier` is
+derived from reviews a document declares about itself, which no authority list
+gates, and both floors now say so rather than letting `human-reviewed` read as a
+check the record performed.
 
 **Replies** depend on your record's passages, so these are the 2026-08-23
 measurement against a live 81-document record (6,963 chunks), plus the
@@ -61,7 +65,7 @@ doing any work.
 ### 1. Delete a tool nothing calls
 
 The biggest win, and the easiest — delete its `registerTool` block. Dropping
-`outline` and `read` takes **8,608 chars (~2,152 tokens)** off every session,
+`outline` and `read` takes **8,798 chars (~2,200 tokens)** off every session,
 whether or not the agent would ever have called them.
 
 ### 2. Say what the record covers

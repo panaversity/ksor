@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  appendEntry,
+  bytesToAppend,
   checkLedgerActors,
   checkLedgerAgainstTree,
   checkLedgerAppendOnly,
@@ -62,6 +62,31 @@ function slugsOf(text: string | null): string[] {
 describe("parseLedger — record spec §5", () => {
   it("no file is an empty ledger, not a refusal", () => {
     expect(ledgerOf(null).entries).toEqual([]);
+  });
+
+  /**
+   * `null` and `""` used to be the same answer, and they are opposite claims.
+   * No file is how "this record has withdrawn nothing" is written. A file that
+   * exists and holds nothing is what an interrupted write leaves — the verb
+   * writes the header and the first entry in one call, so a real ledger is
+   * never empty — and reading it as "no denials" republishes everything the
+   * lost entries withdrew, then makes it permanent at the next write.
+   */
+  it("ksor-ledger-empty: a file that EXISTS and holds nothing is a refusal, not `no denials`", () => {
+    expect(slugsOf("")).toEqual(["ksor-ledger-empty"]);
+    expect(slugsOf("   \n\n\t")).toEqual(["ksor-ledger-empty"]);
+    const refused = parseLedger("", P);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(
+      refused.refusals[0]?.fix,
+      "the remedy has to name where the entries still are",
+    ).toContain("version control");
+  });
+
+  it("...and the header alone still reads as a ledger with no entries yet", () => {
+    // Comments are not emptiness: something wrote this file deliberately.
+    expect(ledgerOf("# written by ksor takedown\n").entries).toEqual([]);
   });
 
   it("reads the three entry kinds", () => {
@@ -613,7 +638,9 @@ describe("writing the ledger", () => {
       amends: denial.id,
     };
     let text: string | null = null;
-    for (const entry of [denial, revocation, amendment]) text = appendEntry(text, entry);
+    for (const entry of [denial, revocation, amendment]) {
+      text = (text ?? "") + bytesToAppend(text, entry);
+    }
     const parsed = parseLedger(text, ".ksor/takedowns.yaml");
     expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
     if (!parsed.ok) return;
@@ -629,9 +656,15 @@ describe("writing the ledger", () => {
   });
 
   it("appends rather than rewriting: every earlier byte survives, and a missing newline is added", () => {
-    const first = appendEntry(null, denial);
-    const second = appendEntry(first.replace(/\n$/, ""), { ...denial, id: `${at}-second` });
-    expect(second.startsWith(first)).toBe(true);
+    const first = bytesToAppend(null, denial);
+    // What the file HOLDS is never in the answer, so a caller cannot write the
+    // result back over the file — the shape that deleted concurrent acts.
+    const trimmed = first.replace(/\n$/, "");
+    const added = bytesToAppend(trimmed, { ...denial, id: `${at}-second` });
+    expect(added.startsWith("\n- id:"), "a file with no final newline gets one").toBe(true);
+    expect(added, "the header belongs to the first entry alone").not.toContain("#");
+    const second = trimmed + added;
+    expect(second.startsWith(first.trimEnd())).toBe(true);
     expect(parseLedger(second, "p").ok).toBe(true);
   });
 
@@ -642,7 +675,7 @@ describe("writing the ledger", () => {
    * npm's and bun's included.
    */
   it("the header names no package manager, because nothing can translate it later", () => {
-    const header = appendEntry(null, denial).split("- id:")[0] ?? "";
+    const header = bytesToAppend(null, denial).split("- id:")[0] ?? "";
     expect(header).toContain("#");
     for (const manager of ["pnpm", "npm run", "bun run", "yarn"]) {
       expect(header, `the ledger header names \`${manager}\``).not.toContain(manager);
@@ -650,7 +683,7 @@ describe("writing the ledger", () => {
   });
 
   it("a subtree denial names the `#section` anchor, and the reader agrees", () => {
-    const text = appendEntry(null, {
+    const text = bytesToAppend(null, {
       ...denial,
       stableId: "knowledge/policies#section",
       scope: "subtree",

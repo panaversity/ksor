@@ -474,3 +474,168 @@ describe("the migrate preview step runs on the records the runbook is for", () =
     },
   );
 });
+
+/**
+ * `verified` is the one governance input a document declares about ITSELF and
+ * nothing checks against the policy. Record spec §2.3 says so outright — the
+ * Governance Policy has no verification family, so `verified[].by` is checked
+ * for its actor FORM and for nothing else, and any well-formed `human:` actor
+ * promotes the trust tier to `human-reviewed`. That is asymmetric with
+ * `ksor.approval.by`, which `resolveApprovers` refuses outright when no rule
+ * matches: `ksor.approval.by: human:mallory` is refused by name, and
+ * `verified: [{ by: human:mallory }]` is accepted from anyone.
+ *
+ * The mechanism is a recorded, owner-gated design (closing it means adding a
+ * `verification_authorities` family, which widens a public surface), so it
+ * stands. What did NOT stand is that the surfaces an adopter and an agent
+ * actually read contradicted it, and one of them inverted it: at
+ * `KSOR_MIN_TRUST_TIER=human-reviewed` the only document served out of a
+ * record was the self-asserting one, carrying the sentence "This sentence was
+ * never read by a human being" (found 2026-08-25).
+ *
+ * So every surface that mentions the tier has to say whose claim it is. These
+ * assert against the SERVED bytes and the EMITTED template, not against the
+ * prose in this repo, because those are what an agent and an operator get.
+ */
+describe("every surface says who the trust tier is a claim by", () => {
+  /**
+   * The premise, read from the policy schema rather than asserted: the closed
+   * root key set of `.ksor/governance.yaml` names no verification family, so
+   * nothing in the policy can gate `verified`. THROWS when it cannot find what
+   * it came for, rather than quietly disarming the block below.
+   */
+  const policyGatesVerification = (): boolean => {
+    const src = read("packages/content/src/record/policy.ts");
+    const root = /"\(root\)":\s*\[([^\]]*)\]/.exec(src);
+    if (root === null) throw new Error("policy.ts: no `(root)` key list in POLICY_KEYS");
+    return /verif/i.test(root[1] as string);
+  };
+
+  /** The BYTES an agent receives, from the committed capture of `tools/list`. */
+  const servedTool = (name: string): string => {
+    const tools = JSON.parse(
+      read("packages/ksor/src/__fixtures__/served-surface.golden.json"),
+    ) as ReadonlyArray<{ name: string; description?: string }>;
+    const tool = tools.find((t) => t.name === name);
+    if (tool?.description === undefined) throw new Error(`served surface has no ${name} tool`);
+    return flat(tool.description);
+  };
+
+  it("reads the policy's key set, and finds no verification family", () => {
+    expect(policyGatesVerification()).toBe(false);
+  });
+
+  it("the search floor scopes `trust_tier` the way it already scopes `approval`", () => {
+    if (policyGatesVerification()) return;
+    const search = servedTool("search");
+    // The shape the approval sentence already has, applied to the other signal.
+    expect(
+      search,
+      "search's floor tells an agent `approval.checked` is only `policy` and says nothing " +
+        "at all about where `trust_tier` comes from — so `human-reviewed` reads as a check " +
+        "this record performed. It is the document's own declaration (record spec §2.3).",
+    ).toContain("the document's own claim that a human read it");
+  });
+
+  it("the read floor does not present the whole governance block as checked", () => {
+    if (policyGatesVerification()) return;
+    const readTool = servedTool("read");
+    expect(
+      readTool,
+      'read\'s floor says "governance" is what the record "checked and stored". Its ' +
+        "`trust_tier` was neither: it was derived from what the document declares about " +
+        "itself. Say which fields were checked against what.",
+    ).not.toMatch(/carries, checked and stored/);
+    expect(readTool).toMatch(/trust_tier/);
+  });
+
+  it("the emitted .env.example does not promise the trust floor serves only reviewed work", () => {
+    if (policyGatesVerification()) return;
+    const whole = read(`${SCAFFOLD}/env.example`);
+    // THIS variable's own block. `.ksor/governance.yaml` is named elsewhere in
+    // the file, so a whole-file match would pass on a paragraph about audiences.
+    const start = whole.indexOf("# The LOWEST trust tier");
+    const end = whole.indexOf("KSOR_MIN_TRUST_TIER=", start);
+    if (start === -1 || end === -1) throw new Error("env.example: no KSOR_MIN_TRUST_TIER block");
+    const block = flat(whole.slice(start, end));
+    expect(
+      block,
+      "`.env.example` tells the operator that `human-reviewed` on a record with no reviews " +
+        "serves nothing at all — true only until one document declares its own review, which " +
+        "nothing checks. That is the state in which the floor served the self-asserting " +
+        "document and no other.",
+    ).not.toMatch(/with no reviews serves nothing at all/);
+    expect(
+      block,
+      "the operator raising this floor has to be told, HERE, that the entries under it are " +
+        "declared by the document and gated by review of the change — not by the policy",
+    ).toMatch(/governance\.yaml/);
+  });
+
+  it("the emitted AGENTS.md marks the asymmetry beside the approval it sits next to", () => {
+    if (policyGatesVerification()) return;
+    const agents = flat(read(`${SCAFFOLD}/AGENTS.md`));
+    expect(
+      agents,
+      "AGENTS.md describes `ksor.approval` as `by an actor the policy authorises` and " +
+        "`verified` as simply setting the tier, two lines apart — an author reads them as " +
+        "the same kind of act. The policy gates one and not the other.",
+    ).toMatch(/verified[\s\S]{0,400}?the policy does not gate WHO may appear here/);
+  });
+});
+
+/**
+ * The emitted AGENTS.md told an adopter, unconditionally, that a document
+ * "whose `stale_after` has passed" is not an `llms.txt` entry "at all, so an
+ * agent is never handed a withdrawn document as plain prose". It is false about
+ * the artefact `ksor build` had just written: admission is decided ONCE, at the
+ * build's `as_of`, and static output cannot re-decide itself — so the moment
+ * that instant passes, `llms.txt` and the markdown twins keep publishing what
+ * `ksor serve`, which evaluates per request, already refuses (record spec §2.5
+ * specifies the divergence; the sentence denied it).
+ *
+ * Nothing in the emitted repo carried the obligation that follows: the shipped
+ * `validate.yml` has no `schedule`, `vercel.json` has no cron, and the README
+ * did not contain the word "stale" once. The whole statement of it was a code
+ * comment in this repository (found 2026-08-25).
+ */
+describe("the emitted docs are true about the artefact they ship with", () => {
+  /** Read from the rule, not asserted: only these two keys turn on the clock. */
+  const clockDecidesAdmission = (): boolean => {
+    const rule = read("packages/content/src/lib/lifecycle-rule.ts");
+    return rule.includes("doc.staleAfter !== null") && rule.includes("doc.effectiveFrom !== null");
+  };
+
+  it("reads the lifecycle rule, and finds admission decided at an instant", () => {
+    expect(clockDecidesAdmission()).toBe(true);
+  });
+
+  it("AGENTS.md does not claim a stale document is excluded whenever it goes stale", () => {
+    if (!clockDecidesAdmission()) return;
+    const agents = flat(read(`${SCAFFOLD}/AGENTS.md`));
+    expect(
+      agents,
+      "`llms.txt` excludes what was stale WHEN THE BUILD RAN. Stated unconditionally, this " +
+        "tells an adopter the static half re-decides itself, which is the one thing it " +
+        "cannot do — build/lifecycle-notice.ts and record spec §2.5.",
+    ).not.toMatch(/one whose `stale_after` has passed are not entries at all/);
+  });
+
+  it.each([
+    [`${SCAFFOLD}/AGENTS.md`, "the working rules an agent reads"],
+    [`${SCAFFOLD}/README.md`, "the operator's own front door"],
+  ])("%s names the rebuild obligation the snapshot creates", (file, why) => {
+    if (!clockDecidesAdmission()) return;
+    const text = flat(read(file));
+    expect(
+      /stale_after/.test(text),
+      `${file} (${why}): nothing in the emitted repo says a build's admissions expire and ` +
+        `only a rebuild moves the line. The emitted validate.yml has no schedule and ` +
+        `vercel.json has no cron, so if this is unwritten it is nowhere.`,
+    ).toBe(true);
+    expect(
+      /rebuild/i.test(text),
+      `${file} (${why}): says stale_after exists but not that a rebuild is what applies it.`,
+    ).toBe(true);
+  });
+});

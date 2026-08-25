@@ -480,6 +480,16 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-ledger-invalid .ksor/takedowns.yaml"],
   },
   {
+    // What an interrupted write leaves. No writer produces it — the verb puts
+    // the header and the first entry down in one call — so reading it as "this
+    // record has withdrawn nothing" republishes every act it held. Absence of
+    // the FILE is how a record without denials is written, and the conformant
+    // fixture ships exactly that.
+    name: "ksor-ledger-empty",
+    files: base({ ".ksor/takedowns.yaml": "" }),
+    expected: ["ksor-ledger-empty .ksor/takedowns.yaml"],
+  },
+  {
     name: "ksor-policy-invalid",
     files: base({ ".ksor/governance.yaml": 'version: "0.1"\napproval_authorities: []\n' }),
     // A policy that fails its shape is refused once; the per-concept rules that need it are skipped.
@@ -517,6 +527,29 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     name: "ksor-key-near-miss",
     files: base({ "knowledge/bad.md": frontmatter(`${stable}stale_afer: 2020-01-01T00:00:00Z\n`) }),
     expected: ["ksor-key-near-miss knowledge/bad.md"],
+  },
+  {
+    // Spelled RIGHT, one level up from where the profile reads it — so no edit
+    // distance sees it and §2.7 preserves it. This one embargoed nothing and
+    // published on the day it was written.
+    name: "ksor-key-misplaced",
+    files: base({
+      "knowledge/bad.md": frontmatter(`${stable}effective_from: 2099-01-01T00:00:00Z\n`),
+    }),
+    expected: ["ksor-key-misplaced knowledge/bad.md"],
+  },
+  {
+    // The mirror, whose remedy used to say "remove `stale_after:`".
+    name: "ksor-key-misplaced (inside the ksor block)",
+    files: base({
+      "knowledge/bad.md": frontmatter(
+        `${stable}`.replace(
+          "  audience: [public]",
+          "  audience: [public]\n  stale_after: 2020-01-01T00:00:00Z",
+        ),
+      ),
+    }),
+    expected: ["ksor-key-misplaced knowledge/bad.md"],
   },
   {
     name: "ksor-instance-format",

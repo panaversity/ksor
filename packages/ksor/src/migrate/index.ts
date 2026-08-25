@@ -26,6 +26,7 @@ import {
   formatRefusal,
   loadRecord,
   parseInstant,
+  parseLedger,
   parsePolicy,
   resolveInstanceDir,
   sortRefusals,
@@ -40,6 +41,7 @@ import { applyProse, type PackageManager } from "../init/manager.js";
 import { ACTOR_FORM, isWritableActor } from "./actor.js";
 import { DenialReadError, readDbDenials, type DbDenial } from "./denials.js";
 import {
+  renderEntries,
   renderLedger,
   toLedgerEntries,
   type LedgerDenial,
@@ -52,7 +54,7 @@ import {
   migrateInstance,
   migrateSummary,
   modelOf,
-  NO_AUDIENCE_MODEL,
+  LOST_AUDIENCE_MODEL,
   type AudienceModel,
   type InstanceNameResult,
 } from "./rules.js";
@@ -260,7 +262,12 @@ export async function runMigrate(
   const changes: FileChange[] = [];
   const refusals: Refusal[] = [];
   const registry = new Set<string>();
-  const model: AudienceModel = oldFm["format"] === 2 ? NO_AUDIENCE_MODEL : modelOf(oldFm);
+  // A `format: 2` instance no longer carries `audiences:`/`default_visibility:`
+  // — this command deleted them — so a pre-profile document arriving now has no
+  // model to expand against, and that absence is REFUSED rather than defaulted
+  // (`migrateConcept`; the widening it prevents is decision 18's leak, reached
+  // by re-running the documented command).
+  const model: AudienceModel = oldFm["format"] === 2 ? LOST_AUDIENCE_MODEL : modelOf(oldFm);
 
   // ── instance.md ────────────────────────────────────────────────────────
   const instance = migrateInstance(instanceText, { directory: path.basename(root) });
@@ -286,7 +293,11 @@ export async function runMigrate(
   /** Concept id → path, for every `approved` document this run turns into a `draft`. */
   const demoted = new Map<string, string>();
   /** Every `ksor.superseded_by` this run would write, by the document writing it. */
-  const pointers: { readonly path: string; readonly successor: string }[] = [];
+  const pointers: {
+    readonly path: string;
+    readonly successor: string;
+    readonly raw: string;
+  }[] = [];
   for (const [rel, text] of [...record.files].sort()) {
     if (!rel.startsWith("knowledge/") || !rel.endsWith(".md")) continue;
     const name = rel.slice(rel.lastIndexOf("/") + 1);
@@ -361,7 +372,11 @@ export async function runMigrate(
     conceptIds.add(conceptId);
     if (out.outcome.demoted) demoted.set(conceptId, target);
     if (out.outcome.successor !== null) {
-      pointers.push({ path: target, successor: out.outcome.successor });
+      pointers.push({
+        path: target,
+        successor: out.outcome.successor,
+        raw: out.outcome.successorRaw ?? out.outcome.successor,
+      });
     }
     if (target !== rel) {
       // A reserved name is emptied and its prose lands in a concept beside it;
@@ -381,41 +396,103 @@ export async function runMigrate(
   // is the one it creates itself, so it refuses it the same way.
   for (const pointer of pointers) {
     const target = demoted.get(pointer.successor);
-    if (target === undefined) continue;
+    if (target !== undefined) {
+      refusals.push({
+        slug: "ksor-migrate-underivable",
+        path: target,
+        why: `\`${pointer.path}\` is withdrawn in favour of this document, and without \`--approve-by\` an \`approved\` document becomes a \`draft\` (R25) — the checker then refuses that tree as \`ksor-supersession-strands\`, because a reader sent to a draft successor is stranded`,
+        fix: "re-run with `--approve-by human:<id>` — the person approving these documents — so every `approved` document becomes `stable` and the pointer resolves",
+      });
+      continue;
+    }
+    // The neighbouring case, and the one that never reached the guard above: a
+    // successor that is not in this record AT ALL. `demoted.get()` can only
+    // answer for a document this run walked, so a pointer resolving to nothing
+    // fell straight through — migrate wrote it, printed "Run `ksor build`", and
+    // `ksor build` refused migrate's own output as `ksor-supersession-strands`,
+    // with `ksor migrate` answering "nothing to migrate" from then on. The
+    // concept-id set is right here (found live, 2026-08-26).
+    //
+    // Judged for EVERY pointer, not only the ones this run rewrites: a reserved
+    // name migrate moves changes the id an untouched document was pointing at,
+    // so migrate can strand a pointer it never wrote a line of.
+    if (conceptIds.has(pointer.successor)) continue;
+    // The successor's document is right there and merely REFUSED by this run,
+    // so it is absent from `conceptIds` without being absent from the record.
+    // Saying "no such concept" about a file the operator can see is a lie, and
+    // it would send them editing a pointer that is fine — the same distinction
+    // `check.ts` draws for an unparseable successor. Fixing the refusal that
+    // did fire puts the concept back, and the next run judges this pointer
+    // against a real one.
+    if (record.files.has(`knowledge/${pointer.successor}.md`)) continue;
+    // `superseded_by: refunds` inside `knowledge/handbook/` resolves against the
+    // document's own folder, which is the commonest way to land here — so name
+    // the concept that IS there under that name, in the root-relative form that
+    // fixes it.
+    const base = pointer.successor.slice(pointer.successor.lastIndexOf("/") + 1);
+    const nearby = [...conceptIds]
+      .filter((id) => id === base || id.endsWith(`/${base}`))
+      .sort()
+      .slice(0, 3);
     refusals.push({
       slug: "ksor-migrate-underivable",
-      path: target,
-      why: `\`${pointer.path}\` is withdrawn in favour of this document, and without \`--approve-by\` an \`approved\` document becomes a \`draft\` (R25) — the checker then refuses that tree as \`ksor-supersession-strands\`, because a reader sent to a draft successor is stranded`,
-      fix: "re-run with `--approve-by human:<id>` — the person approving these documents — so every `approved` document becomes `stable` and the pointer resolves",
+      path: pointer.path,
+      why: `\`superseded_by: ${pointer.raw}\` resolves to \`${pointer.successor}\`, and this record has no such concept — \`ksor build\` refuses that tree as \`ksor-supersession-strands\`, and migrate would have written it`,
+      fix:
+        nearby.length > 0
+          ? `point it at the concept you meant — ${nearby.map((id) => `\`superseded_by: /${id}\``).join(" or ")} (a leading \`/\` is read from the record root, a bare name from this document's own folder) — or delete the key`
+          : "point `superseded_by:` at a concept this record has (a leading `/` is read from the record root, a bare name from this document's own folder), or delete the key",
     });
   }
 
   // ── the takedown ledger ────────────────────────────────────────────────
-  // Transcribing the denylist is a ONE-TIME act, into a record that has no
-  // ledger yet. A record that already has one has already been migrated, and
-  // `ksor takedown` may have appended to it since — regenerating the file from
-  // the database would delete those entries, which is the one thing an
-  // append-only ledger must never suffer.
-  const hadLedger = record.files.has(".ksor/takedowns.yaml");
-  const denials = hadLedger
-    ? []
-    : await collectDenials(identity, oldFm, parsed.attributions, fate, refusals, io);
+  // Regenerating the file from the database is the one thing an append-only
+  // ledger must never suffer: `ksor takedown` may have appended to it since the
+  // migration, and a rewrite would delete those entries. That rule used to be
+  // enforced by not reading the database AT ALL once a ledger existed — which
+  // also stopped migrate accounting for the rows it had REPOINTED, and those
+  // rows are what `ksor ingest` and `ksor serve` refuse on. Both of their
+  // refusals print `ksor migrate --write` as the remedy, and it answered
+  // "nothing to migrate" (found live, 2026-08-26).
+  //
+  // So the file is read instead of skipped: what it already names is left
+  // untouched, and only rows nothing accounts for are APPENDED.
+  const ledgerPath = ".ksor/takedowns.yaml";
+  const ledgerBefore = record.files.get(ledgerPath) ?? null;
+  const accounted = accountedIn(ledgerBefore, refusals);
+  const denials =
+    accounted === null
+      ? []
+      : await collectDenials(
+          identity,
+          oldFm,
+          parsed.attributions,
+          fate,
+          accounted,
+          ledgerBefore !== null,
+          refusals,
+          io,
+        );
   const takedownActors = new Set<string>(denials.map((d) => d.by));
   if (denials.length > 0) {
+    // The tree as it will be AFTER this run — the one the next `ksor build`
+    // judges the ledger against. Migrate renames files inside a directory and
+    // never adds or removes one, so the loaded `dirs` are already that tree's.
+    const tree = {
+      documentIds: conceptIds,
+      dirs: new Set(
+        record.dirs
+          .filter((d) => d.startsWith("knowledge/"))
+          .map((d) => d.slice("knowledge/".length)),
+      ),
+    };
     changes.push({
-      path: ".ksor/takedowns.yaml",
-      before: null,
-      // The tree as it will be AFTER this run — the one the next `ksor build`
-      // judges the ledger against. Migrate renames files inside a directory and
-      // never adds or removes one, so the loaded `dirs` are already that tree's.
-      after: renderLedger(denials, {
-        documentIds: conceptIds,
-        dirs: new Set(
-          record.dirs
-            .filter((d) => d.startsWith("knowledge/"))
-            .map((d) => d.slice("knowledge/".length)),
-        ),
-      }),
+      path: ledgerPath,
+      before: ledgerBefore,
+      after:
+        ledgerBefore === null
+          ? renderLedger(denials, tree)
+          : `${ledgerBefore.endsWith("\n") ? ledgerBefore : `${ledgerBefore}\n`}${renderEntries(denials, tree)}`,
     });
   }
 
@@ -480,9 +557,20 @@ export async function runMigrate(
   // a full disk, a killed CI step — and the text is gone from a tree that never
   // received its replacement. Recoverable from git IF the adopter had committed,
   // which migrate does not check and cannot assume.
+  //
+  // And `instance.md` LAST OF ALL, after the deletions, for the same reason one
+  // step out: it is the only file carrying the audience model, and rewriting it
+  // to `format: 2` DESTROYS that model. Applying it first left every interrupted
+  // run with pre-profile documents and nothing to expand them against — the
+  // state `migrateConcept` now refuses rather than defaulting to `[public]`.
+  // Written last, an interrupted run is simply re-runnable: the documents this
+  // run did reach are already in the profile, and the model is still there for
+  // the ones it did not.
+  const isInstance = (c: FileChange): boolean => c.path === "instance.md";
   const ordered = [
-    ...changes.filter((c) => c.after !== null),
+    ...changes.filter((c) => c.after !== null && !isInstance(c)),
     ...changes.filter((c) => c.after === null),
+    ...changes.filter((c) => c.after !== null && isInstance(c)),
   ];
   for (const change of ordered) {
     const abs = path.join(root, change.path);
@@ -513,12 +601,30 @@ function generatedAtOf(root: string, rel: string, override: string | null): stri
   return at === "" ? null : at;
 }
 
+/**
+ * Every stable_id the committed ledger already names, or null when the file is
+ * there and unreadable — in which case the refusal is raised here and the
+ * database is not consulted, because "what does this record already account
+ * for" has no answer and appending past an unparsed file would guess at one.
+ */
+function accountedIn(text: string | null, refusals: Refusal[]): ReadonlySet<string> | null {
+  if (text === null) return new Set();
+  const parsed = parseLedger(text, ".ksor/takedowns.yaml");
+  if (!parsed.ok) {
+    refusals.push(...parsed.refusals);
+    return null;
+  }
+  return new Set(parsed.ledger.entries.filter((e) => e.kind === "denial").map((e) => e.stableId));
+}
+
 /** Reads the database's denylist, or refuses; an empty list when the record declares none. */
 async function collectDenials(
   identity: InstanceNameResult,
   fm: Readonly<Record<string, unknown>>,
   attributions: ReadonlyMap<string, string>,
   fate: ReservedFate,
+  accounted: ReadonlySet<string>,
+  hasLedger: boolean,
   refusals: Refusal[],
   io: MigrateIo,
 ): Promise<readonly LedgerDenial[]> {
@@ -531,6 +637,21 @@ async function collectDenials(
   if (!identity.ok) return [];
   const dsn = process.env[dsnEnv];
   if (dsn === undefined || dsn === "") {
+    // With NO ledger, an unreadable database means migrating a record whose
+    // denials exist nowhere else — every withdrawn document republished. With
+    // one, the denials are already in the file and nothing is republished; all
+    // that can be missed is a row the ledger does not yet account for. That is
+    // worth saying and not worth refusing over, because the commonest run in
+    // that state is an offline `--write-site` (a `.ksor/takedowns.yaml` cannot
+    // be worked out from a DSN nobody exported).
+    if (hasLedger) {
+      io.err(
+        `not reading ${dsnEnv}: it is unset, so any denylist row this record's ledger does not\n` +
+          `account for stays unaccounted for (\`ksor ingest\` refuses it as ksor-takedown-unledgered).\n` +
+          `Export ${dsnEnv} and run this again to record them.\n`,
+      );
+      return [];
+    }
     refusals.push({
       slug: "ksor-migrate-underivable",
       path: "instance.md",
@@ -566,7 +687,7 @@ async function collectDenials(
     return [];
   }
   io.err(`read ${rows.length} denylist row(s) from ${dsnEnv}\n`);
-  const outcome = toLedgerEntries(rows, attributions, fate);
+  const outcome = toLedgerEntries(rows, attributions, fate, accounted);
   refusals.push(...outcome.refusals);
   return outcome.entries;
 }

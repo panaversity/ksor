@@ -88,7 +88,14 @@ export {
   type ScaffoldStructure,
 } from "./hygiene";
 export { overlaps, mayReach } from "../lib/audience-rule";
-export { admitsLifecycle, type LifecycleDoc, type Surface } from "../lib/lifecycle-rule";
+export {
+  admitsLifecycle,
+  lifecycleBadge,
+  type LifecycleBadge,
+  type LifecycleDoc,
+  type LifecycleStatus,
+  type Surface,
+} from "../lib/lifecycle-rule";
 // The decision TABLES are not re-exported here. This barrel is what the site
 // copies and what the emitted checker bundles, and a table is a test fixture:
 // shipping it would put the spec's rows in an adopter's site bundle. Tests

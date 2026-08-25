@@ -436,3 +436,100 @@ describe("parseConcept — `order` is a position, and the refusal has to say so"
     }
   });
 });
+
+/**
+ * The near-miss net (§2.7) catches a governance key with a letter missing. It
+ * cannot catch the same failure spelled CORRECTLY one level from where the
+ * profile reads it, because there is no near miss to see — and §11 then
+ * preserves the key verbatim, so it is published, unread and enforcing
+ * nothing. Reproduced 2026-08-25 on a scaffolded record: `effective_from:
+ * 2099-01-01T00:00:00Z` at a concept's top level built clean, exited 0, and
+ * wrote `admitted: ["public"]` for a document embargoed for seventy years;
+ * the same instant under `ksor:` wrote `admitted: []`.
+ *
+ * The mirror is worse than silent. `ksor.stale_after` WAS refused — as a key
+ * of a closed block nothing reads — and the remedy printed "remove
+ * `stale_after:`". Following it flipped a document already stale since 2020
+ * from `admitted: []` to `admitted: ["public"]`: the fix line published what
+ * the author had withdrawn. A remedy may never spend a governance value to
+ * clear a refusal.
+ */
+describe("parseConcept — a governance key one level from where it is read", () => {
+  const withKsor = (extra: Record<string, unknown>): Record<string, unknown> => ({
+    ...STABLE,
+    ksor: { ...STABLE.ksor, ...extra },
+  });
+
+  it.each([
+    ["effective_from", "2099-01-01T00:00:00Z"],
+    ["approval", { by: "human:cfo", at: "2026-08-22T10:00:00Z" }],
+    ["deprecated", { by: "human:cfo", at: "2026-08-22T10:00:00Z" }],
+    ["audience", ["public"]],
+  ])("refuses top-level `%s`, a ksor-block key, by name", (key, value) => {
+    const r = parseConcept(P, { ...STABLE, [key]: value });
+    expect(r.ok, `top-level ${key} was accepted`).toBe(false);
+    if (r.ok) return;
+    const refusal = r.refusals.find((x) => x.slug === "ksor-key-misplaced");
+    expect(refusal, JSON.stringify(r.refusals)).toBeDefined();
+    expect(`${refusal?.why}`).toContain(`\`${key}\``);
+    expect(`${refusal?.why}`).toContain(`ksor.${key}`);
+    expect(`${refusal?.fix}`).toContain("ksor:");
+  });
+
+  it.each([
+    ["stale_after", "2020-01-01T00:00:00Z"],
+    ["verified", [{ by: "human:kim", at: "2026-08-21T14:00:00Z" }]],
+    ["status", "deprecated"],
+    ["sources", [{ resource: "https://x/y.pdf" }]],
+  ])("refuses `ksor.%s`, a top-level profile key, by name", (key, value) => {
+    const r = parseConcept(P, withKsor({ [key]: value }));
+    expect(r.ok, `ksor.${key} was accepted`).toBe(false);
+    if (r.ok) return;
+    const refusal = r.refusals.find((x) => x.slug === "ksor-key-misplaced");
+    expect(refusal, JSON.stringify(r.refusals)).toBeDefined();
+    expect(`${refusal?.why}`).toContain(`ksor.${key}`);
+    expect(`${refusal?.fix}`).toContain("top level");
+  });
+
+  it("catches a ksor-block key that is BOTH misspelled and misplaced", () => {
+    const r = parseConcept(P, { ...STABLE, efective_from: "2099-01-01T00:00:00Z" });
+    expect(r.ok, "top-level efective_from was accepted").toBe(false);
+    if (r.ok) return;
+    const refusal = r.refusals.find((x) => x.slug === "ksor-key-misplaced");
+    expect(refusal, JSON.stringify(r.refusals)).toBeDefined();
+    expect(`${refusal?.fix}`).toContain("effective_from");
+  });
+
+  /**
+   * The rule the mirror case bought: every remedy printed for a MISPLACED
+   * governance key has to relocate the value. "Remove it" clears the refusal
+   * and publishes what the key was withholding — the one outcome the refusal
+   * existed to prevent.
+   */
+  it("never prints a remedy that spends the governance value to clear the refusal", () => {
+    const cases: Record<string, unknown>[] = [
+      { ...STABLE, effective_from: "2099-01-01T00:00:00Z" },
+      { ...STABLE, deprecated: { by: "human:cfo", at: "2026-08-22T10:00:00Z" } },
+      withKsor({ stale_after: "2020-01-01T00:00:00Z" }),
+      withKsor({ verified: [{ by: "human:kim", at: "2026-08-21T14:00:00Z" }] }),
+      withKsor({ retention_years: 7 }),
+    ];
+    for (const fm of cases) {
+      const r = parseConcept(P, fm);
+      expect(r.ok, JSON.stringify(fm)).toBe(false);
+      if (r.ok) continue;
+      for (const refusal of r.refusals) {
+        if (refusal.slug === "ksor-derived-key") continue; // the BUILD owns those, not the author
+        expect(
+          refusal.fix,
+          `${refusal.slug} tells the author to delete a value they wrote: ${refusal.fix}`,
+        ).not.toMatch(/\bremove\b|\bdelete\b|\bdrop\b/i);
+      }
+    }
+  });
+
+  it("still keeps a genuine extension key no governance key is one edit from", () => {
+    expect(slugsOf({ ...STABLE, x_department: "finance" })).toEqual([]);
+    expect(slugsOf({ ...STABLE, retention_years: 7 })).toEqual([]);
+  });
+});

@@ -646,7 +646,11 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     expect(r.status, r.stderr).toBe(0);
     expect(lockOf(root).source_commit).toBe(null);
     expect(lockOf(root).dirty).toBe(true);
-    writeFileSync(path.join(root, ".ksor/takedowns.yaml"), "");
+    // The entries deleted, not the FILE emptied: a ledger that exists and holds
+    // nothing is `ksor-ledger-empty` — a torn write, refused before anything
+    // parses — and this is about the baseline, so what is left has to be a
+    // readable ledger the lock no longer matches.
+    writeFileSync(path.join(root, ".ksor/takedowns.yaml"), "# the entries were deleted by hand\n");
     const shrank = build(root, "--as-of", AS_OF);
     expect(shrank.stderr.split("\n")[0]).toBe("error: ksor-ledger-shrank");
     expect(shrank.stderr).toContain("build.lock.json");
@@ -689,5 +693,45 @@ describe("ksor build — arguments", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("--as-of");
     expect(existsSync(path.join(root, "build.lock.json"))).toBe(false);
+  });
+});
+
+/**
+ * A build that publishes a snapshot has to say when the snapshot expires.
+ *
+ * `admitted` is decided at `as_of` and written into files; static output cannot
+ * re-decide itself, so a document whose `stale_after` passes AFTER a build goes
+ * on appearing in `llms.txt` and in its markdown twin while `ksor serve`, which
+ * evaluates the same rule per request, already refuses it. The divergence is
+ * specified (record spec §2.5); what was missing was any surface saying it. The
+ * build reported a dropped admission only as a number that went down, the
+ * emitted AGENTS.md stated the exclusion unconditionally, and no emitted
+ * workflow rebuilds on a schedule (found 2026-08-25).
+ *
+ * A notice, and exit 0: a document past its review date is a governed state
+ * with a page and a badge of its own, and a build that refused it would make
+ * deleting the `stale_after` the fastest way to a green build.
+ */
+describe("ksor build says what its own snapshot will stop being true", () => {
+  it("names the document it held back, and why, without refusing", () => {
+    const r = build(repo(), "--as-of", AS_OF);
+    expect(r.status).toBe(0);
+    expect(r.stdout, r.stdout).toContain("policies/purchase-approval.md");
+    expect(r.stdout, r.stdout).toContain("not effective until 2026-09-01T00:00:00.000Z");
+    expect(r.stdout).not.toContain("problem:");
+  });
+
+  it("names the next instant at which this build's answer goes out of date", () => {
+    const r = build(repo(), "--as-of", AS_OF);
+    expect(r.status).toBe(0);
+    // The EARLIEST future instant in the fixture: effective_from before stale_after.
+    expect(r.stdout, r.stdout).toContain("at 2026-09-01T00:00:00.000Z");
+    expect(r.stdout, r.stdout).toMatch(/cannot re-decide itself/);
+  });
+
+  it("reports a document already past its stale_after, and still exits 0", () => {
+    const r = build(repo(), "--as-of", "2028-01-01T00:00:00Z");
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout, r.stdout).toContain("past stale_after 2027-08-21T00:00:00.000Z");
   });
 });

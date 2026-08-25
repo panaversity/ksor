@@ -209,7 +209,14 @@ describe("toLedgerEntries — a subtree row must name a container", () => {
 
   it("an /index subtree row is repointed to the container anchor and parses", () => {
     const out = toLedgerEntries([dbRow("knowledge/policies/index", "subtree")], new Map(), NONE);
-    expect(out.entries[0]?.stableId).toBe("knowledge/policies#section");
+    // Two entries, and both are needed: the hold moves to the container, and
+    // the ROW it came from is recorded under the id it actually carries — the
+    // one `applyLedger` matches on, without which `ksor ingest` refuses the
+    // migrated record as `ksor-takedown-unledgered`.
+    expect(out.entries.map((e) => [e.stableId, e.scope])).toEqual([
+      ["knowledge/policies/index", "node"],
+      ["knowledge/policies#section", "subtree"],
+    ]);
     const parsed = parseLedger(renderLedger(out.entries, TREE_OF([], [])), ".ksor/takedowns.yaml");
     expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
@@ -248,14 +255,51 @@ describe("repoint — only where migrate actually moved the prose", () => {
     actor: "human:ciso",
   });
 
-  it("follows the prose when this run claimed the overview", () => {
+  it("follows the prose when this run claimed the overview, and records the row", () => {
     const out = toLedgerEntries(
       [dbRow("knowledge/hr/index")],
       new Map(),
       new Map([["knowledge/hr/index", "moved"]]),
     );
     expect(out.refusals).toEqual([]);
-    expect(out.entries[0]?.stableId).toBe("knowledge/hr/overview");
+    expect(out.entries.map((e) => e.stableId)).toEqual([
+      "knowledge/hr/index",
+      "knowledge/hr/overview",
+    ]);
+    // The row's own entry says where the hold went, so the ledger reads as one
+    // act rather than two unrelated denials at the same instant.
+    expect(out.entries[0]?.reason).toContain("knowledge/hr/overview");
+    expect(renderLedger(out.entries, TREE_OF(["hr/overview"], ["hr"]))).toContain(
+      "expected: removed",
+    );
+  });
+
+  /**
+   * The record that already ran the broken version: the hold is in the ledger
+   * under the moved id, and the row it came from is not. `repoint` cannot see
+   * that anything moved by then — `ksor build` has regenerated the index, so
+   * the fate reads `kept` — and re-deciding what the denial covers would
+   * contradict a ledger that has already decided it. Only the row is recorded.
+   */
+  it("records only the row when the ledger already carries the moved hold", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/hr/index")],
+      new Map(),
+      new Map([["knowledge/hr/index", "kept"]]),
+      new Set(["knowledge/hr/overview"]),
+    );
+    expect(out.refusals).toEqual([]);
+    expect(out.entries.map((e) => e.stableId)).toEqual(["knowledge/hr/index"]);
+  });
+
+  it("says nothing about a row the ledger already names", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/hr/index")],
+      new Map(),
+      new Map([["knowledge/hr/index", "moved"]]),
+      new Set(["knowledge/hr/index", "knowledge/hr/overview"]),
+    );
+    expect(out).toEqual({ entries: [], refusals: [] });
   });
 
   it("refuses when migrate kept the file, rather than denying a path that will not exist", () => {

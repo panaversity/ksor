@@ -210,16 +210,48 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
       `remove \`${key}:\` — the trust tier comes from \`verified\`, and the build stamps come from \`build.lock.json\``,
     );
   }
+  // A key of the `ksor:` block written at the concept's TOP level is the near
+  // miss without the miss: spelled right, so no edit-distance net can see it,
+  // and §11 therefore preserves it — published, read by nothing, enforcing
+  // nothing. `effective_from: 2099-01-01T00:00:00Z` here built clean, exited 0
+  // and admitted the document to every surface the same day; the identical
+  // instant under `ksor:` admitted it to none (reproduced 2026-08-25). Refused
+  // by NAME, because a name is all there is to go on. `owner` and
+  // `superseded_by` are skipped: they are pre-profile keys too, and
+  // `ksor-legacy-key` already names them with the migration that moves them.
+  const misplaced = new Set<string>();
+  for (const key of NAMESPACE_KEYS) {
+    if (!(key in frontmatter) || (LEGACY_KEYS as readonly string[]).includes(key)) continue;
+    misplaced.add(key);
+    refuse(
+      "ksor-key-misplaced",
+      `\`${key}\` is a key of the \`ksor:\` block, written at the concept's top level — the profile reads \`ksor.${key}\` and nothing reads this one, so §2.7 preserves it verbatim and whatever it was meant to govern is governed by nothing`,
+      `move it under \`ksor:\` as \`ksor.${key}\`, with the value it has here — the value is the guarantee, so it moves rather than goes`,
+    );
+  }
   // OKF §11 keeps a key nobody knows — but a key ONE edit from a profile key is
   // not an extension, it is the profile key failing open. `stale_afer:` never
   // expires; `titel:` renders no title. Refusing beats preserving here.
   for (const key of Object.keys(frontmatter)) {
+    if (misplaced.has(key)) continue;
     const near = nearest(key, PROFILE_KEYS, 1);
-    if (near === null) continue;
+    if (near !== null) {
+      refuse(
+        "ksor-key-near-miss",
+        `\`${key}\` is one edit from \`${near}\`, the profile key it is almost certainly meant to be — unknown keys are preserved (§2.7), so a near miss would be kept and the governance it carried would simply stop existing`,
+        `rename it to \`${near}:\`, or — if it really is an extension key of your own — give it a name no profile key is one edit from`,
+      );
+      continue;
+    }
+    // Both mistakes at once, which is neither net's alone: `efective_from` at
+    // the top level is a `ksor:` key misspelled AND one level out, and it is
+    // near nothing the top level reads.
+    const nearKsor = nearest(key, NAMESPACE_KEYS, 1);
+    if (nearKsor === null) continue;
     refuse(
-      "ksor-key-near-miss",
-      `\`${key}\` is one edit from \`${near}\`, the profile key it is almost certainly meant to be — unknown keys are preserved (§2.7), so a near miss would be kept and the governance it carried would simply stop existing`,
-      `rename it to \`${near}:\`, or — if it really is an extension key of your own — give it a name no profile key is one edit from`,
+      "ksor-key-misplaced",
+      `\`${key}\` is one edit from \`${nearKsor}\`, a key of the \`ksor:\` block — so it is misspelled AND one level out from where the profile reads it, and §2.7 would preserve it as an extension key that governs nothing`,
+      `write it under \`ksor:\` as \`ksor.${nearKsor}\`, keeping the value; if it really is an extension key of your own, give it a name no governance key is one edit from`,
     );
   }
   for (const key of FLOOR_KEYS) {
@@ -300,11 +332,26 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
   if (typeof ksor === "object" && ksor !== null && !Array.isArray(ksor)) {
     for (const key of Object.keys(ksor as Record<string, unknown>)) {
       if ((NAMESPACE_KEYS as readonly string[]).includes(key)) continue;
+      // The mirror of the rule above, and the half that printed a DESTRUCTIVE
+      // remedy: `ksor.stale_after` was refused as a key of a closed block and
+      // told the author to remove it, which on a document already past that
+      // instant flipped `admitted: []` to `admitted: ["public"]` — the fix
+      // line published what the author had withdrawn (reproduced 2026-08-25).
+      if (key !== "ksor" && (PROFILE_KEYS as readonly string[]).includes(key)) {
+        refuse(
+          "ksor-key-misplaced",
+          `\`ksor.${key}\` is \`${key}\`, a TOP-LEVEL key of the profile, written inside the \`ksor:\` block — the block's key set is closed, so nothing reads it here: a \`ksor.stale_after\` expires nothing and a \`ksor.verified\` earns no trust tier`,
+          `move \`${key}:\` out of the \`ksor:\` block to the concept's top level, with the value it has here — the value is the guarantee, so it moves rather than goes`,
+        );
+        continue;
+      }
       const near = nearest(key, NAMESPACE_KEYS, 2);
       refuse(
         "ksor-ksor-key-unknown",
         `\`ksor.${key}\` is not a key of the \`ksor:\` block — the block is ksor's own namespace and its key set is closed, so a key it does not read is a guarantee that stops existing rather than one the record announces`,
-        `${near === null ? `remove \`${key}:\`` : `did you mean \`${near}:\`?`} (allowed under \`ksor:\`: ${NAMESPACE_KEYS.join(", ")})`,
+        near === null
+          ? `an extension key of your own belongs at the concept's top level, where §2.7 PRESERVES it — move \`${key}:\` out of the block rather than deleting it (allowed under \`ksor:\`: ${NAMESPACE_KEYS.join(", ")})`
+          : `did you mean \`${near}:\`? (allowed under \`ksor:\`: ${NAMESPACE_KEYS.join(", ")})`,
       );
     }
   }

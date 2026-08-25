@@ -23,16 +23,16 @@ are exact for every record:
 
 |                                  | chars  | ~tokens |                                |
 | -------------------------------- | ------ | ------- | ------------------------------ |
-| tool definitions, as transmitted | 16,214 | 4,054   | **always resident in context** |
-| `search` alone                   | 7,602  | 1,901   | always resident                |
+| tool definitions, as transmitted | 16,734 | 4,184   | **always resident in context** |
+| `search` alone                   | 7,932  | 1,983   | always resident                |
 | `outline` alone                  | 3,332  | 833     | always resident                |
-| `read` alone                     | 5,276  | 1,319   | always resident                |
-| `outline` + `read`, if deleted   | 8,608  | 2,152   | the delete-both saving         |
+| `read` alone                     | 5,466  | 1,367   | always resident                |
+| `outline` + `read`, if deleted   | 8,798  | 2,200   | the delete-both saving         |
 
 The first row is the JSON of the whole `tools` array; every other row is one
 tool's own object. The array carries four characters no tool's row does — two
-brackets and two separators — so the three tools sum to **16,210** and the
-array is **16,214**. Deleting a tool saves that tool's own row.
+brackets and two separators — so the three tools sum to **16,730** and the
+array is **16,734**. Deleting a tool saves that tool's own row.
 
 **Replies** depend on the record's passages. These are the 2026-08-23
 measurement against the live book record (81 documents, 6,963 chunks) plus the
@@ -50,11 +50,15 @@ neither. NOT re-measured against that record:
 The definitions grew — `search` was 5,383 chars before the trust floor and the
 per-hit governance, `read` 3,396 before it carried the same block — which is
 the price of an agent being able to tell a
-reviewed document from an unreviewed one, charged once per session.
+reviewed document from an unreviewed one, charged once per session. The last
+520 chars are the price of that signal being HONEST: `trust_tier` is derived
+from reviews a document declares about itself, gated by no authority list, and
+both floors now say so instead of letting `human-reviewed` read as a check the
+record performed.
 
 Two consequences set the scope:
 
-1. **Dropping an unused tool is the largest win** — ~2,152 tokens for the whole
+1. **Dropping an unused tool is the largest win** — ~2,200 tokens for the whole
    session, whether or not the agent would ever have called them.
 2. **`k` is the result lever; `budgets.maximum_response_characters` is not.** It
    defaults to 120,000 and at ~1,700 chars a hit cannot bind before

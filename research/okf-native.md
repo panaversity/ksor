@@ -706,14 +706,44 @@ NEAREST ANCESTOR DIRECTORY that holds any concept whether one of them is
 reachable. Asking only the asset's own directory was defeated by nesting it one
 level deeper, in a directory holding no concept at all.
 
-**Three refusal families the plan did not name**, each closing a key that would
+**Four refusal families the plan did not name**, each closing a key that would
 otherwise fail open: `ksor-key-near-miss` (a top-level key one edit from a
 profile key — a mistyped `stale_after` serves an expired document forever),
 `ksor-derived-key` (a concept claiming a key the build writes, which would
-publish it twice and make the derived trust tier non-authoritative), and the
+publish it twice and make the derived trust tier non-authoritative), the
 CLOSED `ksor:` block, whose optional keys are the ones that fail open —
 `ksor.effective-from` with one hyphen published an embargoed policy four weeks
-early with nothing refusing it.
+early with nothing refusing it — and `ksor-key-misplaced` (2026-08-25), the
+near miss WITHOUT the miss: a governance key spelled correctly one level from
+where the profile reads it, which no edit distance can see. A top-level
+`effective_from: 2099-01-01T00:00:00Z` built clean and published the same day.
+Its mirror, `ksor.stale_after`, was already refused — but the remedy said
+"remove `stale_after:`", and following it published a document the author had
+withdrawn, so no refusal in §2.7 prints a delete any more.
+
+**Three things §1.8 assumed migrate could do once, and the code cannot.** All
+three surfaced walking the upgrade path end to end, 2026-08-26.
+
+The plan reads the transcription as a one-shot — "every existing denylist row
+into the ledger" — and pairs it with the re-pointing above it, without noticing
+that the two contradict each other: a re-pointed entry names `<dir>/overview`
+and the ROW still names `<dir>/index`, so the row is accounted for by nothing
+and `ksor-takedown-unledgered` refuses the record on both surfaces. The
+one-shot rule then made the remedy those refusals print a no-op. Migrate
+records the row as it stands beside the re-pointed hold, and appends to an
+existing ledger any row nothing accounts for; regenerating one is still refused,
+which is the guarantee the one-shot rule was reaching for.
+
+The plan also has migrate delete the instance's `audiences:` model in the same
+run that expands documents against it. A second run — an interrupt, a restored
+`knowledge/` — then has no model, and "no model" is `[public]`: an internal
+record republished by re-running the documented command. Losing the model is a
+refusal, and `instance.md` is written last so an interrupted run is re-runnable.
+
+And its `superseded_by` refusals cover a pointer that climbs out of `knowledge/`
+and one on a document migrate is not deprecating, but not the commonest of the
+three — a pointer that resolves to no concept at all, which `ksor build` refuses
+as `ksor-supersession-strands` after migrate has written it.
 
 **One thing the plan listed and the code does not do.** §1.8's migrate list
 included `index.mdx`. `loadRecord` reads `.md` and `.yaml` as text and nothing
@@ -723,8 +753,8 @@ hand. The parenthetical is already corrected in §1.8.
 
 **And one the plan predicted correctly and is worth naming because it is a
 cost, not a win.** The tool surface grew: the served `tools` array measured
-16,214 chars ≈ 4,054 tokens on 2026-08-25 — the three definitions' own JSON
-sums to 16,210 of that, the array adding two brackets and two separators —
+16,734 chars ≈ 4,184 tokens on 2026-08-25 — the three definitions' own JSON
+sums to 16,730 of that, the array adding two brackets and two separators —
 against ~2,990 tokens measured 2026-08-23 before the trust floor and the
 per-hit governance block. That is
 the price of an agent being able to tell a reviewed document from an

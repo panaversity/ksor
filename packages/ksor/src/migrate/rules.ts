@@ -38,14 +38,35 @@ const SLUG = "ksor-migrate-underivable";
 export interface AudienceModel {
   readonly tiers: readonly string[];
   readonly defaultVisibility: string | null;
+  /**
+   * The record HAD a model and it is GONE — the instance is already `format: 2`,
+   * because a previous run of this same command deleted `audiences:` and
+   * `default_visibility:` from it.
+   *
+   * Distinguished from a record that never declared one, because the two want
+   * OPPOSITE answers and an empty `tiers` cannot tell them apart. A record with
+   * no model published everything to everyone, so `[public]` is faithful; a
+   * record whose model was deleted was `internal` (or narrower) and defaulting
+   * it to `[public]` republishes it — see `migrateConcept`.
+   */
+  readonly lost: boolean;
 }
 
-export const NO_AUDIENCE_MODEL: AudienceModel = { tiers: [], defaultVisibility: null };
+export const LOST_AUDIENCE_MODEL: AudienceModel = {
+  tiers: [],
+  defaultVisibility: null,
+  lost: true,
+};
 
 /**
  * A tier expands UPWARD. `internal` under `[public, internal, board]` is
  * `[internal, board]` — a one-element list would silently drop the document
  * from the board build, which is the review finding §6 records.
+ *
+ * Never called with a LOST model: `migrateConcept` refuses first, because the
+ * `[public]` this returns for an empty one is the answer for a record that
+ * never had tiers and the exact wrong answer for a record whose tiers were
+ * deleted.
  */
 export function expandTier(model: AudienceModel, visibility: string | null): readonly string[] {
   const declared = visibility ?? model.defaultVisibility;
@@ -213,6 +234,13 @@ export interface ConceptOutcome {
   readonly demoted: boolean;
   /** The concept id this document's `ksor.superseded_by` names, when it names one. */
   readonly successor: string | null;
+  /**
+   * What the author WROTE, before it was resolved against this document's own
+   * folder — the string they have to edit when the resolution names nothing.
+   * Naming only the resolved id sends them looking for a value their file does
+   * not contain.
+   */
+  readonly successorRaw: string | null;
 }
 
 export type ConceptResult =
@@ -246,6 +274,7 @@ export function migrateConcept(
         changed: false,
         demoted: false,
         successor: successorOf(fm),
+        successorRaw: successorOf(fm),
       },
     };
   }
@@ -352,6 +381,39 @@ export function migrateConcept(
           path,
           why: `this document declares BOTH \`ksor.audience: [${declared.join(", ")}]\` and the pre-profile \`visibility: ${visibility}\` (which expands to [${widened.join(", ")}]) — they name different readers, and migrating keeps one`,
           fix: `delete whichever is wrong: keep \`ksor.audience\` and drop \`visibility:\`, or drop \`ksor.audience\` and let \`visibility:\` expand — then run \`ksor migrate\` again`,
+        },
+      ],
+    };
+  }
+  // The model this document's audience would be derived from is GONE — an
+  // earlier `ksor migrate --write` deleted `audiences:` and `default_visibility:`
+  // from the instance, and this document did not reach the profile in that run.
+  // `expandTier` answers `["public"]` for an empty model, so a record whose
+  // documents relied on `default_visibility: internal` came back PUBLIC: exit 0,
+  // clean diff, no warning, and an internal handbook answerable by every
+  // unauthenticated caller. The route needs no crash — `migrate --write`,
+  // `git restore knowledge/`, `migrate --write --approve-by` reaches it, and so
+  // does one interrupted run (reproduced end to end against two doors,
+  // 2026-08-26).
+  //
+  // So losing the model REFUSES. A widened audience is not a thing to derive
+  // from an absence (critical rule 1), and the derivation is the only reason
+  // this document needs the model at all: one that declares `ksor.audience`
+  // never reaches here.
+  if (declared === null && ctx.model.lost) {
+    return {
+      ok: false,
+      refusals: [
+        {
+          slug: SLUG,
+          path,
+          why: `instance.md is already \`format: 2\`, so the \`audiences:\` model this document's readers would be derived from is gone — an earlier \`ksor migrate --write\` deleted it. Deriving one now would publish this document to \`[public]\`, whatever tier it was written for`,
+          // The WHOLE file, not the two keys: `format: 2` is what makes the
+          // model unreadable, and a format-2 instance carrying `audiences:` is
+          // not a shape the record accepts either. Restoring it is safe to
+          // re-run — every document already in the profile is left byte-identical,
+          // and instance.md is rewritten last.
+          fix: "restore the pre-migration instance.md (`git checkout <the commit before the migration> -- instance.md`) and run `ksor migrate --write` again — or, if you already know who may read this document, declare `ksor.audience: [<who>]` on it by hand",
         },
       ],
     };
@@ -465,6 +527,7 @@ export function migrateConcept(
       changed: true,
       demoted: oldStatus === "approved" && status === "draft",
       successor: typeof ksor["superseded_by"] === "string" ? ksor["superseded_by"] : null,
+      successorRaw: successor,
     },
   };
 }
@@ -490,7 +553,14 @@ export function migrateSummary(path: string, text: string): ConceptResult {
   if (keys.length === 1 && split.frontmatter?.["type"] === "Summary") {
     return {
       ok: true,
-      outcome: { text, audiences: [], changed: false, demoted: false, successor: null },
+      outcome: {
+        text,
+        audiences: [],
+        changed: false,
+        demoted: false,
+        successor: null,
+        successorRaw: null,
+      },
     };
   }
   if (keys.length > 0) {
@@ -514,6 +584,7 @@ export function migrateSummary(path: string, text: string): ConceptResult {
       changed: true,
       demoted: false,
       successor: null,
+      successorRaw: null,
     },
   };
 }
@@ -596,7 +667,7 @@ export function migrateInstance(text: string, ctx: InstanceContext): InstanceRes
   const fm = split.frontmatter ?? {};
   const model = modelOf(fm);
   if (fm["format"] === 2) {
-    return { ok: true, outcome: { text, model: NO_AUDIENCE_MODEL, changed: false } };
+    return { ok: true, outcome: { text, model: LOST_AUDIENCE_MODEL, changed: false } };
   }
 
   const doc = split.frontmatter === null ? emptyFrontmatterDoc() : parseFrontmatterDoc(split.block);
@@ -684,7 +755,7 @@ export function migrateInstance(text: string, ctx: InstanceContext): InstanceRes
 export function modelOf(fm: Readonly<Record<string, unknown>>): AudienceModel {
   const raw = fm["audiences"];
   const tiers = Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : [];
-  return { tiers, defaultVisibility: str(fm["default_visibility"]) };
+  return { tiers, defaultVisibility: str(fm["default_visibility"]), lost: false };
 }
 
 /** In the profile already: a `type`, a `ksor.audience`, and no pre-profile key left over. */

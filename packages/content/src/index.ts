@@ -17,6 +17,7 @@ export {
   runProbe,
   runAudit,
   runIngest,
+  ContentInputError,
   ContentStoreError,
   TENANT_GUC,
   RUNTIME_ROLE,

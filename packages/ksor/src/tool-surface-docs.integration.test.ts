@@ -50,8 +50,8 @@ describe("the documented tool-definition sizes", () => {
     const transmitted = JSON.stringify(wire).length;
 
     expect([...per.keys()].sort()).toEqual(["outline", "read", "search"]);
-    expect(sum).toBe(16210);
-    expect(transmitted).toBe(16214);
+    expect(sum).toBe(16730);
+    expect(transmitted).toBe(16734);
     // Named so a failure says WHY the two differ rather than only that they do.
     expect(transmitted - sum).toBe(2 /* brackets */ + (wire.length - 1) /* separators */);
   });

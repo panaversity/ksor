@@ -298,7 +298,10 @@ describe("checkLock accepts what composeLock writes", () => {
       ["the concept", edited("knowledge/pol/x.md", CONCEPT + "edit\n")],
       ["the companion", edited("knowledge/pol/x.summary.md", COMPANION + "edit\n")],
       ["the policy", edited(".ksor/governance.yaml", POLICY + "extra: 1\n")],
-      ["the ledger", edited(".ksor/takedowns.yaml", "")],
+      // A readable ledger with its entries gone, not an empty FILE: the lock is
+      // about bytes either way, and a blank ledger is `ksor-ledger-empty` — a
+      // state no record is ever legitimately in.
+      ["the ledger", edited(".ksor/takedowns.yaml", "# the entries were deleted\n")],
       ["a generated index", edited("knowledge/index.md", INDEX_MD + "edit\n")],
       ["instance.md", edited("instance.md", INSTANCE + "\n")],
       [

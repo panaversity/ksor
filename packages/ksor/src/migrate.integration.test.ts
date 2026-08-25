@@ -956,7 +956,7 @@ describe("ksor migrate — two reserved names in one directory", () => {
   });
 });
 
-describe("ksor migrate — the takedown ledger is transcribed once", () => {
+describe("ksor migrate — the takedown ledger is never regenerated", () => {
   const instance = [
     "instance.md",
     "---\nformat: 1\nname: acme\ndatabase:\n  dsn_env: KSOR_WALK_DSN\n---\n\n# Acme\n\nOne sentence of scope.\n",
@@ -977,16 +977,24 @@ describe("ksor migrate — the takedown ledger is transcribed once", () => {
     expect(r.stderr).toContain("KSOR_WALK_DSN");
   });
 
-  // But only ONCE. A record that already has a ledger has already been
-  // migrated, and `ksor takedown` may have appended to it since — so migrate
-  // does not read the database at all, let alone regenerate the file from it.
-  it("does not touch a ledger that already exists, or the database behind it", () => {
+  /**
+   * With a ledger already in the record, an unreadable database is a NOTE, not
+   * a refusal: the denials are in the file, so nothing is republished, and the
+   * commonest run in that state is an offline `--write-site`. What it must
+   * never do is regenerate the file — `ksor takedown` may have appended to it,
+   * and an append-only ledger cannot lose an entry.
+   */
+  it("never regenerates an existing ledger, and says why it did not read the database", () => {
     const root = repo([instance, concept, [".ksor/takedowns.yaml", "[]\n"]]);
     const before = tree(root);
     const r = run(root, "migrate", "--write", "--actor", ACTOR);
     expect(r.status, r.stderr).toBe(0);
-    expect(r.stderr).not.toContain("KSOR_WALK_DSN");
     expect(read(root, ".ksor/takedowns.yaml")).toBe(before.get(".ksor/takedowns.yaml"));
+    // Naming the variable and the consequence: the state this leaves is exactly
+    // the one `ksor ingest` refuses, and the operator is the only one who can
+    // export it.
+    expect(r.stderr).toContain("KSOR_WALK_DSN");
+    expect(r.stderr).toContain("ksor-takedown-unledgered");
   });
 });
 
@@ -1267,5 +1275,163 @@ describe("the repository's own fixture corpus is a migrated record", () => {
     for (const rel of ["knowledge/index.md", "knowledge/policies/index.md"]) {
       expect(read(root, rel), rel).toBe(readFileSync(path.join(workbench, rel), "utf8"));
     }
+  });
+});
+
+/**
+ * The audience model lives in ONE place — `audiences:` and `default_visibility:`
+ * on the pre-profile instance — and the very first thing migrate does is delete
+ * it. So the model exists for exactly one run, and a record that reaches a
+ * SECOND run with pre-profile documents still on it has nothing to expand them
+ * against.
+ *
+ * The route needs no crash: `ksor migrate --write` without `--approve-by`,
+ * knowledge/ restored from git, `ksor migrate --write --approve-by human:x`.
+ * `expandTier` then fell through to `["public"]` for every document that had
+ * relied on `default_visibility`, exit 0, no warning — an `internal` record
+ * republished to every unauthenticated caller by re-running the documented
+ * command (reproduced live, 2026-08-26).
+ */
+describe("ksor migrate — the audience model it deleted is never re-derived", () => {
+  const RANKED = [
+    "instance.md",
+    [
+      "---",
+      "format: 1",
+      "name: acme",
+      "audiences: [public, internal, restricted]",
+      "default_visibility: internal",
+      "---",
+      "",
+      "# Acme",
+      "",
+      "Acme's governed knowledge. It covers nothing else.",
+      "",
+    ].join("\n"),
+  ] as const;
+  /** Relies on `default_visibility` — the population the leak reached. */
+  const BARE = [
+    "knowledge/what-is-a-ksor.md",
+    "---\ntitle: What is a KSoR\ndescription: The internal explanation.\nstatus: approved\n---\n\nBody.\n",
+  ] as const;
+
+  const audienceOf = (root: string, rel: string): unknown =>
+    (fm(root, rel)["ksor"] as Record<string, unknown>)["audience"];
+
+  it("refuses a document whose audience the deleted model can no longer expand", () => {
+    const root = repo([RANKED, BARE]);
+    expect(run(root, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+    expect(audienceOf(root, BARE[0])).toEqual(["internal", "restricted"]);
+
+    // The hiccup: knowledge/ is back at its pre-profile bytes and instance.md
+    // is already `format: 2`.
+    write(root, BARE[0], BARE[1]);
+    const before = tree(root);
+    const again = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(again.status, `stdout: ${again.stdout}\nstderr: ${again.stderr}`).toBe(1);
+    expect(again.stderr).toContain("ksor-migrate-underivable");
+    expect(again.stderr).toContain(BARE[0]);
+    expect(again.stderr).toContain("audiences:");
+    expect(tree(root), "migrate rewrote a record it could not derive an audience for").toEqual(
+      before,
+    );
+  });
+
+  it("still defaults to [public] for a record that never declared a model", () => {
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      BARE,
+    ]);
+    expect(run(root, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+    expect(audienceOf(root, BARE[0])).toEqual(["public"]);
+  });
+
+  /**
+   * The ordering half. instance.md is the ONLY file that carries the model, so
+   * it is written last: interrupt the run anywhere — Ctrl-C, a full disk, a
+   * killed CI step — and the next run still has a model to expand against.
+   */
+  it("writes instance.md LAST, so an interrupted run leaves the model readable", () => {
+    const root = repo([RANKED, BARE]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const lines = r.stdout.split("\n").filter((l) => /^(wrote|rewrote|deleted) /.test(l));
+    expect(lines.length, r.stdout).toBeGreaterThan(1);
+    expect(lines[lines.length - 1], `stdout:\n${r.stdout}`).toBe("rewrote instance.md");
+  });
+});
+
+/**
+ * A supersession pointer migrate RESOLVES but nothing satisfies. The
+ * neighbouring guard refuses a successor this run demotes to `draft`; a
+ * successor that does not exist at all never reached it, so migrate wrote
+ * `ksor.superseded_by: handbook/refunds`, said "Run `ksor build`", and
+ * `ksor build` refused its own output as `ksor-supersession-strands` — with
+ * `ksor migrate` answering "nothing to migrate" from then on.
+ */
+describe("ksor migrate — a supersession pointer that names no concept", () => {
+  const files = (pointer: string): readonly (readonly [string, string])[] => [
+    ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+    [
+      "knowledge/handbook/old-refunds.md",
+      `---\ntitle: Old refunds\ndescription: The refunds policy we no longer use.\nstatus: superseded\nsuperseded_by: ${pointer}\n---\n\nReturns were 14 days.\n`,
+    ],
+    [
+      "knowledge/refunds.md",
+      "---\ntitle: Refunds\ndescription: The current refunds policy.\nstatus: approved\n---\n\nReturns are 30 days.\n",
+    ],
+  ];
+
+  it("refuses, naming what was written and what it resolved to, and writes nothing", () => {
+    // Resolved against the document's own folder: `handbook/refunds`, which
+    // this record does not have — the concept is `refunds`.
+    const root = repo(files("refunds"));
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("ksor-migrate-underivable");
+    expect(r.stderr).toContain("knowledge/handbook/old-refunds.md");
+    expect(r.stderr, "the refusal must name the value it resolved to").toContain(
+      "handbook/refunds",
+    );
+    expect(r.stderr, "and the concept that is actually there").toContain("/refunds");
+    expect(tree(root), "migrate wrote a tree its own checker refuses").toEqual(before);
+  });
+
+  it("migrates and then BUILDS once the pointer names a concept", () => {
+    const root = repo(files("/refunds"));
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    expect(
+      (fm(root, "knowledge/handbook/old-refunds.md")["ksor"] as Record<string, unknown>)[
+        "superseded_by"
+      ],
+    ).toBe("refunds");
+    const built = run(root, "build");
+    expect(built.status, built.stderr + built.stdout).toBe(0);
+  });
+
+  /**
+   * The successor's document is in the record and this run REFUSED it, so it is
+   * missing from the id set without being missing from the tree. Two refusals
+   * about one file, the second of them false, sends the operator editing a
+   * pointer that is correct.
+   */
+  it("does not call a successor missing when its document is merely refused", () => {
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      [
+        "knowledge/old.md",
+        "---\ntitle: Old\ndescription: The policy we replaced.\nstatus: superseded\nsuperseded_by: /new\n---\n\nBody.\n",
+      ],
+      // No `description:`: refused, so `new` never reaches the concept-id set.
+      ["knowledge/new.md", "---\ntitle: New\nstatus: approved\n---\n\nBody.\n"],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("no `description:`");
+    expect(r.stderr, "the pointer is fine; only the document it names is not").not.toContain(
+      "this record has no such concept",
+    );
   });
 });

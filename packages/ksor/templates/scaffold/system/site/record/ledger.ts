@@ -75,13 +75,49 @@ export type LedgerResult =
 const FIX =
   "the ledger is written by `ksor takedown`; do not edit it by hand — revert the edit and run the verb";
 
-/** `text` is null when the file does not exist: an empty ledger. */
+/**
+ * `text` is null when the file does not exist: an empty ledger, and the honest
+ * way to write "this record has never withdrawn anything".
+ *
+ * A file that EXISTS and holds nothing is a different claim, and it is one no
+ * writer makes: the verb writes the header and the first entry in the same
+ * call, so there is no moment at which a real ledger is empty. What produces
+ * one is a write that was interrupted, and reading it as "no denials" is how
+ * that becomes permanent — the reader believes the record has withdrawn
+ * nothing, republishes everything it withdrew, and the next write makes the
+ * belief true on disk. Both halves measured (2026-08-25): a `writeFileSync` of
+ * a 7 KB ledger left the file at zero bytes for 3.3% of reads under sustained
+ * contention, and a sampler watching REAL `ksor takedown` runs was handed the
+ * empty file once in 5,177 reads — and the verb, handed exactly that state,
+ * wrote a ONE-entry ledger over forty and exited 0. So an empty read is a
+ * refusal: the one moment at which the entries are still recoverable.
+ */
 export function parseLedger(text: string | null, path: string): LedgerResult {
   if (text === null) return { ok: true, ledger: { entries: [], ids: [] } };
   const refuse = (why: string): LedgerResult => ({
     ok: false,
     refusals: [{ slug: SLUG, path, why, fix: FIX }],
   });
+  if (text.trim() === "") {
+    return {
+      ok: false,
+      refusals: [
+        {
+          slug: "ksor-ledger-empty",
+          path,
+          why:
+            "the file exists and holds nothing. `ksor takedown` writes the header and an entry " +
+            "together, so an empty ledger is not a record that has withdrawn nothing — it is one " +
+            "whose withdrawals were lost, and reading it as `no denials` republishes every " +
+            "document they took down",
+          fix:
+            "restore the file from version control — it is committed, and every entry it ever " +
+            "held is in its history; if this record has genuinely never withdrawn anything, " +
+            "delete the file, because ABSENCE is how that is written",
+        },
+      ],
+    };
+  }
 
   // The file is a list at its root; the shared reader wants a mapping, so wrap it.
   const loaded = parseYamlFile(`entries:\n${indent(text)}`, path, SLUG);
@@ -341,7 +377,7 @@ export function expectedIn(denial: Pick<Denial, "stableId" | "scope">, tree: Tre
  * what the tree actually holds, and the scope decides only how the refusal
  * READS. It used to decide the verdict as well — the subtree branch refused on
  * absence alone and never consulted `expected` — and that made an ordinary act
- * unrecordable. `ksor takedown --scope subtree knowledge/embargo` on a
+ * unrecordable. `ksor takedown --actor <who> --scope subtree knowledge/embargo` on a
  * directory that does not exist yet is sanctioned (a denial may precede what it
  * names, decision 14); the verb wrote `expected: removed` and exited 0, and the
  * next `ksor build` exited 1 with `ksor-takedown-dangling` — with no honest
@@ -352,6 +388,21 @@ export function expectedIn(denial: Pick<Denial, "stableId" | "scope">, tree: Tre
  * 'removed'`), so the two surfaces disagreed about which records are
  * publishable — decision 19's forbidden state, inverted (2026-08-25).
  */
+/**
+ * Why the record ROOT can never be the target of a denial, and what to do
+ * instead — written ONCE, because two places refuse it and a rule explained
+ * twice is a rule that drifts (decision 18's shape, applied to prose).
+ *
+ * `planTakedown` refuses the ACT, so the entry is never written; this module
+ * refuses the ENTRY, for the ones an older verb wrote and for the ones a hand
+ * appends in a pull request. Only the second can name a `--revoke` exit, so the
+ * entry id is appended there and not carried in the shared text.
+ */
+export const RECORD_ROOT_DENIAL = {
+  why: "the record root is no node: top-level sections are `knowledge/<section>#section` with no parent, so the serving side's `parent_id` walk seeds EMPTY and denies nothing, while the site's prefix test denies EVERYTHING. A hold that darkens the website and goes on serving every document to every agent is worse than no hold, because the dark website reads as confirmation",
+  fix: "deny each top-level section instead — `ksor takedown --actor <who> --scope subtree knowledge/<section>`, one per section",
+} as const;
+
 export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal[] {
   const refusals: Refusal[] = [];
   const path = ".ksor/takedowns.yaml";
@@ -376,8 +427,8 @@ export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal
       refusals.push({
         slug: "ksor-takedown-dangling",
         path,
-        why: `entry \`${d.id}\` denies the subtree \`${d.stableId}\` — the record root, which is no node: top-level sections are \`knowledge/<section>#section\` with no parent, so the serving side's \`parent_id\` walk seeds EMPTY and denies nothing, while the site's prefix test denies EVERYTHING. A hold that darkens the website and goes on serving every document to every agent is worse than no hold, because the dark website reads as confirmation`,
-        fix: `deny each top-level section instead — \`ksor takedown --scope subtree knowledge/<section>\`, one per section — and then lift this one with \`ksor takedown --revoke ${d.id}\``,
+        why: `entry \`${d.id}\` denies the subtree \`${d.stableId}\` — ${RECORD_ROOT_DENIAL.why}`,
+        fix: `${RECORD_ROOT_DENIAL.fix} — and then lift this one with \`ksor takedown --actor <who> --revoke ${d.id}\``,
       });
       continue;
     }
@@ -398,14 +449,14 @@ export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal
             : `entry \`${d.id}\` denies ${what}, which no longer exists — a renamed folder would otherwise republish`,
         // `--removed`, never `--revoke`: a revocation records a lift that never
         // happened, and drops the hold if the path ever comes back.
-        fix: `restore the ${it}, or record its removal with \`ksor takedown --removed ${d.id}\` (and deny the new path if it was renamed)`,
+        fix: `restore the ${it}, or record its removal with \`ksor takedown --actor <who> --removed ${d.id}\` (and deny the new path if it was renamed)`,
       });
     } else {
       refusals.push({
         slug: "ksor-takedown-readded",
         path,
         why: `entry \`${d.id}\` recorded ${what} as removed, and the ${dir === null ? "path" : "directory"} is back`,
-        fix: `delete the ${it} again, or revoke the entry with \`ksor takedown --revoke ${d.id}\` in a reviewed change`,
+        fix: `delete the ${it} again, or revoke the entry with \`ksor takedown --actor <who> --revoke ${d.id}\` in a reviewed change`,
       });
     }
   }
@@ -604,14 +655,30 @@ export function renderEntry(entry: LedgerEntry): string {
 }
 
 /**
- * The file as it should be after appending. `text` is null when the ledger
- * does not exist yet; a file that does not end in a newline gets one, so an
- * append never joins itself onto someone else's last line.
+ * The bytes to ADD to `text` — never the file rewritten around them.
+ *
+ * The distinction is the whole of it. This used to return the file as it
+ * should be after appending, and its one caller wrote that back with
+ * `writeFileSync`: a call that opens with `O_TRUNC`, so every earlier entry
+ * was deleted and then re-written from whatever the caller happened to have
+ * read. Two operators running `ksor takedown` at once destroyed each other's
+ * acts and both reported success (measured: five concurrent runs, five claims,
+ * three entries), and a reader landing inside the truncation window read an
+ * empty ledger and rewrote forty entries down to one.
+ *
+ * A delta cannot do either. Appended with `O_APPEND` the kernel places the
+ * bytes at the end whatever else is happening, so the file only ever grows,
+ * a killed writer leaves what was already there, and the worst a LOST lock can
+ * do is order two acts differently — not lose one.
+ *
+ * `text` is null when the ledger does not exist yet, which is the only time
+ * the header is written. A file that does not end in a newline gets one first,
+ * so an append never joins itself onto somebody else's last line.
  */
-export function appendEntry(text: string | null, entry: LedgerEntry): string {
+export function bytesToAppend(text: string | null, entry: LedgerEntry): string {
   const rendered = renderEntry(entry);
   if (text === null || text.trim() === "") return LEDGER_HEADER + rendered;
-  return (text.endsWith("\n") ? text : `${text}\n`) + rendered;
+  return (text.endsWith("\n") ? "" : "\n") + rendered;
 }
 
 // Manager-NEUTRAL on purpose. This file is written at RUNTIME by `ksor

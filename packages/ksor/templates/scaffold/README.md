@@ -292,6 +292,17 @@ That is deliberate. The act that withdraws a document is one merged commit,
 and both surfaces read it: the door refuses immediately, the site at its next
 build. Merge the ledger entry, rebuild, redeploy.
 
+**A withdrawal that arrives on a clock works the same way, and that one has to
+be scheduled.** `stale_after` and `ksor.effective_from` are evaluated once per
+build, at the instant that build ran, and the answer is written into
+`system/site/out/` — static files cannot re-decide themselves. So a document
+whose `stale_after` passes after your last build keeps appearing in `/llms.txt`
+and in its markdown twin, while `ksor serve` — a process, evaluating per
+request — already refuses it. `ksor build` prints the next instant at which
+this happens. Nothing here rebuilds for you: `validate.yml` runs on pull
+requests and `vercel.json` declares no cron. If this record uses either key,
+add a scheduled rebuild and redeploy.
+
 - **GitHub Pages, nginx, S3, anything static** — run `pnpm build` and
   upload `system/site/out/`. Hosted under a sub-path (like
   `user.github.io/repo`)? Build with `KSOR_BASE_PATH=/repo pnpm build`.

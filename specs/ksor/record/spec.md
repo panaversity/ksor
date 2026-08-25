@@ -195,8 +195,11 @@ a duplicate key, a second document marker or a non-mapping is
 frontmatter (then `ksor-missing-key`).
 
 **2.7 Unknown keys** are preserved and never refused (OKF §11) at the
-**concept's own top level** — with three exceptions, each of which is a key
-that would otherwise fail OPEN.
+**concept's own top level** — with four exceptions, each of which is a key
+that would otherwise fail OPEN. No refusal in this section may print a remedy
+that DELETES the value: the value IS the governance, and a remedy that spends
+it to clear the refusal publishes exactly what the key was withholding
+(reproduced 2026-08-25 — see exception 5). Every remedy here RELOCATES it.
 
 1. `id`, `name`, `visibility`, `provenance`, `owner`, `effective`,
    `superseded`, `superseded_by` and `sor_id` are refused by name
@@ -219,13 +222,31 @@ that would otherwise fail OPEN.
    (`uniqueKeys: true`), and a lenient consumer picks one of the two, which
    makes the derived trust tier non-authoritative and the R14 build stamp
    forgeable by whoever writes the document.
-4. The **`ksor:` block's own key set is CLOSED** — `audience`, `owner`,
+4. A top-level key that is a key of the **`ksor:` block** — `audience`,
+   `approval`, `effective_from`, `deprecated` — is `ksor-key-misplaced`, named,
+   and so is a key one edit from one of them. This is exception 2's failure
+   without the miss: the key is spelled RIGHT, one level from where the profile
+   reads it, so no edit distance can see it and §11 preserves it verbatim.
+   `effective_from: 2099-01-01T00:00:00Z` at a concept's top level built clean,
+   exited 0 and wrote `admitted: ["public"]` for a document embargoed for
+   seventy years; the identical instant under `ksor:` wrote `admitted: []`
+   (reproduced 2026-08-25). `owner` and `superseded_by` are exception 1's,
+   which already names the migration that moves them.
+5. The **`ksor:` block's own key set is CLOSED** — `audience`, `owner`,
    `approval`, `effective_from`, `superseded_by`, `deprecated` — and anything
-   else there is `ksor-ksor-key-unknown`. That namespace is ksor's, not OKF's,
+   else there is `ksor-ksor-key-unknown`, except a TOP-LEVEL profile key
+   written inside it, which is exception 4 mirrored and is `ksor-key-misplaced`.
+   That namespace is ksor's, not OKF's,
    so §11 does not reach it, and the keys that fail open are the OPTIONAL ones:
    a typo in a required key already surfaces as `ksor-missing-key`, while
    `ksor.effective-from` (one hyphen) published an embargoed policy four weeks
-   early with no refusal anywhere (reproduced 2026-08-25).
+   early with no refusal anywhere (reproduced 2026-08-25). The mirror is where
+   the destructive remedy was found: `ksor.stale_after` was refused as a key of
+   a closed block and the fix line read "remove `stale_after:`". Following it on
+   a document already past that instant flipped `admitted: []` to
+   `admitted: ["public"]` — the remedy published what the author had withdrawn.
+   An unrecognised key under `ksor:` is now moved to the concept's top level,
+   where §11 preserves it, rather than deleted.
 
 ## 3 · The instance document
 
@@ -338,7 +359,26 @@ recorded actor, no `--actor` needed — ingest's step, on demand) as the fix;
 `--file-only`. `--reason` is REQUIRED on a denial: `takedown_denylist.reason`
 is `NOT NULL`, and the entry is the only place the withdrawal is ever
 explained. `--scope subtree` appends the `#section` anchor when the operator
-named the bare directory, and refuses one at the default scope. `--list` and
+named the bare directory, and refuses one at the default scope. It refuses the
+record ROOT at EITHER scope and in every shape it can be typed (`knowledge`,
+`knowledge/`, `knowledge#section`, `knowledge/#section`):
+`ksor-takedown-record-root`, sharing the §7 checker's reasoning and its remedy
+verbatim — one `subtree` entry per top-level section. The refusal is at the ACT
+because the ledger is append-only: the anchored spelling used to exit `0` and
+leave an entry every later `ksor build` refuses, and the bare one raised a
+`TypeError` under exit `3`, the ENVIRONMENT code, for an argument. At node
+scope the id matches no concept, so both surfaces denied nothing while the verb
+reported a denial. A trailing slash — which a shell puts on every completed
+directory — is normalized away on both sides of the anchor before any of this
+is read, rather than recorded: `knowledge/policies/x/` matched no concept while
+recording `expected: removed`, which AGREES with "no such concept" and so left
+the checker green over a hold that denied nothing, and
+`knowledge/policies/#section` recorded the directory `policies//`.
+`--instance` is resolved by the ONE rule every verb shares
+(an `instance.md`, or a directory at or below the record root); taking the
+argument verbatim made `--instance .` read the record's PARENT as the root and
+report `ksor-policy-missing` about a record whose policy was present, with a
+fix that overwrites it. `--list` and
 `--ledger` read and need no actor (decision 21), and need no database either:
 with no `database:` they answer from the committed ledger — the denials in
 force, and every entry with its id, which is what `--revoke` takes. With a
@@ -346,13 +386,33 @@ force, and every entry with its id, which is what `--revoke` takes. With a
 §7 trail, which additionally records the apply. `--export` is removed, with
 `.ksor-denylist.json` and the scaffold's `export-denylist` step.
 
+**One writer at a time, and the write is an APPEND.** The verb reads the
+ledger, decides what the act is, and writes — three steps that used to have
+nothing between them and ended in a `writeFileSync` of the WHOLE file. Two
+operators running it at once therefore deleted each other's acts and both
+reported success: measured on a stock scaffold with no database, five
+concurrent runs, five "recorded as" lines, three entries (2026-08-25). The
+read, the decision and the write now happen inside an exclusive lock
+(`.ksor/takedowns.yaml.lock`, `wx`-created and pid-stamped; a lock whose holder
+is gone is broken, and one still held after 30s refuses `ksor-ledger-locked`
+under exit `3` having written nothing), and the write is an `O_APPEND` of the
+new entry ALONE. Both, because they answer different failures: the lock makes N
+concurrent acts produce N entries, and the append is what makes the loss
+impossible rather than unlikely — an older `ksor` or a broken lock can then
+only order two acts differently, never delete one, and the file has no state in
+which it is shorter than it was. That last is what `ksor-ledger-empty` is the
+other half of: `writeFileSync` opens `O_TRUNC`, so a reader landing in the
+window read a ledger with no entries and rewrote forty down to one.
+
 The verb's own argument refusals, each slug-first on stderr and outside the §6
 checker set the way the ingest slugs are: `ksor-takedown-unattributed` (no
 `--actor`), `ksor-takedown-unauthorised`, `ksor-actor-form`,
 `ksor-takedown-unspecified` (no act named), `ksor-takedown-ambiguous` (two),
 `ksor-takedown-scope`, `ksor-takedown-unreasoned`, `ksor-takedown-stable-id`,
+`ksor-takedown-record-root`,
 `ksor-takedown-unknown-entry` (`--revoke`/`--removed` naming no denial),
-`ksor-takedown-dsn-missing`.
+`ksor-takedown-dsn-missing`, `ksor-ledger-locked` (exit `3`: another
+`ksor takedown` holds the file).
 
 **How a row lifts.** `takedown_denylist` gains `ledger_id`, `actor`,
 `applied_at`, and nullable `revoked_ledger_id` / `revoked_at`; the `DENIED`
@@ -423,7 +483,11 @@ whatever `expected` says: it is unhonourable, not merely out of step with the
 tree. The refusal names the form that works — one `subtree` entry per top-level
 section — and it is raised on the IN-FORCE set rather than at parse time, so
 the entry stays readable and `--revoke`, which loads the file through
-`parseLedger`, remains the exit.
+`parseLedger`, remains the exit. The verb refuses the same form as an ACT
+(`ksor-takedown-record-root`, §5), so this refusal now meets only what an older
+verb wrote or a hand appended; the reasoning and the remedy are ONE text
+(`RECORD_ROOT_DENIAL`), because a rule explained in two places is a rule that
+drifts.
 
 Presence is asked of the **tree**, not of the concept set: a document that
 fails to parse is not a concept but is still there, and judging it absent made
@@ -482,11 +546,18 @@ which announces a replacement no surface shows),
 `ksor-takedown-readded`, `ksor-ledger-shrank`, `ksor-ledger-amended` (an
 entry whose TEXT moved under an id a baseline recorded — comparing id sets
 alone let a committed denial be retargeted in place),
-`ksor-ledger-invalid`,
+`ksor-ledger-invalid`, `ksor-ledger-empty` (the file EXISTS and holds
+nothing — the verb writes the header and an entry in one call, so a real
+ledger is never empty; what leaves one is an interrupted write, and reading
+it as `no denials` republishes every document those entries withdrew and
+makes it permanent at the next write),
 `ksor-policy-missing`, `ksor-policy-invalid` (§4: an unknown key in any of
 the policy's closed objects included), `ksor-legacy-key` (§2.6),
 `ksor-ksor-key-unknown` (a key outside the closed `ksor:` block, §2.7),
 `ksor-key-near-miss` (a top-level key one edit from a profile key, §2.7),
+`ksor-key-misplaced` (a governance key one level from where the profile reads
+it — a `ksor:` block key at the concept's top level, or a top-level profile key
+inside the `ksor:` block, §2.7),
 `ksor-derived-key` (a concept claiming a key the build writes, §2.7),
 `ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
 `^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside

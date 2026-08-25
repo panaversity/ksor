@@ -28,7 +28,7 @@ const D2 = entry(
 );
 const R1 = entry("r1", "2026-08-25T11:00:00Z", "  revokes: d1\n  reason: lifted\n");
 
-function ledger(text: string): Ledger {
+function ledger(text: string | null): Ledger {
   const r = parseLedger(text, ".ksor/takedowns.yaml");
   if (!r.ok) throw new Error(JSON.stringify(r.refusals));
   return r.ledger;
@@ -57,7 +57,11 @@ describe("ledgerDenials — what `--list` prints without a database", () => {
   });
 
   it("an empty ledger denies nothing rather than refusing", () => {
-    expect(ledgerDenials(ledger(""))).toEqual([]);
+    // `null` and not `""`: no FILE is how a record writes "nothing has been
+    // withdrawn". A file that exists and holds nothing is `ksor-ledger-empty`,
+    // because it is what an interrupted write leaves behind, never what a
+    // record without denials looks like.
+    expect(ledgerDenials(ledger(null))).toEqual([]);
   });
 });
 

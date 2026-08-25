@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import pg from "pg";
@@ -40,8 +40,10 @@ import {
   type TakedownRow,
 } from "./takedown-ops.js";
 import { applyLedger, unmergedLines } from "./ingest/ledger-apply.js";
-import { appendEntry, mintLedgerId, parseLedger, type LedgerEntry } from "./record/ledger.js";
+import { mintLedgerId, parseLedger, type LedgerEntry, type LedgerResult } from "./record/ledger.js";
+import { LedgerLocked, withLedgerLock, writeLedgerEntry } from "./ledger-file.js";
 import { resolveInstanceDir } from "./record/load.js";
+import type { Refusal } from "./record/refusal.js";
 import { parsePolicy } from "./record/policy.js";
 import {
   authorizeActor,
@@ -888,11 +890,20 @@ async function takedownCommand(args: string[]): Promise<number> {
   // The record root is where instance.md lives, resolved through the ONE
   // helper `build`, `migrate` and `ingest` share (build spec §1): the ledger,
   // the policy and the bundle all hang off it.
-  const instancePath =
-    values.instance ??
-    (resolveInstanceDir(process.cwd()) === null
-      ? undefined
-      : join(resolveInstanceDir(process.cwd())!, "instance.md"));
+  //
+  // The comment said that before the code did. `--instance .` — a directory,
+  // which every other verb accepts and which `build --help` documents for this
+  // same flag name — was taken VERBATIM, so `dirname(resolve("."))` read the
+  // record root as the record's PARENT: the verb reported `ksor-policy-missing`
+  // about a record whose `.ksor/governance.yaml` was right there, and its
+  // printed fix would have had the adopter overwrite their real
+  // `approval_authorities` and `takedown_authorities`. A false report whose
+  // remedy destroys governance (found on a live walk, 2026-08-25).
+  const instancePath = ((): string | undefined => {
+    if (values.instance !== undefined) return instancePathOf(values.instance);
+    const found = resolveInstanceDir(process.cwd());
+    return found === null ? undefined : join(found, "instance.md");
+  })();
   if (instancePath === undefined) {
     return fail(
       REFUSED,
@@ -1010,46 +1021,92 @@ async function takedownCommand(args: string[]): Promise<number> {
   });
   if (!step.ok) return refuse(step.refusal);
 
-  const at = new Date().toISOString();
   const actor = values.actor!.trim();
-  let entry: LedgerEntry;
-  if (mode.kind === "deny") {
-    const target = conceptPathOf(mode.stableId) ?? subtreeDirOf(mode.stableId)!;
-    entry = {
-      kind: "denial",
-      id: mintLedgerId(at),
-      by: actor,
-      at,
-      reason,
-      stableId: mode.stableId,
-      scope: mode.scope,
-      // What the verb SAW: a denial may precede the document it names
-      // (decision 14), and `expected` is how the checker later tells a
-      // deliberate removal from a rename that would republish.
-      expected: expectedFor(existsSync(join(root, target))),
-    };
-  } else {
-    const target = parsedLedger.ledger.entries.find((e) => e.id === mode.target);
-    if (target === undefined || target.kind !== "denial") {
-      return refuse({
-        slug: "ksor-takedown-unknown-entry",
-        why:
-          target === undefined
-            ? `\`${mode.target}\` is no entry in .ksor/takedowns.yaml`
-            : `\`${mode.target}\` is a ${target.kind} — only a denial can be revoked or recorded as removed`,
-        fix: "name the denial's entry id (the `id:` line in .ksor/takedowns.yaml)",
-      });
-    }
-    entry =
-      mode.kind === "revoke"
-        ? { kind: "revocation", id: mintLedgerId(at), by: actor, at, reason, revokes: target.id }
-        : { kind: "amendment", id: mintLedgerId(at), by: actor, at, reason, amends: target.id };
-  }
 
   // FILE FIRST, always. The entry is the record of the act; the row is a
   // projection of it, and `--apply` can always rebuild the row from the file
   // while nothing can rebuild the file from the row.
-  writeFileSync(ledgerPath, appendEntry(ledgerText, entry), "utf8");
+  //
+  // Under the lock, and decided from the text read INSIDE it. Deciding from a
+  // copy read before the wait — which is what this did — is how two operators
+  // running the verb at once deleted each other's acts and both reported
+  // success; `ledger-file.ts` records the measurement and why the append
+  // underneath the lock is the half that makes the loss impossible.
+  type Written =
+    | { kind: "written"; entry: LedgerEntry; after: LedgerResult }
+    | { kind: "refused"; refusal: VerbRefusal }
+    | { kind: "unreadable"; refusals: readonly Refusal[] };
+  let outcome: Written;
+  try {
+    outcome = withLedgerLock(ledgerPath, (current): Written => {
+      const held = parseLedger(current, ".ksor/takedowns.yaml");
+      if (!held.ok) return { kind: "unreadable", refusals: held.refusals };
+      // Stamped HERE and not before the wait: `at` is when the act was
+      // recorded, and a run that queued behind another one would otherwise
+      // date its entry before the entry it lands after.
+      const at = new Date().toISOString();
+      let entry: LedgerEntry;
+      if (mode.kind === "deny") {
+        const target = conceptPathOf(mode.stableId) ?? subtreeDirOf(mode.stableId)!;
+        entry = {
+          kind: "denial",
+          id: mintLedgerId(at),
+          by: actor,
+          at,
+          reason,
+          stableId: mode.stableId,
+          scope: mode.scope,
+          // What the verb SAW: a denial may precede the document it names
+          // (decision 14), and `expected` is how the checker later tells a
+          // deliberate removal from a rename that would republish.
+          expected: expectedFor(existsSync(join(root, target))),
+        };
+      } else {
+        const target = held.ledger.entries.find((e) => e.id === mode.target);
+        if (target === undefined || target.kind !== "denial") {
+          return {
+            kind: "refused",
+            refusal: {
+              slug: "ksor-takedown-unknown-entry",
+              why:
+                target === undefined
+                  ? `\`${mode.target}\` is no entry in .ksor/takedowns.yaml`
+                  : `\`${mode.target}\` is a ${target.kind} — only a denial can be revoked or recorded as removed`,
+              fix: "name the denial's entry id (the `id:` line in .ksor/takedowns.yaml)",
+            },
+          };
+        }
+        entry =
+          mode.kind === "revoke"
+            ? {
+                kind: "revocation",
+                id: mintLedgerId(at),
+                by: actor,
+                at,
+                reason,
+                revokes: target.id,
+              }
+            : { kind: "amendment", id: mintLedgerId(at), by: actor, at, reason, amends: target.id };
+      }
+      const text = writeLedgerEntry(ledgerPath, current, entry);
+      return { kind: "written", entry, after: parseLedger(text, ".ksor/takedowns.yaml") };
+    });
+  } catch (exc) {
+    // Nothing was written, so nothing is claimed: exit 3, because another
+    // process holding the file is the environment and not this request.
+    if (exc instanceof LedgerLocked) return fail(ENVIRONMENT, exc.message);
+    throw exc;
+  }
+  if (outcome.kind === "refused") return refuse(outcome.refusal);
+  if (outcome.kind === "unreadable") {
+    return fail(
+      REFUSED,
+      outcome.refusals
+        .map((r) => `${r.slug}: ${r.path}\n  why: ${r.why}\n  fix: ${r.fix}`)
+        .join("\n"),
+    );
+  }
+  const { entry, after: reparsed } = outcome;
   process.stdout.write(
     `takedown: ${describe(entry)}\n  recorded as \`${entry.id}\` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger\n`,
   );
@@ -1061,7 +1118,6 @@ async function takedownCommand(args: string[]): Promise<number> {
 
   const dsn = resolveDsn(instance!);
   if (typeof dsn === "number") return dsn;
-  const reparsed = parseLedger(readFileSync(ledgerPath, "utf8"), ".ksor/takedowns.yaml");
   if (!reparsed.ok) {
     return fail(
       ENVIRONMENT,

@@ -95,13 +95,20 @@ expanded UPWARD through the old ordered model, `provenance` into `sources`,
 instance into format 2 with authority moved into `.ksor/governance.yaml`, a
 reserved `index.md`/`README.md` carrying prose into `overview.md`, every
 summary companion marked `type: Summary`, and every denylist row in the
-database into the committed ledger (once, into a record that has no ledger
-yet — a record that already has one has already been migrated, and `ksor
-takedown` may have appended to it since). Without `--write` it prints a
+database into the committed ledger. A row whose denial the ledger already
+names is left alone and an existing ledger is never regenerated — `ksor
+takedown` may have appended to it — but a row nothing accounts for is
+APPENDED, including the one a repointed denial leaves behind, which is the
+state `ksor ingest` and `ksor serve` refuse as `ksor-takedown-unledgered` and
+name this command as the remedy for. Without `--write` it prints a
 unified diff and changes nothing. `--write-site` UPDATES the byte-copied rule
 modules where a `system/site` exists; it never creates one. It refuses by name (`ksor-migrate-underivable`) rather
 than author a title, a description, a `generated.at` or the actor behind a
-takedown. `workbench/example-corpus` is migrated and builds green;
+takedown — and rather than DERIVE either of the two values a re-run can no
+longer know: an audience, once the `audiences:` model it deleted is gone (it
+writes `instance.md` last so an interrupted run keeps one), and a
+`ksor.superseded_by` resolving to no concept, which `ksor build` would refuse as
+`ksor-supersession-strands`. `workbench/example-corpus` is migrated and builds green;
 `scripts/check-corpus.mjs` no longer applies the pre-profile rules to it.
 
 **The kernel reads the record through it, and stores what it finds.** Schema
@@ -121,6 +128,12 @@ the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
 `--apply`, and `--export` and `.ksor-denylist.json` are gone. `--list` and
 `--ledger` read without a database too, from the committed ledger — the rung
 `ksor init` emits, and the only place `--revoke`'s entry id can be found there.
+The write is serialised and APPEND-ONLY: the read, the decision and the write
+happen under `.ksor/takedowns.yaml.lock` (a holder still there after 30s is
+`ksor-ledger-locked`, exit `3`, nothing written), and the entry is appended
+with `O_APPEND` rather than the file rewritten — so N concurrent runs record N
+acts, and the ledger has no state in which it is shorter than it was. A file
+that exists and holds nothing is `ksor-ledger-empty`, never "no denials".
 
 **And serving now reads all of it.** `lib/lifecycle.ts` and `lib/trust.ts`
 join the audience overlap in ONE admitted set (`lib/admit.ts`), bound beside
@@ -314,15 +327,18 @@ surface, compared over the protocol. The measurement that motivated it: three
 tool definitions cost ~2,990 always-resident tokens and one default `search`
 call ~3,541 — an agent pays for a record's tool surface out of its context
 window, so the record's owner decides what it says. Re-measured 2026-08-25
-after the trust floor and the per-hit governance landed: the definitions are
-**16,214 chars / ~4,054 tokens** as transmitted — exact, they depend on the
-code alone — which is `search` 7,602 + `outline` 3,332 + `read` 5,276 =
-**16,210**, plus the four characters the `tools` array itself carries;
+after the trust floor, the per-hit governance and the trust-tier provenance
+sentences landed: the definitions are
+**16,734 chars / ~4,184 tokens** as transmitted — exact, they depend on the
+code alone — which is `search` 7,932 + `outline` 3,332 + `read` 5,466 =
+**16,730**, plus the four characters the `tools` array itself carries;
 the per-call figures were NOT re-measured against that record, and
 `packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
 measurement plus the governance block's exactly-measured 262 chars a hit. The
-same block rides on every `read` reply, beside the authored frontmatter and
-labelled as the half the record checked.
+same block rides on every `read` reply, beside the authored frontmatter — and
+both floors now say which of its fields were CHECKED (`approval`, against the
+governance policy) and which were only derived from what the document declares
+about itself (`trust_tier`).
 
 ### One auth switch, spelled like what it does (0.0.29)
 

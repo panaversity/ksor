@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -237,20 +237,169 @@ describe("a governance act must NAME who performed it", () => {
   });
 
   it("never infers one from the environment", () => {
-    const src = readFileSync(
-      path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "..",
-        "..",
-        "content",
-        "src",
-        "commands.ts",
-      ),
+    // WHOLE files, not a slice between two landmarks: this used to bracket
+    // `const namedActor` and `if (values.export`, both of which have since been
+    // removed, so `indexOf` returned -1 twice and the assertion ran against an
+    // empty string — a test that could no longer fail. Its pattern could not
+    // fail either: `USERNAME?` is `USERNAM` plus an optional `E`, so the very
+    // variable decision 21 names first, `$USER`, was the one it did not match
+    // (both found 2026-08-25).
+    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "content");
+    for (const rel of ["src/commands.ts", "src/takedown-verb.ts"]) {
+      expect(
+        readFileSync(path.join(dir, rel), "utf8"),
+        `${rel}: an actor guessed from the shell attributes nothing`,
+      ).not.toMatch(/process\.env\[["'](?:USER|USERNAME|LOGNAME)["']\]/);
+    }
+  });
+});
+
+/**
+ * `ksor takedown`'s ARGUMENTS, through the built binary — both defects here
+ * were found by typing the verb the way its own `--help` documents it, and
+ * neither was reachable from the pure planner alone (2026-08-25 walk).
+ *
+ * A level-0 record, so the whole act is the ledger entry and no database is
+ * involved: the argument paths are what is under test, not the row.
+ */
+describe("ksor takedown — the arguments an adopter actually types", () => {
+  /** A record at `<tmp>/rec`, so the PARENT is ours to assert nothing leaked into. */
+  function record(): { readonly parent: string; readonly root: string } {
+    const parent = mkdtempSync(path.join(tmpdir(), "ksor-takedown-args-"));
+    const root = path.join(parent, "rec");
+    mkdirSync(path.join(root, ".ksor"), { recursive: true });
+    mkdirSync(path.join(root, "knowledge", "policies"), { recursive: true });
+    writeFileSync(
+      path.join(root, "instance.md"),
+      '---\nformat: 2\nname: args-test\ntitle: Args Test\ndescription: "A record that exists to be typed at."\n---\n\nA record that exists to be typed at.\n',
       "utf8",
     );
-    const block = src.slice(src.indexOf("const namedActor"), src.indexOf("if (values.export"));
-    expect(block, "an actor guessed from the shell attributes nothing").not.toMatch(
-      /process\.env\["USERNAME?"\]/,
+    writeFileSync(
+      path.join(root, ".ksor", "governance.yaml"),
+      'version: "0.1"\napproval_authorities:\n  - actors: [human:ciso]\ntakedown_authorities:\n  actors: [human:ciso]\n',
+      "utf8",
     );
+    writeFileSync(path.join(root, "knowledge", "policies", "x.md"), "# X\n", "utf8");
+    return { parent, root };
+  }
+
+  const deny = (root: string, ...rest: readonly string[]) =>
+    runCli(["takedown", "--instance", root, "--actor", "human:ciso", "--reason", "legal", ...rest]);
+
+  /**
+   * `--instance .` is what `build --help` documents for the same flag name and
+   * what every other verb accepts. takedown took the argument verbatim and read
+   * the record root as `dirname(resolve("."))` — the record's PARENT — so it
+   * reported `ksor-policy-missing` about a record whose `.ksor/governance.yaml`
+   * was right there, and its printed fix would have had the adopter overwrite
+   * their real `approval_authorities` and `takedown_authorities`. A false
+   * report whose remedy destroys governance.
+   */
+  it("accepts a DIRECTORY for --instance, like every other verb", () => {
+    const { parent, root } = record();
+    try {
+      const r = deny(root, "knowledge/policies/x");
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stderr, "the policy is right there").not.toContain("ksor-policy-missing");
+      expect(
+        existsSync(path.join(root, ".ksor", "takedowns.yaml")),
+        "the entry lands in the record's own .ksor/, not a directory above it",
+      ).toBe(true);
+      expect(readFileSync(path.join(root, ".ksor", "takedowns.yaml"), "utf8")).toContain(
+        "knowledge/policies/x",
+      );
+      expect(existsSync(path.join(parent, ".ksor")), "nothing was written above the record").toBe(
+        false,
+      );
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The same root cause reached `--list` by a different route: `parseInstance`
+   * on the DIRECTORY throws EISDIR rather than `NoDatabaseDeclared`, so the
+   * level-0 branch — answer from the committed ledger — was never taken, and a
+   * record with no database was told to stand up Postgres.
+   */
+  it("--list on a level-0 record answers from the ledger, given a directory", () => {
+    const { parent, root } = record();
+    try {
+      const r = runCli(["takedown", "--instance", root, "--list"]);
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stderr, "a level-0 record is not missing an environment").not.toContain("dsn_env");
+      expect(r.stdout).toContain("nothing is denied in this corpus");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The record root. It used to reach `join(root, null)` and exit **3** with a
+   * raw `TypeError: The "path" argument must be of type string` — the
+   * ENVIRONMENT code, for an argument the operator typed — and the anchored
+   * spelling was worse: exit 0, with an entry written that the next
+   * `ksor build` refuses for as long as the append-only ledger exists.
+   */
+  it.each([
+    ["subtree", "knowledge/"],
+    ["subtree", "knowledge/#section"],
+    ["node", "knowledge/"],
+  ])("refuses the record root at %s scope (`%s`) — nothing written", (scope, id) => {
+    const { parent, root } = record();
+    try {
+      const r = scope === "subtree" ? deny(root, "--scope", "subtree", id) : deny(root, id);
+      expect(r.status, r.stdout + r.stderr).toBe(1);
+      expect(r.stderr.split("\n")[0], "slug-first on stderr").toMatch(
+        /^ksor-takedown-record-root:/,
+      );
+      expect(r.stderr, "the remedy is the form that works").toContain(
+        "--scope subtree knowledge/<section>",
+      );
+      expect(
+        existsSync(path.join(root, ".ksor", "takedowns.yaml")),
+        "a refused act writes no entry — the ledger is append-only",
+      ).toBe(false);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The shell's trailing slash, recorded verbatim. This is the quietest of the
+   * four: `knowledge/policies/x/` matched no concept, so both surfaces denied
+   * nothing — and `expected: removed` AGREED with "no such concept", so the
+   * checker stayed green and no surface ever said the hold was fake. The verb
+   * said `denied`, and that was the only thing anyone would ever see.
+   */
+  it("records the id the record uses, not the one the shell completed", () => {
+    const { parent, root } = record();
+    try {
+      const r = deny(root, "knowledge/policies/x/");
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      const ledger = readFileSync(path.join(root, ".ksor", "takedowns.yaml"), "utf8");
+      expect(ledger, "the trailing slash is not part of the id").toContain(
+        'stable_id: "knowledge/policies/x"',
+      );
+      expect(
+        ledger,
+        "and `expected` therefore reports what is actually there — the document IS present",
+      ).toContain("expected: present");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("still denies a top-level section — the refusal is the root, not the depth", () => {
+    const { parent, root } = record();
+    try {
+      const r = deny(root, "--scope", "subtree", "knowledge/policies");
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(readFileSync(path.join(root, ".ksor", "takedowns.yaml"), "utf8")).toContain(
+        "knowledge/policies#section",
+      );
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 });

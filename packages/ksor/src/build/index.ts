@@ -25,6 +25,7 @@ import { attachmentKindOf } from "@panaversity/ksor-content";
 
 import { exitCodes } from "../index.js";
 import { gitFacts, ignoredGovernance } from "./git.js";
+import { lifecycleNotice } from "./lifecycle-notice.js";
 
 export interface BuildIo {
   readonly out: (text: string) => void;
@@ -276,9 +277,23 @@ export function runBuild(
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 
   const admitted = lock.documents.filter((d) => d.admitted.length > 0).length;
+  // Why the count is what it is, and when it stops being true. A build that
+  // publishes past a document's review date, or holds an embargoed one back,
+  // has to SAY so: the number alone reads as a total, and the static artefact
+  // it just wrote goes on answering at instants this run never saw.
+  const notice = lifecycleNotice(
+    result.concepts.map((c) => ({
+      path: c.path.slice("knowledge/".length),
+      status: c.status,
+      effectiveFrom: c.effectiveFrom,
+      staleAfter: c.staleAfter,
+    })),
+    Date.parse(lock.as_of),
+  );
   io.out(
     `ksor build: ${lock.documents.length} document(s), ${admitted} admitted to a machine surface at ${lock.as_of}` +
       `${lock.dirty ? " (dirty)" : ""}\n` +
+      notice +
       `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,
   );

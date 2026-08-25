@@ -191,7 +191,10 @@ from `sources.frontmatter`, never a re-serialisation of the parsed columns:
 the profile preserves unknown keys, so a re-rendered block would hand an agent
 a document the record does not contain. It is UNTRUSTED corpus text, and it
 sits beside `governance`, which is not: the frontmatter is what the author
-DECLARED, `governance` is what the record checked and stored. Offering only the
+DECLARED, `governance` is what the record STORED — checked per field, not as a
+block: `approval` against the Governance Policy, `trust_tier` only DERIVED from
+`verified` entries the document declares about itself, which no policy family
+gates (record spec §2.3). The floor text says which is which. Offering only the
 authored block on the surface an agent reads documents from would invite it to
 read a declaration as a verification, so both go out and the floor says which
 is which. The in-band injection advisory is computed over BOTH channels.

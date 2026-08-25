@@ -66,14 +66,35 @@ export function repoint(stableId: string, scope: "node" | "subtree", fate: Reser
   return fate.get(stableId) === "moved" ? `${m[1]}/overview` : stableId;
 }
 
+/** Where a PREVIOUS run's repointing would have sent this row's hold, when it moved the prose. */
+function movedTo(stableId: string): string | null {
+  const m = /^(.*)\/(index|README)$/.exec(stableId);
+  return m === null ? null : `${m[1]}/overview`;
+}
+
 export function toLedgerEntries(
   rows: readonly DbDenial[],
   attributions: ReadonlyMap<string, string>,
   fate: ReservedFate,
+  /**
+   * The stable_ids the record's EXISTING `.ksor/takedowns.yaml` already names.
+   *
+   * Transcription used to be all-or-nothing — a record with a ledger was not
+   * read at all — which left every row whose id had been REPOINTED accounted
+   * for by nothing: `ksor ingest` refused `ksor-takedown-unledgered`, `ksor
+   * serve` refused to boot, and the remedy both of them print (`ksor migrate
+   * --write`) answered "nothing to migrate". Per-row is what makes the remedy
+   * real, and it keeps the guarantee the all-or-nothing rule was protecting:
+   * an entry already in the file is never rewritten, only appended past.
+   */
+  accounted: ReadonlySet<string> = new Set(),
 ): LedgerOutcome {
   const entries: LedgerDenial[] = [];
   const refusals: Refusal[] = [];
   for (const row of rows) {
+    // Already in the ledger under its own id: the record accounts for this row,
+    // and re-deriving anything from it would duplicate an append-only entry.
+    if (accounted.has(row.stableId)) continue;
     const asserted = attributions.get(row.stableId);
     const by = asserted ?? row.actor;
     if (by === null || by === undefined) {
@@ -100,6 +121,45 @@ export function toLedgerEntries(
       continue;
     }
     const stableId = repoint(row.stableId, row.scope, fate);
+    /**
+     * The row AS IT STANDS, so nothing in the database is left unaccounted for.
+     *
+     * Emitted whenever the hold is written under a DIFFERENT id — `<dir>/index`
+     * denied, its prose moved to `<dir>/overview`, the entry naming the
+     * overview. The row still names the index, and the ledger is what accounts
+     * for rows (`applyLedger` matches by stable_id), so without this the record
+     * migrate produced could not be ingested or served at all.
+     *
+     * It is a faithful transcription and not a new act: the same actor, the same
+     * instant, the reason the row carries. `renderLedger` derives `expected`
+     * from the post-migration tree, which no longer holds that path, so it
+     * records `removed` — the state `assertGovernanceServable` excludes from the
+     * orphan check precisely because it is correct and permanent. `node`
+     * whatever the row's scope was: a subtree entry must name a container's
+     * `#section`, this names a former document, and the subtree hold itself is
+     * carried by the repointed entry beside it.
+     */
+    const accountFor = (holdsAt: string): void => {
+      if (accounted.has(row.stableId)) return;
+      entries.push({
+        id: ledgerIdFor(row.stableId, row.at),
+        stableId: row.stableId,
+        scope: "node",
+        by,
+        at: row.at,
+        reason: `${row.reason === "" ? "migrated from the denylist" : row.reason} (the denylist row \`ksor migrate\` transcribed; the hold now names \`${holdsAt}\`)`,
+      });
+    };
+    // A previous run already moved the prose and recorded the hold under the
+    // moved id — the file left behind is the GENERATED index `ksor build`
+    // writes, so `repoint` can no longer see that anything moved. All that is
+    // missing is the row's own entry, and re-deciding what the denial covers
+    // would contradict a ledger that has already decided it.
+    const moved = movedTo(row.stableId);
+    if (moved !== null && accounted.has(moved)) {
+      accountFor(moved);
+      continue;
+    }
     // The reserved name is still in the record, so the denial cannot follow
     // prose that did not move — and it cannot stay pointed at a generated index
     // either, which under the profile carries no knowledge and is not a concept.
@@ -126,6 +186,8 @@ export function toLedgerEntries(
       });
       continue;
     }
+    if (stableId !== row.stableId) accountFor(stableId);
+    if (accounted.has(stableId)) continue;
     entries.push({
       id: ledgerIdFor(stableId, row.at),
       stableId,
@@ -153,10 +215,23 @@ export function toLedgerEntries(
  * (`--revoke`) records a lift that never happened.
  */
 export function renderLedger(entries: readonly LedgerDenial[], tree: TreeShape): string {
-  const lines = [
-    "# The takedown ledger — append-only, written by `ksor takedown` (record spec §5).",
-    "# These entries were transcribed from the database's denylist by `ksor migrate`.",
-  ];
+  return `${LEDGER_HEADER.join("\n")}\n${renderEntries(entries, tree)}`;
+}
+
+const LEDGER_HEADER = [
+  "# The takedown ledger — append-only, written by `ksor takedown` (record spec §5).",
+  "# These entries were transcribed from the database's denylist by `ksor migrate`.",
+];
+
+/**
+ * The entries alone, for APPENDING to a ledger that already exists — a record
+ * whose rows migrate could not account for on its first run, or which grew a row
+ * by hand. Append-only means the bytes already in the file are never re-rendered
+ * (their `expected` is what an amendment left it, not what today's tree says), so
+ * this renders only what is new.
+ */
+export function renderEntries(entries: readonly LedgerDenial[], tree: TreeShape): string {
+  const lines: string[] = [];
   for (const d of entries) {
     const expected = expectedIn(d, tree);
     lines.push(
