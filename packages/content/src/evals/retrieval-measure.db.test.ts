@@ -264,8 +264,4 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
       "more gold questions returned the link-list page than the baseline allows",
     ).toBeLessThanOrEqual(RETRIEVAL_BASELINE.navNegativeHits);
   });
-
-  it("skips without KSOR_DB_URL and GEMINI_API_KEY", () => {
-    expect(true).toBe(true);
-  });
 });

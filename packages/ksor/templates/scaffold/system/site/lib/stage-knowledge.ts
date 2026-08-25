@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
+import { ATTACHMENT_SUFFIXES, isAttachment } from "./attachment-rule";
 import { publicSimPath, SIM_SUFFIX } from "./sim-rule";
 import { refuse, viewer } from "./audience";
 import { overlaps } from "./audience-rule";
@@ -48,13 +48,6 @@ import type { Refusal } from "../record/refusal";
 const KNOWLEDGE = "knowledge/";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const POLICY_PATH = ".ksor/governance.yaml";
-// Byte-for-byte the checker's set (`record/check.ts`): one answer to "what is
-// a companion" across the checker, the lock and the stage. `.summary.mdx` was
-// in this one and not in that one, so the two would have disagreed about the
-// lock's companion list — a permanent `ksor-lock-stale` had the record checker
-// not refused `.mdx` first.
-const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
-
 /**
  * Everything this build may publish, as bytes at bundle-relative paths: the
  * admitted concepts (copied), their companions (copied), ONLY the assets those
@@ -86,7 +79,7 @@ function refuseRecord(refusals: readonly Refusal[]): never {
  * pages, and a restricted `plan.mdx` staged that way once published untiered
  * (review finding, 2026-08-18).
  *
- * Neither does a COMPANION, for the same reason one level down. A companion is
+ * Neither does an ATTACHMENT, for the same reason one level down. An attachment is
  * staged with its parent or not at all — that is how it inherits its parent's
  * audience, lifecycle and takedown (decision 24) — and this function probes the
  * FILESYSTEM, which knows nothing about any of them. So a document linking
@@ -104,7 +97,7 @@ function assetTarget(recordDir: string, documentRel: string, target: string): st
     : path.resolve(recordDir, path.dirname(documentRel), clean);
   if (!resolved.startsWith(recordDir + path.sep)) return null;
   if (/\.mdx?$/i.test(resolved)) return null;
-  if (COMPANION.test(path.basename(resolved))) return null;
+  if (isAttachment(path.basename(resolved))) return null;
   try {
     // lstat, never stat: `statSync` FOLLOWS a symlink, and `readFileSync` below
     // follows it too, so `knowledge/guides/leak.png -> /etc/secret` published
@@ -140,7 +133,12 @@ function planStage(recordDir: string, development: boolean): StagePlan {
     if (!file.startsWith(KNOWLEDGE)) continue;
     const rel = file.slice(KNOWLEDGE.length);
     const name = path.basename(rel);
-    if (COMPANION.test(name)) companions.set(rel, path.join(recordDir, rel));
+    // The CANONICAL rule, never a copy of it (decision 18). The regex that
+    // used to be here was the fifth hand copy of the suffix list: it claimed
+    // byte-identity with the checker, had stopped being that when the checker
+    // moved to `attachmentKindOf`, and was missing `.summary.mdx` — so the
+    // stage and the lock writer disagreed about the companion list.
+    if (isAttachment(name)) companions.set(rel, path.join(recordDir, rel));
     else if (name === "index.md") indexFiles.set(rel, path.join(recordDir, rel));
     else if (name.endsWith(".md")) documents.set(rel, path.join(recordDir, rel));
   }

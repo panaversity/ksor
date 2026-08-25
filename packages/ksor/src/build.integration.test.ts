@@ -336,10 +336,19 @@ describe("ksor build — what `as_of` does and does not move", () => {
  * attachment-rule.ts`, whose header calls itself canonical) and this package
  * must not carry a hand copy of the suffix list.
  *
- * It has now regressed FOUR times. This branch already removed "a third hand
+ * It has now regressed SIX times. This branch already removed "a third hand
  * copy of the attachment list that had already drifted", and two more were
  * still here afterwards — `build/index.ts`'s lock filter and `migrate/index.ts`'s
  * `COMPANION` — each carrying the SAME `.summary.mdx` gap the removed one had.
+ *
+ * Then this guard was scoped to `src/*.ts` minus tests, and a copy was sitting
+ * in EACH of the two places that left out: the scaffold's `stage-knowledge.ts`
+ * (whose comment still claimed byte-identity with a checker that had moved on)
+ * and this package's `site-staging` fixture. The fixture one is the worse
+ * shape — a test that classifies companions by its own rule cannot detect the
+ * code under test classifying them differently. So the scan now covers the
+ * emitted scaffold and test files too, and the WHOLE tree it is given rather
+ * than one directory.
  *
  * Neither was observable: `loadRecord` admits only `/\.(md|yaml)$/` (load.ts),
  * so `.mdx` never reaches `record.files`, and `hygiene.ts` refuses a
@@ -371,21 +380,33 @@ describe("the attachment rule is not re-implemented in this package", () => {
     const out: string[] = [];
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
+      if (entry.name === "node_modules" || entry.name === ".next") continue;
       if (entry.isDirectory()) out.push(...sources(abs));
-      else if (entry.name.endsWith(".ts") && !entry.name.includes(".test.")) out.push(abs);
+      else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) out.push(abs);
     }
     return out;
   };
 
+  /**
+   * The canonical list has to spell itself out, and this suite has to spell it
+   * out to search for it. Nothing else may, INCLUDING tests and the emitted
+   * scaffold — that is the scope that let copies five and six land.
+   */
+  const CANONICAL = ["lib/attachment-rule.ts", "src/build.integration.test.ts"];
+
   it("no module spells the suffix list out for itself", () => {
     const src = fileURLToPath(new URL(".", import.meta.url));
-    const offenders = sources(src).flatMap((file) =>
-      code(readFileSync(file, "utf8"))
-        .split("\n")
-        .map((line, i) => ({ line: line.trim(), at: i + 1 }))
-        .filter(({ line }) => MARKERS.filter((m) => line.includes(m)).length >= 2)
-        .map(({ line, at }) => `${path.relative(src, file)}:${at}  ${line}`),
-    );
+    const roots = [src, path.resolve(src, "..", "templates", "scaffold")];
+    const offenders = roots
+      .flatMap((root) => sources(root))
+      .filter((file) => !CANONICAL.some((c) => file.replaceAll(path.sep, "/").endsWith(c)))
+      .flatMap((file) =>
+        code(readFileSync(file, "utf8"))
+          .split("\n")
+          .map((line, i) => ({ line: line.trim(), at: i + 1 }))
+          .filter(({ line }) => MARKERS.filter((m) => line.includes(m)).length >= 2)
+          .map(({ line, at }) => `${path.relative(src, file)}:${at}  ${line}`),
+      );
     expect(
       offenders,
       "each of these re-implements the attachment rule — import `attachmentKindOf` from " +

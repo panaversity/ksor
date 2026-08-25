@@ -96,7 +96,24 @@ describe("what does NOT refuse", () => {
     );
   });
 
-  it("the digest is stable and short enough to paste beside a number", () => {
+  /**
+   * The VALUE, not the shape. A shape assertion cannot fail, and this is the
+   * one number in the tree that a whitespace-only edit can invalidate in the
+   * field: every `ksor calibrate` writes it into the adopter's `instance.md`
+   * as `retrieval.floor_digest`, and the door compares it at boot, so a
+   * reflow of the predicate that changes no SQL semantics still makes every
+   * calibrated record refuse until it is re-measured.
+   *
+   * Changing this number is therefore a deliberate act with a migration
+   * attached, never a side effect of tidying. If this line goes red and you
+   * did not mean to change what the gate selects, revert the formatting.
+   */
+  it("the digest is exactly the value adopters have measured against", () => {
     expect(GATE_PREDICATE_DIGEST).toMatch(/^[0-9a-f]{12}$/);
+    expect(
+      GATE_PREDICATE_DIGEST,
+      "the serving predicate changed — every floor measured through the old one is stale; " +
+        "if that was intended, say so in the changeset and tell adopters to re-run `ksor calibrate`",
+    ).toBe("8bfb07d0e6f5");
   });
 });

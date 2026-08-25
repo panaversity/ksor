@@ -57,10 +57,16 @@ const PINNED: readonly (readonly [string, string])[] = [
 ];
 
 /** The leaf rules under `lib/` the record module and the site both read, held identical here. */
-const LIB_FILES = ["audience-rule.ts", "lifecycle-rule.ts", "sim-rule.ts"] as const;
+const LIB_FILES = ["lifecycle-rule.ts", "sim-rule.ts"] as const;
 
-/** Leaves the site carries with a drift test of their own, so this file only has to allow them. */
-const LIB_ELSEWHERE = ["order-rule.ts", "attachment-rule.ts"] as const;
+/**
+ * Leaves the site carries with a drift test of their own, so this file only has
+ * to allow them: `order-rule.ts` and `attachment-rule.ts` in
+ * `order-rule-drift`, `audience-rule.ts` in `audience-rule-drift`. Those
+ * suites are the STRONGER side — each also asserts its rule is genuinely a
+ * leaf — so a name belongs here rather than in LIB_FILES, never in both.
+ */
+const LIB_ELSEWHERE = ["order-rule.ts", "attachment-rule.ts", "audience-rule.ts"] as const;
 
 describe("the record module is one rule set", () => {
   it("ships every kernel record file, so the list is not hand-kept", () => {

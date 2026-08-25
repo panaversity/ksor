@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-/** Both halves of the rule are copied: the rule itself, and the tree sort. */
-const COPIED = ["order-rule.ts", "page-order.ts"] as const;
+/** The rule itself is copied; the tree sort that used to be copied beside it is gone. */
+const COPIED = ["order-rule.ts"] as const;
 const canonicalPath = (file: string): string =>
   path.resolve(here, "..", "..", "content", "src", "lib", file);
 const copyPath = (file: string): string =>
@@ -58,12 +58,5 @@ describe("the reading-order rule is one rule", () => {
       /^import\s/m.test(ruleText(canonicalPath("order-rule.ts"))),
       "an import here would make the rule untestable in isolation, which is why it was extracted",
     ).toBe(false);
-  });
-
-  it("page-order.ts imports ONLY the rule — no framework, or the copy stops being testable", () => {
-    const imports = [
-      ...ruleText(canonicalPath("page-order.ts")).matchAll(/^import .*from "(.*)";$/gm),
-    ].map((m) => m[1]);
-    expect(imports).toEqual(["./order-rule"]);
   });
 });

@@ -24,13 +24,14 @@ import { TRUST_TIERS, type TrustTier } from "../record/profile.js";
 /** The GUC the predicate reads. Unset or empty means the floor is 0. */
 const GUC = "app.min_trust_tier";
 
-/** The predicate for a node aliased `alias`. */
-export function trustAdmits(alias: string): string {
-  return `(COALESCE(${alias}.trust_tier, 0) >= COALESCE(NULLIF(current_setting('${GUC}', true), '')::smallint, 0))`;
-}
-
-/** The predicate for the usual `n` alias. */
-export const TRUST_ADMITS: string = trustAdmits("n");
+/**
+ * The predicate, for the `n` alias every arm's final SELECT uses.
+ *
+ * Not parameterised by alias: it was, and no caller ever passed anything but
+ * `"n"`. The alias parameterisation that IS load-bearing lives on `admitted()`
+ * in `admit.ts`, where the outline's `child_count` subquery needs a second one.
+ */
+export const TRUST_ADMITS: string = `(COALESCE(n.trust_tier, 0) >= COALESCE(NULLIF(current_setting('${GUC}', true), '')::smallint, 0))`;
 
 /**
  * The stored tier for a named one; the inverse of ingest's derivation.

@@ -122,8 +122,14 @@ const SEP = "";
  * share one `ARM_WHERE` string and renumber its parameters by substitution, so
  * a GUC composes the way the tenant wall does — bound in the same `set_config`
  * round trip, invisible to the numbering, and impossible to leak to the next
- * pool borrower. Parameterised by alias because the outline's child_count
- * subquery scans a second one; two hand copies drifted apart once (PR #43).
+ * pool borrower.
+ *
+ * The alias parameter is vestigial — it existed because the outline's
+ * child_count subquery scanned a second alias, which `admittedCte` now covers,
+ * and every remaining caller passes `"n"`. It is kept rather than inlined
+ * because the string this produces is hashed into `GATE_PREDICATE_DIGEST` and
+ * pinned by value in `calibration-digest.test.ts`: collapsing it must not move
+ * a byte, and there is nothing to gain by finding out.
  */
 export function audienceAllowed(alias: string): string {
   return `(

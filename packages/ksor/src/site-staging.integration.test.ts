@@ -12,6 +12,10 @@
  */
 
 import { createHash } from "node:crypto";
+// The fixture must classify companions the way the code under test does. It
+// used to carry its own regex, which is how a stage/lock disagreement could
+// have shipped with this suite green.
+import { isAttachment } from "../templates/scaffold/system/site/lib/attachment-rule.js";
 import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -296,7 +300,7 @@ function writeLock(
       // the symlink case below reach the checker for the wrong reason.
       if (entry.isSymbolicLink() || OS_JUNK.has(entry.name)) continue;
       if (entry.isDirectory()) walk(path.join(dir, entry.name), `${rel}/`);
-      else if (/\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(entry.name)) {
+      else if (isAttachment(entry.name)) {
         companions.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
       } else if (entry.name === "index.md") {
         indexes.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });

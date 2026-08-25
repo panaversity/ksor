@@ -354,8 +354,21 @@ describe("the actor convention is documented as far as it is enforced", () => {
     return !(owner[1] as string).includes("actor");
   };
 
-  it("reads the owner declaration out of the schema", () => {
-    expect(typeof ownerIsUnchecked()).toBe("boolean");
+  /**
+   * The VALUE, not the type. `expect(typeof … ).toBe("boolean")` is the
+   * assertion this same file post-mortems 50 lines below as one that cannot
+   * fail — and it was guarding the fact the two `if (!ownerIsUnchecked())
+   * return;` cases below depend on, so giving `owner` the actor codec would
+   * have turned all three green while leaving two documents false.
+   */
+  it("the owner declaration IS unchecked today, and this is where that is pinned", () => {
+    expect(
+      ownerIsUnchecked(),
+      "profile.ts now parses `ksor.owner` with the actor codec — delete the " +
+        '"NOT form-checked" sentence from specs/ksor/record/spec.md and the scaffold\'s ' +
+        "AGENTS.md, and flip this pin to false. `check.ts` also stops needing the " +
+        "reason it records for not falling back to `concept.owner`.",
+    ).toBe(true);
   });
 
   it.each([

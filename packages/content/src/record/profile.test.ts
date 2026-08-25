@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { TRUST_CASES } from "../lib/trust-conformance.js";
 import { LEGACY_KEYS, parseConcept, RESERVED_TYPES } from "./profile.js";
 
 const P = "knowledge/policies/purchase-approval.md";
@@ -26,6 +27,26 @@ function slugsOf(fm: Record<string, unknown>): string[] {
   const r = parseConcept(P, fm);
   return r.ok ? [] : r.refusals.map((x) => x.slug);
 }
+
+/**
+ * The KERNEL half of the trust table (decision 18). The site derives the same
+ * tier by hand in `system/site/lib/governance.ts` because it cannot import this
+ * package; `packages/ksor/src/site-governance.test.ts` runs these same rows
+ * against that copy, so a surface that drifts fails on the ROW it broke.
+ */
+describe("trust tier — record spec §2.3", () => {
+  for (const c of TRUST_CASES) {
+    it(c.name, () => {
+      const r = parseConcept(P, { ...STABLE, verified: c.verified });
+      expect(r.ok, JSON.stringify(r)).toBe(true);
+      if (!r.ok) return;
+      expect(
+        r.concept.trustTier,
+        `${c.name}: verified ${JSON.stringify(c.verified)} must derive ${c.tier}`,
+      ).toBe(c.tier);
+    });
+  }
+});
 
 describe("parseConcept — the §2 concept schema", () => {
   it("accepts the spec's example and derives what the rest of the module needs", () => {

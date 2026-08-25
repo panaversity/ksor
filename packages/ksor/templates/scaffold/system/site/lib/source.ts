@@ -77,7 +77,17 @@ function positions(): Map<string, number> {
 // ["", "docs", "x"], so its segment is at 2 — the baseUrl's segment count.
 const BASE_SEGMENTS = "/docs".split("/").length;
 
-/** A node's own route at `depth`: a page's url, or a folder's route derived from any descendant. */
+/**
+ * A node's own route at `depth`: a page's url, or a folder's route derived
+ * from any descendant, TRUNCATED to this depth.
+ *
+ * The truncation is the whole point, not tidiness. A folder with no index
+ * document takes its url from a descendant (`/docs/guides/first`), and
+ * comparing that whole url against a sibling `/docs/guides-x` puts the two in
+ * the opposite order, because the separator `/` (47) sorts after `-` (45).
+ * Cutting to this depth compares `/docs/guides` against `/docs/guides-x`,
+ * which is what the reading-order rule means by a sibling name.
+ */
 function routeAt(node: Node, depth: number): string {
   if (node.type === "page") return node.url;
   if (node.type === "folder") {

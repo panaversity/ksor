@@ -28,14 +28,16 @@
  * The stage lock (`system/site/lib/stage-knowledge.ts`) is the same primitive
  * and paid for the same lessons — `wx` as the whole of the acquire, `EPERM` as
  * Windows's spelling of `EEXIST`, a pid that decides whether to break and a
- * clock that decides when to give up, and a blank lock looked at TWICE. What
- * DIFFERS here is what happens to an abandoned one, and the difference is the
- * point: the stage refuses rather than breaking, because staging removes and
- * refills a directory in place and breaking that lock publishes a half-written
- * record. Appending a few hundred bytes has no half-written state, so a lock
- * whose holder is gone is broken here and the wait is much shorter — a
- * takedown holds this for milliseconds, and a minute of waiting is not
- * contention, it is a corpse.
+ * clock that decides when to give up, and a blank lock looked at TWICE. Both
+ * BREAK an abandoned lock rather than refusing it; they differ only in what
+ * they are willing to wait for a live holder.
+ *
+ * Here that bound is 30s against the stage's 120s, because the two hold their
+ * locks for different lengths of time: a takedown appends a few hundred bytes
+ * and holds this for milliseconds, so a minute of waiting is not contention,
+ * it is a corpse — while staging removes and refills a whole directory. The
+ * stage also bounds the time a lock has been HELD as well as the time this
+ * caller has WAITED, which this one has no need of for the same reason.
  */
 
 import {

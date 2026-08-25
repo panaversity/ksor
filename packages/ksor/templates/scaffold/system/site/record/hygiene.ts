@@ -15,6 +15,15 @@ const KNOWLEDGE = "knowledge/";
 const ASSET_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]);
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const COMPANION_SUFFIXES: readonly string[] = ATTACHMENT_SUFFIXES.map((e) => e.suffix);
+/**
+ * The yaml companions, as the refusal's remedy names them. Derived, because a
+ * remedy that hand-lists the suffixes is one more copy of the rule to keep
+ * right — and a remedy naming three of five sends the author to fix a file
+ * that was already named correctly.
+ */
+const YAML_COMPANIONS: string = ATTACHMENT_SUFFIXES.filter((e) => e.suffix.endsWith(".yaml"))
+  .map((e) => `\`<doc>${e.suffix}\``)
+  .join(", ");
 const RESERVED = new Set(["index.md", "log.md", "README.md"]);
 
 export interface HygieneTree {
@@ -132,7 +141,7 @@ export function checkHygiene(tree: HygieneTree): Refusal[] {
         slug: "ksor-file-type",
         path,
         why: "a YAML file that is no companion — the record holds concepts, their companions and images; other formats cannot be governed or rendered",
-        fix: "name it after its document (`<doc>.flashcards.yaml`, `<doc>.quiz.yaml`, `<doc>.slides.yaml`) or move it out of knowledge/",
+        fix: `name it after its document (${YAML_COMPANIONS}) or move it out of knowledge/`,
       });
     } else if (bytes !== null && !sim && (ext === ".html" || ext === ".htm")) {
       // Split out of the refusal below because `.html` is the one extension an

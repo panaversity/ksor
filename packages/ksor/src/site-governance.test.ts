@@ -9,6 +9,7 @@
 // Vocabulary: the profile's (record spec §2) — `draft | stable | deprecated`,
 // `ksor.owner`, `sources`, `ksor.superseded_by` as a concept id.
 import { parseConcept } from "@panaversity/ksor-content/record";
+import { TRUST_CASES } from "../../content/src/lib/trust-conformance.js";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
@@ -182,18 +183,23 @@ describe("readGovernance", () => {
   });
 });
 
+/**
+ * The SITE half of the trust table (decision 18). These rows are the rule;
+ * `packages/content/src/record/profile.test.ts` runs the same ones against the
+ * kernel's derivation. Hand-written expectations lived here before, which is
+ * how the two implementations could have drifted with both suites green — the
+ * tier is stamped into every `/md/` twin and stored as the column the SQL
+ * serving floor compares against.
+ */
 describe("trustTierOf — record spec §2.3", () => {
-  it("none → unverified; machine only → machine-confirmed; any human → human-reviewed", () => {
-    expect(trustTierOf([])).toBe("unverified");
-    expect(trustTierOf([{ by: "process:nightly", at: "x" }])).toBe("machine-confirmed");
-    expect(trustTierOf([{ by: "claude-code/1.0", at: "x" }])).toBe("machine-confirmed");
-    expect(
-      trustTierOf([
-        { by: "process:nightly", at: "x" },
-        { by: "human:kim", at: "x" },
-      ]),
-    ).toBe("human-reviewed");
-  });
+  for (const c of TRUST_CASES) {
+    it(c.name, () => {
+      expect(
+        trustTierOf(c.verified),
+        `${c.name}: verified ${JSON.stringify(c.verified)} must derive ${c.tier}`,
+      ).toBe(c.tier);
+    });
+  }
 });
 
 describe("resolveSuccessorUrl — a concept id against this build's pages", () => {

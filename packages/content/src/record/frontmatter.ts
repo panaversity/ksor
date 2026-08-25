@@ -22,7 +22,13 @@ const SLUG = "ksor-frontmatter-invalid";
 /** A fence line: three dashes, trailing blanks tolerated, on the opening and the closing line alike. */
 const FENCE = /^---[ \t]*$/;
 
-/** An editor's byte-order mark is invisible to the author; CR and CRLF are the checkout's, not the record's. */
+/**
+ * An editor's byte-order mark is invisible to the author; CR and CRLF are the
+ * checkout's, not the record's. The BOM is why this runs before the fence is
+ * looked for at all: a BOM-prefixed file whose opening fence is therefore not
+ * at byte 0 reads as having no frontmatter, and serves its YAML as content
+ * (review finding, 2026-08-19).
+ */
 export function normalizeText(text: string): string {
   return text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
 }

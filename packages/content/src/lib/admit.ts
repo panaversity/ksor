@@ -47,6 +47,10 @@ import { TRUST_ADMITS } from "./trust.js";
  * from the pinned generation while governance is decided on the LIVE one
  * (issue #87 — a pin must not freeze a withdrawal), so `read.ts` binds
  * `admitted_live` over `live` and `denied_live` beside the ordinary pair.
+ *
+ * Parameterised rather than hand-copied per call site because two hand copies
+ * of the audience predicate drifted apart once already (PR #43) — the reason
+ * decision 18 exists.
  */
 export function admittedCte(name: string, gen: string, denied = "denied"): string {
   return `

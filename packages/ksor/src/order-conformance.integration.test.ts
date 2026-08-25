@@ -7,14 +7,14 @@
  * WEBSITE reports.
  *
  * It used to drive `lib/page-order.ts`'s `sortNodes`, which no site module
- * calls: `grep sortNodes` over the tree finds its definition in the two copies
- * of that file and in this test, and nothing else. The site's real order is
- * the bytes `generateIndexes` writes, read back by `parseIndex` and walked by
- * `readingOrder` (`system/site/lib/source.ts:71-73`) — a second, completely
- * separate implementation. So decision 18's guard was asserting dead code, and
- * the site was free to report a third, unasserted order. It does drive the
- * real path now: build the record a row describes, generate its indexes, parse
- * them back, walk them.
+ * called — decision 18's guard was asserting dead code, and the site was free
+ * to report a third, unasserted order. The site's real order is the bytes
+ * `generateIndexes` writes, read back by `parseIndex` and walked by
+ * `readingOrder` (`system/site/lib/source.ts`) — a second, completely separate
+ * implementation, and the one these rows drive now: build the record a row
+ * describes, generate its indexes, parse them back, walk them. `page-order.ts`
+ * itself was deleted once this test stopped being its only caller; it is in
+ * git history if the reason it existed is ever wanted.
  */
 
 import { describe, expect, it } from "vitest";
