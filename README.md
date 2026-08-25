@@ -727,7 +727,7 @@ off until you measure a floor with `ksor calibrate` and paste it into
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
-KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, `.ksor/governance.yaml` and the takedown ledger beside them. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
+KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, and `.ksor/governance.yaml` beside them. The takedown ledger `.ksor/takedowns.yaml` is not emitted: the first `ksor takedown` writes it, because an empty ledger would assert an act nobody performed. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
 
 ```text
 my-ksor/
