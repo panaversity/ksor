@@ -7,6 +7,21 @@ evidence: research/visibility.md · panaversity/ksor#10
 
 # Visibility
 
+> **Superseded in part (2026-08-25, the OKF-native change).** The reasoning
+> below still holds and is why the record carries audience at all — staged
+> per-audience builds, the canary sweeps, and "the filter is a directory, not
+> a predicate". The KEY and the MODEL are superseded: audience moved to the
+> KSoR Profile of OKF as `ksor.audience`, a non-empty LIST matched against the
+> viewer's list by OVERLAP, with the registry in `.ksor/governance.yaml`
+> rather than `instance.md`. `visibility:` is now refused by name
+> (`ksor-legacy-key`). The contract is `specs/ksor/record/spec.md` §2.4 (the
+> key, the registry, omission refused) and `specs/ksor/build/spec.md` §3 (the
+> comma-list `KSOR_AUDIENCE`, `ksor-viewer-omits-public`,
+> `ksor-viewer-unregistered`); the evidence that reverses the "never a list"
+> clause is `research/okf-native.md` §2.2. Also superseded: "on both shells" —
+> the second shell was retired by decision 9's 2026-08-24 revision — and
+> "absent `audiences:`, nothing changes": staging is unconditional now.
+
 Who may read a document is the most consequential fact about it, and until
 now it was the one fact outside governance — answered by whoever configures
 a web server, in a place the record cannot see, diff, or carry to another

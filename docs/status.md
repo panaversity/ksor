@@ -453,19 +453,25 @@ either stops being true.
   keeps its `.each(SHELLS)` shape; `ksor init` emits Fumadocs, always.
 
 - **Visibility** (`specs/ksor/visibility/spec.md`, evidence in
-  `research/visibility.md` and issue #10) — the record declares its
-  audience: a `visibility:` key against an `audiences:` model in
-  instance.md; per-audience **staged** builds on both shells carry no
-  trace of a document below its tier (page, search, llms, sidebar, asset
-  name or bytes — raw or base64); the filter itself never reaches the
-  client bundle; non-public builds label themselves; seven checker rules
-  including the cross-audience link no single build can catch. Absent
-  `audiences:`, nothing changes. Conformance-tested with canary sweeps
-  and positive controls in CI. Hardened by two adversarial review rounds
-  (16 findings fixed): one canonical frontmatter grammar across the
-  checker and both shells, and every malformed shape fails closed —
-  including the two that once failed open (a block-list `visibility:`,
-  a `----`-closed frontmatter block).
+  `research/visibility.md` and issue #10; **rewritten onto the KSoR Profile
+  of OKF in the OKF-native change** — the contract is now
+  `specs/ksor/record/spec.md` §2.4 and `specs/ksor/build/spec.md` §3) — the
+  record declares its audience, and the model is now OVERLAP, not rank:
+  `ksor.audience` is a non-empty LIST on every concept (omission is refused,
+  never defaulted), the registry lives in `.ksor/governance.yaml`, and a
+  viewer is a comma list in `KSOR_AUDIENCE` that must include `public`
+  (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`). A document is
+  admitted when the two lists overlap. `visibility:` is a pre-profile key and
+  is refused by name (`ksor-legacy-key`). Staging is UNCONDITIONAL — every
+  build stages, there is no `audiences:` precondition and no level-0 fast
+  path, because no record is safe to serve raw now that every one has drafts,
+  a ledger and generated indexes. One shell (decision 9's 2026-08-24
+  revision). What has not changed is what the staged build guarantees: no
+  trace of a document outside the viewer (page, search, llms, sidebar, asset
+  name or bytes — raw or base64), the filter never in the client bundle,
+  non-public builds labelled, canary sweeps and positive controls in CI, and
+  the two adversarial rounds' 16 findings closed by one canonical frontmatter
+  grammar with every malformed shape failing closed.
 
 - **Governance rendering on the site**
   (`specs/ksor/site-governance/spec.md`, issue #29; rewritten onto the KSoR
@@ -616,9 +622,10 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   shipped bytes of a scaffold built from the packed CLI: **no route, no `/md/`
   twin, no `llms.txt` or `llms-full.txt` line, no search-index entry**, and the
   parent's own `/md/` and both llms files are **byte-identical** (sha-256) with
-  and without attachments present. Governance inherits: with the parent set to
-  `visibility: internal`, a public build contains the summary and deck text in
-  **0** files against a positive control of 26. `ksor ingest` creates no node
+  and without attachments present. Governance inherits: with the parent's
+  `ksor.audience` set to `[internal]` (measured before the profile landed, when
+  the key was `visibility: internal`), a public build contains the summary and
+  deck text in **0** files against a positive control of 26. `ksor ingest` creates no node
   for either, so neither is independently citable — previously `isDoc` accepted
   `x.summary.md` and gave it its own `stable_id`, which is the one cause behind
   four cross-surface leaks (decision 24).

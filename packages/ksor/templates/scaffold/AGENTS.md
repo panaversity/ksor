@@ -378,15 +378,13 @@ revocation is REFUSED without it. There is no default: a name taken from the
 environment reads like a person and is whatever the shell happened to be
 (`runner` under CI, `root` in a container), which is worse than no name at all
 in the one row that exists to record who did this. Read-only modes
-(`--list`, `--ledger`, `--export`) need nothing.
+(`--list`, `--ledger`) need nothing.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
 build** — the site reads the committed ledger (`.ksor/takedowns.yaml`), not
-the database. So after a takedown, merge the ledger entry, rebuild and
-redeploy the site, or the human surface keeps publishing what the agent
-surface already refuses. (Until the site half of this release lands, a record
-that declares a `database:` still writes `.ksor-denylist.json` with
-`ksor takedown --export` before the site build.)
+the database, and so needs no database access to honour a takedown. After a
+takedown, merge the ledger entry, rebuild and redeploy the site, or the human
+surface keeps publishing what the agent surface already refuses.
 
 ## Publishing
 
@@ -489,11 +487,14 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   carries a notice above the title naming its successor and linking to it. A
   key you leave off renders nothing at all: the site never invents a value, so
   a missing owner reads as missing rather than as unowned.
-- **The agent surface carries them too.** `llms.txt` marks a document whose
-  status is a caveat and names the route that replaced a deprecated one;
-  `llms-full.txt` puts the keys back as frontmatter above each document. An
-  agent reading the record therefore sees what a reader sees — a withdrawn
-  document is never handed over as plain prose.
+- **The agent surface carries them too — by EXCLUDING what it must not
+  hand over.** `llms.txt` and `llms-full.txt` list only what the §2.5 table
+  admits to a machine surface: stable, effective, unexpired, undenied. A
+  draft, a deprecated document and one whose `stale_after` has passed are not
+  entries at all, so an agent is never handed a withdrawn document as plain
+  prose. `llms-full.txt` serves each document's own frontmatter intact, plus
+  the derived `trust_tier` and this build's stamps — so what an agent reads
+  carries the same governance a reader sees on the page.
 - **Don't want any of it on the published pages?** Set `governance: false`
   under `site:` in `instance.md`. The record keeps every key — the agent
   surface and your audit trail still read them, and `llms.txt`/`llms-full.txt`

@@ -241,15 +241,13 @@ database: it regenerates every `index.md`, runs the record checker, and writes
 `build.lock.json` — commit it — which every machine artefact stamps. A refusal
 stops the build before a byte is written; `--strict` also refuses an
 uncommitted input. Takedowns reach the site through the committed ledger
-(`.ksor/takedowns.yaml`); until the site half of this release lands, a record
-that declares a `database:` still writes `.ksor-denylist.json` with
-`ksor takedown --export` before the site build, and without `KSOR_DB_URL` that
-step **refuses**.
+(`.ksor/takedowns.yaml`), which is a file in the repository — so the site build
+needs no `KSOR_DB_URL` at all.
 
-That refusal is the design working. A takedown reaches the door instantly (it is
-a row) and reaches the site at its next build (it reads a file), so a site built
-without the DSN would keep publishing what the door already refuses. Set
-`KSOR_DB_URL` on the site build as well as on the door.
+That is the design working. A takedown reaches the door instantly (it is a row)
+and reaches the site at its next build (it reads the ledger), so the act that
+withdraws a document is the same merged commit on both surfaces. Merge the
+ledger entry, rebuild, redeploy.
 
 ## Keeping people out of the site
 

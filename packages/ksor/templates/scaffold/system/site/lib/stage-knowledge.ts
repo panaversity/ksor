@@ -34,7 +34,12 @@ import type { Refusal } from "../record/refusal";
 const KNOWLEDGE = "knowledge/";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const POLICY_PATH = ".ksor/governance.yaml";
-const COMPANION = /\.(summary\.mdx?|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
+// Byte-for-byte the checker's set (`record/check.ts`): one answer to "what is
+// a companion" across the checker, the lock and the stage. `.summary.mdx` was
+// in this one and not in that one, so the two would have disagreed about the
+// lock's companion list — a permanent `ksor-lock-stale` had the record checker
+// not refused `.mdx` first.
+const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 
 /**
  * Everything this build may publish, as bytes at bundle-relative paths: the
