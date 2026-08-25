@@ -415,6 +415,25 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-legacy-key knowledge/bad.md"],
   },
   {
+    // One hyphen. It published an embargoed policy four weeks early.
+    name: "ksor-ksor-key-unknown",
+    files: base({
+      "knowledge/bad.md": frontmatter(
+        `${stable}`.replace(
+          "  audience: [public]",
+          "  audience: [public]\n  effective-from: 2026-09-01T00:00:00Z",
+        ),
+      ),
+    }),
+    expected: ["ksor-ksor-key-unknown knowledge/bad.md"],
+  },
+  {
+    // A top-level key one edit from `stale_after`: preserved, it never expires.
+    name: "ksor-key-near-miss",
+    files: base({ "knowledge/bad.md": frontmatter(`${stable}stale_afer: 2020-01-01T00:00:00Z\n`) }),
+    expected: ["ksor-key-near-miss knowledge/bad.md"],
+  },
+  {
     name: "ksor-instance-format",
     files: base({ "instance.md": INSTANCE.replace("format: 2", "format: 1") }),
     expected: ["ksor-instance-format instance.md"],

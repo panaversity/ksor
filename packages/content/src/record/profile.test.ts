@@ -244,13 +244,12 @@ describe("parseConcept — the §2 concept schema", () => {
     }
   });
 
-  it("unknown keys are preserved (OKF §11), including under ksor:", () => {
-    const r = parseConcept(P, {
-      ...STABLE,
-      "x-custom": { deep: 1 },
-      ksor: { ...STABLE.ksor, "x-flag": true },
-    });
-    expect(r.ok).toBe(true);
+  // The `ksor:` half of this used to pass and should not have: the block is
+  // ksor's own namespace, and a key it does not read there is a governance
+  // guarantee that silently stops existing (see the closed-block describe).
+  it("unknown keys are preserved (OKF §11) at the concept's own top level", () => {
+    const r = parseConcept(P, { ...STABLE, "x-custom": { deep: 1 } });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
     if (!r.ok) return;
     expect(r.concept.frontmatter["x-custom"]).toEqual({ deep: 1 });
   });
@@ -264,5 +263,51 @@ describe("parseConcept — the §2 concept schema", () => {
       "ksor-source-unresourced",
       "ksor-status-unknown",
     ]);
+  });
+});
+
+/**
+ * The optional governance keys fail OPEN when misspelled — a typo in a
+ * REQUIRED key surfaces as a missing-key refusal, but `ksor.effective-from`
+ * (hyphen) published an embargoed policy four weeks early and a mistyped
+ * `stale_after` never expires (reproduced 2026-08-25). The `ksor:` namespace is
+ * ksor's own, so OKF §11's preserve-unknown-keys rule does not cover it.
+ */
+describe("parseConcept — the ksor block is closed, the concept is not", () => {
+  const withKsor = (extra: Record<string, unknown>): Record<string, unknown> => ({
+    ...STABLE,
+    ksor: { ...STABLE.ksor, ...extra },
+  });
+
+  it("refuses an unknown key in the ksor block, naming it and the allowed set", () => {
+    const r = parseConcept(P, withKsor({ "effective-from": "2026-09-01T00:00:00Z" }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toContain("ksor-ksor-key-unknown");
+    const refusal = r.refusals.find((x) => x.slug === "ksor-ksor-key-unknown");
+    expect(refusal?.why).toContain("effective-from");
+    expect(refusal?.fix).toContain("effective_from");
+  });
+
+  it("refuses a misspelled superseded_by and a spurious aproval alike", () => {
+    expect(slugsOf(withKsor({ superceded_by: "policies/open" }))).toContain(
+      "ksor-ksor-key-unknown",
+    );
+    expect(slugsOf(withKsor({ aproval: { by: "human:nobody" } }))).toContain(
+      "ksor-ksor-key-unknown",
+    );
+  });
+
+  it("keeps the concept's own top level open — OKF §11 preserves unknown keys", () => {
+    expect(slugsOf({ ...STABLE, x_department: "finance" })).toEqual([]);
+  });
+
+  it("refuses a top-level key one edit from a profile key, which fails open otherwise", () => {
+    const r = parseConcept(P, { ...STABLE, stale_afer: "2020-01-01T00:00:00Z" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const refusal = r.refusals.find((x) => x.slug === "ksor-key-near-miss");
+    expect(refusal?.why).toContain("stale_afer");
+    expect(refusal?.fix).toContain("stale_after");
   });
 });

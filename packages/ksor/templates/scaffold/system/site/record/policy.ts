@@ -26,34 +26,112 @@ const scope = z
   })
   .optional();
 
-const ownershipRule = z.object({ scope, owner: anyActor, escalation: anyActor.optional() }).loose();
-const approvalRule = z
-  .object({
-    scope,
-    actors: z.array(anyActor).min(1, "an approval rule needs non-empty `actors`"),
-  })
-  .loose();
+const ownershipRule = z.object({ scope, owner: anyActor, escalation: anyActor.optional() });
+const approvalRule = z.object({
+  scope,
+  actors: z.array(anyActor).min(1, "an approval rule needs non-empty `actors`"),
+});
 
-const policySchema = z
-  .object({
-    version: z.string().min(1),
-    audiences: z
-      .record(
-        z.string().min(1),
-        z
-          .object({ description: z.string().min(1, "every audience needs a `description`") })
-          .loose(),
-      )
-      .optional(),
-    ownership: z.array(ownershipRule).optional(),
-    approval_authorities: z.array(approvalRule),
-    takedown_authorities: z
-      .object({
-        actors: z.array(anyActor).min(1, "`takedown_authorities` needs non-empty `actors`"),
-      })
-      .loose(),
-  })
-  .loose();
+/**
+ * Every object in the policy has a CLOSED key set, checked before the shape is
+ * parsed so the refusal can name the key and the set it missed.
+ *
+ * zod strips an unknown key by default, and a stripped key in THIS file widens
+ * authority: `scope: { path: ["drafts/"] }` (one letter) left `scope: {}`,
+ * which `pathDepth` scores as depth 0, so an intern's drafts rule became the
+ * record's fallback and approved a document nobody had authority over
+ * (reproduced end to end, 2026-08-25). The instance's key set is closed for
+ * exactly this reason, and this file is the root of authority the instance is
+ * not. There are therefore no extension keys here: a key the policy does not
+ * read is a rule that is not in force, and silence about that is the failure
+ * mode.
+ */
+const POLICY_KEYS: Readonly<Record<string, readonly string[]>> = {
+  "(root)": ["version", "audiences", "ownership", "approval_authorities", "takedown_authorities"],
+  scope: ["paths", "types"],
+  "an audience": ["description"],
+  "an `ownership` rule": ["scope", "owner", "escalation"],
+  "an `approval_authorities` rule": ["scope", "actors"],
+  takedown_authorities: ["actors"],
+};
+
+function isMapping(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Edit distance, capped: only a near miss earns a "did you mean". */
+function distance(a: string, b: string): number {
+  let previous = [...Array(b.length + 1).keys()];
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      row[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (row[j - 1] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    previous = row;
+  }
+  return previous[b.length] ?? 0;
+}
+
+function closedKeys(value: unknown, where: string, path: string, refusals: Refusal[]): void {
+  if (!isMapping(value)) return;
+  const allowed = POLICY_KEYS[where] ?? [];
+  for (const key of Object.keys(value)) {
+    if (allowed.includes(key)) continue;
+    const near = allowed
+      .map((a) => [a, distance(a, key)] as const)
+      .filter(([, d]) => d <= 2)
+      .sort((x, y) => x[1] - y[1])[0]?.[0];
+    refusals.push({
+      slug: SLUG,
+      path,
+      why: `${where === "(root)" ? "the policy" : where} declares an unknown key: \`${key}\` — the policy is the root of authority every approval and takedown is checked against, and a key it does not read is a rule that is not in force`,
+      fix: `${near === undefined ? `remove \`${key}:\`` : `did you mean \`${near}:\`?`} (allowed ${where === "(root)" ? "at the root" : `in ${where}`}: ${allowed.join(", ")})`,
+    });
+  }
+}
+
+/** The whole closed-key walk, in the shape `checkInstance` uses for `instance.md`. */
+function checkPolicyKeys(value: unknown, path: string): Refusal[] {
+  const refusals: Refusal[] = [];
+  if (!isMapping(value)) return refusals;
+  closedKeys(value, "(root)", path, refusals);
+  const audiences = value["audiences"];
+  if (isMapping(audiences)) {
+    for (const entry of Object.values(audiences)) closedKeys(entry, "an audience", path, refusals);
+  }
+  for (const [key, where] of [
+    ["ownership", "an `ownership` rule"],
+    ["approval_authorities", "an `approval_authorities` rule"],
+  ] as const) {
+    const rules = value[key];
+    if (!Array.isArray(rules)) continue;
+    for (const rule of rules) {
+      closedKeys(rule, where, path, refusals);
+      if (isMapping(rule)) closedKeys(rule["scope"], "scope", path, refusals);
+    }
+  }
+  closedKeys(value["takedown_authorities"], "takedown_authorities", path, refusals);
+  return refusals;
+}
+
+const policySchema = z.object({
+  version: z.string().min(1),
+  audiences: z
+    .record(
+      z.string().min(1),
+      z.object({ description: z.string().min(1, "every audience needs a `description`") }),
+    )
+    .optional(),
+  ownership: z.array(ownershipRule).optional(),
+  approval_authorities: z.array(approvalRule),
+  takedown_authorities: z.object({
+    actors: z.array(anyActor).min(1, "`takedown_authorities` needs non-empty `actors`"),
+  }),
+});
 
 export interface Scope {
   readonly paths?: readonly string[];
@@ -75,7 +153,7 @@ export interface Policy {
   readonly takedownActors: readonly string[];
   readonly ownership: readonly OwnershipRule[];
   readonly approvalRules: readonly ApprovalRule[];
-  /** The parsed document, extension keys included (KSP 4.2.5 MAY preserve). */
+  /** The parsed document. The key set is closed, so this is `POLICY_KEYS` and nothing else. */
   readonly raw: Readonly<Record<string, unknown>>;
 }
 
@@ -100,6 +178,8 @@ export function parsePolicy(text: string | null, path: string): PolicyResult {
   }
   const loaded = parseYamlFile(text, path, SLUG);
   if (!loaded.ok) return loaded;
+  const unknown = checkPolicyKeys(loaded.value, path);
+  if (unknown.length > 0) return { ok: false, refusals: unknown };
   const parsed = policySchema.safeParse(loaded.value);
   if (!parsed.success) {
     return {

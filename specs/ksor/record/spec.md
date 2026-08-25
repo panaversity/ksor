@@ -152,13 +152,30 @@ a duplicate key, a second document marker or a non-mapping is
 `ksor-frontmatter-invalid`. No fence at all is a document with no
 frontmatter (then `ksor-missing-key`).
 
-**2.7 Unknown keys** are preserved and never refused (OKF §11) — except
-`id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`,
-`superseded_by` and `sor_id` at the top level of a concept, refused by name
-with the migration hint, because each is a pre-profile key whose silent
-survival would mean silent loss of governance. `superseded_by` is on that list
-for the same reason as the rest: the profile reads `ksor.superseded_by`, so a
-top-level one announces a successor no surface shows.
+**2.7 Unknown keys** are preserved and never refused (OKF §11) at the
+**concept's own top level** — with three exceptions, each of which is a key
+that would otherwise fail OPEN.
+
+1. `id`, `name`, `visibility`, `provenance`, `owner`, `effective`,
+   `superseded`, `superseded_by` and `sor_id` are refused by name
+   (`ksor-legacy-key`) with the migration hint, because each is a pre-profile
+   key whose silent survival would mean silent loss of governance.
+   `superseded_by` is on that list for the same reason as the rest: the profile
+   reads `ksor.superseded_by`, so a top-level one announces a successor no
+   surface shows.
+2. A top-level key **one edit** from a profile key (`type`, `title`,
+   `description`, `status`, `order`, `generated`, `sources`, `verified`,
+   `stale_after`, `ksor`) is `ksor-key-near-miss`, naming the key it is one
+   edit from. Preserving is right for a key nobody knows and wrong for a key
+   that is the profile's own with a letter missing: a mistyped `stale_after`
+   serves an expired document forever, and nothing goes red.
+3. The **`ksor:` block's own key set is CLOSED** — `audience`, `owner`,
+   `approval`, `effective_from`, `superseded_by`, `deprecated` — and anything
+   else there is `ksor-ksor-key-unknown`. That namespace is ksor's, not OKF's,
+   so §11 does not reach it, and the keys that fail open are the OPTIONAL ones:
+   a typo in a required key already surfaces as `ksor-missing-key`, while
+   `ksor.effective-from` (one hyphen) published an embargoed policy four weeks
+   early with no refusal anywhere (reproduced 2026-08-25).
 
 ## 3 · The instance document
 
@@ -184,7 +201,14 @@ declared; optional — absent means only `public`); `ownership` (scoped rules
 with `owner`, `escalation`; optional — absent means R24 binds nothing);
 `approval_authorities` (scoped rules with non-empty `actors`; required);
 `takedown_authorities` (`actors`; required). A level-0 policy is the two
-required families. The policy is ingested — the registry and authority sets
+required families. **Every object in the file has a CLOSED key set** — root,
+`scope`, an audience entry, an `ownership` rule, an `approval_authorities`
+rule, `takedown_authorities` — and an unknown key is `ksor-policy-invalid`
+naming the key, the nearest allowed one and the set. There are no extension
+keys here: a stripped key in the root of authority WIDENS it, because
+`scope: { path: [...] }` (one letter) leaves an empty scope, which matches
+every concept and made a drafts-only rule the record's fallback (reproduced
+end to end, 2026-08-25). The policy is ingested — the registry and authority sets
 as `ingestion_runs.policy JSONB`, plus `policy_sha256` — so the door and the
 snapshot token bind to a row, and the served container never needs the file.
 
@@ -309,7 +333,10 @@ which announces a replacement no surface shows),
 entry whose TEXT moved under an id a baseline recorded — comparing id sets
 alone let a committed denial be retargeted in place),
 `ksor-ledger-invalid`,
-`ksor-policy-missing`, `ksor-policy-invalid`, `ksor-legacy-key` (§2.6),
+`ksor-policy-missing`, `ksor-policy-invalid` (§4: an unknown key in any of
+the policy's closed objects included), `ksor-legacy-key` (§2.6),
+`ksor-ksor-key-unknown` (a key outside the closed `ksor:` block, §2.7),
+`ksor-key-near-miss` (a top-level key one edit from a profile key, §2.7),
 `ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
 `^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside
 the closed set at any level, a group not written as a block, a non-boolean
@@ -326,8 +353,9 @@ whose signature or chunk CRC fails), `ksor-attachment-near-miss` (`.yml`,
 `.json`, `.markdown` one character off a companion), `ksor-link-dead` (a
 record-internal link that resolves to no concept, companion, asset,
 directory, index or the root), `ksor-link-escapes` (a `..` that climbs out of
-`knowledge/`). Unknown frontmatter keys are NOT refused (§2.7) — the one
-deliberate loosening against the old checker's closed key set. The project
+`knowledge/`). Unknown frontmatter keys at a concept's own top level are NOT
+refused (§2.7) — the one deliberate loosening against the old checker's closed
+key set; the `ksor:` block and the policy stay closed. The project
 around the record is checked by `pnpm check` alone, not by `ksor build` or
 ingest: `ksor-pointer-changed` (`CLAUDE.md` is not exactly `@AGENTS.md`),
 `ksor-skill-copy-diverged` (`.agents/skills` and `.claude/skills` differ in
