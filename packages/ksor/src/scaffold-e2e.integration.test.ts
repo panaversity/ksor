@@ -851,6 +851,90 @@ ${body}
     // tier's 30s default — like every other clause here that builds.
   }, 300_000);
 
+  it("frames a link titled `embed`, requests nothing until asked, and leaves /md/ alone", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const doc = path.join(project, "knowledge", "embed-host.md");
+    const URL = "https://sims.example.org/zzsimzz";
+    try {
+      writeFileSync(
+        doc,
+        "---\ntitle: Embed host\nstatus: approved\n---\n\n" +
+          // The marked link, alone in its paragraph.
+          `[Play the zzsimzz](${URL} "embed")\n\n` +
+          // An ordinary link to the SAME url, which must stay a link — the
+          // opt-in is the title, so this pair is the whole rule in one file.
+          `See [the zzsimzz](${URL}) for more.\n`,
+      );
+      expect(buildScaffold(project).status, "build with an embed").toBe(0);
+
+      const page = readFileSync(path.join(outDir, "docs", "embed-host", "index.html"), "utf8");
+
+      // Nothing is requested until a reader asks: the built page ships the
+      // placeholder, and the frame is created on click. This is the clause
+      // that keeps the zero-external-request guarantee true.
+      expect(page, "an embed must not ship a frame").not.toContain("<iframe");
+      expect(page, "the host must be named, so the click is informed").toContain(
+        "sims.example.org",
+      );
+
+      // The ordinary link survives as a link.
+      expect(page, "the plain link was reframed").toContain("See ");
+
+      // REHYPE, not remark: the agent surface keeps the author's link rather
+      // than this site's component. The whole reason for the phase choice.
+      const twin = readFileSync(path.join(outDir, "md", "embed-host.md"), "utf8");
+      expect(twin, "the markdown twin lost the author's link").toContain(URL);
+      expect(twin, "the markdown twin served a React component").not.toContain("<Embed");
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("serves a sim the record carries, from this site, under the record's own path", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const dir = path.join(project, "knowledge", "sims-host");
+    const doc = path.join(dir, "index.md");
+    const sim = path.join(dir, "zzloopzz.sim.html");
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(sim, "<!doctype html><title>zzsimtitlezz</title><p>zzsimbodyzz</p>\n");
+      writeFileSync(
+        doc,
+        "---\ntitle: Sims host\nstatus: approved\n---\n\n" +
+          // Written as a link to the file BESIDE the document, exactly the way
+          // a figure is. The served url is derived, never authored.
+          '[Play it](zzloopzz.sim.html "embed")\n',
+      );
+      expect(buildScaffold(project).status, "build with a carried sim").toBe(0);
+
+      // Published where it can be SERVED, under the record path — so two
+      // documents may each own a `zzloopzz.sim.html` without colliding.
+      const served = path.join(outDir, "sims", "sims-host", "zzloopzz.html");
+      expect(existsSync(served), "the sim was not published where it can be served").toBe(true);
+      expect(readFileSync(served, "utf8")).toContain("zzsimbodyzz");
+
+      const page = readFileSync(path.join(outDir, "docs", "sims-host", "index.html"), "utf8");
+      // The derived url, not the record path.
+      expect(page).toContain("/sims/sims-host/zzloopzz.html");
+      expect(page, "the record's own path must not reach the page").not.toContain(
+        "zzloopzz.sim.html",
+      );
+      // Still click-to-load, and now honestly described: it IS part of the
+      // record, so the panel may not say a third party runs it.
+      expect(page, "a sim must not ship a frame").not.toContain("<iframe");
+      expect(page).toContain("Part of this record");
+
+      // No route and no markdown twin: a sim is an asset, not a document.
+      expect(existsSync(path.join(outDir, "docs", "sims-host", "zzloopzz.sim"))).toBe(false);
+      expect(existsSync(path.join(outDir, "md", "sims-host", "zzloopzz.sim.html"))).toBe(false);
+
+      // And it never becomes a document: nothing in the record index names it.
+      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).not.toContain("zzloopzz");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("renders code tabs from a fence's info string, and carries the group", () => {
     const knowledge = path.join(project, "knowledge");
     const doc = path.join(knowledge, "tabbed.md");
