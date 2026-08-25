@@ -1,6 +1,6 @@
 ---
 issue: okf-native-spec branch (set to the PR URL when it opens)
-status: proposed
+status: accepted (phase A built; phase B not started — §7)
 last_updated: 2026-08-25
 ---
 
@@ -22,7 +22,10 @@ no audience or lifecycle seam at all (`calibrate/run.ts:50-58`).
 
 This record is the plan for closing that gap, written for the owner who asked
 to see **what we are going to do and how it will work from today**: §1 is the
-walk, §2 the decisions taken, §4 the work. The contracts are
+walk, §2 the decisions taken, §4 the work. **Phase A is built; §7 records
+where the implementation diverged from what is written below, and the code
+wins over every sentence here.** Phase B has not started, so §1.7 and the
+change-control clauses describe intent rather than behaviour. The contracts are
 `specs/ksor/record/spec.md` (Class A — the record) and
 `specs/ksor/build/spec.md` (Class B — `ksor build`). Two adversarial review
 rounds (98 and 68 confirmed findings) reshaped both; §6 records what they
@@ -253,7 +256,10 @@ no longer matches its measurement is a declared-but-uncalibrated floor, and
 the invariant says that refuses. **Every adopter with a numeric floor
 re-measures.**
 
-### 1.7 Exchange
+### 1.7 Exchange — PHASE B, not built
+
+`ksor build --bundles` parses its flag and exits `2` with the honest notice.
+What it will do:
 
 ```
 ksor build --bundles
@@ -323,8 +329,12 @@ outage window §5 lists.
 
 ## 2 · The decisions taken (assumptions the owner can reverse)
 
-Each is recorded with what would reverse it. They become AGENTS.md decision 26
-in the phase-A PR, with revision notes on the decisions named.
+Each is recorded with what would reverse it. _They became AGENTS.md **decision
+27**, not 26: the YAML parser was split out and recorded first, as decision 26,
+because it landed before the design it serves and a dependency needs its own
+entry. Decision 27 carries the fifteen clauses below; decisions 10, 12 and 18
+took their revision notes from 26, and 4, 7, 8, 11, 14, 15, 19, 21, 23, 24 plus
+product principles 3 and 7 from 27._
 
 1. **The conformance floor replaces the numeric ladder.** Level 0 was `title`
    - `status`; the floor is `type`, `title`, `description`, `status`,
@@ -539,7 +549,7 @@ frontmatter on `read`, the viewer list bound into the snapshot token, R20
 attributes in `retrieval_log`, the boot gate's ledger checks, the
 served-surface golden regenerated, `tool-surface.md`; the starter and the
 workbench fixture rewritten (three fixture descriptions written by hand);
-docs, both READMEs, every skill that emits frontmatter; `specs/ksor/record/okf-SPEC.md`; KSP-001 draft 10; AGENTS.md decision 26 with revision notes on
+docs, both READMEs, every skill that emits frontmatter; `specs/ksor/record/okf-SPEC.md`; KSP-001 draft 10; AGENTS.md decisions 26 and 27 with revision notes on
 4, 7, 8, 10, 11, 12, 14, 15, 18, 19, 21, 23, 24, product principles 3 and 7,
 the reproducibility invariant and the vocabulary.
 
@@ -654,3 +664,60 @@ documents never left the open web without a commit, so it defaults to now
 and the invariant's wording gains the clause (§2.9); and the trust floor
 would have existed on one surface a release before the other, so the door's
 half joins phase A (§4).
+
+## 7 · What the implementation changed about this plan
+
+Written 2026-08-25, after phase A landed. The plan above is left as it was
+written — it is the reasoning, and supersession is visible — so this section
+is where it and the code disagree. **The code wins over every sentence above.**
+
+**The decision number.** §2's decisions became AGENTS.md **decision 27**, not 26. The YAML parser was split out and recorded first, because it landed before
+the design it serves and a runtime dependency needs an entry of its own
+(guard rule 5). §2 is annotated in place.
+
+**Phase B is not started, so §1.7 is intent.** `ksor build --bundles` parses
+its flag and exits `2`. So do the change-control clauses: R22–R25 verification
+against repository history does not exist, which is why every envelope says
+`approval.checked: "policy"` — the honest form — and why "whether an edit
+bumped `generated.at`" stays in §5's cost list rather than being closed.
+`llms.txt` v2 URL forms and OKF import (R26) are likewise unwritten.
+
+**Two clauses grew during implementation, both from review.** The ledger's
+baseline is `(id, digest)` pairs rather than ids alone, in both the git-history
+baseline and the lock's `ledger_entries`: an id set cannot tell a committed
+denial from the same id RETARGETED in place, which republished the denied
+document and denied an innocent one with nothing red on any surface
+(`ksor-ledger-amended`). And the site's lock freshness covers the CONTROL
+files and the ASSETS, not only the documents — `instance_sha256`,
+`policy_sha256`, `ledger_sha256` and `assets[]` — because a takedown was lifted
+by deleting four lines while the committed lock still validated, and because a
+replaced diagram changed what the site published with no refusal anywhere.
+
+**The widening rule reaches assets, which the plan did not anticipate.** An
+asset declares no audience, so it inherits one by position: the rule asks the
+NEAREST ANCESTOR DIRECTORY that holds any concept whether one of them is
+reachable. Asking only the asset's own directory was defeated by nesting it one
+level deeper, in a directory holding no concept at all.
+
+**Three refusal families the plan did not name**, each closing a key that would
+otherwise fail open: `ksor-key-near-miss` (a top-level key one edit from a
+profile key — a mistyped `stale_after` serves an expired document forever),
+`ksor-derived-key` (a concept claiming a key the build writes, which would
+publish it twice and make the derived trust tier non-authoritative), and the
+CLOSED `ksor:` block, whose optional keys are the ones that fail open —
+`ksor.effective-from` with one hyphen published an embargoed policy four weeks
+early with nothing refusing it.
+
+**One thing the plan listed and the code does not do.** §1.8's migrate list
+included `index.mdx`. `loadRecord` reads `.md` and `.yaml` as text and nothing
+else, so an `.mdx` never reaches migrate; the record checker refuses one under
+`knowledge/` by name (`ksor-file-type`) and an adopter carrying one moves it by
+hand. The parenthetical is already corrected in §1.8.
+
+**And one the plan predicted correctly and is worth naming because it is a
+cost, not a win.** The tool surface grew: the three definitions measured
+16,214 chars ≈ 4,054 tokens on 2026-08-25, against ~2,990 tokens measured
+2026-08-23 before the trust floor and the per-hit governance block. That is
+the price of an agent being able to tell a reviewed document from an
+unreviewed one, charged once per session, and it is recorded in decision 23's
+revision rather than argued away.
