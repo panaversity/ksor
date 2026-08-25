@@ -27,6 +27,15 @@ export interface GitFacts {
   readonly repository: boolean;
   readonly shallow: boolean;
   readonly sourceCommit: string | null;
+  /**
+   * Whether HEAD exists at all. `sourceCommit` is null in TWO different states
+   * — a repository with no commit yet (what `ksor init` leaves behind) and a
+   * repository whose commits touch none of the record's inputs — and the
+   * reader's next command differs, so the build must not report one as the
+   * other. The same mistake, in the same place, that cost `ksor ingest` a
+   * message telling people to `git init` a repository they already had.
+   */
+  readonly born: boolean;
   readonly dirty: boolean;
   /**
    * Every ledger entry any committed version of the file has carried — id and,
@@ -75,6 +84,7 @@ export function gitFacts(root: string): GitFacts {
       repository: false,
       shallow: false,
       sourceCommit: null,
+      born: false,
       dirty: true,
       historicLedger: null,
       historyUnreadable: null,
@@ -90,6 +100,7 @@ export function gitFacts(root: string): GitFacts {
     repository: true,
     shallow: history.shallow,
     sourceCommit,
+    born,
     dirty,
     historicLedger: history.entries,
     historyUnreadable: history.unreadable,

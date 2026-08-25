@@ -205,7 +205,7 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
       "knowledge/policies/current",
     );
     expect(code).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-dsn-missing:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-dsn-missing");
     expect(err.join(""), "both ways out are named").toContain("--file-only");
     expect(
       () => readFileSync(join(root, ".ksor", "takedowns.yaml"), "utf8"),
@@ -250,18 +250,18 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
       "knowledge/policies/current",
     );
     expect(code, "a refusal, not an environment failure").toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-unauthorised:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-unauthorised");
     expect(err.join("")).toContain(ACTOR);
   });
 
   it("refuses an unnamed actor, and a shape that is not an actor", async () => {
     const root = record(true);
     expect(await run(root, "--reason", "legal", "knowledge/policies/current")).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-unattributed:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-unattributed");
     expect(
       await run(root, "--actor", "ops@example.com", "--reason", "x", "knowledge/policies/current"),
     ).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-actor-form:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-actor-form");
   });
 
   it("the missing actor is reported FIRST, even when the record has other problems", async () => {
@@ -272,12 +272,12 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
     const root = record(false);
     rmSync(join(root, ".ksor", "governance.yaml"));
     expect(await run(root, "--reason", "legal", "knowledge/policies/current")).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-unattributed:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-unattributed");
     // …and WITH an actor, the missing policy is what refuses.
     expect(
       await run(root, "--actor", ACTOR, "--reason", "legal", "knowledge/policies/current"),
     ).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-policy-missing:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-policy-missing");
   });
 
   it("--revoke lifts the denial by naming its entry, and a re-denial denies again", async () => {
@@ -332,7 +332,7 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
     const root = record(true);
     process.env[DSN_ENV] = dsn;
     expect(await run(root, "--actor", ACTOR, "--revoke", "not-an-id")).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-unknown-entry:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-unknown-entry");
   });
 
   it("`expected` is what the verb SAW: `removed` when the file is already gone", async () => {
@@ -396,7 +396,7 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
     expect(await run(root, "--actor", ACTOR, "--reason", "x", "knowledge/policies/current")).toBe(
       1,
     );
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-ledger-invalid:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-ledger-invalid");
   });
 
   it("--list and --ledger read, and need no actor", async () => {
@@ -414,9 +414,9 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
   it("refuses two acts in one invocation, and an invocation naming none", async () => {
     const root = record(false);
     expect(await run(root)).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-unspecified:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-unspecified");
     expect(await run(root, "--actor", ACTOR, "--reason", "x", "--apply", "knowledge/x")).toBe(1);
-    expect(err.join("").split("\n")[0]).toMatch(/^ksor-takedown-ambiguous:/);
+    expect(err.join("").split("\n")[0]).toBe("error: ksor-takedown-ambiguous");
   });
 });
 

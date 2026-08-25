@@ -182,13 +182,23 @@ measure until the corpus is in there.
 pnpm exec ksor calibrate --instance instance.md
 ```
 
-It prints a recommended `vector_floor`. Paste it into **`instance.md`** with the
-date you measured it, then restart `ksor serve` — the floor is read at boot:
+It ends with a block to paste into **`instance.md`**'s frontmatter, exactly as
+printed — the floor, the measurement recorded beside it as a comment, and
+`floor_digest`, the digest of the retrieval predicate the floor was measured
+through. Paste it, then restart `ksor serve`: the floor is read at boot.
 
 ```yaml
 retrieval:
-  vector_floor: 0.55 # measured by ksor calibrate on 2026-08-23
+  vector_floor: 0.55 # calibrated 2026-08-23 on generation 3, model gemini-embedding-001/d1536, door: synthesized
+  floor_digest: 8bfb07d0e6f5
 ```
+
+If the file already declares `retrieval:`, merge the keys into the block it has
+rather than adding a second one — a duplicate key is refused.
+
+A measurement that does not separate in-corpus from out-of-corpus prints **no
+floor at all**, and a `vector_floor: uncalibrated` block instead. That block is
+the fail-closed state: every serve refuses until a real number replaces it.
 
 Until you do, `/health` reports the gate as `OFF (no floor declared — will not
 refuse out-of-corpus questions)` and every search envelope carries

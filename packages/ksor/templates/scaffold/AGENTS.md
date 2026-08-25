@@ -197,13 +197,18 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    pnpm exec ksor calibrate --instance instance.md
    ```
 
-   It prints a recommended `vector_floor` for THIS corpus in THIS embedding
-   space. Paste the number in and restart:
+   It ends with a `retrieval:` block for THIS corpus in THIS embedding space,
+   ready to paste into instance.md's frontmatter exactly as printed. Paste it
+   and restart:
 
    ```yaml
    retrieval:
-     vector_floor: 0.55 # measured by ksor calibrate on <date>
+     vector_floor: 0.55 # calibrated <date> on generation 3, model <model>/d1536, door: synthesized
+     floor_digest: 8bfb07d0e6f5
    ```
+
+   If instance.md already has a `retrieval:` block, merge the keys into it — a
+   second `retrieval:` is a duplicate key and is refused.
 
    Never copy a floor from another corpus — recalibrate, and record the
    measurement beside the number. Writing `vector_floor: uncalibrated` declares

@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { InstanceParseError, NoDatabaseDeclared, parseInstanceText } from "./instance.js";
 
+/** The slug a refusal CARRIES — it is no longer spelled inside the message (see below). */
+function refusalOf(fn: () => unknown): InstanceParseError {
+  try {
+    fn();
+  } catch (exc) {
+    if (exc instanceof InstanceParseError) return exc;
+    throw exc;
+  }
+  throw new Error("the instance was accepted");
+}
+
 const base = `---
 format: 2
 name: acme-handbook
@@ -85,6 +96,39 @@ budgets:
     ).toThrowError(/unknown top-level key: vector_floor/);
   });
 
+  it("states the record's refusal ONCE — a why repeated as a second line is not two facts", () => {
+    // `ksor serve`, `ingest`, `schema`, `calibrate`, `gc` and `grant` all print
+    // this Error's message, and it carried the same sentence twice: once inline
+    // on the `error:` line and again under `why:` (first-hour walkthrough,
+    // 2026-08-26). A reader who has to check whether the second line says
+    // something new is being charged for a line that never does.
+    let message = "";
+    try {
+      parseInstanceText(base.replace("database:", "vector_floor: 0.664\ndatabase:"));
+    } catch (exc) {
+      message = (exc as Error).message;
+    }
+    const why = "unknown top-level key";
+    const occurrences = message.split(why).length - 1;
+    expect(occurrences, `the message repeats itself:\n${message}`).toBe(1);
+    // …and the message is the why then the fix, with the machine-readable slug
+    // carried BESIDE it rather than inside it — the CLI prints `error: <slug>`
+    // as its own first stderr line, which is the contract docs/index.md states.
+    expect(message.split("\n")[0]).toMatch(/^instance\.md declares an unknown top-level key/);
+    expect(message).toMatch(/\n {2}fix: /);
+  });
+
+  it("carries the record's own slug, so every verb can print `error: <slug>` first", () => {
+    // `ksor build` prints `error: ksor-instance-format`; `ksor schema` printed
+    // no slug at all for the identical file (first-hour walkthrough, 2026-08-26).
+    // The refusal that reaches the kernel has to CARRY the name so both can.
+    expect(
+      refusalOf(() =>
+        parseInstanceText(base.replace("database:", "vector_floor: 0.664\ndatabase:")),
+      ).slug,
+    ).toBe("ksor-instance-format");
+  });
+
   it("carries the site and discovery keys the kernel does not consume", () => {
     // `site.url` and `site.governance` are the site's, not the kernel's — it
     // passes them through. What it no longer does is tolerate a key nobody
@@ -108,10 +152,11 @@ database:`,
       "default_visibility: public",
       "ksor:\n  requires: x",
     ]) {
-      expect(
-        () => parseInstanceText(base.replace("database:", `${moved}\ndatabase:`)),
-        moved,
-      ).toThrowError(/ksor-instance-format.*no longer live on the instance/);
+      const refusal = refusalOf(() =>
+        parseInstanceText(base.replace("database:", `${moved}\ndatabase:`)),
+      );
+      expect(refusal.slug, moved).toBe("ksor-instance-format");
+      expect(refusal.message, moved).toMatch(/no longer live on the instance/);
     }
   });
 
@@ -137,9 +182,9 @@ database:`,
   });
 
   it("refuses format 1 (the pre-profile instance) and a bad name", () => {
-    expect(() => parseInstanceText(base.replace("format: 2", "format: 1"))).toThrowError(
-      /ksor-instance-format.*format: 1/,
-    );
+    const one = refusalOf(() => parseInstanceText(base.replace("format: 2", "format: 1")));
+    expect(one.slug).toBe("ksor-instance-format");
+    expect(one.message).toMatch(/format: 1/);
     expect(() => parseInstanceText(base.replace("acme-handbook", "Acme Handbook"))).toThrowError(
       /identity/,
     );
@@ -155,9 +200,11 @@ database:`,
   });
 
   it("refuses duplicate keys and an unclosed fence", () => {
-    expect(() => parseInstanceText(base.replace("format: 2", "format: 2\nformat: 2"))).toThrowError(
-      /ksor-frontmatter-invalid/,
+    expect(
+      refusalOf(() => parseInstanceText(base.replace("format: 2", "format: 2\nformat: 2"))).slug,
+    ).toBe("ksor-frontmatter-invalid");
+    expect(refusalOf(() => parseInstanceText("---\nformat: 2\n")).slug).toBe(
+      "ksor-frontmatter-invalid",
     );
-    expect(() => parseInstanceText("---\nformat: 2\n")).toThrowError(/ksor-frontmatter-invalid/);
   });
 });

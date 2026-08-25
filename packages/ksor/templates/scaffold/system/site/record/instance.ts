@@ -54,6 +54,31 @@ export const NESTED_INSTANCE_KEYS: Readonly<Record<string, readonly string[]>> =
 
 const OPEN_GROUPS: readonly string[] = [];
 
+/**
+ * The map above, read backwards: which block a top-level key would have
+ * belonged to.
+ *
+ * A key of a block written one level out is not an unknown key — it is a known
+ * key in the wrong place, and the difference is the whole remedy. `ksor
+ * calibrate` printed `vector_floor:` and `floor_digest:` to paste, the paste
+ * was refused, and the refusal said to "nest it under the block it belongs to"
+ * without ever naming the block. It is `retrieval:`, and this file is where
+ * that is written down (first-hour walkthrough, 2026-08-26).
+ */
+const GROUP_OF: ReadonlyMap<string, string> = new Map(
+  Object.entries(NESTED_INSTANCE_KEYS).flatMap(([group, keys]) =>
+    keys.map((key) => [key, group] as const),
+  ),
+);
+
+/** The value as it would be written back — so the remedy moves the value, not just the key. */
+function asYaml(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value === null || value === undefined) return "null";
+  return JSON.stringify(value);
+}
+
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 const schema = z
@@ -132,9 +157,28 @@ export function parseInstanceDocument(text: string, path: string = PATH): Instan
   }
   const unknown = Object.keys(fm).filter((k) => !(INSTANCE_KEYS as readonly string[]).includes(k));
   if (unknown.length > 0) {
+    // A key that belongs to a block gets that block by NAME, with the values it
+    // already carries — the remedy is a block to write, not a direction to
+    // search in. Grouped by the block they belong to, so two keys of one block
+    // are one edit.
+    const group = unknown.map((k) => GROUP_OF.get(k)).find((g) => g !== undefined);
+    if (group !== undefined) {
+      const here = unknown.filter((k) => GROUP_OF.get(k) === group);
+      const one = here.length === 1;
+      return refuse(
+        `instance.md declares an unknown top-level key: ${unknown.join(", ")} — ` +
+          `${here.map((k) => `\`${k}\``).join(" and ")} ${one ? "is a key" : "are keys"} of the ` +
+          `\`${group}:\` block written at the top level, where nothing reads ${one ? "it" : "them"}. ` +
+          "The key set is closed so a key never means two things (a misspelled " +
+          "`retrieval:` would otherwise turn the abstention gate off silently)",
+        `move ${one ? "it" : "them"} under \`${group}:\`, keeping the value${one ? "" : "s"} — ` +
+          `the value is the setting, so it moves rather than goes:\n${group}:\n` +
+          here.map((k) => `  ${k}: ${asYaml(fm[k])}`).join("\n"),
+      );
+    }
     return refuse(
       `instance.md declares an unknown top-level key: ${unknown.join(", ")} — the key set is closed so a key never means two things (a misspelled \`retrieval:\` would otherwise turn the abstention gate off silently)`,
-      "fix the spelling, nest it under the block it belongs to, or remove it",
+      `fix the spelling or remove it — the top level reads exactly: ${INSTANCE_KEYS.join(", ")}`,
     );
   }
   // Every group is closed too, and a group written inline or as a scalar is

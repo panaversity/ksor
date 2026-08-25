@@ -127,6 +127,89 @@ describe("ksor CLI (built artifact)", () => {
     }
   });
 
+  it("serve and init answer their OWN --help — the two verbs that had no page", () => {
+    // Every other verb documents itself. `serve` is one of the four commands
+    // the README tells an adopter to run, is configured entirely by
+    // environment variable, and is the verb whose bind failure sends a reader
+    // hunting for a flag — and both it and `init` fell through to the generic
+    // verb list (first-hour walkthrough, 2026-08-26).
+    const serve = runCli(["serve", "--help"]);
+    expect(serve.status, serve.stderr).toBe(0);
+    expect(serve.stdout, "not the generic verb list").not.toContain("Usage: ksor <verb>");
+    expect(serve.stdout, "the flag it takes").toContain("--instance");
+    expect(serve.stdout, "the variable a busy port sends you looking for").toContain(
+      "KSOR_MCP_PORT",
+    );
+    expect(serve.stdout, "the variable without which it refuses to boot").toContain("KSOR_AUTH");
+    expect(serve.stdout, "asking a question must never perform the act").not.toContain("serving");
+
+    const init = runCli(["init", "--help"]);
+    expect(init.status, init.stderr).toBe(0);
+    expect(init.stdout, "not the generic verb list").not.toContain("Usage: ksor <verb>");
+    expect(init.stdout).toContain("ksor init <name>");
+    expect(init.stdout, "the form that scaffolds in place").toContain("ksor init .");
+  });
+
+  it("every write-plane refusal opens with `error: <slug>`, the contract docs/index.md states", () => {
+    // `ksor build` printed `error: ksor-instance-format`; `ksor schema` printed
+    // its sentence with no slug at all, so an agent branching on the first
+    // stderr line could read one verb and not the other (first-hour
+    // walkthrough, 2026-08-26).
+    const cases: readonly (readonly [readonly string[], string])[] = [
+      [["schema"], "error: bad-args"],
+      [["schema", "--dim", "8", "--instance", "instance.md"], "error: bad-args"],
+      [["schema", "--dim", "zero"], "error: bad-args"],
+      [["schema", "--dim", "8", "--apply"], "error: bad-args"],
+      [["ingest"], "error: bad-args"],
+      [["calibrate"], "error: bad-args"],
+      [["gc"], "error: bad-args"],
+      [["grant"], "error: bad-args"],
+      [["takedown"], "error: ksor-takedown-unspecified"],
+    ];
+    for (const [args, slug] of cases) {
+      const r = runCli([...args]);
+      expect(r.status, `ksor ${args.join(" ")}: ${r.stdout}${r.stderr}`).toBe(1);
+      expect(r.stderr.split("\n")[0], `ksor ${args.join(" ")}`).toBe(slug);
+    }
+  });
+
+  it("a write-plane verb names the record's own slug when the record is what refused", () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), "ksor-slug-"));
+    try {
+      writeFileSync(
+        path.join(cwd, "instance.md"),
+        "---\nformat: 2\nname: slug\ntitle: Slug\ndescription: One sentence.\nvector_floor: 0.609\n---\n\nScope.\n",
+      );
+      for (const verb of ["schema", "ingest", "calibrate", "gc", "grant"]) {
+        const r = spawnSync(process.execPath, [distCli, verb, "--instance", "."], {
+          cwd,
+          encoding: "utf8",
+        });
+        expect(r.status, `ksor ${verb}: ${r.stdout}${r.stderr}`).toBe(1);
+        expect(r.stderr.split("\n")[0], `ksor ${verb}`).toBe("error: ksor-instance-format");
+        // …and says it once. The same sentence used to arrive inline on the
+        // error line AND again under `why:`.
+        expect(
+          r.stderr.split("unknown top-level key").length - 1,
+          `ksor ${verb} repeats its own why:\n${r.stderr}`,
+        ).toBe(1);
+        // The block the misplaced key belongs to, by name — "nest it under the
+        // block it belongs to" never said which block.
+        expect(r.stderr, `ksor ${verb} names the block`).toContain("retrieval:");
+      }
+      // `ksor build` on the same tree answers the same shape — `error: <slug>`
+      // alone on line one — and names the same rule about the same file. (It
+      // leads with the MISSING POLICY, because a record with no
+      // .ksor/governance.yaml has a bigger problem than a misplaced key; both
+      // refusals are in the report.)
+      const build = spawnSync(process.execPath, [distCli, "build"], { cwd, encoding: "utf8" });
+      expect(build.stderr.split("\n")[0]).toMatch(/^error: ksor-[a-z-]+$/);
+      expect(build.stderr).toContain("ksor-instance-format");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("answers --version with the version and exit 0", () => {
     const result = runCli(["--version"]);
     expect(result.status).toBe(0);
@@ -350,8 +433,8 @@ describe("ksor takedown — the arguments an adopter actually types", () => {
     try {
       const r = scope === "subtree" ? deny(root, "--scope", "subtree", id) : deny(root, id);
       expect(r.status, r.stdout + r.stderr).toBe(1);
-      expect(r.stderr.split("\n")[0], "slug-first on stderr").toMatch(
-        /^ksor-takedown-record-root:/,
+      expect(r.stderr.split("\n")[0], "slug-first on stderr").toBe(
+        "error: ksor-takedown-record-root",
       );
       expect(r.stderr, "the remedy is the form that works").toContain(
         "--scope subtree knowledge/<section>",

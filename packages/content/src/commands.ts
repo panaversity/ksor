@@ -13,7 +13,6 @@
  * guard only).
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -66,6 +65,7 @@ import { renderReport } from "./calibrate/math.js";
 import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
 import { widestViewer } from "./lib/policy-row.js";
 import { overlapAdvice } from "./calibrate/overlap.js";
+import { detectSourceCommit, provenanceGap, provenanceNotice } from "./lib/provenance.js";
 import { GeminiTextGenerator } from "./lib/providers/gemini.js";
 import { runGc } from "./ingest/gc.js";
 
@@ -152,6 +152,24 @@ function fail(code: number, message: string): number {
 }
 
 /**
+ * A REFUSAL (exit 1), with the machine-readable slug alone on the first stderr
+ * line — the contract `packages/ksor/docs/index.md` states and `ksor build`
+ * already kept. The write-plane verbs kept it nowhere: `ksor schema` printed a
+ * sentence and `ksor ingest` printed `<slug>: <path>` on the same line, so an
+ * agent reading `stderr.split("\n")[0]` got a different shape per verb, or
+ * nothing at all (first-hour walkthrough, 2026-08-26).
+ *
+ * The vocabulary is deliberately small, because a slug is only worth having if
+ * a caller can branch on it: `bad-args` when the invocation is wrong (the same
+ * slug `ksor build` uses), `unknown-verb` for a word that is not a verb, the
+ * RECORD's own slug when a record file refused, and one name per act that
+ * refuses on its own terms.
+ */
+function refuse(slug: string, message: string): number {
+  return fail(REFUSED, `error: ${slug}\n${message}`);
+}
+
+/**
  * `--instance` accepts what `ksor build` accepts: an instance.md, or a
  * DIRECTORY at or below the record root.
  *
@@ -179,13 +197,18 @@ export function instancePathOf(path: string): string {
 /** Resolve the instance, or explain exactly which file refused and why. */
 function loadInstance(rawPath: string | undefined): ContentInstance | number {
   if (rawPath === undefined) {
-    return fail(REFUSED, "--instance PATH is required (the instance.md that names this corpus)");
+    return refuse(
+      "bad-args",
+      "--instance PATH is required (the instance.md that names this corpus)",
+    );
   }
   const path = instancePathOf(rawPath);
   try {
     return parseInstance(path);
   } catch (exc) {
-    if (exc instanceof InstanceParseError) return fail(REFUSED, `${path}: ${exc.message}`);
+    // The RECORD's own slug, carried on the error rather than spelled inside
+    // its message, so this line is the same one `ksor build` prints.
+    if (exc instanceof InstanceParseError) return refuse(exc.slug, `${path}: ${exc.message}`);
     if (isFsError(exc)) {
       return fail(ENVIRONMENT, `cannot read ${path}: ${(exc as Error).message}`);
     }
@@ -226,107 +249,24 @@ function composeProvider(instance: ContentInstance): EmbeddingProvider | number 
       dim: instance.embeddingDim,
     });
   } catch (exc) {
-    return fail(
-      REFUSED,
+    return refuse(
+      "ksor-instance-format",
       `instance embedding.provider: ${exc instanceof Error ? exc.message : String(exc)}`,
     );
   }
 }
 
 /**
- * The commit the corpus was ingested from, resolved from git when the tree is
- * in a repository.
- *
- * `--source-commit` has always existed and the golden path never passed it, so
- * EVERY generation an adopter produced recorded the literal string
- * "unspecified" — product principle 6 requires a build to record the exact
- * corpus that produced it, and a placeholder records nothing (review
- * 2026-08-20). Resolved here rather than in the scaffold script so it is right
- * however the verb is invoked. A tree that is not a repository, or a git that
- * is not installed, still records the honest sentinel rather than failing an
- * ingest over provenance metadata.
+ * Provenance moved to `lib/provenance.ts` when `ksor build` started reading the
+ * same sentences; re-exported so nothing that already asks this module has to
+ * learn a second import path.
  */
-/**
- * WHY a generation could not name the commit that produced it.
- *
- * Three different states used to collapse into one word, and the message built
- * from it named only the first: "knowledge/ is not in a git repository". For a
- * freshly scaffolded project that is FALSE — `ksor init` runs `git init`
- * (`init/index.ts:95`), so the repository exists and merely has no commit yet,
- * and `rev-parse HEAD` fails with "unknown revision" rather than because
- * nothing is there. The reader was sent to `git init`, which they had already
- * done, in the one message that governs provenance.
- */
-export type ProvenanceGap = "no-repo" | "no-commit" | "no-git" | "not-asked";
-
-export function provenanceGap(knowledgeDir: string | undefined): ProvenanceGap {
-  if (knowledgeDir === undefined) return "not-asked";
-  const run = (args: readonly string[]): { ok: boolean; out: string } => {
-    try {
-      return {
-        ok: true,
-        out: execFileSync("git", ["-C", knowledgeDir, ...args], {
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "ignore"],
-        }).trim(),
-      };
-    } catch {
-      return { ok: false, out: "" };
-    }
-  };
-  // `git --version` distinguishes "git is not installed" from "this is not a
-  // repository" — `ksor init` already warns about the former and must not be
-  // contradicted here.
-  if (!run(["--version"]).ok && !run(["rev-parse", "--git-dir"]).ok) return "no-git";
-  if (!run(["rev-parse", "--git-dir"]).ok) return "no-repo";
-  return "no-commit";
-}
-
-/** The remedy for each, because the reader's next command differs. */
-export function provenanceNotice(gap: ProvenanceGap): string {
-  const why = "so this generation cannot be traced back to a reviewed commit";
-  switch (gap) {
-    case "no-commit":
-      return (
-        `source: unspecified — knowledge/ is in a git repository with no commits yet, ${why}.\n` +
-        "  fix: commit the record (git add knowledge && git commit) and re-run"
-      );
-    case "no-repo":
-      return (
-        `source: unspecified — knowledge/ is not in a git repository, ${why}.\n` +
-        "  fix: git init, commit the record, and re-run"
-      );
-    case "no-git":
-      return (
-        `source: unspecified — git is not installed, ${why}.\n` +
-        "  fix: install git, or pass --source-commit <sha> if the record is versioned elsewhere"
-      );
-    case "not-asked":
-      return `source: unspecified — no knowledge directory was given, ${why}.`;
-  }
-}
-
-export function detectSourceCommit(knowledgeDir: string | undefined): string {
-  if (knowledgeDir === undefined) return "unspecified";
-  try {
-    const head = execFileSync("git", ["-C", knowledgeDir, "rev-parse", "HEAD"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    if (!/^[0-9a-f]{40}$/.test(head)) return "unspecified";
-    // A dirty tree did NOT produce that commit; say so rather than citing a
-    // commit whose bytes differ from what was just ingested.
-    // Path-scoped: a dirty file elsewhere in the repository says nothing about
-    // whether the RECORD that was ingested matches the commit (review of PR #43).
-    const dirty = execFileSync("git", ["-C", knowledgeDir, "status", "--porcelain", "--", "."], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return dirty === "" ? head : `${head}-dirty`;
-  } catch {
-    return "unspecified";
-  }
-}
+export {
+  detectSourceCommit,
+  provenanceGap,
+  provenanceNotice,
+  type ProvenanceGap,
+} from "./lib/provenance.js";
 
 function isFsError(exc: unknown): boolean {
   return exc instanceof Error && typeof (exc as { code?: unknown }).code === "string";
@@ -382,13 +322,13 @@ async function schemaCommand(args: string[]): Promise<number> {
     },
   });
   if (values.dim !== undefined && values.instance !== undefined) {
-    return fail(
-      REFUSED,
+    return refuse(
+      "bad-args",
       "schema: pass --dim OR --instance, not both (one source of truth for the dimension)",
     );
   }
   if (values.dim === undefined && values.instance === undefined) {
-    return fail(REFUSED, "schema: pass --dim N or --instance PATH\n" + USAGE);
+    return refuse("bad-args", "schema: pass --dim N or --instance PATH\n" + USAGE);
   }
 
   let dim: number;
@@ -396,8 +336,8 @@ async function schemaCommand(args: string[]): Promise<number> {
   if (values.dim !== undefined) {
     dim = intFlag("--dim", values.dim);
     if (!Number.isInteger(dim) || dim < 1) {
-      return fail(
-        REFUSED,
+      return refuse(
+        "bad-args",
         `schema: --dim must be a positive integer, got ${JSON.stringify(values.dim)}`,
       );
     }
@@ -416,8 +356,8 @@ async function schemaCommand(args: string[]): Promise<number> {
     return 0;
   }
   if (instance === null) {
-    return fail(
-      REFUSED,
+    return refuse(
+      "bad-args",
       "schema: --apply needs --instance (the instance names the DSN env var; --dim alone names no database)",
     );
   }
@@ -605,7 +545,11 @@ async function ingestCommand(args: string[]): Promise<number> {
   } catch (exc) {
     // The record refused — the checker, the lock gate or the ledger baseline.
     // Nothing was written; the slug is the first stderr line (principle 4).
-    if (exc instanceof RecordRefused) return fail(REFUSED, exc.message);
+    // `formatRefusals` already writes each refusal's slug first; the FIRST
+    // one's is what this run failed on, and is what the line above must name.
+    if (exc instanceof RecordRefused) {
+      return refuse(exc.refusals[0]?.slug ?? "ksor-record-refused", exc.message);
+    }
     throw exc;
   }
   if (report.unchanged) {
@@ -653,7 +597,7 @@ async function ingestCommand(args: string[]): Promise<number> {
       );
     }
   }
-  if (report.refusal !== null) return fail(REFUSED, report.refusal);
+  if (report.refusal !== null) return refuse("ksor-shrink-guard", report.refusal);
 
   // The act that CREATES the record must refuse where serving it would.
   // `ingest --flip` exited 0 on a generation `ksor serve` then refused to boot
@@ -669,8 +613,8 @@ async function ingestCommand(args: string[]): Promise<number> {
     ),
   );
   if (governance !== null) {
-    return fail(
-      REFUSED,
+    return refuse(
+      "ksor-generation-unservable",
       `generation ${report.generation} was built and NOT activated — no surface could serve it\n` +
         `  ${governance.split("\n").join("\n  ")}\n` +
         `  note: generation ${report.generation} is left behind, un-activated; \`ksor gc\` reaps it ` +
@@ -706,7 +650,7 @@ async function ingestCommand(args: string[]): Promise<number> {
         return null;
       }),
     );
-    if (refusal !== null) return fail(REFUSED, refusal);
+    if (refusal !== null) return refuse("ksor-shrink-guard", refusal);
     process.stdout.write(`FLIPPED active generation -> ${report.generation}\n`);
   }
   // Only the WITHHELD state still needs saying — the flip above narrates
@@ -724,16 +668,25 @@ function parseGeneration(raw: string | undefined): number | null {
   return intFlag("--generation", raw);
 }
 
-/** A flag that must be a non-negative integer — a typo is a REFUSAL (exit 1),
+/**
+ * A flag that must be a non-negative integer — a typo is a REFUSAL (exit 1),
  * not a raw NaN threaded downstream into an opaque "database down" (review
- * finding, 2026-08-19). */
+ * finding, 2026-08-19).
+ *
+ * It used to be an `InstanceParseError`, which is the wrong thing for it to be:
+ * nothing is wrong with the instance, the ARGUMENT is wrong. Wearing Node's own
+ * parseArgs code puts it on the same path as every other bad flag, so it
+ * refuses under `error: bad-args` like `--knowledg` does rather than under a
+ * slug about a file it never read (first-hour walkthrough, 2026-08-26).
+ */
 function intFlag(name: string, raw: string | undefined): number {
   if (raw === undefined || !/^\d+$/.test(raw)) {
-    throw new InstanceParseError(
-      `${name} must be a non-negative integer, got ${JSON.stringify(raw ?? null)}`,
-      "a numeric flag typo must fail as a refusal, not surface as a spurious environment error",
-      `pass ${name} <n>`,
-    );
+    const error = new Error(
+      `${name} must be a non-negative integer, got ${JSON.stringify(raw ?? null)}\n` +
+        `  fix: pass ${name} <n>`,
+    ) as Error & { code: string };
+    error.code = "ERR_PARSE_ARGS_INVALID_OPTION_VALUE";
+    throw error;
   }
   return Number(raw);
 }
@@ -765,8 +718,8 @@ async function calibrateCommand(args: string[]): Promise<number> {
   if (queries === null) {
     const apiKey = process.env["GEMINI_API_KEY"];
     if (apiKey === undefined || apiKey === "") {
-      return fail(
-        REFUSED,
+      return refuse(
+        "bad-args",
         "the synthesized door needs GEMINI_API_KEY (it writes one probe question per sampled " +
           "passage) — or calibrate with zero LLM: --queries-file PATH (one in-corpus question per line)",
       );
@@ -872,7 +825,7 @@ async function takedownCommand(args: string[]): Promise<number> {
     },
   });
 
-  const refuse = (r: VerbRefusal): number => fail(REFUSED, `${r.slug}: ${r.why}\n  fix: ${r.fix}`);
+  const refuseVerb = (r: VerbRefusal): number => refuse(r.slug, `${r.why}\n  fix: ${r.fix}`);
 
   const planned = planTakedown({
     stableId: positionals[0],
@@ -884,7 +837,7 @@ async function takedownCommand(args: string[]): Promise<number> {
     list: values.list,
     ledger: values.ledger,
   });
-  if (!planned.ok) return refuse(planned.refusal);
+  if (!planned.ok) return refuseVerb(planned.refusal);
   const { mode, reason } = planned;
 
   // The record root is where instance.md lives, resolved through the ONE
@@ -905,8 +858,8 @@ async function takedownCommand(args: string[]): Promise<number> {
     return found === null ? undefined : join(found, "instance.md");
   })();
   if (instancePath === undefined) {
-    return fail(
-      REFUSED,
+    return refuse(
+      "bad-args",
       "--instance PATH is required (no instance.md was found at or above the working directory)",
     );
   }
@@ -919,22 +872,22 @@ async function takedownCommand(args: string[]): Promise<number> {
   // policy just because the record also has something else wrong with it.
   if (writesLedger(mode)) {
     const unnamed = checkActorNamed(values.actor);
-    if (unnamed !== null) return refuse(unnamed);
+    if (unnamed !== null) return refuseVerb(unnamed);
     const policyPath = join(root, ".ksor", "governance.yaml");
     const parsed = parsePolicy(
       existsSync(policyPath) ? readFileSync(policyPath, "utf8") : null,
       ".ksor/governance.yaml",
     );
     if (!parsed.ok) {
-      return fail(
-        REFUSED,
+      return refuse(
+        parsed.refusals[0]!.slug,
         parsed.refusals
           .map((r) => `${r.slug}: ${r.path}\n  why: ${r.why}\n  fix: ${r.fix}`)
           .join("\n"),
       );
     }
     const denied = authorizeActor(values.actor, parsed.policy);
-    if (denied !== null) return refuse(denied);
+    if (denied !== null) return refuseVerb(denied);
   }
 
   // A record that declares no `database:` is a legitimate level-0 shape, not a
@@ -955,8 +908,8 @@ async function takedownCommand(args: string[]): Promise<number> {
   const ledgerText = existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : null;
   const parsedLedger = parseLedger(ledgerText, ".ksor/takedowns.yaml");
   if (!parsedLedger.ok) {
-    return fail(
-      REFUSED,
+    return refuse(
+      parsedLedger.refusals[0]!.slug,
       parsedLedger.refusals
         .map((r) => `${r.slug}: ${r.path}\n  why: ${r.why}\n  fix: ${r.fix}`)
         .join("\n"),
@@ -1019,7 +972,7 @@ async function takedownCommand(args: string[]): Promise<number> {
     dsnEnv,
     fileOnly: values["file-only"],
   });
-  if (!step.ok) return refuse(step.refusal);
+  if (!step.ok) return refuseVerb(step.refusal);
 
   const actor = values.actor!.trim();
 
@@ -1097,10 +1050,10 @@ async function takedownCommand(args: string[]): Promise<number> {
     if (exc instanceof LedgerLocked) return fail(ENVIRONMENT, exc.message);
     throw exc;
   }
-  if (outcome.kind === "refused") return refuse(outcome.refusal);
+  if (outcome.kind === "refused") return refuseVerb(outcome.refusal);
   if (outcome.kind === "unreadable") {
-    return fail(
-      REFUSED,
+    return refuse(
+      outcome.refusals[0]!.slug,
       outcome.refusals
         .map((r) => `${r.slug}: ${r.path}\n  why: ${r.why}\n  fix: ${r.fix}`)
         .join("\n"),
@@ -1229,16 +1182,23 @@ export async function runContentCli(argv: readonly string[]): Promise<number> {
       case "gc":
         return await gcCommand(rest);
       default:
-        return fail(REFUSED, `unknown command ${JSON.stringify(command)}\n` + USAGE);
+        return refuse("unknown-verb", `unknown command ${JSON.stringify(command)}\n` + USAGE);
     }
   } catch (exc) {
     if (isArgParseError(exc)) {
-      return fail(
-        REFUSED,
-        `error: bad-args\n${exc instanceof Error ? exc.message : String(exc)}\n` +
-          `  see: ksor ${command} --help`,
+      return refuse(
+        "bad-args",
+        `${exc instanceof Error ? exc.message : String(exc)}\n  see: ksor ${command} --help`,
       );
     }
-    return fail(classifyFailure(exc), exc instanceof Error ? exc.message : String(exc));
+    const code = classifyFailure(exc);
+    const message = exc instanceof Error ? exc.message : String(exc);
+    // A refusal that escaped as an exception still owes the first stderr line
+    // its slug — the same contract the explicit branches keep. An error that
+    // carries one (the instance reader's) names the rule; everything else is
+    // `ksor-refused`, the fallback `ksor build` already uses.
+    if (code !== REFUSED) return fail(code, message);
+    const slug = (exc as { slug?: unknown } | null)?.slug;
+    return refuse(typeof slug === "string" ? slug : "ksor-refused", message);
   }
 }

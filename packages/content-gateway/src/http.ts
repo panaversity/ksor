@@ -20,7 +20,7 @@
  * posture, the three probes, the concurrency cap, the content kernel.
  */
 
-import { serve, type ServerType } from "@hono/node-server";
+import { type ServerType } from "@hono/node-server";
 import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -45,6 +45,7 @@ import {
   UNDESCRIBED_RECORD,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
+import { listenOrExplain } from "./bind.js";
 import { notReadyReason, refusalBody } from "./refusal-body.js";
 import { buildServer, recordIsUndescribed } from "./server.js";
 import type { Composition } from "./compose.js";
@@ -694,19 +695,9 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
 
   // AWAIT the bind: EADDRINUSE / EACCES / an unroutable host must reach the
   // CLI exit contract in main(), not escape as an uncaught 'error' event and
-  // a stack trace (review, 2026-08-19). The boot line prints AFTER binding.
-  const server = await new Promise<ServerType>((resolve, reject) => {
-    const s = serve({ fetch: app.fetch, hostname: bind.host, port: bind.port }, () => {
-      // Bind succeeded: detach the bind-time rejecter (a settled promise
-      // swallows it) and attach a PERSISTENT handler, so a post-bind server
-      // error (EMFILE, a socket fault) is logged instead of vanishing
-      // (review 2026-08-19).
-      s.off("error", reject);
-      s.on("error", (err: Error) => console.error(`gateway server error: ${err.message}`));
-      resolve(s);
-    });
-    s.once("error", reject);
-  });
+  // a stack trace (review, 2026-08-19) — and must arrive there with a REMEDY,
+  // which is what `bind.ts` adds. The boot line prints AFTER binding.
+  const server = await listenOrExplain(app.fetch, bind);
   // The two lines that decide whether an operator should trust what happens
   // next, said plainly: who may ask, and what the record will refuse.
   if (recordIsUndescribed(instance.instructions)) {

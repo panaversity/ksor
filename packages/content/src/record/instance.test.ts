@@ -81,6 +81,37 @@ describe("parseInstanceDocument — instance.md format 2 (record spec §3)", () 
     ]);
   });
 
+  it("a key of a known block NAMES that block — `nest it under the block it belongs to` named none", () => {
+    // `ksor calibrate` printed `vector_floor:` and `floor_digest:` to paste,
+    // the paste was refused, and the remedy said to nest them "under the block
+    // it belongs to" without ever saying which block it is. It is `retrieval:`,
+    // and this module already holds the map that says so (first-hour
+    // walkthrough, 2026-08-26).
+    const r = parseInstanceDocument(
+      BASE.replace("mcp_url:", "vector_floor: 0.609\nfloor_digest: 8bfb07d0e6f5\nmcp_url:"),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const [first] = r.refusals;
+    expect(first?.slug).toBe("ksor-instance-format");
+    expect(first?.why).toContain("`retrieval:`");
+    expect(first?.why).toContain("vector_floor");
+    expect(first?.why).toContain("floor_digest");
+    // The remedy shows the block, and shows it with the VALUES the file already
+    // has — a remedy that drops the value is a remedy that loses the floor.
+    expect(first?.fix).toContain("retrieval:");
+    expect(first?.fix).toContain("vector_floor: 0.609");
+    expect(first?.fix).toContain("floor_digest: 8bfb07d0e6f5");
+  });
+
+  it("a key belonging to NO block still gets the general remedy", () => {
+    const r = parseInstanceDocument(BASE.replace("mcp_url:", "colour: red\nmcp_url:"));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals[0]?.why).toContain("colour");
+    expect(r.refusals[0]?.fix).toMatch(/spelling|remove/);
+  });
+
   it("no frontmatter at all is refused, and an unclosed fence is the frontmatter's own refusal", () => {
     expect(slugs("# Just a body\n")).toEqual([expect.stringMatching(/no frontmatter/)]);
     const r = parseInstanceDocument("---\nformat: 2\n");

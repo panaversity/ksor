@@ -154,6 +154,18 @@ describe("ksor build — acceptance 1: the emitted starter", () => {
     const lock = lockOf(root);
     expect(lock.source_commit).toBeNull();
     expect(lock.dirty).toBe(true);
+    // …and SAYS why, in the words `ksor ingest` uses on the identical state.
+    // Build used to report the same missing fact as a bare `(dirty)`, a word
+    // no human-facing document defines, while ingest explained it in full
+    // (first-hour walkthrough, 2026-08-26). Provenance is load-bearing, so the
+    // verb that records it has to say when it could not.
+    expect(r.stdout, r.stdout).toContain(
+      "source: unspecified — knowledge/ is in a git repository with no commits yet",
+    );
+    expect(r.stdout).toContain("cannot be traced back to a reviewed commit");
+    expect(r.stdout, "the remedy, not just the fault").toContain(
+      "fix: commit the record (git add knowledge && git commit) and re-run",
+    );
     // And --strict still says so, by name.
     const strict = build(root, "--as-of", AS_OF, "--strict");
     expect(strict.status).toBe(1);
@@ -184,6 +196,13 @@ describe("ksor build — acceptance 1: the emitted starter", () => {
     const lock = lockOf(root);
     expect(lock.dirty).toBe(false);
     expect(lock.source_commit).toBe(git(root, "rev-parse", "HEAD"));
+    // A clean build NAMES the commit it published, the way ingest names the
+    // one it ingested. Silence about provenance reads the same whether it is
+    // perfect or absent.
+    expect(first.stdout, first.stdout).toContain(`source: ${lock.source_commit}`);
+    expect(first.stdout, "nothing to explain when there is nothing missing").not.toContain(
+      "unspecified",
+    );
     // Every starter document PUBLISHES: the samples ship `status: stable`,
     // approved by the producer that generated them and authorised by the
     // emitted policy, so a fresh record has a machine surface on its first
@@ -406,6 +425,12 @@ describe("ksor build — acceptance 3: refusals write nothing", () => {
     const loose = build(root);
     expect(loose.status, loose.stderr).toBe(0);
     expect(lockOf(root).dirty).toBe(true);
+    // What the lock's `dirty: true` MEANS, said once, where the reader is.
+    // The stamp used to be the word `(dirty)` appended to the summary line,
+    // defined in no human-facing document (first-hour walkthrough, 2026-08-26).
+    expect(loose.stdout, loose.stdout).toContain(`source: ${lockOf(root).source_commit} (dirty)`);
+    expect(loose.stdout).toContain("does not contain the bytes this build published");
+    expect(loose.stdout).toContain("fix: commit the inputs");
   });
 
   /**
@@ -646,6 +671,12 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     expect(r.status, r.stderr).toBe(0);
     expect(lockOf(root).source_commit).toBe(null);
     expect(lockOf(root).dirty).toBe(true);
+    // The state ingest distinguishes from "no commit yet", because the reader's
+    // next command differs: here there is no repository to commit into.
+    expect(r.stdout, r.stdout).toContain(
+      "source: unspecified — knowledge/ is not in a git repository",
+    );
+    expect(r.stdout).toContain("fix: git init, commit the record, and re-run");
     // The entries deleted, not the FILE emptied: a ledger that exists and holds
     // nothing is `ksor-ledger-empty` — a torn write, refused before anything
     // parses — and this is about the baseline, so what is left has to be a

@@ -31,6 +31,53 @@ const notice =
   "\n" +
   `Follow along: ${pkg.homepage}\n`;
 
+/**
+ * `ksor serve --help`.
+ *
+ * Serve is one of the four commands the README tells an adopter to run, it is
+ * configured almost entirely by environment variable rather than by flag, and
+ * it is the verb whose likeliest first failure — a port already held — sends a
+ * reader hunting for the variable that moves it. It had no page at all: `ksor
+ * serve --help` fell through to the verb list, and so did `ksor init --help`,
+ * while every other verb answered for itself (first-hour walkthrough,
+ * 2026-08-26).
+ *
+ * The variables here are the ones a FIRST run needs. env.example carries the
+ * full contract with the prose around each name, and this says so rather than
+ * reprinting it — one fact, one file.
+ */
+const serveUsage = `Usage: ksor serve [--instance <path>]
+
+Serves the record's MCP surface over stateless Streamable HTTP at POST /mcp —
+the agent half of the same corpus the site publishes. It SERVES what \`ksor
+ingest\` published; it never publishes, so a record that has not been ingested
+serves nothing. Runs in this process and holds it; SIGTERM/SIGINT drains.
+
+  --instance <path>   instance.md, or a directory at or below the record root
+                      (default: ./instance.md, or $KSOR_INSTANCE)
+
+Configured by environment — .env beside the record is read automatically:
+
+  <database.dsn_env>       the Postgres DSN, under the NAME instance.md gives
+  GEMINI_API_KEY           iff the instance's embedding provider needs a key
+  KSOR_AUTH                disabled-local (loopback dev) | disabled-public.
+                           Serve REFUSES to boot with neither this nor a
+                           configured SSO door — never open by accident
+  KSOR_MCP_HOST            bind address (default 127.0.0.1; $PORT means 0.0.0.0)
+  KSOR_MCP_PORT            bind port (default 8080) — the answer to
+                           "address already in use"
+  KSOR_SSO_URL, KSOR_MCP_RESOURCE_URL, KSOR_JWT_ALLOWED_AUDIENCES
+                           the public door: sign every call with a real
+                           authorization server
+  KSOR_SNAPSHOT_KEYS       kid=secret[,...]; REQUIRED on any multi-replica or
+                           scale-to-zero host, or generation pins stop verifying
+  KSOR_AUDIENCE            who this door answers as (default: public)
+  KSOR_MIN_TRUST_TIER      the lowest trust tier it will answer from
+
+Every variable, with what each one costs: the scaffold's env.example.
+Exit codes: 1 refused · 3 environment (a held port, an unreachable store)
+`;
+
 const usage =
   `ksor ${pkg.version} — Knowledge System of Record\n` +
   "\n" +
@@ -88,15 +135,19 @@ async function main(args: readonly string[]): Promise<number> {
     );
     return 1;
   }
-  if (
-    wantsHelp &&
-    (helpVerb === null || helpVerb === "init" || helpVerb === "serve" || helpVerb === "dev")
-  ) {
-    // Only the CORPUS verbs answer their own --help (their dispatcher prints a
-    // per-verb block). Everything else answers HERE, because narrowing this to
-    // `verb === null` made `ksor serve --help` BOOT THE SERVER and
-    // `ksor init --help` refuse with bad-name — asking a question must never
-    // perform the act (round-1 review of PR #43).
+  if (wantsHelp && helpVerb === "serve") {
+    // Answered HERE, before the flag parsing and before the gateway is reached:
+    // asking a question must never perform the act. Narrowing this to
+    // `verb === null` once made `ksor serve --help` BOOT THE SERVER (round-1
+    // review of PR #43); printing the generic verb list instead answered a
+    // different question (first-hour walkthrough, 2026-08-26).
+    process.stdout.write(serveUsage);
+    return 0;
+  }
+  if (wantsHelp && (helpVerb === null || helpVerb === "dev")) {
+    // `dev` is designed and not implemented, so it has no flags of its own to
+    // document; a page describing them would document a verb that does not run.
+    // `init` and the corpus verbs answer their own --help in their dispatchers.
     process.stdout.write(usage);
     return 0;
   }

@@ -21,10 +21,15 @@ import {
   type Refusal,
 } from "@panaversity/ksor-content/record";
 
-import { attachmentKindOf } from "@panaversity/ksor-content";
+import {
+  attachmentKindOf,
+  dirtyNotice,
+  provenanceGap,
+  provenanceNotice,
+} from "@panaversity/ksor-content";
 
 import { exitCodes } from "../index.js";
-import { gitFacts, ignoredGovernance } from "./git.js";
+import { gitFacts, ignoredGovernance, type GitFacts } from "./git.js";
 import { lifecycleNotice } from "./lifecycle-notice.js";
 
 export interface BuildIo {
@@ -89,6 +94,30 @@ function parseArgs(args: readonly string[]): Parsed | string {
     else return `unknown argument "${arg}"`;
   }
   return { instance, asOf, strict, allowUnverifiable, bundles };
+}
+
+/**
+ * What this build can say about the commit it published from — the SAME
+ * sentences `ksor ingest` prints, because it is the same missing fact.
+ *
+ * Build used to say `(dirty)` and nothing else, and write `"source_commit":
+ * null` into the lock without a word about why (first-hour walkthrough,
+ * 2026-08-26). It is not a refusal — a provenance-less build is legitimate, and
+ * `--strict` exists for anyone who wants it refused — but principle 6 makes
+ * provenance load-bearing, and a guarantee that goes missing silently is the
+ * failure mode "honest absence, never silent weakness" is written against.
+ *
+ * The four states are distinguished HERE rather than by re-asking git, because
+ * the build already knows three of them; only "outside a repository" needs the
+ * extra question of whether git is installed at all, and `provenanceGap`
+ * answers that one.
+ */
+function provenanceLine(facts: GitFacts, root: string): string {
+  if (facts.sourceCommit !== null) {
+    return facts.dirty ? dirtyNotice(facts.sourceCommit) : `source: ${facts.sourceCommit}`;
+  }
+  if (!facts.repository) return provenanceNotice(provenanceGap(root), "build");
+  return provenanceNotice(facts.born ? "no-input-commit" : "no-commit", "build");
 }
 
 function refuse(io: BuildIo, slug: string, why: string, fix: string): number {
@@ -291,8 +320,11 @@ export function runBuild(
     Date.parse(lock.as_of),
   );
   io.out(
-    `ksor build: ${lock.documents.length} document(s), ${admitted} admitted to a machine surface at ${lock.as_of}` +
-      `${lock.dirty ? " (dirty)" : ""}\n` +
+    `ksor build: ${lock.documents.length} document(s), ${admitted} admitted to a machine surface at ${lock.as_of}\n` +
+      // The LOCK's dirty flag, not the one git reported a moment earlier: this
+      // run's regenerated indexes are uncommitted output too, and the line has
+      // to describe what was PUBLISHED.
+      `${provenanceLine({ ...facts, dirty: lock.dirty }, root)}\n` +
       notice +
       `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,

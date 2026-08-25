@@ -136,6 +136,14 @@ export {
 export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 
 export { instancePathOf, runContentCli } from "./commands.js";
+// Provenance sentences, shared with `ksor build` (which cannot import commands'
+// verb dispatch, and must not need to, to say the same thing about a commit).
+export {
+  dirtyNotice,
+  provenanceGap,
+  provenanceNotice,
+  type ProvenanceGap,
+} from "./lib/provenance.js";
 
 export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
 // The canonical attachment rule, for the surfaces OUTSIDE this package that

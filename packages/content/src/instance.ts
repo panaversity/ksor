@@ -24,16 +24,33 @@ import { z } from "zod";
 import { EMBED_DIM, EMBED_MODEL } from "./config.js";
 import type { AbstainConfig } from "./lib/abstain.js";
 import { parseInstanceDocument, type InstanceDocument } from "./record/instance.js";
+import type { RefusalSlug } from "./record/refusal.js";
 
 /** Mirrors `schema.ts`'s ceiling, so a bad `dim:` is refused when instance.md is
  *  PARSED rather than when the DDL is rendered. The why lives there. */
 export const EMBED_DIM_MAX = 2000;
 export const SUPPORTED_FORMATS: readonly number[] = [2];
 
+/**
+ * The record's `Refusal` shape, as an exception: what is wrong AND why the rule
+ * exists in one `why`, the remedy in `fix`, and the machine-readable `slug`
+ * BESIDE the message so every verb can print `error: <slug>` on its own first
+ * stderr line (product principle 4; the contract `packages/ksor/docs/index.md`
+ * states).
+ *
+ * It used to take a separate `what`, and the path that carries a record refusal
+ * had no distinct `what` to give — so it passed the same sentence as both, and
+ * `ksor serve`, `ingest`, `schema`, `calibrate`, `gc` and `grant` all printed
+ * that sentence twice, inline and again under `why:` (first-hour walkthrough,
+ * 2026-08-26). One refusal, one sentence.
+ */
 export class InstanceParseError extends Error {
-  constructor(what: string, why: string, fix: string) {
-    super(`${what}\n  why: ${why}\n  fix: ${fix}`);
+  /** The record's own slug where a record rule refused; the instance's shape otherwise. */
+  readonly slug: RefusalSlug;
+  constructor(why: string, fix: string, slug: RefusalSlug = "ksor-instance-format") {
+    super(`${why}\n  fix: ${fix}`);
     this.name = "InstanceParseError";
+    this.slug = slug;
   }
 }
 
@@ -48,8 +65,8 @@ export class InstanceParseError extends Error {
  */
 export class NoDatabaseDeclared extends InstanceParseError {
   readonly instanceName: string;
-  constructor(instanceName: string, what: string, why: string, fix: string) {
-    super(what, why, fix);
+  constructor(instanceName: string, why: string, fix: string) {
+    super(why, fix);
     this.name = "NoDatabaseDeclared";
     this.instanceName = instanceName;
   }
@@ -151,8 +168,9 @@ function bindGroup<K extends (typeof KERNEL_GROUPS)[number]>(
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new InstanceParseError(
-      `instance.md ${group}.${issue?.path.join(".") ?? ""}: ${issue?.message ?? "invalid"}`,
-      "the instance parse fails closed — a misdeclared key must never become a silently different deployment",
+      `instance.md ${group}.${issue?.path.join(".") ?? ""}: ${issue?.message ?? "invalid"} — ` +
+        "the instance parse fails closed, so a misdeclared key never becomes a silently " +
+        "different deployment",
       `fix the ${group}: block; unknown keys are refused, not ignored`,
     );
   }
@@ -169,7 +187,7 @@ export function parseInstanceText(text: string): ContentInstance {
   const read = parseInstanceDocument(text);
   if (!read.ok) {
     const first = read.refusals[0]!;
-    throw new InstanceParseError(`instance.md: ${first.slug} — ${first.why}`, first.why, first.fix);
+    throw new InstanceParseError(first.why, first.fix, first.slug);
   }
   const doc = read.instance;
   const name = doc.name;
@@ -180,17 +198,22 @@ export function parseInstanceText(text: string): ContentInstance {
     // sharing a tenant would let GC on one delete the other's live rows
     // (review finding, 2026-08-19). Forcing tenant == name keeps them 1:1.
     throw new InstanceParseError(
-      `database.tenant_id (${JSON.stringify(database.tenant_id)}) must equal the instance name (${JSON.stringify(name)})`,
-      "the kernel scopes a corpus by its tenant; a tenant shared across corpora makes GC delete the wrong rows",
+      `database.tenant_id (${JSON.stringify(database.tenant_id)}) must equal the instance name ` +
+        `(${JSON.stringify(name)}) — the kernel scopes a corpus by its tenant, and a tenant ` +
+        "shared across corpora makes GC delete the wrong rows",
       "remove database.tenant_id (it defaults to the name), or set it equal to the name",
     );
   }
   if (database === null) {
     throw new NoDatabaseDeclared(
       name,
-      "instance.md declares no database: block",
-      "the kernel serves from a Postgres corpus store; without database.dsn_env there is nothing to open",
-      "add:\n  database:\n    dsn_env: KSOR_DB_URL\nand export that variable with the DSN",
+      "instance.md declares no `database:` block — the kernel serves from a Postgres corpus " +
+        "store, and without database.dsn_env there is nothing to open",
+      // Written at column 0, because a remedy is pasted rather than read: two
+      // spaces reads well in a terminal and is a YAML error inside a
+      // frontmatter, where the key above it is not a mapping.
+      "add this to instance.md's frontmatter, then export that variable with the DSN:\n" +
+        "database:\n  dsn_env: KSOR_DB_URL",
     );
   }
   const embedding = bindGroup(doc, "embedding") ?? groupSchemas.embedding.parse({});
