@@ -37,9 +37,20 @@ import type { EmbeddingProvider } from "./embedding.js";
 // Each L1 entry is a ~1536-float pgvector literal (~25 KB), so 10k entries
 // ≈ 250 MB — the dominant in-process footprint. Env-tunable (fail-soft) so
 // an operator can shrink it to fit a smaller memory allocation.
+//
+// Read lazily and MEMOIZED on first use, never as a module-scope const:
+// `cli.ts` imports this module statically, so a module-level env read here
+// would evaluate before `main()` calls `loadDotEnv()` and freeze at the
+// default forever — the same ESM-ordering trap `drainTimeoutMs` in
+// packages/content-gateway/src/http.ts already guards against (issue #149).
+// `_testing.reset()` clears the memo, so a test that sets the env var after
+// import still sees it honored on the next read.
 /** Oracle env var: SOR_EMBED_CACHE_MAX. */
-const CACHE_MAX_INITIAL: number = envInt("KSOR_EMBED_CACHE_MAX", 10000, 1);
-let cacheMax: number = CACHE_MAX_INITIAL;
+let cacheMaxMemo: number | undefined;
+function cacheMax(): number {
+  cacheMaxMemo ??= envInt("KSOR_EMBED_CACHE_MAX", 10000, 1);
+  return cacheMaxMemo;
+}
 
 export const BREAKER_COOLDOWN_S = 10.0;
 
@@ -49,8 +60,12 @@ export const BREAKER_COOLDOWN_S = 10.0;
 // both (oracle E2E review SB8). Deliberately the SAME env var embedding.ts
 // reads with default 10.0 as the per-request HTTP timeout — two reads, two
 // defaults, carried from the oracle (query_embed.py:44 vs embedding.py:62).
+//
+// Read lazily, INSIDE a function, not as a module-scope const — the same
+// ESM-ordering trap as the cache cap above (issue #149): a module-level read
+// here evaluates before loadDotEnv() and freezes at the default forever.
 /** Oracle env var: SOR_QUERY_EMBED_TIMEOUT_S. */
-export const EMBED_WALL_TIMEOUT_S: number = envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 5.0, 0.1);
+export const embedWallTimeoutS = (): number => envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 5.0, 0.1);
 
 // L1 (insertion-ordered Map → LRU), the in-flight map, and the breaker are
 // MODULE-GLOBAL: one embedding space per process is the deployed shape. A
@@ -102,16 +117,17 @@ export function breakerOpenUntil(provider: EmbeddingProvider): number {
 }
 
 function withWallClock(work: Promise<number[][]>): Promise<number[][]> {
+  const timeoutS = embedWallTimeoutS();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       // The losing embed cannot be cancelled (module note); its settlement is
       // already observed by the handlers below, so nothing goes unhandled.
       reject(
         new QueryEmbedTimeoutError(
-          `query embed exceeded the ${EMBED_WALL_TIMEOUT_S}s wall clock — treated as a provider failure (degrade to keyword-only)`,
+          `query embed exceeded the ${timeoutS}s wall clock — treated as a provider failure (degrade to keyword-only)`,
         ),
       );
-    }, EMBED_WALL_TIMEOUT_S * 1000);
+    }, timeoutS * 1000);
     work.then(
       (value) => {
         clearTimeout(timer);
@@ -151,7 +167,7 @@ async function embedMiss(
     const literal = vlit(vec);
     cache.delete(key);
     cache.set(key, literal); // insert at the LRU tail
-    while (cache.size > cacheMax) {
+    while (cache.size > cacheMax()) {
       const oldest = cache.keys().next().value;
       if (oldest === undefined) break;
       cache.delete(oldest);
@@ -208,16 +224,19 @@ export async function embedQueryVlit(
   }
 }
 
-/** Test seam: reset module state (and the env-derived cache cap) between
- * tests; shrink the cap to make eviction observable. Never a production path. */
+/** Test seam: reset module state between tests; shrink the cap to make
+ * eviction observable. Clears the memoized cache-cap read too, so a test that
+ * sets KSOR_EMBED_CACHE_MAX after import sees it honored on the next read
+ * (issue #149) rather than a value already memoized from a previous case.
+ * Never a production path. */
 export const _testing: { reset(): void; setCacheMax(n: number): void } = {
   reset(): void {
     cache.clear();
     inflight.clear();
     breakerOpenUntilByMs.clear();
-    cacheMax = CACHE_MAX_INITIAL;
+    cacheMaxMemo = undefined;
   },
   setCacheMax(n: number): void {
-    cacheMax = n;
+    cacheMaxMemo = n;
   },
 };

@@ -16,7 +16,7 @@
  */
 
 import { EMBED_DIM, EMBED_MODEL, EMBED_TASK_DOCUMENT, EMBED_TASK_QUERY } from "../../config.js";
-import { EMBED_TIMEOUT_S, QUERY_EMBED_TIMEOUT_S } from "../embedding.js";
+import { embedTimeoutS, queryEmbedTimeoutS } from "../embedding.js";
 import type { EmbeddingProvider } from "../embedding.js";
 import { FakeEmbeddingProvider } from "./fake.js";
 import { GeminiEmbeddingProvider } from "./gemini.js";
@@ -115,7 +115,7 @@ export function buildShippedProvider(
     dim: opts.dim ?? EMBED_DIM,
     documentTaskLabel: EMBED_TASK_DOCUMENT,
     queryTaskLabel: EMBED_TASK_QUERY,
-    documentTimeoutS: EMBED_TIMEOUT_S,
-    queryTimeoutS: QUERY_EMBED_TIMEOUT_S,
+    documentTimeoutS: embedTimeoutS(),
+    queryTimeoutS: queryEmbedTimeoutS(),
   });
 }

@@ -229,6 +229,48 @@ describe("the circuit breaker", () => {
   });
 });
 
+describe("env knobs are read lazily, not frozen at module scope (issue #149)", () => {
+  afterEach(() => {
+    delete process.env["KSOR_EMBED_CACHE_MAX"];
+    delete process.env["KSOR_QUERY_EMBED_TIMEOUT_S"];
+  });
+
+  it("honors KSOR_EMBED_CACHE_MAX set after import — no _testing.setCacheMax involved", async () => {
+    // Before the fix, CACHE_MAX_INITIAL was a module-scope `const` evaluated
+    // at import — before cli.ts's main() ever calls loadDotEnv() — so this
+    // env var could never take effect once the process was running. Setting
+    // it here, after import, and then relying only on the public
+    // `_testing.reset()` seam (never `setCacheMax`) is exactly the case that
+    // was impossible to honor before the fix.
+    process.env["KSOR_EMBED_CACHE_MAX"] = "2";
+    _testing.reset();
+    const { provider, calls } = countingProvider();
+    await embedQueryVlit("q1", { provider }); // miss (1)
+    await embedQueryVlit("q2", { provider }); // miss (2)
+    await embedQueryVlit("q1", { provider }); // hit — q1 moves to the tail
+    await embedQueryVlit("q3", { provider }); // miss (3) — evicts q2, the LRU, at cap 2
+    await embedQueryVlit("q1", { provider }); // still cached
+    expect(calls(), "provider calls before re-fetch: " + calls()).toBe(3);
+    await embedQueryVlit("q2", { provider }); // evicted → miss (4)
+    expect(calls(), "provider calls after re-fetch: " + calls()).toBe(4);
+  });
+
+  it("honors KSOR_QUERY_EMBED_TIMEOUT_S set after import — the wall clock fires early", async () => {
+    // Before the fix, EMBED_WALL_TIMEOUT_S was frozen at its 5s default
+    // regardless of this env var.
+    process.env["KSOR_QUERY_EMBED_TIMEOUT_S"] = "1";
+    vi.useFakeTimers();
+    const { provider, calls } = countingProvider({
+      next: () => new Promise<number[][]>(() => {}), // a hang, never settles
+    });
+    const pending = embedQueryVlit("a hanging query, short custom timeout", { provider });
+    const assertion = expect(pending).rejects.toBeInstanceOf(QueryEmbedTimeoutError);
+    await vi.advanceTimersByTimeAsync(1_001); // would need 5_001 before the fix
+    await assertion;
+    expect(calls()).toBe(1);
+  });
+});
+
 describe("the wall clock", () => {
   it("bounds a provider HANG: times out with the timeout class and trips the breaker", async () => {
     vi.useFakeTimers();

@@ -87,11 +87,17 @@ import { envFloat, envInt } from "../env.js";
 
 export { envFloat, envInt };
 
-export const EMBED_TIMEOUT_S: number = envFloat("KSOR_EMBED_TIMEOUT_S", 60.0, 1.0);
+// Read lazily, INSIDE a function, not as a module-scope const. `cli.ts`
+// imports this module (through the provider registry) statically, so a
+// module-level env read here would evaluate before `main()` calls
+// `loadDotEnv()` and freeze at the default forever — the same ESM-ordering
+// trap `drainTimeoutMs` in packages/content-gateway/src/http.ts already
+// guards against (issue #149).
+export const embedTimeoutS = (): number => envFloat("KSOR_EMBED_TIMEOUT_S", 60.0, 1.0);
 /** Oracle env var: SOR_QUERY_EMBED_TIMEOUT_S. Note: query-embed.ts reads the
  * SAME variable with a different default (5.0) as its hard wall clock — two
  * deliberate reads, carried from the oracle (embedding.py:62 vs query_embed.py:44). */
-export const QUERY_EMBED_TIMEOUT_S: number = envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 10.0, 1.0);
+export const queryEmbedTimeoutS = (): number => envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 10.0, 1.0);
 
 // ---------------------------------------------------------------------------
 // Pure helpers (eval-locked; the embed_input recipe won the bake-off —

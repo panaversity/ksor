@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { aembedIntent, embedInput, embedIntent, generateText, vlit } from "./embedding.js";
+import {
+  aembedIntent,
+  embedInput,
+  embedIntent,
+  embedTimeoutS,
+  generateText,
+  queryEmbedTimeoutS,
+  vlit,
+} from "./embedding.js";
 import type { EmbeddingProvider, TextGenerator } from "./embedding.js";
 
 /** A scriptable provider: `plan` yields one outcome per attempt (a vector
@@ -40,6 +48,30 @@ function stubProvider(opts: {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("embed timeout knobs are read lazily, not frozen at module scope (issue #149)", () => {
+  afterEach(() => {
+    delete process.env["KSOR_EMBED_TIMEOUT_S"];
+    delete process.env["KSOR_QUERY_EMBED_TIMEOUT_S"];
+  });
+
+  it("embedTimeoutS() honors KSOR_EMBED_TIMEOUT_S set after import", () => {
+    // Before the fix this was a module-scope `const` evaluated at import —
+    // before cli.ts's main() ever calls loadDotEnv() — so setting the env
+    // var here could never change the exported value. It is impossible to
+    // write this assertion against the old shape without reimporting the
+    // module, which is exactly the bug.
+    expect(embedTimeoutS()).toBe(60); // the documented default, unset
+    process.env["KSOR_EMBED_TIMEOUT_S"] = "45";
+    expect(embedTimeoutS()).toBe(45);
+  });
+
+  it("queryEmbedTimeoutS() honors KSOR_QUERY_EMBED_TIMEOUT_S set after import", () => {
+    expect(queryEmbedTimeoutS()).toBe(10); // the documented default, unset
+    process.env["KSOR_QUERY_EMBED_TIMEOUT_S"] = "7";
+    expect(queryEmbedTimeoutS()).toBe(7);
+  });
 });
 
 describe("embedInput", () => {
