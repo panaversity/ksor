@@ -295,3 +295,61 @@ describe("the way to a takedown entry id does not depend on a database", () => {
     ).toBe(false);
   });
 });
+
+/**
+ * `ksor.owner` is declared `z.string().min(1).optional()` — the ONE actor-named
+ * slot in the profile that is never parsed. Every other one (`generated.by`,
+ * `verified[].by`, `ksor.approval.by`, `ksor.deprecated.by`) is built from the
+ * `actor` codec and refuses anything malformed.
+ *
+ * The spec said the convention holds "everywhere" and listed `ksor-actor-form`
+ * among the refusals with `ksor.owner` named as the slot `team:<id>` is allowed
+ * IN — permission language that reads as a check. It is not one, and `ksor
+ * migrate` manufactures the shape it appeared to forbid: a pre-profile
+ * `owner: Product` is carried through verbatim and the tree passes `ksor build`.
+ * Where spec and code disagree the code wins (AGENTS.md authority rule 1).
+ *
+ * This asserts the disagreement cannot come back silently: while the schema
+ * leaves owner unparsed, the documents must say so; if owner is ever given the
+ * actor codec, this fails and asks for the sentences back.
+ */
+describe("the actor convention is documented as far as it is enforced", () => {
+  const ownerIsUnchecked = (): boolean => {
+    const src = read("packages/content/src/record/profile.ts");
+    const block = /const ksorBlock = z\.object\(\{([\s\S]*?)\n\}\);/.exec(src);
+    if (block === null) throw new Error("profile.ts: no ksorBlock literal to read");
+    const owner = /^\s*owner:\s*(.+?),\s*$/m.exec(block[1] as string);
+    if (owner === null) throw new Error("profile.ts: ksorBlock declares no owner key");
+    return !(owner[1] as string).includes("actor");
+  };
+
+  it("reads the owner declaration out of the schema", () => {
+    expect(typeof ownerIsUnchecked()).toBe("boolean");
+  });
+
+  it.each([
+    ["specs/ksor/record/spec.md", "the contract"],
+    [`${SCAFFOLD}/AGENTS.md`, "what an author is told"],
+  ])("%s says `ksor.owner` is not form-checked", (file, why) => {
+    if (!ownerIsUnchecked()) return;
+    const text = flat(read(file));
+    expect(
+      /`ksor.owner` is free text and is NOT form-checked|`ksor.owner` is not checked for its shape/.test(
+        text,
+      ),
+      `${file} (${why}): profile.ts declares \`owner\` as a bare string, so no actor form is ` +
+        `enforced on it and \`ksor migrate\` carries a pre-profile bare word through. Say that, ` +
+        `rather than describing a check that does not run.`,
+    ).toBe(true);
+  });
+
+  it("no document claims the actor form applies everywhere", () => {
+    if (!ownerIsUnchecked()) return;
+    for (const file of ["specs/ksor/record/spec.md", `${SCAFFOLD}/AGENTS.md`]) {
+      expect(
+        /<producer>\/<version>` everywhere/.test(flat(read(file))),
+        `${file}: "everywhere" is false while \`ksor.owner\` is unparsed.`,
+      ).toBe(false);
+    }
+  });
+});

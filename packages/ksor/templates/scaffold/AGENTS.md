@@ -507,8 +507,11 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   as GFM footnotes `[^id]`), `verified` (`[{ by, at }]` — sets the trust
   tier: none → unverified, machine actors → machine-confirmed, any `human:`
   → human-reviewed), `stale_after`, `ksor.effective_from`. Actors are
-  `human:<id>`, `process:<id>` or `<producer>/<version>`; `team:<id>` only in
-  `ksor.owner`. Every timestamp is an ISO 8601 instant with an offset
+  `human:<id>`, `process:<id>` or `<producer>/<version>` in `verified`,
+  `generated`, `ksor.approval` and `ksor.deprecated` — anything else there is
+  refused. `ksor.owner` is not checked for its shape: write an actor or
+  `team:<id>` by convention, but it is free text, so a bare word passes and can
+  then never be the `ksor.deprecated.by` that deprecates the document. Every timestamp is an ISO 8601 instant with an offset
   (`2026-08-25T09:00:00Z`) — never a bare date. Unknown keys are preserved, unless
   the name is one edit from a profile key — `stale_afer:` is refused rather
   than kept, because a preserved near miss is the key it meant, failing open.

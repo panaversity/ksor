@@ -108,10 +108,23 @@ mapping is accepted as a one-element list (OKF §5.2 MUST). Links resolve in
 both OKF §6.1 forms — bundle-absolute (`/policies/x.md`, against
 `knowledge/`) and relative (against the source's directory), `.md` optional;
 the site rewrites bundle-absolute links to routes. Actors: `human:<id>`,
-`process:<id>`, `<producer>/<version>` everywhere; `team:<id>` only in
-`ksor.owner` and in the policy — in `verified`, `generated`, `approval` or
-`deprecated` it is refused (`ksor-actor-form`), because tiers key on the
-`human:` prefix and a team would silently classify as machine-confirmed.
+`process:<id>`, `<producer>/<version>` in `verified`, `generated`,
+`ksor.approval` and `ksor.deprecated`, where anything else — `team:<id>`
+included — is refused (`ksor-actor-form`), because tiers key on the `human:`
+prefix and a team would silently classify as machine-confirmed. The policy's
+own actor slots additionally admit `team:<id>` (`ksor-policy-invalid`
+otherwise). **`ksor.owner` is free text and is NOT form-checked** — the
+convention is the same vocabulary plus `team:<id>`, and the spec recommends it,
+but the checker only ever COMPARES the value (to `ksor.deprecated.by`, R23),
+never parses it. That is deliberate for now: `ksor migrate` carries a
+pre-profile `owner: Product` through verbatim rather than inventing an actor
+for it, and refusing the result would refuse every migrated record. One
+consequence, stated because it is invisible otherwise: since
+`ksor.deprecated.by` IS form-checked, a bare-word owner can never equal it, so
+R23's "deprecated by the owner" branch is unreachable on such a document and
+the deprecation must come from a takedown authority instead. Reversed by
+form-checking `ksor.owner` (allowing `team:`) and teaching `ksor migrate` to
+rewrite or refuse a bare owner, in one change — never by the spec alone.
 Actor ids are published with the content; use handles, not addresses. Every
 timestamp is an ISO 8601 instant with an explicit offset; `ksor migrate`
 widens a bare date to midnight UTC. Trust tier derives from `verified`: none
@@ -343,7 +356,9 @@ duplicate key, non-plain tag, second document, non-mapping),
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,
 `ksor-deprecated-unattributed`, `ksor-deprecator-unauthorised`,
 `ksor-reserved-type-unsourced`, `ksor-reserved-type-unowned`,
-`ksor-source-unresourced`, `ksor-actor-form`, `ksor-instant-form` (a
+`ksor-source-unresourced`, `ksor-actor-form` (§2.3 — the four
+actor-typed slots; NOT `ksor.owner`, which is unparsed free text),
+`ksor-instant-form` (a
 timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-footnote-unkeyed`,
 `ksor-reserved-name`, `ksor-index-stale` (check only),
