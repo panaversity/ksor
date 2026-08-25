@@ -25,6 +25,7 @@ import {
   VECTOR_TXN_GUCS,
   type Hit,
   type HitAct,
+  type NodeGovernance,
 } from "./lib/search.js";
 import {
   mint,
@@ -238,18 +239,18 @@ export function latestAct(acts: readonly HitAct[] | null): HitAct | null {
  * refused at boot, and a three-valued answer here would put `null` on a wire
  * whose schema says the field is a tier.
  */
-export function hitGovernance(hit: Hit): HitGovernance {
-  const verified = latestAct(hit.verified);
+export function hitGovernance(node: NodeGovernance): HitGovernance {
+  const verified = latestAct(node.verified);
   return {
-    status: hit.docStatus,
-    trust_tier: TRUST_TIERS[hit.trustTier ?? 0] ?? "unverified",
+    status: node.docStatus,
+    trust_tier: TRUST_TIERS[node.trustTier ?? 0] ?? "unverified",
     verified: verified === null ? null : { by: verified.by, at: verified.at },
-    effective_from: hit.effectiveFrom,
-    stale_after: hit.staleAfter,
+    effective_from: node.effectiveFrom,
+    stale_after: node.staleAfter,
     approval:
-      hit.approval === null
+      node.approval === null
         ? null
-        : { by: hit.approval.by, at: hit.approval.at, checked: "policy" },
+        : { by: node.approval.by, at: node.approval.at, checked: "policy" },
   };
 }
 
@@ -715,6 +716,17 @@ export interface ReadResult {
    * document it does not contain, under the name of the system of record.
    */
   readonly frontmatter: string | null;
+  /**
+   * What the RECORD has done about this document — the stored governance, from
+   * the same columns a search hit carries and through the same seam.
+   *
+   * It is beside `frontmatter` on purpose, and the two are not the same claim:
+   * frontmatter is what the author DECLARED, untrusted corpus text like the
+   * prose under it, while this is what the record checked and stored. A read
+   * surface that offered only the authored block would be inviting an agent to
+   * read a declaration as a verification (review finding).
+   */
+  readonly governance: HitGovernance;
   readonly provenance: SearchHit["provenance"];
   readonly window_from?: string;
   readonly window_to?: string;
@@ -918,6 +930,7 @@ export async function readDocument(
     text,
     sections,
     frontmatter,
+    governance: hitGovernance(node),
     provenance: {
       corpus_id: inst.corpusId,
       stable_id: node.stableId,

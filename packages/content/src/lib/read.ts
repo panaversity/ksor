@@ -16,6 +16,12 @@
 import type pg from "pg";
 
 import { admitted, ADMITTED, ADMITTED_CTE, admittedCte } from "./admit.js";
+import {
+  GOVERNANCE_COLUMN_COUNT,
+  governanceColumns,
+  governanceFromRow,
+  type NodeGovernance,
+} from "./search.js";
 import { DENIED_CTE, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
@@ -66,6 +72,15 @@ live AS (
 const ADMITTED_LIVE_CTE = admittedCte("admitted_live", "live");
 const ADMITTED_LIVE = admitted("now", "admitted_live");
 
+/**
+ * The governance a read carries out, taken from the LIVE row (`now`) and never
+ * from the pinned one — the same reasoning as the admission above. A pin exists
+ * so a citation keeps resolving to the same bytes; it must not also freeze the
+ * record's position ON those bytes, or a document de-verified this morning
+ * would go on reading as human-reviewed for the token's life.
+ */
+const GOVERNANCE = governanceColumns("now");
+
 /** Candidates by LEAF slug ($4), each with its full root path (for suffix disambiguation). */
 export const NODE_BY_SLUG_SQL: string = `
 WITH RECURSIVE ${GEN},
@@ -91,7 +106,8 @@ tree AS (
     JOIN tree t ON n.parent_id = t.node_id
     WHERE n.tenant_id = $1 AND n.generation = t.generation AND n.status = 'published'
 )
-SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink
+SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink,
+       ${GOVERNANCE}
 FROM tree n
 JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
                        AND self.generation = n.generation
@@ -117,7 +133,8 @@ WHERE a.tenant_id = $1 AND a.alias_slug = $4`;
  */
 export const NODE_BY_STABLE_ID_SQL: string = `
 WITH RECURSIVE ${GEN}, ${DENIED_CTE}, ${ADMITTED_LIVE_CTE}
-SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
+SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink,
+       ${GOVERNANCE}
 FROM content_nodes n JOIN g ON n.generation = g.gen
 JOIN live ON TRUE
 JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
@@ -270,7 +287,7 @@ export class UnknownSlug extends Error {
   }
 }
 
-export interface DocumentNode {
+export interface DocumentNode extends NodeGovernance {
   readonly nodeId: string;
   readonly slug: string;
   readonly title: string;
@@ -300,7 +317,7 @@ function toNumber(value: unknown, column: string): number {
 }
 
 /** Both node lookups project exactly these columns, in this order. */
-export const NODE_COLUMNS = 7;
+export const NODE_COLUMNS: number = 7 + GOVERNANCE_COLUMN_COUNT;
 
 /**
  * Width-guarded row parse. The oracle's scar: its star-unpack silently
@@ -323,6 +340,7 @@ export function nodeRows(result: pg.QueryArrayResult): DocumentNode[] {
     path: String(row[4]),
     generation: toNumber(row[5], "generation"),
     permalink: row[6] === null ? null : String(row[6]),
+    ...governanceFromRow(row, 7),
   }));
 }
 

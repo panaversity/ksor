@@ -95,8 +95,15 @@ export const GATE_PREDICATE_DIGEST: string = createHash("sha256")
  * the DOCUMENT it came from, and a second query would let the two disagree
  * across a flip. `n` is the node alias both arms' final SELECT uses.
  */
-const GOVERNANCE_COLUMNS = `n.doc_status, n.trust_tier, n.verified, n.approval,
-           n.effective_from, n.stale_after`;
+export function governanceColumns(alias: string): string {
+  return `${alias}.doc_status, ${alias}.trust_tier, ${alias}.verified, ${alias}.approval,
+           ${alias}.effective_from, ${alias}.stale_after`;
+}
+
+/** How many columns {@link governanceColumns} projects — the read path's width guard needs it. */
+export const GOVERNANCE_COLUMN_COUNT = 6;
+
+const GOVERNANCE_COLUMNS = governanceColumns("n");
 
 const JOINS = `
         FROM chunks c
@@ -188,7 +195,24 @@ export interface HitAct {
   readonly at: string;
 }
 
-export interface Hit {
+/**
+ * The governance a NODE carries, in row shape.
+ *
+ * Split out of Hit because `read` projects the same six columns from the same
+ * table and must reach the same wire shape: one seam, so a surface cannot drift
+ * into answering a second way about the same document (decision 18's rule,
+ * applied to the governance block).
+ */
+export interface NodeGovernance {
+  readonly docStatus: string | null;
+  readonly trustTier: number | null;
+  readonly verified: readonly HitAct[] | null;
+  readonly approval: HitAct | null;
+  readonly effectiveFrom: string | null;
+  readonly staleAfter: string | null;
+}
+
+export interface Hit extends NodeGovernance {
   readonly chunkId: string;
   readonly sourceId: string;
   readonly stableId: string;
@@ -209,12 +233,6 @@ export interface Hit {
    * are never the shape a SERVED hit has, but the parse must not invent values
    * for them either.
    */
-  readonly docStatus: string | null;
-  readonly trustTier: number | null;
-  readonly verified: readonly HitAct[] | null;
-  readonly approval: HitAct | null;
-  readonly effectiveFrom: string | null;
-  readonly staleAfter: string | null;
 }
 
 const HIT_COLUMNS = 15;
@@ -256,6 +274,18 @@ function toActs(value: unknown): HitAct[] | null {
   return acts.length === 0 ? null : acts;
 }
 
+/** The six {@link governanceColumns} columns starting at `at`, parsed once for both paths. */
+export function governanceFromRow(row: readonly unknown[], at: number): NodeGovernance {
+  return {
+    docStatus: row[at] === null ? null : String(row[at]),
+    trustTier: row[at + 1] === null ? null : toNumber(row[at + 1], "trust_tier"),
+    verified: toActs(row[at + 2]),
+    approval: toAct(row[at + 3]),
+    effectiveFrom: toInstant(row[at + 4]),
+    staleAfter: toInstant(row[at + 5]),
+  };
+}
+
 function rowToHit(row: readonly unknown[]): Hit {
   return {
     chunkId: String(row[0]),
@@ -267,12 +297,7 @@ function rowToHit(row: readonly unknown[]): Hit {
     score: toNumber(row[6], "score"),
     generation: toNumber(row[7], "generation"),
     permalink: row[8] === null ? null : String(row[8]),
-    docStatus: row[9] === null ? null : String(row[9]),
-    trustTier: row[10] === null ? null : toNumber(row[10], "trust_tier"),
-    verified: toActs(row[11]),
-    approval: toAct(row[12]),
-    effectiveFrom: toInstant(row[13]),
-    staleAfter: toInstant(row[14]),
+    ...governanceFromRow(row, 9),
   };
 }
 

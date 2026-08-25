@@ -38,7 +38,7 @@ import {
   type TrustTier,
 } from "@panaversity/ksor-content";
 
-import { searchHandler, type SearchArgs } from "./tools.js";
+import { readHandler, searchHandler, type SearchArgs } from "./tools.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -122,6 +122,19 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     const reply = await searchHandler(ctx)({ query: QUERY, k: 10, ...args });
     expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
     return reply.structuredContent as { ok: boolean; hits?: WireHit[] };
+  };
+
+  /** `read`, the way the registration calls it. */
+  const readAs = async (
+    ctx: ServiceContext,
+    slug: string,
+  ): Promise<{ frontmatter: string | null; governance: WireHit["governance"] }> => {
+    const reply = await readHandler(ctx)({ slug });
+    expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
+    return reply.structuredContent as {
+      frontmatter: string | null;
+      governance: WireHit["governance"];
+    };
   };
 
   const slugsFrom = async (
@@ -370,6 +383,25 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
       const slugs = await slugsFrom(doorAt(configured), { min_trust_tier: "human-reviewed" });
       expect(slugs, `configured floor ${String(configured)}`).toEqual(["human-reviewed"]);
     }
+  });
+
+  it("`read` carries the same stored governance the hit did", async () => {
+    // `read` grew a frontmatter channel, and frontmatter is UNTRUSTED authored
+    // text — the schema says so itself. If that were the only governance on the
+    // surface an agent reads documents from, the surface would be implying an
+    // authored block is the record's verified position. The stored governance
+    // is a column plus a seam (decision 15), so it goes out on both tools, and
+    // the two must agree about the same document or the record answers twice.
+    const hits = (await searchAs(doorAt(undefined))).hits ?? [];
+    const fromSearch = hits.find((h) => h.slug === "human-reviewed")?.governance;
+    expect(fromSearch, JSON.stringify(hits)).toBeDefined();
+    expect((await readAs(doorAt(undefined), "human-reviewed")).governance).toEqual(fromSearch);
+
+    // The honest state, not a missing one — the same reading `search` gives.
+    const unverified = (await readAs(doorAt(undefined), "unverified")).governance;
+    expect(unverified.trust_tier).toBe("unverified");
+    expect(unverified.verified).toBeNull();
+    expect(unverified.approval?.checked).toBe("policy");
   });
 
   it("REFUSES a floor it cannot recognise instead of serving the whole record", async () => {

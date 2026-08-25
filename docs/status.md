@@ -122,8 +122,12 @@ NOTICES its absence instead of refusing it. Every hit carries its
 `governance` — `status`, `trust_tier`, the latest `verified` act,
 `effective_from`, `stale_after`, and `approval` with `checked: "policy"`,
 which is honest absence in the envelope's own idiom: policy-checked, not yet
-change-control-verified. `read` returns the concept's frontmatter byte-exact
-(`sources.frontmatter`, the author's own bytes, never a re-serialisation).
+change-control-verified. `read` carries the same `governance` block, from the
+same columns through the same seam, and returns the concept's frontmatter
+byte-exact beside it (`sources.frontmatter`, the author's own bytes, never a
+re-serialisation) — the frontmatter is what the author DECLARED and is
+untrusted corpus text, `governance` is what the record stored, and the tool
+description says which is which. The in-band injection advisory reads both.
 Every serving act's `retrieval_log` row records the viewer list, the trust
 floor that applied, whether it abstained and how many results it returned —
 and never content or the query.
