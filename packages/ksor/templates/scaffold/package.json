@@ -9,7 +9,7 @@
     "check": "node .agents/skills/format-checker/check.mjs",
     "provision": "pnpm schema && pnpm grant",
     "serve": "ksor serve",
-    "refresh": "pnpm ingest && pnpm gc",
+    "refresh": "ksor build && pnpm ingest && pnpm gc",
     "schema": "ksor schema --instance instance.md --apply",
     "grant": "ksor grant --instance instance.md",
     "ingest": "ksor ingest --instance instance.md --flip",

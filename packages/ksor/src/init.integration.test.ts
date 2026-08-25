@@ -231,8 +231,15 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     // and no POSIX-only `exec` keyword to break cmd.exe on Windows. It also
     // makes publication deliberate: refreshing the record is its own verb.
     expect(pkg.scripts?.["serve"], "serving is one supervised process").toBe("ksor serve");
+    // Publishing stays a separate, deliberate act from SERVING — and the build
+    // is part of publishing, not a fourth step the README forgot to mention.
+    // `ingest` publishes only a tree `ksor build` has checked, so without it a
+    // brand new record following the emitted ordered path
+    // (`pnpm provision` → `pnpm refresh` → `pnpm serve`) died at step two with
+    // `ksor-lock-missing`, on a recipe that never names `ksor build`. Walked
+    // live on a real scaffold against a real Postgres, 2026-08-25.
     expect(pkg.scripts?.["refresh"], "publishing is a separate, deliberate act").toBe(
-      "pnpm ingest && pnpm gc",
+      "ksor build && pnpm ingest && pnpm gc",
     );
     // gc in the loop: a refused flip leaves a complete generation behind, and
     // nothing in the default path ever collected them.
