@@ -274,7 +274,7 @@ consumer reads it with no ksor in the loop. Import stays demand-gated.
 ### 1.8 An existing record
 
 ```
-ksor migrate                                                      # shows the diff
+ksor migrate --actor human:<you>                                  # shows the diff
 ksor migrate --write --actor human:<you> --approve-by human:<you> # applies it
 ```
 

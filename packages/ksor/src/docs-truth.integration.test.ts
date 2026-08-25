@@ -353,3 +353,44 @@ describe("the actor convention is documented as far as it is enforced", () => {
     }
   });
 });
+
+/**
+ * The FIRST line of the published upgrade path was bare `ksor migrate`,
+ * annotated "prints the diff, writes nothing". A pre-profile record has no
+ * `.ksor/governance.yaml` by definition, and migrate refuses without `--actor`
+ * when it must write one — so the preview step exited 1 on every record the
+ * runbook is for, before anything downstream could be reached.
+ *
+ * `--actor` on the dry run is true in both worlds: it works today, and it stays
+ * correct if the preview is ever allowed to run without one. The premise is
+ * read from the precondition itself.
+ */
+describe("the migrate preview step runs on the records the runbook is for", () => {
+  const previewNeedsActor = (): boolean =>
+    /!hadPolicy && parsed\.actor === null/.test(read("packages/ksor/src/migrate/index.ts"));
+
+  it("reads the precondition out of migrate", () => {
+    expect(typeof previewNeedsActor()).toBe("boolean");
+  });
+
+  it.each([".changeset/okf-native.md", "README.md", "research/okf-native.md"])(
+    "%s — the preview line carries --actor",
+    (file) => {
+      if (!previewNeedsActor()) return;
+      const bare = fencedBlocks(read(file))
+        // A RUNBOOK block: at least one line carries a flag, so its lines are
+        // commands to run in order. The README also prints a bare vocabulary
+        // listing of every verb, which is a list of words, not instructions.
+        .filter((block) => block.includes("--"))
+        .flatMap((block) => block.split("\n"))
+        .filter((line) => /^\s*ksor migrate\b/.test(line))
+        .filter((line) => !line.includes("--actor"));
+      expect(
+        bare,
+        `${file}: \`ksor migrate\` without \`--actor\` exits 1 with \`error: bad-args\` on a ` +
+          `pre-profile record — it has no .ksor/governance.yaml, so migrate must write one and ` +
+          `refuses to guess who is performing the act. The preview step needs the flag too.`,
+      ).toEqual([]);
+    },
+  );
+});

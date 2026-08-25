@@ -33,7 +33,7 @@ adopters depend on. In one place, what moves:
 
 ```sh
 pnpm add -D @panaversity/ksor@latest
-ksor migrate                      # prints the diff, writes nothing
+ksor migrate --actor human:<you>  # prints the diff, writes nothing
 ksor migrate --write --actor human:<you> --approve-by human:<you>
 ksor build
 # a served record, after committing the migration:

@@ -1596,7 +1596,7 @@ changes nothing until `--write`, and refuses by name rather than invent a title,
 a description or the actor behind a takedown.
 
 ```bash
-ksor migrate
+ksor migrate --actor human:you   # prints the diff, writes nothing
 ksor migrate --write --actor human:you --approve-by human:you
 ```
 
