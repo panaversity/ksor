@@ -179,7 +179,16 @@ export function runBuild(
         "delete the file and rebuild — the lock is regenerated from the tree, never edited",
       );
     }
-    baselines.push({ source: "build.lock.json", entries: committed.lock.ledger_entries });
+    baselines.push({
+      source: "build.lock.json",
+      entries: committed.lock.ledger_entries,
+      // A build that PASSED wrote this lock, so the entries in it were judged
+      // against the policy of the day. Marking it accepted is what lets
+      // `checkLedgerActors` stop re-judging history — without it the whole
+      // escape hatch is inert and its refusal prints a remedy that does not
+      // exist. Git history stays UNACCEPTED: committing is not passing.
+      accepted: true,
+    });
   }
 
   const record = loadRecord(root);

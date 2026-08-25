@@ -43,7 +43,11 @@ function lockBaseline(): LedgerBaseline[] {
   const lockPath = path.join(root, "build.lock.json");
   if (!existsSync(lockPath)) return [];
   const parsed = parseLock(readFileSync(lockPath, "utf8"));
-  if (parsed.ok) return [{ source: "build.lock.json", entries: parsed.lock.ledger_entries }];
+  if (parsed.ok) {
+    // Accepted for the reason `build/index.ts` records: a passing build wrote
+    // it, so those entries were judged once and are not re-judged.
+    return [{ source: "build.lock.json", entries: parsed.lock.ledger_entries, accepted: true }];
+  }
   console.error(
     `ksor-lock-invalid: build.lock.json — ${parsed.why}\n` +
       "  why: the lock is one of the two baselines the takedown ledger is judged against; a lock nothing can read is a baseline that quietly holds nothing\n" +

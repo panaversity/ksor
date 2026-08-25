@@ -364,7 +364,14 @@ function planStage(recordDir: string, development: boolean): StagePlan {
  * outright — so this is a note beside the verdict, not a second refusal.
  */
 function ledgerBaselines(fromLock: readonly LedgerBaselineEntry[]): LedgerBaseline[] {
-  const lockBaseline: LedgerBaseline = { source: "build.lock.json", entries: fromLock };
+  // Accepted: a passing `ksor build` wrote this lock, so its entries were
+  // judged against the policy of the day and are history now. The git-history
+  // baseline below stays unaccepted — committing is not passing.
+  const lockBaseline: LedgerBaseline = {
+    source: "build.lock.json",
+    entries: fromLock,
+    accepted: true,
+  };
   const history = historicLedger(projectRoot);
   if (!history.repository) return [lockBaseline];
   if (history.entries === null) {
