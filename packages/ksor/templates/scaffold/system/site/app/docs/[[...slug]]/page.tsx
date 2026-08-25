@@ -215,16 +215,25 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
 
 export async function generateStaticParams() {
   const params = source.generateParams();
-  if (params.length === 0) {
-    // Without this, Next fails the empty-record build with an error that
-    // names neither the record nor the rule (found live, 2026-08-18).
+  // Every directory this viewer's stage holds an index for is a page too —
+  // the root included, which is the record's own map. So an empty `params` is
+  // not an empty build: a record nobody has approved yet stages no document
+  // and still publishes its map (build spec §4). An empty RECORD is refused
+  // upstream by `ksor-record-empty`, and a viewer that admits nothing from a
+  // record that HAS approved knowledge by `ksor-audience-empty` — both before
+  // Next is ever asked for a page.
+  //
+  // Found live 2026-08-25: this threw on a fresh `ksor init`, whose starter is
+  // all drafts because R25 forbids the tool recording an approval, and told
+  // the adopter "the record has no documents (pnpm check says the same)" —
+  // which their record was not and their checker did not.
+  const folders = folderSlugs().map((slug) => ({ slug }));
+  if (params.length === 0 && folders.length === 0) {
     throw new Error(
-      "the record has no documents — a KSoR is never empty; add one to knowledge/ or restore one from git history (pnpm check says the same).",
+      "the staged record holds neither a document nor an index — staging refuses both states it can name, so this is a staging bug, not a record's: report it with the stage manifest.",
     );
   }
-  // Every directory this viewer's stage holds an index for is a page too —
-  // the root included, which is the record's own map.
-  return [...params, ...folderSlugs().map((slug) => ({ slug }))];
+  return [...params, ...folders];
 }
 
 export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): Promise<Metadata> {
