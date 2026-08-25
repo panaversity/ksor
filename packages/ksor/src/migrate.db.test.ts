@@ -23,7 +23,15 @@ import type pg from "pg";
 import { runMigrate } from "./migrate/index.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_migrate_denials";
+/**
+ * Suffixed with the ADMIN database's own name, so two checkouts of this
+ * repository pointed at one cluster do not share a scratch database. A fixed
+ * name is not merely untidy here: this suite drops its database `WITH (FORCE)`
+ * between runs, which terminates the other checkout's connections mid-INSERT
+ * with `terminating connection due to administrator command` — observed live
+ * on a shared cluster.
+ */
+const DB = `ksor_migrate_denials_${(adminDsn === "" ? "x" : new URL(adminDsn).pathname.slice(1)).replace(/[^a-z0-9_]/gi, "_")}`;
 const TENANT = "acme";
 const DSN_ENV = "KSOR_MIGRATE_TEST_DSN";
 const ACTOR = "human:mjs";
