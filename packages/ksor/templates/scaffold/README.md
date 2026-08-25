@@ -26,6 +26,22 @@ The first `pnpm install` also fetches the
 `ksor` tool (pinned in `package.json`) and writes it into your lockfile —
 commit the updated lockfile.
 
+**The starter documents are drafts, so a build publishes none of them.**
+`pnpm dev` shows all five — the preview is where drafts live, each marked as
+one — but `pnpm build` admits a draft to no surface at all: no page, no
+sidebar row, no `/llms.txt` entry, nothing for an agent to read. That is on
+purpose. Day one publishes nothing until a human approves, so the record never
+claims authority nobody granted.
+
+To publish, approve — or delete. Approving a document means `status: stable`
+with a `ksor.approval: { by, at }` naming an actor `.ksor/governance.yaml`
+authorises, and `ksor init` writes `human:you` there as a placeholder for your
+real handle. Ask your coding agent to run the intake interview: it replaces the
+placeholder, and it can approve the starters you are keeping in the same
+conversation. Delete the rest as your own knowledge arrives. Until something in
+`knowledge/` is approved, `ksor build` prints `0 admitted to a machine surface`
+and means it.
+
 ### Presenting a document
 
 Ask your coding agent for slides and it writes them, from the document, into
@@ -270,8 +286,11 @@ build. Merge the ledger entry, rebuild, redeploy.
 - **GitHub Pages, nginx, S3, anything static** — run `pnpm build` and
   upload `system/site/out/`. Hosted under a sub-path (like
   `user.github.io/repo`)? Build with `KSOR_BASE_PATH=/repo pnpm build`.
-- **Verify any deploy** the same way: the home page, one document page,
-  and `/llms.txt` all load; nothing else is required.
+- **Verify any deploy** the same way: the home page and `/llms.txt` load,
+  and each names the documents this record has approved. On a record whose
+  documents are all still drafts both come up empty, which is the correct
+  answer, not a broken deploy — approve a document and rebuild to see it
+  change.
 
 ### The agent surface deploys separately
 

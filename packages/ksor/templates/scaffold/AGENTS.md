@@ -429,6 +429,20 @@ including `public` — builds for a wider viewer, and that build belongs
 behind that audience's own access control, never on a public host.
 Details in README → Deploying.
 
+**A build publishes nothing until a human approves.** The five starter
+documents ship `status: draft`, and §2.5 admits a draft to NO surface of a
+build — not the page, not the sidebar, not the search index, not `llms.txt`.
+So the first `pnpm build` of a fresh record emits a site with zero document
+pages and an empty `## Documents` section, reports `0 admitted to a machine
+surface`, and is working correctly. `pnpm dev` shows the drafts, which is what
+the preview is for. Never approve on the owner's behalf to make a build look
+fuller: approving is `status: stable` plus a `ksor.approval: { by, at }` naming
+an actor `.ksor/governance.yaml` authorises, and it is the owner's act. Ask
+them, then write down what they said (`.agents/skills/intake-interview/`).
+`KSOR_DRAFTS=show pnpm build` publishes drafts to the HUMAN surface only, marks
+the build `noindex` and records itself in `build.lock.json` — a review link,
+never a way to ship.
+
 ### The MCP door is a container
 
 The other surface is a live process, so it ships as one. `Dockerfile` and
@@ -530,10 +544,11 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   it is the bytes an agent is served, and editing them to match a page setting
   would make it lie. Remove the panel if you need the front page silent too. The supersession notice is the one thing it does not hide: a reader
   handed a replaced document with no word of its successor has been misled.
-- **`status` is shown only when it is a caveat.** `draft` and `deprecated`
-  appear as a small label; `stable` shows nothing, because a reader already
-  assumes a document in the record is current — so the label stays rare
-  enough to be noticed on the pages where it matters.
+- **`status` is shown only when it is a caveat.** `deprecated` appears as a
+  small label; `stable` shows nothing, because a reader already assumes a
+  document in the record is current — so the label stays rare enough to be
+  noticed on the pages where it matters. `draft` carries the same label, but
+  only under `pnpm dev`: a BUILT site has no draft page to label it on.
 - `ksor.audience` lists who may read a document; a viewer holds a list that
   always includes `public`, and the document is visible when the two overlap.
   Every identifier but `public` must be registered in
