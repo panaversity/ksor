@@ -211,8 +211,10 @@ act). And `takedown_authorities` in `.ksor/governance.yaml` must name it
 ledger at `pnpm check`, `ksor build` and ingest, so a line appended by hand in a
 pull request is refused exactly as the verb would refuse it.
 
-Lifting a takedown is `--revoke <entry-id>` — the id of the LEDGER ENTRY, which
-`ksor takedown --ledger` lists, not the stable id. The ledger is append-only: a
+Lifting a takedown is `--revoke <entry-id>` — the id of the LEDGER ENTRY, not
+the stable id. The denial that created it prints the id, `ksor takedown
+--ledger` lists it, and it is written in `.ksor/takedowns.yaml`; none of the
+three needs a database, because the ledger is a file in the repository. The ledger is append-only: a
 revocation is a new entry, never a deleted line, and a build whose ledger shrank
 against its own git history is refused.
 

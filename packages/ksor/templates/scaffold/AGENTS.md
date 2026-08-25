@@ -388,9 +388,11 @@ pnpm exec ksor takedown --instance instance.md --actor human:you --revoke <entry
 The stable id is what a search result reports as `provenance.stable_id`, and it
 is `knowledge/<path-without-.md>` — always, since path is identity.
 `--scope subtree` withdraws a section and everything beneath it, including
-documents added later. `--revoke` takes the id of a LEDGER ENTRY, which
-`--ledger` lists, not a stable id: the ledger is append-only, so a lift is a new
-entry rather than a deleted line. `--removed <entry-id>` records that a denied
+documents added later. `--revoke` takes the id of a LEDGER ENTRY, not a stable
+id: the ledger is append-only, so a lift is a new entry rather than a deleted
+line. The id is printed by the denial that created it, listed by `--ledger`,
+and written in `.ksor/takedowns.yaml` — three ways to the same string, none of
+which needs a database. `--removed <entry-id>` records that a denied
 document was deleted, and `--apply` writes the rows for entries that reached
 the database late.
 
@@ -403,8 +405,11 @@ actor (`human:<handle>` or `process:<id>` — a bare name is refused) and
 `takedown_authorities` in `.ksor/governance.yaml` must name it. The same check
 runs over every entry in the ledger at `pnpm check`, `ksor build` and ingest, so
 a line appended by hand in a pull request is refused exactly as the verb would
-refuse it. Read-only modes
-(`--list`, `--ledger`) need nothing.
+refuse it. The read-only modes
+(`--list`, `--ledger`) need no actor — nobody is performing an act by looking.
+They do not need a database either: on a record that declares none they read
+the committed `.ksor/takedowns.yaml`, which is the whole record of the act
+anyway.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
 build** — the site reads the committed ledger (`.ksor/takedowns.yaml`), not
@@ -775,8 +780,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 - `.agents/skills/add-sources/` — turn source material (documents, pages,
   notes) into governed knowledge.
 - `.agents/skills/make-slides/` — generate a presentation from one document
-- `.agents/skills/make-summary/` — write a document's summary and attach it
   and attach it, so it renders on that document's page.
+- `.agents/skills/make-summary/` — write a document's summary and attach it,
+  so it renders as a second tab on that document's page.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.
 

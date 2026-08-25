@@ -2,7 +2,7 @@
 name: format-checker
 description: The record's format rules as a runnable check — frontmatter, filenames, links, structure. Use before handing off any change to knowledge/, when a check fails and you need to fix it, or when unsure whether a document is well-formed. Run with `pnpm check` (or node .agents/skills/format-checker/check.mjs).
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
 ---
 
 # Format checker
@@ -10,8 +10,14 @@ metadata:
 `pnpm check` runs `check.mjs` — a self-contained Node program that needs no
 install. It is **generated** by ksor from the same rule set `ksor build` and
 `ksor ingest` run, so the three can never disagree about what a well-formed
-record is; do not edit it (a ksor upgrade replaces it). It is read-only: it
-reports, and never rewrites a file.
+record is. Do not edit it: `ksor init` writes it and `ksor migrate` rewrites
+both copies of it when you upgrade the tool, so an edit is overwritten rather
+than kept. It is read-only in the other direction too — it reports, and never
+rewrites a file.
+
+If its refusals contradict this document, the checker is older than the record:
+upgrade `@panaversity/ksor` and re-run `ksor migrate`, and never "fix" the
+record by undoing what the migration wrote.
 
 What it holds the record to (the full contract is ksor's record spec):
 

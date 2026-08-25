@@ -173,3 +173,125 @@ describe("the README's list of what `ksor init` emits matches the template", () 
     }
   });
 });
+
+/**
+ * The `## Skills` list is the index a coding agent reads to find out what it
+ * can be asked to do, and it had lost a sentence: a later commit inserted the
+ * `make-summary` bullet BETWEEN the two lines of the `make-slides` bullet, so
+ * one item ended mid-sentence on the word "document" and the other rendered as
+ * "…attach it and attach it, so it renders on that document's page."
+ *
+ * Structure catches this where prose review did not: every list item is one
+ * sentence, so every item ends in a full stop, and no directory ships without
+ * a line naming it.
+ */
+describe("the scaffold's Skills list is whole", () => {
+  const section = (): string => {
+    const text = read(`${SCAFFOLD}/AGENTS.md`);
+    const m = /\n## Skills\n([\s\S]*?)\n## /.exec(text);
+    if (m === null) throw new Error(`${SCAFFOLD}/AGENTS.md: no "## Skills" section`);
+    return m[1] as string;
+  };
+
+  /** One entry per bullet, its lazy continuation lines folded in. */
+  const items = (): string[] =>
+    section()
+      .split(/\n(?=- )/)
+      .map(flat)
+      .map((s) => s.trim())
+      .filter((s) => s.startsWith("- "));
+
+  it("names every skill the scaffold ships", () => {
+    const shipped = readdirSync(path.join(repoRoot, SCAFFOLD, ".agents", "skills")).sort();
+    const missing = shipped.filter((s) => !items().some((i) => i.includes(`skills/${s}/`)));
+    expect(
+      missing,
+      `${SCAFFOLD}/AGENTS.md "## Skills" does not name: ${missing.join(", ")}`,
+    ).toEqual([]);
+  });
+
+  it("every bullet is a finished sentence", () => {
+    const unfinished = items().filter((i) => !i.endsWith("."));
+    expect(
+      unfinished,
+      `${SCAFFOLD}/AGENTS.md "## Skills": a bullet ends mid-sentence — ${unfinished.join(" | ")}`,
+    ).toEqual([]);
+  });
+
+  it("no bullet repeats itself", () => {
+    for (const item of items()) {
+      const words = item.split(" ");
+      const repeats = words
+        .map((_, i) => words.slice(i, i + 3).join(" "))
+        .filter(
+          (tri, i) =>
+            tri.split(" ").length === 3 &&
+            words
+              .slice(i + 3)
+              .join(" ")
+              .startsWith(tri),
+        );
+      expect(repeats, `${SCAFFOLD}/AGENTS.md "## Skills": duplicated phrase in — ${item}`).toEqual(
+        [],
+      );
+    }
+  });
+});
+
+/**
+ * `env.example` is the ONE emitted file that is copied byte-for-byte rather
+ * than prose-translated: `materialize.ts`'s `isTextFile` keys on an extension
+ * list plus two hardcoded basenames, and `.example` is in neither. So an npm
+ * or bun adopter was told to set three variables "before `pnpm build`" in a
+ * project that ships no pnpm files and whose own build script is `npm run` or
+ * `bun run`. The conformance guard that forbids a foreign manager's token
+ * scans by the same extension list, so it never read this file either.
+ *
+ * The fix is to name no manager at all in a file no manager's emit can rewrite.
+ */
+describe("the verbatim-copied scaffold files name no package manager", () => {
+  it.each(["env.example"])("%s", (file) => {
+    const offenders = flat(read(`${SCAFFOLD}/${file}`))
+      .split(" ")
+      .filter((w) => /^`?(pnpm|bun|npx)$/.test(w) || w === "npm");
+    expect(
+      offenders,
+      `${SCAFFOLD}/${file} is copied byte-for-byte into the npm and bun scaffolds — ` +
+        `naming a manager there is wrong for two of the three. Say "the site build", ` +
+        `not "\`pnpm build\`". Found: ${offenders.join(", ")}`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * `--revoke` takes a LEDGER ENTRY id, and the docs pointed at `ksor takedown
+ * --ledger` as the way to obtain one — which on a record with no `database:`
+ * (the rung `ksor init` emits) refused with exit 1, leaving no tool path to the
+ * id at all. The read-only modes are being taught to read the committed ledger,
+ * but the durable fact is the one asserted here: the denial that WRITES an
+ * entry prints its id, so the id is reachable from the act itself and no
+ * document should present `--ledger` as the only route to it.
+ */
+describe("the way to a takedown entry id does not depend on a database", () => {
+  it("the denial echoes the id it just wrote", () => {
+    const src = read("packages/content/src/commands.ts");
+    expect(
+      /recorded as[^\n]*\.ksor\/takedowns\.yaml/.test(flat(src)),
+      "packages/content/src/commands.ts no longer echoes the ledger entry id when it " +
+        "writes one — the scaffold AGENTS.md and packages/ksor/docs/ingesting.md both " +
+        "tell the adopter it does, and it is the only route to the id that never needs " +
+        "a database.",
+    ).toBe(true);
+  });
+
+  it.each([
+    [`${SCAFFOLD}/AGENTS.md`, "the agent operating the record"],
+    ["packages/ksor/docs/ingesting.md", "the operator following the ingest runbook"],
+  ])("%s does not present --ledger as the only route", (file, who) => {
+    expect(
+      /which\s+`?--ledger`? lists|which\s+`ksor takedown --ledger` lists/.test(flat(read(file))),
+      `${file} (${who}): says the entry id is "which --ledger lists", full stop. Name the ` +
+        `denial's own echo and the committed ledger too, so a record with no database has a route.`,
+    ).toBe(false);
+  });
+});
