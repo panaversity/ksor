@@ -172,18 +172,31 @@ export function refusalBody(error: unknown): RefusalBody {
   // The class name is safe and useful — it distinguishes "your request was
   // fine, our store is not" from a refusal the caller could act on — and it is
   // the same reduction `ContentStoreError` already applies on the serving path.
-  const kind = error instanceof Error ? error.name : "Error";
   return {
     jsonrpc: "2.0",
     error: {
       code: -32001,
       message:
-        `this record cannot be served: the content store is unavailable (${kind}). ` +
+        `this record cannot be served: the content store is unavailable${classSuffix(error)}. ` +
         "The reason is in this server's logs; it is withheld here because a driver " +
         "error names the database host and user.",
     },
     id: null,
   };
+}
+
+/**
+ * The failure's class, in brackets — or nothing, when the class says nothing.
+ *
+ * `pg` reports most connection failures as a bare `Error`, so every line built
+ * this way ended in "(Error)": a parenthetical that reads as a truncated
+ * diagnostic and identifies nothing. Shared by the boot deferral and the
+ * refusal body so the two cannot disagree about when it is worth printing
+ * (resilience walk, 2026-08-25).
+ */
+export function classSuffix(error: unknown): string {
+  const name = error instanceof Error ? error.name : "";
+  return name === "" || name === "Error" ? "" : ` (${name})`;
 }
 
 /**

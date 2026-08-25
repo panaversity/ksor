@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { inForce, parseLedger } from "../record/ledger.js";
-import { foldLedger, unmergedLines } from "./ledger-apply.js";
+import { foldLedger, unmergedForGeneration, unmergedLines } from "./ledger-apply.js";
 
 const ENTRY = (id: string, rest: string): string =>
   `- id: ${id}\n  by: human:ciso\n  at: 2026-08-25T10:00:00Z\n${rest}`;
@@ -103,5 +103,43 @@ describe("unmergedLines", () => {
     expect(line?.split("\n")[0]).toMatch(/^ksor-takedown-unmerged: knowledge\/x .*`d9`/);
     expect(line).toMatch(/merge the change/);
     expect(line).toMatch(/--revoke d9/);
+  });
+});
+
+/**
+ * ONE string served TWO different checks, and it was only true for one of them
+ * (found on a live two-door walk, 2026-08-25).
+ *
+ * `applyLedger` compares the row's `ledger_id` against the FILE, so "the ledger
+ * does not contain it" is exactly right there. The boot gate compares against
+ * `ingestion_runs.ledger_ids` — a SNAPSHOT of the file taken when the serving
+ * generation was ingested — so for an operator who took a document down AFTER
+ * ingesting, the shared message told them their own committed ledger did not
+ * contain an entry that was sitting in it. Its `fix:` then sent them to merge a
+ * branch, when the remedy is `ksor ingest`.
+ *
+ * A governance surface may not tell an operator something untrue about their
+ * own record. Each check now says what IT compared.
+ */
+describe("the unmerged report says what it actually compared", () => {
+  const row = [{ stableId: "knowledge/comp/nightjar", ledgerId: "2026-08-25T10:00:00Z-a6c248" }];
+
+  it("the FILE check names the file, and offers merge-or-revoke", () => {
+    const [line] = unmergedLines(row);
+    expect(line).toContain("ksor-takedown-unmerged");
+    expect(line).toContain(".ksor/takedowns.yaml does not contain");
+    expect(line).toContain("--revoke");
+  });
+
+  it("the GENERATION check never claims the file lacks the entry — and sends them to ingest", () => {
+    const [line] = unmergedForGeneration(row, 7);
+    expect(line).toContain("ksor-takedown-unmerged");
+    expect(
+      line,
+      "the entry may be sitting in the committed ledger; only the SERVED generation predates it",
+    ).not.toContain("does not contain");
+    expect(line, "the generation it is actually about").toContain("generation 7");
+    expect(line, "the remedy that works").toMatch(/ksor ingest/);
+    expect(line, "merging a branch is the OTHER check's remedy").not.toContain("merge the change");
   });
 });

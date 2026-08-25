@@ -63,7 +63,16 @@ const READ_RETRY_BACKOFF_S = (): number => envFloat("KSOR_READ_RETRY_BACKOFF_S",
  */
 export class ContentStoreError extends Error {
   constructor(className: string) {
-    super(`content store temporarily unavailable (${className})`);
+    // `pg` reports most connection failures as a bare `Error`, so this rendered
+    // "content store temporarily unavailable (Error)" — a parenthetical that
+    // looks like a truncated diagnostic and identifies nothing. The pool's own
+    // "idle client error (error 57P01)" earns its brackets; this did not
+    // (resilience walk, 2026-08-25).
+    super(
+      className === "" || className === "Error"
+        ? "content store temporarily unavailable"
+        : `content store temporarily unavailable (${className})`,
+    );
     this.name = "ContentStoreError";
   }
 }

@@ -375,8 +375,24 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         );
       }
     }
+    // Whether the store answers RIGHT NOW, through the same coalesced probe
+    // /ready uses — never a second one. /health is unauthenticated under
+    // KSOR_AUTH=disabled-public, so a probe of its own would be the
+    // pool-exhaustion amplifier /ready's coalescing exists to prevent; sharing
+    // it also means the two endpoints cannot disagree about the same instant.
+    //
+    // Walked live: with the store unreachable and every request being refused,
+    // this body came back 200 with every field green, because `boot_checks:
+    // "passed"` is a fact about the PAST and nothing here spoke about the
+    // present. /ready knew and said so; /health is the one a person curls
+    // (resilience walk, 2026-08-25).
+    //
+    // The cost is honest: during an outage this inherits /ready's latency —
+    // the read-retry ladder, ~10s — because it is asking the same question.
+    const verdict = await readiness();
     return c.json({
       corpus_id: instance.corpusId,
+      store: verdict.ok ? "reachable" : notReadyReason(verdict.error),
       // A deferred instance refuses 100% of requests and this body otherwise
       // read entirely normal — corpus, gate, auth, all fine. /ready knows, but
       // /ready answers a load balancer; /health is what a person curls when

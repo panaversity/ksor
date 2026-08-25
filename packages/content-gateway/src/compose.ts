@@ -39,7 +39,7 @@ import {
 } from "@panaversity/ksor-content";
 
 import { bootHeader, bootLine } from "./boot-report.js";
-import { isRefusal } from "./refusal-body.js";
+import { classSuffix, isRefusal } from "./refusal-body.js";
 
 import { loadGateway } from "./gateway-load.js";
 import { verifyGatewaySurface } from "./gateway-verify.js";
@@ -268,7 +268,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // retry can change.
     if (isRefusal(error)) throw error;
     console.error(
-      `boot checks DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
+      `boot checks DEFERRED: content store unreachable${classSuffix(error)} — ` +
         "this instance reports NOT READY until schema AND governance both verify",
     );
     // …and the WHOLE error, to the logs.

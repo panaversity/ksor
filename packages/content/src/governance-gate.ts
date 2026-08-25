@@ -29,7 +29,7 @@
 
 import { compareSchemaVersion } from "./migrate.js";
 import { runRead } from "./db.js";
-import { unmergedLines } from "./ingest/ledger-apply.js";
+import { unmergedForGeneration } from "./ingest/ledger-apply.js";
 import type { ContentInstance } from "./instance.js";
 import type pg from "pg";
 
@@ -235,5 +235,7 @@ export async function assertGovernanceServable(
     );
   }
 
-  for (const line of unmergedLines(state.unmerged)) (options.report ?? console.error)(line);
+  for (const line of unmergedForGeneration(state.unmerged, state.generation)) {
+    (options.report ?? console.error)(line);
+  }
 }

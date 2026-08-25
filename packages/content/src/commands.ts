@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import pg from "pg";
@@ -114,6 +114,9 @@ Usage:
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
 
+--instance PATH is an instance.md, or a directory at or below the record
+root: --instance . works from anywhere inside it.
+
 Exit codes: 0 ok · 1 refused · 3 environment
 `;
 
@@ -146,11 +149,37 @@ function fail(code: number, message: string): number {
   return code;
 }
 
+/**
+ * `--instance` accepts what `ksor build` accepts: an instance.md, or a
+ * DIRECTORY at or below the record root.
+ *
+ * The write-plane verbs used to hand the argument straight to a file read, so
+ * `--instance .` — the obvious thing to type, and what `build --help` documents
+ * for the same flag name — died with a raw `EISDIR: illegal operation on a
+ * directory, read`: no rule, no reason, no fix (found on a live walk,
+ * 2026-08-25). One flag now means one thing across the CLI.
+ *
+ * A path that is not a directory, or a directory with no instance.md above it,
+ * is returned UNCHANGED on purpose: inventing a refusal here would compete with
+ * the reader's own message about the same problem, and one clear error beats
+ * two.
+ */
+export function instancePathOf(path: string): string {
+  try {
+    if (!statSync(path).isDirectory()) return path;
+  } catch {
+    return path; // does not exist — let the reader say so
+  }
+  const root = resolveInstanceDir(path);
+  return root === null ? path : join(root, "instance.md");
+}
+
 /** Resolve the instance, or explain exactly which file refused and why. */
-function loadInstance(path: string | undefined): ContentInstance | number {
-  if (path === undefined) {
+function loadInstance(rawPath: string | undefined): ContentInstance | number {
+  if (rawPath === undefined) {
     return fail(REFUSED, "--instance PATH is required (the instance.md that names this corpus)");
   }
+  const path = instancePathOf(rawPath);
   try {
     return parseInstance(path);
   } catch (exc) {
@@ -499,7 +528,10 @@ async function ingestCommand(args: string[]): Promise<number> {
   // being absent from `--help` is a trap. Passing it now refuses as any
   // unknown flag does, and `ksor migrate` strips it from the scripts the old
   // scaffold shipped.
-  const recordRoot = dirname(resolve(values.instance!));
+  // Through the SAME resolver `loadInstance` used, or `--instance .` would
+  // resolve the instance correctly and then take the record root from
+  // `dirname(".")` — the record's PARENT, which reads as an empty record.
+  const recordRoot = dirname(resolve(instancePathOf(values.instance!)));
   const knowledgeDir = join(recordRoot, "knowledge");
   // Resolved once and REPORTED: this is the last link in the provenance chain
   // (answer -> passage -> document -> generation -> commit -> reviewed source).

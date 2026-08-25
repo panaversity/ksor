@@ -65,6 +65,25 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     expect(health, "the state must be ON the body").toContain("boot_checks");
   });
 
+  it("/health reports the store NOW, not only whether boot once passed", () => {
+    // `boot_checks: "passed"` is a fact about the PAST. Walked live: with the
+    // store totally unreachable and 100% of requests refused, /health answered
+    // 200 with every field green, while /ready correctly said
+    // {"ready":false,"reason":"content store unreachable"}. /health is the one a
+    // person curls when they want to know what is wrong, and in a post-boot
+    // outage it read healthy (resilience walk, 2026-08-25).
+    const health = HTTP.slice(
+      HTTP.indexOf('app.get("/health"'),
+      HTTP.indexOf('app.get("/.well-known'),
+    );
+    expect(health, "a reachability field must be on the body").toContain("store:");
+    // …through the SAME coalesced probe /ready uses, never a second one: a
+    // second probe on an endpoint that is unauthenticated under
+    // KSOR_AUTH=disabled-public is the pool-exhaustion amplifier /ready's
+    // coalescing was written to prevent.
+    expect(health, "share the probe, do not add one").toContain("await readiness()");
+  });
+
   it("the 413 names the knob that raises it", () => {
     // "request body too large" and nothing else: not the limit, not the
     // variable (review finding 6). Errors are documentation.

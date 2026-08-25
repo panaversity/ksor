@@ -134,15 +134,51 @@ export function unledgeredRefusal(stableIds: readonly string[]): IngestRefusal {
   };
 }
 
-/** The `ksor-takedown-unmerged` report: named id, two fixes, one line each. */
-export function unmergedLines(
-  unmerged: readonly { readonly stableId: string; readonly ledgerId: string }[],
-): string[] {
+export type UnmergedRow = { readonly stableId: string; readonly ledgerId: string };
+
+/**
+ * The `ksor-takedown-unmerged` report as the INGEST path sees it: the row names
+ * an entry the ledger FILE does not contain.
+ *
+ * There are two of these, deliberately, and they used to be one. The two checks
+ * compare against different things — this one against the file just parsed, the
+ * boot gate against a snapshot of the file taken when the serving generation
+ * was ingested — so a single sentence could only ever be true for one of them.
+ * It was true here and false there (see {@link unmergedForGeneration}).
+ */
+export function unmergedLines(unmerged: readonly UnmergedRow[]): string[] {
   return unmerged.map(
     (u) =>
       `ksor-takedown-unmerged: ${u.stableId} is denied by ledger entry \`${u.ledgerId}\`, which .ksor/takedowns.yaml does not contain\n` +
       "  why: `ksor takedown` wrote the row and the entry together; the entry lives on a branch that was never merged, so the door refuses what the site does not\n" +
       `  fix: merge the change that added \`${u.ledgerId}\`, or revoke it: ksor takedown --actor <actor> --revoke ${u.ledgerId}`,
+  );
+}
+
+/**
+ * The same slug as the SERVING door sees it: the entry is not in the set this
+ * generation was ingested with. It may be sitting in the committed ledger —
+ * usually IS, because the ordinary way to reach this state is to take a
+ * document down after ingesting.
+ *
+ * The door used to print the file-check sentence here, telling an operator that
+ * their own `.ksor/takedowns.yaml` did not contain an entry that was in it, and
+ * sending them to merge a branch that was already merged (found on a live walk,
+ * 2026-08-25). The denial applied correctly throughout and this is a report
+ * rather than a refusal — but a governance surface may not say something untrue
+ * about the record it is serving, and a `fix:` that does nothing is worse than
+ * none. It says what it compared, and names the act that reconciles it.
+ */
+export function unmergedForGeneration(
+  unmerged: readonly UnmergedRow[],
+  generation: number,
+): string[] {
+  return unmerged.map(
+    (u) =>
+      `ksor-takedown-unmerged: ${u.stableId} is denied by ledger entry \`${u.ledgerId}\`, which is not in the set generation ${generation} was ingested with\n` +
+      `  why: the served generation was built before this entry existed, so the door is enforcing a denial the published generation has no record of. Ordinary after a takedown taken AFTER the last ingest — the denial IS in force, and the ledger file most likely does contain the entry\n` +
+      "  fix: publish a generation that knows about it: ksor build && ksor ingest --instance instance.md --flip\n" +
+      `       (if the entry is NOT in .ksor/takedowns.yaml, it was written on an unmerged branch — merge that change, or revoke it: ksor takedown --actor <actor> --revoke ${u.ledgerId})`,
   );
 }
 
