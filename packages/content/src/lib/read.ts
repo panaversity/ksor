@@ -22,7 +22,7 @@ import {
   governanceFromRow,
   type NodeGovernance,
 } from "./search.js";
-import { DENIED_CTE, DENY } from "./takedown.js";
+import { DENIED_CTE, deniedCte, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
 const GEN = `
@@ -69,7 +69,9 @@ live AS (
  * life. Outline judges on the generation it walks, which is the generation its
  * rows describe.
  */
-const ADMITTED_LIVE_CTE = admittedCte("admitted_live", "live");
+const DENIED_LIVE_CTE = deniedCte("denied_live", "live");
+const ADMITTED_LIVE_CTE = `${DENIED_LIVE_CTE},
+${admittedCte("admitted_live", "live", "denied_live")}`;
 const ADMITTED_LIVE = admitted("now", "admitted_live");
 
 /**

@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scopedTxn } from "@panaversity/ksor-postgres";
 import { contentPool } from "../db.js";
 import { admitted, ADMITTED_CTE } from "./admit.js";
+import { DENIED_CTE } from "./takedown.js";
 import { audienceAllowed, audienceGucs, WHOLE_RECORD_SCOPE } from "./audience.js";
 import { AUDIENCE_CASES, type AudienceCase } from "./audience-conformance.js";
 import { REFUSAL_SLUGS } from "../record/refusal.js";
@@ -67,9 +68,10 @@ describe.runIf(adminDsn !== "")("the audience decision table, in SQL (db)", () =
 
   const sectionSql = `
 WITH RECURSIVE g AS (SELECT active_generation AS gen FROM corpora WHERE tenant_id = $1 AND corpus_id = 'c'),
+${DENIED_CTE},
 ${ADMITTED_CTE}
 SELECT ${admitted("n")} AS visible FROM content_nodes n JOIN g ON n.generation = g.gen
-WHERE n.tenant_id = $1 AND n.stable_id = $2`;
+WHERE n.tenant_id = $1 AND n.stable_id = $3`;
 
   /** One section + its descendants, unique per row so the rows cannot interact. */
   let built = 0;
@@ -95,7 +97,9 @@ WHERE n.tenant_id = $1 AND n.stable_id = $2`;
     scopedTxn(pool, { "app.tenant_id": TENANT, ...audienceGucs(c.viewer) }, async (client) => {
       if (c.section !== undefined) {
         const id = await buildSection(c.section.descendants);
-        const r = await client.query(sectionSql, [TENANT, id]);
+        // $2 is corpus_id — the deny seam binds it, and the admission set now
+        // binds the deny seam.
+        const r = await client.query(sectionSql, [TENANT, "c", id]);
         // An empty section has no row of its own to be absent from; the query
         // returns the section row, and `visible` is the admission verdict.
         return r.rows[0]?.visible === true;
