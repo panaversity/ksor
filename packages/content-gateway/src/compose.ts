@@ -26,6 +26,7 @@ import {
   checkEmbeddingSpace,
   contentPool,
   contentPoolMin,
+  parseTrustFloor,
   parseViewer,
   servingPolicy,
   validateViewer,
@@ -240,6 +241,13 @@ export async function compose(instancePath: string, version: string): Promise<Co
   const viewer = validateViewer(policy?.registry ?? [], parseViewer(process.env["KSOR_AUDIENCE"]));
   console.error(bootLine("audience", viewer.join(",")));
 
+  // The deployment's own trust floor — the half of "configuration tightens" a
+  // caller cannot reach. Validated HERE, at boot, for the same reason the
+  // viewer list is: a misspelled tier that fell back to `unverified` would
+  // serve the record the operator meant to restrict and look healthy doing it.
+  const minTrustTier = parseTrustFloor(process.env["KSOR_MIN_TRUST_TIER"]);
+  console.error(bootLine("trust", minTrustTier));
+
   // Prewarm is OPT-IN (KSOR_CONTENT_POOL_MIN, default 0). `min` alone cannot
   // do this — pg-pool never opens connections eagerly — so the dial is honoured
   // HERE or it is a lie. Default 0 means a quiet server holds no open
@@ -267,6 +275,9 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // out ALL of it, because ingest dropped `visibility:` and the door had
     // nothing to filter on — review 2026-08-20).
     viewer,
+    // A caller may raise this per call (`min_trust_tier`); `tightenTrustFloor`
+    // is what makes sure they can never lower it.
+    minTrustTier,
   };
   // Resolved at boot, before the door opens: a bad gateway file must refuse
   // loudly rather than serve a surface nobody asked for.

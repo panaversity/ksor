@@ -94,3 +94,13 @@ COMMENT ON COLUMN takedown_denylist.ledger_id IS
   'The .ksor/takedowns.yaml entry that wrote this row. NULL = written before the ledger existed; the boot gate refuses it (ksor-takedown-unledgered) until an ingest attaches one by stable_id.';
 COMMENT ON COLUMN takedown_denylist.revoked_at IS
   'Set by a revocation entry; the DENIED seam denies only rows where this is NULL. A re-denial clears it — the ledger holds the history, the row holds the state.';
+
+-- The author's own frontmatter bytes, so `read` can return them intact rather
+-- than re-serialising the parsed columns into a document the record does not
+-- contain. Additive and nullable: a carried row simply has none, and such a
+-- generation is refused at boot anyway (GOVERNANCE_SINCE).
+ALTER TABLE sources
+    ADD COLUMN IF NOT EXISTS frontmatter TEXT;
+
+COMMENT ON COLUMN sources.frontmatter IS
+  'The file''s frontmatter block, byte-exact as authored (comments and unknown keys included). Served verbatim by `read`; never re-serialised.';

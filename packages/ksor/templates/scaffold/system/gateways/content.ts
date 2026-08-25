@@ -32,6 +32,7 @@ import {
   readHandler,
   SEARCH_OUTPUT,
   searchHandler,
+  TRUST_TIERS,
   z,
   type ServiceContext,
 } from "@panaversity/ksor/gateway";
@@ -75,6 +76,18 @@ export default function buildGateway(ctx: ServiceContext, version: string): McpS
           .max(MAX_SEARCH_K)
           .default(10)
           .describe(`Maximum passages to return (1–${MAX_SEARCH_K})`),
+        // The caller's trust floor. Keep it: dropping the parameter does not
+        // weaken the record — the handler still applies `unverified` and this
+        // deployment's own floor — but it takes away the only way a caller can
+        // ask to be answered ONLY from what a human reviewed, and the door says
+        // so at boot instead of failing quietly.
+        min_trust_tier: z
+          .enum(TRUST_TIERS)
+          .optional()
+          .describe(
+            "Lowest trust tier to answer from (default unverified). This deployment's own " +
+              "floor still applies: it can only be raised here, never lowered.",
+          ),
       }),
       outputSchema: SEARCH_OUTPUT,
       annotations: READ_ONLY,

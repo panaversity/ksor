@@ -214,8 +214,8 @@ export async function buildStructure(
     const title = f.title !== null && f.title !== "" ? f.title : titles.get(f.node)!;
     await client.query(
       "INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path," +
-        " content_hash, embedding_model, chunk_policy, source_commit)" +
-        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        " content_hash, embedding_model, chunk_policy, source_commit, frontmatter)" +
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
       [
         tenantId,
         generation,
@@ -227,6 +227,9 @@ export async function buildStructure(
         modelId,
         CHUNK_POLICY,
         manifest.source_commit,
+        // The author's own bytes, from the SAME split the body came from —
+        // never re-read and never re-serialised (`read` serves this verbatim).
+        split.ok && split.frontmatter !== null ? split.block : null,
       ],
     );
     nSources += 1;

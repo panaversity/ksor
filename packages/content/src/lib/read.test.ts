@@ -39,6 +39,14 @@ function node(path: string): DocumentNode {
     path,
     generation: 1,
     permalink: null,
+    // Resolution is about paths; the governance columns ride along on the same
+    // row and no resolution decision reads them.
+    docStatus: "stable",
+    trustTier: 0,
+    verified: null,
+    approval: null,
+    effectiveFrom: null,
+    staleAfter: null,
   };
 }
 
@@ -181,7 +189,26 @@ function fakeClient(
   return client as unknown as pg.PoolClient;
 }
 
-const NODE_FIELDS = ["node_id", "slug", "title", "stable_id", "path", "generation", "permalink"];
+// The six governance columns ride on the same projection, from the LIVE row —
+// `read` carries them out beside the passage, so the node lookups fetch them.
+const GOVERNANCE_FIELDS = [
+  "doc_status",
+  "trust_tier",
+  "verified",
+  "approval",
+  "effective_from",
+  "stale_after",
+];
+const NODE_FIELDS = [
+  "node_id",
+  "slug",
+  "title",
+  "stable_id",
+  "path",
+  "generation",
+  "permalink",
+  ...GOVERNANCE_FIELDS,
+];
 const OUTLINE_FIELDS = [
   "slug",
   "kind",
@@ -205,6 +232,12 @@ const CANDIDATE = [
   "getting-started/mode-2/phase-3",
   "1",
   "/docs/phase-3",
+  "stable",
+  2,
+  [{ by: "human:kim", at: "2026-08-22T09:00:00Z" }],
+  { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+  null,
+  null,
 ];
 // OUTLINE_SQL rows are NINE wide — the last is w.permalink (the prod scar).
 const ANCHOR = ["phase-3", "section", "Phase 3", "phase-3", 0, 0, "1", false, null];
@@ -368,7 +401,9 @@ describe("projection width contracts (the prod-crash class, made loud)", () => {
       rows: [["a"]],
       fields: [{ name: "node_id" }],
     } as unknown as pg.QueryArrayResult;
-    expect(() => nodeRows(short)).toThrowError(/node projection drift: expected 7/);
+    expect(() => nodeRows(short)).toThrowError(
+      new RegExp(`node projection drift: expected ${NODE_COLUMNS}`),
+    );
     expect(() => outlineRows(short)).toThrowError(/outline projection drift: expected 9/);
   });
 

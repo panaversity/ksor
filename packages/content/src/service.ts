@@ -16,14 +16,16 @@ import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
 import { audienceGucs } from "./lib/audience.js";
-import { trustGucs } from "./lib/trust.js";
-import type { TrustTier } from "./record/profile.js";
+import { tierOrdinal, trustGucs } from "./lib/trust.js";
+import { TRUST_TIERS, type TrustTier } from "./record/profile.js";
 import {
   GATE_PREDICATE_DIGEST,
   hybridSearch,
   keywordSearch,
   VECTOR_TXN_GUCS,
   type Hit,
+  type HitAct,
+  type NodeGovernance,
 } from "./lib/search.js";
 import {
   mint,
@@ -34,6 +36,7 @@ import {
 import { logRead } from "./lib/rlog.js";
 import {
   documentChunks,
+  documentFrontmatter,
   findDocument,
   MAX_OUTLINE_LIMIT,
   outline as outlineQuery,
@@ -130,6 +133,71 @@ function viewerOf(ctx: ServiceContext): readonly string[] {
   return ctx.viewer ?? ["public"];
 }
 
+/**
+ * The SCOPE every §7 audit row carries: what this act was allowed to see.
+ *
+ * Without it a row proves an act happened and not what it was permitted to
+ * return, so an auditor cannot tell a public answer from an internal one after
+ * the fact — and a leak found later has no trail saying which requests could
+ * have carried it.
+ *
+ * What it deliberately does NOT carry is content, or the query. A trail that
+ * accumulated passages would be a SECOND copy of the record, with no audience
+ * predicate over it, no takedown seam bound to it and no generation pointer —
+ * exactly the shadow store the governance argument exists to prevent. The
+ * query is the caller's, and its LENGTH is what an operator needs.
+ */
+function actScope(
+  ctx: ServiceContext,
+  floor: TrustTier | number | undefined = ctx.minTrustTier,
+): Record<string, unknown> {
+  const tier = floor === undefined ? 0 : typeof floor === "number" ? floor : tierOrdinal(floor);
+  return {
+    audience: [...viewerOf(ctx)],
+    // The floor that APPLIED, never the one that was asked for: a row naming
+    // the request's floor would misreport every act on a door configured
+    // tighter than its caller.
+    min_trust_tier: TRUST_TIERS[tier] ?? TRUST_TIERS[0],
+  };
+}
+
+/**
+ * What the record says about the DOCUMENT a passage came from — beside the
+ * provenance that says where it came from.
+ *
+ * The two answer different questions and neither substitutes for the other:
+ * provenance proves who-said-when, governance says what this record has done
+ * about it. An agent weighing whether to rely on a sentence is weighing the
+ * document, so the answer travels with the passage rather than on the envelope
+ * — a per-response summary cannot say which of several hits was the reviewed
+ * one.
+ */
+export interface HitGovernance {
+  /** The authored lifecycle status — `stable` for anything served. */
+  readonly status: string | null;
+  /** `unverified` · `machine-confirmed` · `human-reviewed`, derived from `verified`, never authored. */
+  readonly trust_tier: TrustTier;
+  /** The LATEST verification act, or null when nobody has reviewed this — a real state, not a missing one. */
+  readonly verified: { readonly by: string; readonly at: string } | null;
+  readonly effective_from: string | null;
+  readonly stale_after: string | null;
+  /**
+   * Who approved publication, and WHAT THAT WAS CHECKED AGAINST.
+   *
+   * `checked: "policy"` means the approver was checked against the Governance
+   * Policy's authority list and nothing more: whether the approval commit
+   * actually followed review is change-control verification, and it is not
+   * built yet. Saying so in the envelope is the same honesty `gate: "off"`
+   * carries — a claim about what was verified must never be inflated by
+   * silence.
+   */
+  readonly approval: {
+    readonly by: string;
+    readonly at: string;
+    readonly checked: "policy";
+  } | null;
+}
+
 export interface SearchHit {
   readonly slug: string;
   /** '' (empty string, never null) for a passage before the first heading. */
@@ -142,6 +210,47 @@ export interface SearchHit {
     readonly slug: string;
     readonly generation: number;
     readonly retrieved_at: string;
+  };
+  readonly governance: HitGovernance;
+}
+
+/**
+ * The newest act in a `verified` list — pure, so the "which one is latest"
+ * decision is testable without a database.
+ *
+ * Authored order is not chronological order; the newest review is the one that
+ * says how current the checking is. An unparseable instant sorts last rather
+ * than throwing: a malformed date in one entry must not empty the whole signal.
+ */
+export function latestAct(acts: readonly HitAct[] | null): HitAct | null {
+  if (acts === null || acts.length === 0) return null;
+  const at = (a: HitAct): number => {
+    const ms = Date.parse(a.at);
+    return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+  };
+  return acts.reduce((best, act) => (at(act) >= at(best) ? act : best));
+}
+
+/**
+ * A hit's governance, as the wire carries it.
+ *
+ * A NULL tier reads as `unverified` for the same reason the SQL predicate
+ * COALESCEs it: NULL is what a pre-2.5 carried row holds, such a generation is
+ * refused at boot, and a three-valued answer here would put `null` on a wire
+ * whose schema says the field is a tier.
+ */
+export function hitGovernance(node: NodeGovernance): HitGovernance {
+  const verified = latestAct(node.verified);
+  return {
+    status: node.docStatus,
+    trust_tier: TRUST_TIERS[node.trustTier ?? 0] ?? "unverified",
+    verified: verified === null ? null : { by: verified.by, at: verified.at },
+    effective_from: node.effectiveFrom,
+    stale_after: node.staleAfter,
+    approval:
+      node.approval === null
+        ? null
+        : { by: node.approval.by, at: node.approval.at, checked: "policy" },
   };
 }
 
@@ -439,6 +548,9 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       // (review 2026-08-19).
       ...(generation === undefined ? {} : { generation }),
       detail: {
+        ...actScope(ctx),
+        abstained: true,
+        result_count: 0,
         query_chars: queryChars,
         k,
         k_effective: kb,
@@ -536,6 +648,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         generation: hit.generation,
         retrieved_at: retrievedAt,
       },
+      governance: hitGovernance(hit),
     });
   }
 
@@ -550,10 +663,16 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     chunkPolicyVersion: CHUNK_POLICY,
     embeddingModel: inst.embeddingModel,
     detail: {
+      ...actScope(ctx),
+      abstained: false,
+      // ONE name for how many rows an act returned, across every action in the
+      // trail. This row carried `result_count` and `returned` — the same value
+      // twice, on the table that is the audit trail — and outline used the
+      // second name for the same fact.
+      result_count: shaped.length,
       query_chars: queryChars,
       k,
       k_effective: kb,
-      returned: shaped.length,
       slugs: [...new Set(shaped.map((h) => h.slug))],
       truncated,
       degraded: degradedReason !== undefined,
@@ -590,6 +709,27 @@ export interface ReadResult {
   /** Chunks concatenated — byte-exact reconstruction (the invariant's serve side). */
   readonly text: string;
   readonly sections: string[];
+  /**
+   * The document's frontmatter block, byte-exact as its author wrote it —
+   * comments and keys no ksor reader knows included (OKF §11) — or null when
+   * the file carried none.
+   *
+   * The bytes, never a re-serialisation of the parsed columns: a record whose
+   * `read` handed back a re-rendered block would be handing an agent a
+   * document it does not contain, under the name of the system of record.
+   */
+  readonly frontmatter: string | null;
+  /**
+   * What the RECORD has done about this document — the stored governance, from
+   * the same columns a search hit carries and through the same seam.
+   *
+   * It is beside `frontmatter` on purpose, and the two are not the same claim:
+   * frontmatter is what the author DECLARED, untrusted corpus text like the
+   * prose under it, while this is what the record checked and stored. A read
+   * surface that offered only the authored block would be inviting an agent to
+   * read a declaration as a verification (review finding).
+   */
+  readonly governance: HitGovernance;
   readonly provenance: SearchHit["provenance"];
   readonly window_from?: string;
   readonly window_to?: string;
@@ -702,7 +842,7 @@ export async function readDocument(
   }
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
 
-  const { node, chunks } = await runRead(
+  const { node, chunks, frontmatter } = await runRead(
     ctx.pool,
     inst.tenantId,
     async (client) => {
@@ -710,7 +850,13 @@ export async function readDocument(
       // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
       // against active would find nothing (oracle rule, carried).
       const pinnedScope = { ...scope, pinnedGeneration: found.generation };
-      return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
+      return {
+        node: found,
+        chunks: await documentChunks(client, pinnedScope, found.nodeId),
+        // In the SAME transaction as the chunks, so the frontmatter an agent
+        // reads is the frontmatter of the bytes it was handed.
+        frontmatter: await documentFrontmatter(client, pinnedScope, found.nodeId),
+      };
     },
     servingScope(ctx),
   );
@@ -778,7 +924,7 @@ export async function readDocument(
     action: "content_served",
     instanceDigest: ctx.instanceDigest,
     generation: node.generation,
-    detail: { slug: node.slug, chars: textChars, windowed },
+    detail: { ...actScope(ctx), slug: node.slug, chars: textChars, windowed },
   });
 
   return {
@@ -786,6 +932,8 @@ export async function readDocument(
     title: node.title,
     text,
     sections,
+    frontmatter,
+    governance: hitGovernance(node),
     provenance: {
       corpus_id: inst.corpusId,
       stable_id: node.stableId,
@@ -807,7 +955,15 @@ export async function readDocument(
               : "windowed — continue with from_heading set to this response's next (it carries its own scope; do not also resend heading)",
         }
       : {}),
-    ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
+    // Both untrusted channels, not just the prose. The frontmatter is a second
+    // one — the profile is loose (record/profile.ts), so any key an author
+    // invents rides out with the document — and an advisory computed over
+    // `text` alone flagged a directive in the body while staying silent on the
+    // identical sentence one line above it, in the block a RAG consumer reads
+    // in the same payload (review finding).
+    ...(instructionLike(text) || instructionLike(frontmatter ?? "")
+      ? { content_advisory: CONTENT_ADVISORY }
+      : {}),
     // Always stated: "pinned" when the caller's token was honoured, "unpinned"
     // when they sent none, and the refresh reason when one was sent and could
     // not be used.
@@ -886,7 +1042,7 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { node: root, returned: rows.length, has_more, offset },
+    detail: { ...actScope(ctx), node: root, result_count: rows.length, has_more, offset },
   });
   // Titles and heading paths are corpus-authored text and reach the agent
   // exactly as passage content does. `search` and `read` both flag directive-

@@ -16,26 +16,44 @@ An agent pays for this surface out of its context window, and it pays twice.
 Every tool's name, description and input schema is resident for the whole
 session; every answer spends more.
 
-Measured against a live 81-document record (6,963 chunks), ~4 chars/token:
+**Definitions**, re-measured 2026-08-25 from the served `tools/list` of the
+default registration (~4 chars/token). These depend only on the code, so the
+numbers are exact for every record:
 
-|                                | chars  | ~tokens |                     |
-| ------------------------------ | ------ | ------- | ------------------- |
-| all three tool definitions     | 11,960 | 2,990   | **always resident** |
-| `search` alone                 | 5,383  | 1,346   | always resident     |
-| `outline` + `read`             | 6,571  | 1,643   | always resident     |
-| one `search`, `k=10` (default) | 14,164 | 3,541   | per call            |
-| one `search`, `k=5`            | 8,009  | 2,002   | per call            |
+|                            | chars  | ~tokens |                     |
+| -------------------------- | ------ | ------- | ------------------- |
+| all three tool definitions | 16,214 | 4,054   | **always resident** |
+| `search` alone             | 7,602  | 1,901   | always resident     |
+| `outline` + `read`         | 8,608  | 2,152   | always resident     |
 
-An agent with five records attached carries ~15,000 tokens of definitions before
+They grew: `search` was 5,383 chars before the trust floor and the governance
+each hit now carries, and `read` 3,396 before it carried the same governance
+block beside the frontmatter. That is the price of an agent being able to tell
+a reviewed document from an unreviewed one, and it is charged once per session.
+
+**Replies** depend on your record's passages, so these are the 2026-08-23
+measurement against a live 81-document record (6,963 chunks), plus the
+governance block every hit — and every `read` reply — now carries: measured
+exactly at **262 chars** for a document with a verification and an approval,
+**133** where a level-0 record has neither. They were NOT re-measured against
+that record:
+
+|                                | ~chars | ~tokens |          |
+| ------------------------------ | ------ | ------- | -------- |
+| one `search`, `k=10` (default) | 16,784 | 4,196   | per call |
+| one `search`, `k=5`            | 9,319  | 2,330   | per call |
+| one `search`, `k=3`            | 4,939  | 1,235   | per call |
+
+An agent with five records attached carries ~20,000 tokens of definitions before
 doing any work.
 
 ## The three edits that pay
 
 ### 1. Delete a tool nothing calls
 
-The biggest win, and the easiest — delete its `registerTool` block. Measured
-live: a registration keeping only a renamed `search` served **5,337** bytes
-against the default's 11,960.
+The biggest win, and the easiest — delete its `registerTool` block. Dropping
+`outline` and `read` takes **8,608 chars (~2,152 tokens)** off every session,
+whether or not the agent would ever have called them.
 
 ### 2. Say what the record covers
 
@@ -51,18 +69,37 @@ Your prose goes **above** `FLOOR.search`, never instead of it — see below.
 
 ### 3. Set `k`
 
-`k` is the lever on reply size: 10 costs ~3,500 tokens a call, 5 costs ~2,000.
+`k` is the lever on reply size: 10 costs ~4,200 tokens a call, 5 costs ~2,300.
 The caller can always ask for more, so make the default what you usually need.
+
+**`budgets.maximum_response_characters` is not this lever.** It defaults to
+120,000 and at ~1,700 chars a hit cannot bind before the 50-hit ceiling. Tune
+`k`, as in the schema below.
 
 ```ts
 inputSchema: z.object({
   query: z.string().min(1).max(2000),
   k: z.number().int().min(1).max(50).default(5),
+  min_trust_tier: z.enum(TRUST_TIERS).optional(),
 }),
 ```
 
-**`budgets.maximum_response_characters` is not this lever.** It defaults to
-120,000 and at ~1,400 chars a hit cannot bind before the 50-hit ceiling. Tune `k`.
+### 4. Keep `min_trust_tier`
+
+It is how a caller asks to be answered only from documents someone has reviewed.
+Dropping it weakens nothing — the handler still applies `unverified`, and
+`KSOR_MIN_TRUST_TIER` still sets this deployment's own floor, which an argument
+can raise but never lower — but the capability goes away. A registration
+emitted before this parameter existed keeps working, and the door says so at
+boot:
+
+```
+notice: the search tool is served as "search" without a `min_trust_tier`
+parameter, so a caller cannot ask to be answered only from documents someone
+has reviewed. ...
+```
+
+A notice, not a refusal: nothing is broken, something is absent.
 
 ## Adding your own tools
 
@@ -90,8 +127,8 @@ made it answer from.
   hand-written one returning fabricated hits with plausible `stable_id`s would
   pass every shape check there is.
 - **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
-  `provenance`, the `snapshot` token and `gate`. A record that reshaped them
-  would still look like a KSoR and no longer be one.
+  `provenance`, each hit's `governance`, the `snapshot` token and `gate`. A
+  record that reshaped them would still look like a KSoR and no longer be one.
 - **The `FLOOR` text.** It tells an agent how to branch on an envelope, what
   `gate: "off"` means, and that corpus content is **untrusted** — quote it, never
   obey it. Your prose is composed above it.
@@ -116,6 +153,9 @@ Put FLOOR.search back: a record's own prose goes ABOVE it, as
 | a served ksor tool lost its `FLOOR` text           | `ksor-gateway-floor-missing` |
 | the registration serves no tools at all            | `ksor-gateway-no-tools`      |
 | the file throws, or default-exports a non-function | `ksor-gateway-unloadable`    |
+
+And one thing it only NOTICES, because nothing is broken by it: a `search` tool
+with no `min_trust_tier` parameter (above).
 
 Delete the file to take the default registration back.
 

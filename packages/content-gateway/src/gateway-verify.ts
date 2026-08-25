@@ -39,6 +39,7 @@ interface JsonRpcReply {
 interface ListedTool {
   readonly name: string;
   readonly description?: string | undefined;
+  readonly inputSchema?: { readonly properties?: Record<string, unknown> } | undefined;
   readonly outputSchema?: { readonly properties?: Record<string, unknown> } | undefined;
 }
 
@@ -123,9 +124,7 @@ export async function listServedTools(server: McpServer): Promise<readonly Liste
  */
 export function assertSurfaceGoverned(tools: readonly ListedTool[]): void {
   for (const { kind, marker, floor } of EXPECTED) {
-    const tool = tools.find(
-      (t) => t.outputSchema?.properties !== undefined && marker in t.outputSchema.properties,
-    );
+    const tool = servedAs(tools, marker);
     // A record is allowed to drop a tool entirely; only a tool that IS served
     // has to be intact.
     if (tool === undefined) continue;
@@ -143,8 +142,63 @@ export function assertSurfaceGoverned(tools: readonly ListedTool[]): void {
   }
 }
 
+/**
+ * The tool a shape marker recognises, whatever the record called it.
+ *
+ * Split out because both the refusal and the notice ask the same question, and
+ * two copies of "which one is the search tool" is how a rename starts being
+ * handled correctly in one place and not the other.
+ */
+function servedAs(tools: readonly ListedTool[], marker: string): ListedTool | undefined {
+  return tools.find(
+    (t) => t.outputSchema?.properties !== undefined && marker in t.outputSchema.properties,
+  );
+}
+
+/**
+ * What the door tells an operator about — without refusing.
+ *
+ * The distinction is the point. A missing FLOOR is a broken guarantee and
+ * refuses; a missing `min_trust_tier` is a MISSING CAPABILITY, and every
+ * guarantee still holds without it: the handler supplies `unverified` and the
+ * deployment's own floor is untouched. Refusing would take a working record
+ * off the air for a parameter that did not exist when its registration was
+ * emitted — and the registration is adopter-owned code (decision 23), so
+ * "regenerate it" is not something this package may do on their behalf.
+ *
+ * What IS lost is the only way a caller can ask to be answered from reviewed
+ * material, and an absence nobody is told about is one nobody fixes.
+ */
+export function noticeSurface(tools: readonly ListedTool[], report: (line: string) => void): void {
+  const search = servedAs(tools, "hits");
+  if (search === undefined) return;
+  if (
+    search.inputSchema?.properties !== undefined &&
+    "min_trust_tier" in search.inputSchema.properties
+  ) {
+    return;
+  }
+  report(
+    `notice: the search tool is served as "${search.name}" without a \`min_trust_tier\` ` +
+      "parameter, so a caller cannot ask to be answered only from documents someone has " +
+      "reviewed. Nothing is weakened by this — the handler still applies `unverified` and this " +
+      "deployment's own floor — but the capability is absent. Add it to that tool's inputSchema:\n" +
+      "    min_trust_tier: z.enum(TRUST_TIERS).optional(),\n" +
+      "  (import TRUST_TIERS from the same place as FLOOR; delete system/gateways/content.ts to " +
+      "take the current default registration instead)",
+  );
+}
+
+export interface VerifyOptions {
+  /** Where boot NOTICES go. Defaults to stderr, beside every other boot line. */
+  readonly report?: (line: string) => void;
+}
+
 /** Build, inspect, refuse — the whole boot check, in one call. */
-export async function verifyGatewaySurface(server: McpServer): Promise<readonly ListedTool[]> {
+export async function verifyGatewaySurface(
+  server: McpServer,
+  options: VerifyOptions = {},
+): Promise<readonly ListedTool[]> {
   const tools = await listServedTools(server);
   if (tools.length === 0) {
     throw new GatewayConfigError(
@@ -155,5 +209,6 @@ export async function verifyGatewaySurface(server: McpServer): Promise<readonly 
     );
   }
   assertSurfaceGoverned(tools);
+  noticeSurface(tools, options.report ?? console.error);
   return tools;
 }

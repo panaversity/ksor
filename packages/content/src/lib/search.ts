@@ -87,6 +87,24 @@ export const GATE_PREDICATE_DIGEST: string = createHash("sha256")
   .digest("hex")
   .slice(0, 12);
 
+/**
+ * The governance columns every hit carries out with it (record spec §2).
+ *
+ * Projected in the SAME statement as the passage rather than fetched per hit
+ * afterwards: an agent decides whether to rely on a sentence by deciding about
+ * the DOCUMENT it came from, and a second query would let the two disagree
+ * across a flip. `n` is the node alias both arms' final SELECT uses.
+ */
+export function governanceColumns(alias: string): string {
+  return `${alias}.doc_status, ${alias}.trust_tier, ${alias}.verified, ${alias}.approval,
+           ${alias}.effective_from, ${alias}.stale_after`;
+}
+
+/** How many columns {@link governanceColumns} projects — the read path's width guard needs it. */
+export const GOVERNANCE_COLUMN_COUNT = 6;
+
+const GOVERNANCE_COLUMNS = governanceColumns("n");
+
 const JOINS = `
         FROM chunks c
         JOIN g ON TRUE
@@ -141,6 +159,7 @@ WITH RECURSIVE ${GEN_CTE}, ${DENIED_CTE}, ${ADMITTED_CTE},
         GROUP BY chunk_id)
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
            c.content, f.score, f.gen, n.permalink,
+           ${GOVERNANCE_COLUMNS},
            (SELECT max(sim) FROM vec) AS top_vec_sim
     FROM fused f
     JOIN chunks c ON c.chunk_id = f.chunk_id AND c.tenant_id = $1 AND c.generation = f.gen
@@ -154,7 +173,8 @@ WITH RECURSIVE ${GEN_CTE.replace("$8", "$6")}, ${DENIED_CTE}, ${ADMITTED_CTE}
     SELECT c.chunk_id::text, c.source_id::text, n.stable_id, n.slug, c.heading_path_text,
            c.content,
            ts_rank_cd(c.search_tsv, websearch_to_tsquery($7::regconfig, $3)) AS score,
-           g.gen, n.permalink
+           g.gen, n.permalink,
+           ${GOVERNANCE_COLUMNS}
     ${JOINS}
     WHERE ${armWhere("$4")}
       AND c.search_tsv @@ websearch_to_tsquery($7::regconfig, $3)
@@ -169,7 +189,30 @@ WITH RECURSIVE ${GEN_CTE.replace("$8", "$5")}, ${DENIED_CTE}, ${ADMITTED_CTE}
     ORDER BY c.embedding <=> $3::vector, c.chunk_id
     LIMIT 1`;
 
-export interface Hit {
+/** An act the record records: who, and when (ISO 8601, as the row holds it). */
+export interface HitAct {
+  readonly by: string;
+  readonly at: string;
+}
+
+/**
+ * The governance a NODE carries, in row shape.
+ *
+ * Split out of Hit because `read` projects the same six columns from the same
+ * table and must reach the same wire shape: one seam, so a surface cannot drift
+ * into answering a second way about the same document (decision 18's rule,
+ * applied to the governance block).
+ */
+export interface NodeGovernance {
+  readonly docStatus: string | null;
+  readonly trustTier: number | null;
+  readonly verified: readonly HitAct[] | null;
+  readonly approval: HitAct | null;
+  readonly effectiveFrom: string | null;
+  readonly staleAfter: string | null;
+}
+
+export interface Hit extends NodeGovernance {
   readonly chunkId: string;
   readonly sourceId: string;
   readonly stableId: string;
@@ -180,9 +223,19 @@ export interface Hit {
   readonly score: number;
   readonly generation: number;
   readonly permalink: string | null;
+  /**
+   * The governance the passage's DOCUMENT declared. Carried on the hit because
+   * that is the unit an agent judges: a per-response summary cannot say which
+   * of several hits was the reviewed one.
+   *
+   * Nullable throughout, because a section row and a pre-2.5 carried row hold
+   * NULL — such a generation is refused at boot (GOVERNANCE_SINCE), so these
+   * are never the shape a SERVED hit has, but the parse must not invent values
+   * for them either.
+   */
 }
 
-const HIT_COLUMNS = 9;
+const HIT_COLUMNS = 15;
 
 /** Serialize a query vector as a pgvector literal. */
 export function vectorLiteral(vector: readonly number[]): string {
@@ -197,6 +250,42 @@ function toNumber(value: unknown, column: string): number {
   return n;
 }
 
+/**
+ * A TIMESTAMPTZ as the wire carries it. `pg` parses the column into a Date, so
+ * the instant is re-rendered rather than stringified — `String(date)` would put
+ * a local-timezone human string on an MCP response.
+ */
+function toInstant(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
+/** A JSONB act, shaped or dropped — never half-built from a row that holds something else. */
+function toAct(value: unknown): HitAct | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const act = value as Record<string, unknown>;
+  if (typeof act["by"] !== "string" || typeof act["at"] !== "string") return null;
+  return { by: act["by"], at: act["at"] };
+}
+
+function toActs(value: unknown): HitAct[] | null {
+  if (!Array.isArray(value)) return null;
+  const acts = value.map(toAct).filter((a): a is HitAct => a !== null);
+  return acts.length === 0 ? null : acts;
+}
+
+/** The six {@link governanceColumns} columns starting at `at`, parsed once for both paths. */
+export function governanceFromRow(row: readonly unknown[], at: number): NodeGovernance {
+  return {
+    docStatus: row[at] === null ? null : String(row[at]),
+    trustTier: row[at + 1] === null ? null : toNumber(row[at + 1], "trust_tier"),
+    verified: toActs(row[at + 2]),
+    approval: toAct(row[at + 3]),
+    effectiveFrom: toInstant(row[at + 4]),
+    staleAfter: toInstant(row[at + 5]),
+  };
+}
+
 function rowToHit(row: readonly unknown[]): Hit {
   return {
     chunkId: String(row[0]),
@@ -208,6 +297,7 @@ function rowToHit(row: readonly unknown[]): Hit {
     score: toNumber(row[6], "score"),
     generation: toNumber(row[7], "generation"),
     permalink: row[8] === null ? null : String(row[8]),
+    ...governanceFromRow(row, 9),
   };
 }
 

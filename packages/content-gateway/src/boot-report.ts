@@ -18,8 +18,16 @@
 /** Two-space indent, label padded so the values line up under each other. */
 const LABEL_WIDTH = 9;
 
+/**
+ * A label longer than the column still gets a space. `padEnd` returns the
+ * label unchanged when it is already too long, so a new eleven-character
+ * label printed as `trust floorunverified` — one word, unreadable, and green
+ * in every test because the alignment test only knew the labels that existed
+ * (found live while adding the trust floor's own line).
+ */
 export function bootLine(label: string, text: string): string {
-  return `  ${label.padEnd(LABEL_WIDTH)}${text}`;
+  const padded = label.padEnd(LABEL_WIDTH);
+  return `  ${padded}${padded === label ? " " : ""}${text}`;
 }
 
 export function bootHeader(corpusId: string): string {
