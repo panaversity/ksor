@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { refuse } from "./audience";
 import { RULES_VERSION } from "./rules-version";
+import { parseInstant } from "../record/instant";
 
 /**
  * `build.lock.json` as the site reads it (build spec §2–§3): the record that
@@ -19,22 +20,58 @@ import { RULES_VERSION } from "./rules-version";
  * surface and needs none (decision 7); its artefacts say so.
  */
 
-const hashed = z.object({ path: z.string().min(1), sha256: z.string().regex(/^[0-9a-f]{64}$/) });
+const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "a sha256 hex digest");
+const hashed = z.object({ path: z.string().min(1), sha256: hex64 });
+
+/**
+ * `as_of` and `ksor_version` are VALIDATED here, not merely required to be
+ * non-empty, because both fail open downstream when they are unreadable: an
+ * `as_of` that does not parse made every lifecycle comparison `NaN`-false, so a
+ * policy not effective until 2030 was published as current and carried no
+ * badge; a `ksor_version` the semver regex misses slipped past the
+ * `ksor-site-outdated` gate and was then stamped verbatim into every machine
+ * artefact. A lock the site cannot read cannot say what was checked.
+ */
+const instant = z
+  .string()
+  .refine((v) => parseInstant(v) !== null, "an ISO 8601 instant with an explicit offset");
+const semver = z.string().regex(/^v?\d+\.\d+\.\d+/, "a version this site can compare");
 
 const lockSchema = z
   .object({
     format: z.literal(1),
     build_id: z.string().min(1),
-    ksor_version: z.string().min(1),
+    ksor_version: semver,
     source_commit: z.string().nullable(),
     dirty: z.boolean(),
-    as_of: z.string().min(1),
+    as_of: instant,
     drafts: z.enum(["hidden", "shown"]),
+    instance_sha256: hex64,
+    policy_sha256: hex64,
+    ledger_sha256: hex64,
+    ledger_entries: z.array(z.object({ id: z.string().min(1), digest: hex64 }).loose()),
     audiences: z.object({ registry: z.array(z.string().min(1)) }).loose(),
     documents: z.array(hashed.loose()),
     companions: z.array(hashed.loose()),
+    assets: z.array(hashed.loose()),
   })
   .loose();
+
+/**
+ * The three files that hold the record's governance, hashed the way
+ * `composeLock` hashes them: over the TEXT, with the empty string standing for
+ * a ledger that does not exist.
+ */
+export interface ControlTexts {
+  readonly instance: string;
+  readonly policy: string;
+  /** Null when `.ksor/takedowns.yaml` is not there — an empty ledger. */
+  readonly ledger: string | null;
+}
+
+function sha256Text(text: string): string {
+  return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+}
 
 export type BuildLock = z.infer<typeof lockSchema>;
 
@@ -56,6 +93,8 @@ export function readLock(
   files: {
     readonly documents: ReadonlyMap<string, string>;
     readonly companions: ReadonlyMap<string, string>;
+    readonly assets: ReadonlyMap<string, string>;
+    readonly control: ControlTexts;
   },
   options: { readonly draftsRequested: boolean },
 ): BuildLock {
@@ -83,6 +122,22 @@ export function readLock(
       "run `ksor build` again; if the lock was written by a newer ksor, upgrade the site with `ksor migrate --write-site`",
     );
   }
+  // The control files first: a stale DOCUMENT is a document nothing checked,
+  // and a stale LEDGER or POLICY is a takedown that was lifted or an authority
+  // that was rewritten — the second is worse, so it is named first.
+  for (const [file, want, have] of [
+    ["instance.md", lock.data.instance_sha256, sha256Text(files.control.instance)],
+    [".ksor/governance.yaml", lock.data.policy_sha256, sha256Text(files.control.policy)],
+    [".ksor/takedowns.yaml", lock.data.ledger_sha256, sha256Text(files.control.ledger ?? "")],
+  ] as const) {
+    if (want === have) continue;
+    refuse(
+      "ksor-lock-stale",
+      `${file} changed since ${LOCK_FILE} was written`,
+      "the lock's build_id is a hash over the record AND the three files that govern it, so a projection under a control file the lock never saw publishes what nothing checked — a denial lifted by deleting a line would otherwise leave the lock valid",
+      "run `ksor build` again and commit the lock with the change; lift a denial with `ksor takedown --revoke <id>`, never by editing the ledger",
+    );
+  }
   const stale = firstStale(lock.data, files);
   if (stale !== null) {
     refuse(
@@ -92,12 +147,20 @@ export function readLock(
       "run `ksor build` again and commit the lock with the change",
     );
   }
-  if (options.draftsRequested && lock.data.drafts !== "shown") {
+  // Both directions. The reverse — a `drafts: shown` lock and no KSOR_DRAFTS —
+  // is the dangerous one: one preview build accidentally committed publishes
+  // every draft on every later production deploy, with no environment signal
+  // and nothing red (`noindex` is a crawler hint, not a control).
+  if (options.draftsRequested !== (lock.data.drafts === "shown")) {
     refuse(
       "ksor-lock-stale",
-      `KSOR_DRAFTS=show was requested, but ${LOCK_FILE} was built with drafts hidden`,
-      "the lock's build_id covers the drafts switch, so a site showing drafts under a lock that hid them would stamp every artefact with an id that does not describe it",
-      "run `KSOR_DRAFTS=show ksor build` before the site build, or build without KSOR_DRAFTS",
+      options.draftsRequested
+        ? `KSOR_DRAFTS=show was requested, but ${LOCK_FILE} was built with drafts hidden`
+        : `${LOCK_FILE} was built with drafts SHOWN, and this build did not ask for them`,
+      "the lock's build_id covers the drafts switch, so a site and a lock that disagree about it would stamp every artefact with an id that does not describe it — and a preview lock is not a publishing lock",
+      options.draftsRequested
+        ? "run `KSOR_DRAFTS=show ksor build` before the site build, or build without KSOR_DRAFTS"
+        : "run `ksor build` (without KSOR_DRAFTS) and commit the lock, or build the preview with `KSOR_DRAFTS=show`",
     );
   }
   if (outdated(lock.data.ksor_version, RULES_VERSION)) {
@@ -117,11 +180,16 @@ function firstStale(
   files: {
     readonly documents: ReadonlyMap<string, string>;
     readonly companions: ReadonlyMap<string, string>;
+    readonly assets: ReadonlyMap<string, string>;
   },
 ): string | null {
   for (const [kind, entries, tree] of [
     ["document", lock.documents, files.documents],
     ["companion", lock.companions, files.companions],
+    // Assets last and never omitted: the site publishes their bytes, and for a
+    // record whose diagrams carry the substance a lock that stops at the
+    // markdown does not cover what the build actually serves.
+    ["asset", lock.assets, files.assets],
   ] as const) {
     const locked = new Map(entries.map((e) => [e.path, e.sha256] as const));
     for (const [rel, abs] of tree) {
@@ -138,14 +206,18 @@ function firstStale(
 
 /**
  * Is a lock written by `lockVersion` newer than the rules this site carries?
- * Numeric semver, pre-release tags ignored; a stamp that is not a version
- * (the template's literal, never stamped) cannot be compared and counts as
- * outdated, because an unstamped site is one `ksor init` never finished.
+ * Numeric semver, pre-release tags ignored. NEITHER unparsable side is
+ * "current": a SITE stamp that is not a version is the template's literal, so
+ * `ksor init` never finished; a LOCK version that is not a version is a lock
+ * this site cannot compare against at all. Both count as outdated — this used
+ * to return false for the lock half, which let `"999"` past the gate and then
+ * stamped it into every machine artefact. `lockSchema` now refuses that shape
+ * first, so this branch is the second lock on the same door.
  */
 export function outdated(lockVersion: string, rulesVersion: string): boolean {
   const a = parts(lockVersion);
   const b = parts(rulesVersion);
-  if (a === null) return false;
+  if (a === null) return true;
   if (b === null) return true;
   for (let i = 0; i < 3; i += 1) {
     if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);

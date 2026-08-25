@@ -116,7 +116,16 @@ Actor ids are published with the content; use handles, not addresses. Every
 timestamp is an ISO 8601 instant with an explicit offset; `ksor migrate`
 widens a bare date to midnight UTC. Trust tier derives from `verified`: none
 → unverified; machine actors only → machine-confirmed; any `human:` →
-human-reviewed.
+human-reviewed. **`verified` is a claim gated by pull-request review, NOT by
+the policy** — the Governance Policy has no verification family, so
+`verified[].by` is checked for its actor FORM and for nothing else, and any
+well-formed `human:` actor promotes the tier. This is asymmetric with
+`ksor.approval.by`, which the policy's resolved approval set does gate
+(`ksor-approver-unauthorised`), and it is recorded here rather than left
+silent: a concept may not DECLARE `trust_tier` (`ksor-derived-key`) but may
+supply the input that computes it. Closing it means adding a
+`verification_authorities` family to §4, which widens a public surface and is
+an owner decision.
 
 **2.4 Audience.** A list of identifiers; `public` is reserved; every other
 identifier must be in the policy's registry. A **viewer** holds a list that
@@ -152,13 +161,38 @@ a duplicate key, a second document marker or a non-mapping is
 `ksor-frontmatter-invalid`. No fence at all is a document with no
 frontmatter (then `ksor-missing-key`).
 
-**2.7 Unknown keys** are preserved and never refused (OKF §11) — except
-`id`, `name`, `visibility`, `provenance`, `owner`, `effective`, `superseded`,
-`superseded_by` and `sor_id` at the top level of a concept, refused by name
-with the migration hint, because each is a pre-profile key whose silent
-survival would mean silent loss of governance. `superseded_by` is on that list
-for the same reason as the rest: the profile reads `ksor.superseded_by`, so a
-top-level one announces a successor no surface shows.
+**2.7 Unknown keys** are preserved and never refused (OKF §11) at the
+**concept's own top level** — with three exceptions, each of which is a key
+that would otherwise fail OPEN.
+
+1. `id`, `name`, `visibility`, `provenance`, `owner`, `effective`,
+   `superseded`, `superseded_by` and `sor_id` are refused by name
+   (`ksor-legacy-key`) with the migration hint, because each is a pre-profile
+   key whose silent survival would mean silent loss of governance.
+   `superseded_by` is on that list for the same reason as the rest: the profile
+   reads `ksor.superseded_by`, so a top-level one announces a successor no
+   surface shows.
+2. A top-level key **one edit** from a profile key (`type`, `title`,
+   `description`, `status`, `order`, `generated`, `sources`, `verified`,
+   `stale_after`, `ksor`) is `ksor-key-near-miss`, naming the key it is one
+   edit from. Preserving is right for a key nobody knows and wrong for a key
+   that is the profile's own with a letter missing: a mistyped `stale_after`
+   serves an expired document forever, and nothing goes red.
+3. The keys the BUILD derives — `trust_tier`, `build_id`, `source_commit`,
+   `ksor_version`, `dirty`, `unstamped` — are `ksor-derived-key` at a
+   concept's top level. The markdown twin and the `llms-full.txt` block append
+   them under the record's own frontmatter, so a document that declares one
+   publishes it TWICE: the twin then fails the record's own reader
+   (`uniqueKeys: true`), and a lenient consumer picks one of the two, which
+   makes the derived trust tier non-authoritative and the R14 build stamp
+   forgeable by whoever writes the document.
+4. The **`ksor:` block's own key set is CLOSED** — `audience`, `owner`,
+   `approval`, `effective_from`, `superseded_by`, `deprecated` — and anything
+   else there is `ksor-ksor-key-unknown`. That namespace is ksor's, not OKF's,
+   so §11 does not reach it, and the keys that fail open are the OPTIONAL ones:
+   a typo in a required key already surfaces as `ksor-missing-key`, while
+   `ksor.effective-from` (one hyphen) published an embargoed policy four weeks
+   early with no refusal anywhere (reproduced 2026-08-25).
 
 ## 3 · The instance document
 
@@ -184,7 +218,14 @@ declared; optional — absent means only `public`); `ownership` (scoped rules
 with `owner`, `escalation`; optional — absent means R24 binds nothing);
 `approval_authorities` (scoped rules with non-empty `actors`; required);
 `takedown_authorities` (`actors`; required). A level-0 policy is the two
-required families. The policy is ingested — the registry and authority sets
+required families. **Every object in the file has a CLOSED key set** — root,
+`scope`, an audience entry, an `ownership` rule, an `approval_authorities`
+rule, `takedown_authorities` — and an unknown key is `ksor-policy-invalid`
+naming the key, the nearest allowed one and the set. There are no extension
+keys here: a stripped key in the root of authority WIDENS it, because
+`scope: { path: [...] }` (one letter) leaves an empty scope, which matches
+every concept and made a drafts-only rule the record's fallback (reproduced
+end to end, 2026-08-25). The policy is ingested — the registry and authority sets
 as `ingestion_runs.policy JSONB`, plus `policy_sha256` — so the door and the
 snapshot token bind to a row, and the served container never needs the file.
 
@@ -266,9 +307,16 @@ id whose TEXT moved is `ksor-ledger-amended`. Ids alone are not enough: a
 committed denial could be RETARGETED in place, keeping its id and its actor,
 which republished the denied document and denied an innocent one with nothing
 red on any surface. A historic version that does not parse today still counts
-for shrink, with no digest. When history is unavailable (a shallow clone) it
-refuses unless `--allow-unverifiable-ledger` is explicit; the scaffold's
-`validate.yml` fetches full depth.
+for shrink, with no digest. Two baselines and not one, because the LOCK
+travels in the same pull request as the ledger and is hand-editable: emptying
+both together printed "ok" from a checker that read only the lock. A lock that
+does not parse is `ksor-lock-invalid` rather than an empty baseline, which was
+the other way to hold nothing. When history is unavailable (a shallow clone)
+`ksor build` refuses unless `--allow-unverifiable-ledger` is explicit; the
+emitted checker takes no arguments, so it prints `ksor-ledger-unverifiable`
+beside its verdict and falls back to the lock alone — a checker that refused
+every shallow checkout would be turned off, and silence would be worse than
+either. The scaffold's `validate.yml` fetches full depth.
 
 **Dangling.** `ksor-takedown-dangling` applies to in-force (unrevoked)
 entries: a `present` `node` entry whose stable_id resolves to no concept,
@@ -279,8 +327,9 @@ when the path **reappears** (`ksor-takedown-readded`).
 ## 6 · The checker
 
 One rule set, in `packages/content/src/record/`, run by `ksor build` and
-`ksor ingest`, and **built** — a second tsdown entry with
-`noExternal: ['yaml']` and a banner carrying the parser's ISC notice — into
+`ksor ingest`, and **built** — a second tsdown entry
+bundling everything but Node builtins, with a banner carrying the `yaml`
+(ISC) and `zod` (MIT) notices — into
 the emitted `check.mjs` in both skill copies at package-build time, gitignored
 in the templates like `schema/`, with a drift test running the §7 fixture
 through the kernel rules and the emitted file. `pnpm check` is read-only and
@@ -299,7 +348,15 @@ timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-footnote-unkeyed`,
 `ksor-reserved-name`, `ksor-index-stale` (check only),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
-`ksor-attachment-orphan`, `ksor-link-widens`, `ksor-supersession-strands`
+`ksor-attachment-orphan`, `ksor-link-widens` (a link to a concept whose
+audience this document's readers do not reach — and a link to an ASSET whose
+NEAREST ANCESTOR DIRECTORY holding any concept holds not one reachable: an
+asset declares no audience, so it inherits one by position, and a public
+document linking `/secret/chart.png` otherwise published that directory's name
+and bytes into the public build. The ancestor walk is what makes the rule
+whole — asking only the asset's own directory was defeated by nesting it one
+level deeper, `/secret/img/chart.png`, whose directory holds no concept at
+all), `ksor-supersession-strands`
 (a `deprecated` concept whose `ksor.superseded_by` names a concept that does
 not exist, is not `stable`, or fails the widening rule — and the pointer on a
 concept that is not `deprecated` at all, which the old checker refused and
@@ -309,7 +366,11 @@ which announces a replacement no surface shows),
 entry whose TEXT moved under an id a baseline recorded — comparing id sets
 alone let a committed denial be retargeted in place),
 `ksor-ledger-invalid`,
-`ksor-policy-missing`, `ksor-policy-invalid`, `ksor-legacy-key` (§2.6),
+`ksor-policy-missing`, `ksor-policy-invalid` (§4: an unknown key in any of
+the policy's closed objects included), `ksor-legacy-key` (§2.6),
+`ksor-ksor-key-unknown` (a key outside the closed `ksor:` block, §2.7),
+`ksor-key-near-miss` (a top-level key one edit from a profile key, §2.7),
+`ksor-derived-key` (a concept claiming a key the build writes, §2.7),
 `ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
 `^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside
 the closed set at any level, a group not written as a block, a non-boolean
@@ -326,8 +387,9 @@ whose signature or chunk CRC fails), `ksor-attachment-near-miss` (`.yml`,
 `.json`, `.markdown` one character off a companion), `ksor-link-dead` (a
 record-internal link that resolves to no concept, companion, asset,
 directory, index or the root), `ksor-link-escapes` (a `..` that climbs out of
-`knowledge/`). Unknown frontmatter keys are NOT refused (§2.7) — the one
-deliberate loosening against the old checker's closed key set. The project
+`knowledge/`). Unknown frontmatter keys at a concept's own top level are NOT
+refused (§2.7) — the one deliberate loosening against the old checker's closed
+key set; the `ksor:` block and the policy stay closed. The project
 around the record is checked by `pnpm check` alone, not by `ksor build` or
 ingest: `ksor-pointer-changed` (`CLAUDE.md` is not exactly `@AGENTS.md`),
 `ksor-skill-copy-diverged` (`.agents/skills` and `.claude/skills` differ in
@@ -361,10 +423,22 @@ site build and the door, not to the record checker (build spec §3).
    written by hand) produces trees that pass this checker, with every
    `approved` document `draft` unless `--approve-by` was given, a tier
    expanded to every tier at or above it, and every existing denylist row
-   present in the ledger.
-6. A bare OKF reader with no ksor code (the reference `OKFDocument.parse`)
-   reads every non-reserved `.md` under the emitted starter's `knowledge/`
-   as a typed concept.
+   present in the ledger. `id`/`name` are deleted; `sor_id`, an escaping or
+   stranded `superseded_by`, and a denylist row whose scope or subtree target
+   it cannot read are refused (`ksor-migrate-underivable`) rather than
+   silently dropped — dropping any of them retires an identity or narrows a
+   takedown with nothing recording that it happened.
+6. A bare OKF reader with no ksor code reads every non-reserved `.md` under
+   the emitted starter's `knowledge/` as a typed concept — `type` (OKF §4.1's
+   only always-required key), a `title` to display, a `description` to preview,
+   a body, and every `sources` entry naming its `resource` — with the reserved
+   root index carrying `okf_version` and nothing else, and a non-root index no
+   frontmatter at all. There is no reference `OKFDocument.parse` to run here
+   (the spec is vendored, the implementation is not), so the reader is written
+   out from the vendored spec in `okf-reader.integration.test.ts` and shares no
+   code with `packages/content/src/record`: it splits the fence itself and
+   parses YAML with the parser directly. If it ever needs a ksor import to
+   pass, that import is the finding.
 7. A ledger with a deleted line is refused by `ksor build` (in a repository
    with history) and by ingest; a hand-appended revocation by an unnamed
    actor is refused by check, build and ingest alike; a revocation by a named

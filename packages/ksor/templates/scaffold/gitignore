@@ -13,6 +13,9 @@ system/site/out/
 # the per-audience copy of the record a build stages — a filtered derivative,
 # never a second record; committing it would publish what a build excluded
 system/site/.staged-knowledge/
+# and its manifest, which names this build's viewer and every concept it
+# staged — committing it publishes the restricted viewer's page list
+system/site/.staged-knowledge.json
 # and the lock that keeps one evaluation of a build staging at a time; it only
 # outlives a build that was killed mid-stage, and the next build clears it
 system/site/.staged-knowledge.lock

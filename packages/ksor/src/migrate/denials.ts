@@ -56,7 +56,7 @@ export async function readDbDenials(
     }
     return rows.map((row) => ({
       stableId: String(row["stable_id"]),
-      scope: String(row["scope"]) === "subtree" ? "subtree" : "node",
+      scope: readScope(String(row["stable_id"]), row["scope"]),
       reason: String(row["reason"] ?? ""),
       at: (row["created_at"] as Date).toISOString().replace(/\.\d+Z$/, "Z"),
       actor: actorOf.get(String(row["stable_id"])) ?? null,
@@ -64,4 +64,24 @@ export async function readDbDenials(
   } finally {
     await pool.end();
   }
+}
+
+/**
+ * The column, read STRICTLY. `x === "subtree" ? "subtree" : "node"` narrowed
+ * anything unexpected toward the weaker posture, and node/subtree IS the
+ * governance guarantee (decision 14): a subtree denial covers descendants a
+ * later change adds, a node denial does not. The schema's CHECK constraint
+ * makes the value safe today, which is exactly why the fail-open direction was
+ * invisible — the guard was somewhere else, and this line would not go red if
+ * it moved. This is a one-time governance transcription: a value it cannot read
+ * stops it rather than guessing.
+ */
+function readScope(stableId: string, value: unknown): "node" | "subtree" {
+  const scope = String(value);
+  if (scope === "node" || scope === "subtree") return scope;
+  throw new Error(
+    `ksor-migrate-underivable: the denylist row for \`${stableId}\` has \`scope: ${scope}\`, which is neither \`node\` nor \`subtree\`\n` +
+      "  why: node and subtree are different guarantees — a subtree denial covers descendants a later change adds — and transcribing an unreadable value would narrow a takedown silently\n" +
+      "  fix: correct the row in the database, then run `ksor migrate` again",
+  );
 }

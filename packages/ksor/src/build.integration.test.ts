@@ -282,6 +282,59 @@ describe("ksor build — acceptance 3: refusals write nothing", () => {
   });
 });
 
+describe("ksor build — assets are part of what was checked", () => {
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  /**
+   * Assets were absent from the lock entirely, so the bytes a site publishes
+   * for every image were never compared against anything the build checked.
+   * For a record whose diagrams and PDFs carry the substance, "a projection
+   * only publishes what was checked" stopped at the markdown.
+   */
+  it("records each asset's sha256, and its bytes move the build_id", () => {
+    const root = repo();
+    writeFileSync(path.join(root, "knowledge/policies/diagram.png"), PNG);
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const first = lockOf(root);
+    expect(first.assets.map((a) => a.path)).toEqual(["policies/diagram.png"]);
+
+    writeFileSync(path.join(root, "knowledge/policies/diagram.png"), Buffer.concat([PNG, PNG]));
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const second = lockOf(root);
+    expect(second.assets[0]?.sha256).not.toBe(first.assets[0]?.sha256);
+    expect(second.build_id).not.toBe(first.build_id);
+  });
+});
+
+describe("ksor build — a record-wide legal hold", () => {
+  /**
+   * `knowledge/#section` is the shape `denies()` documents as covering
+   * everything, and `checkLedgerAgainstTree` refused it as "the subtree `/`,
+   * which no longer exists" — the bundle root is never in the walker's `dirs`.
+   * A legal hold over a whole record was therefore unrecordable.
+   */
+  it("a subtree denial on the bundle root builds, with every concept unadmitted", () => {
+    const root = repo();
+    writeFileSync(
+      path.join(root, ".ksor/takedowns.yaml"),
+      `${readFileSync(path.join(root, ".ksor/takedowns.yaml"), "utf8")}- id: 2026-08-25T09:00:00Z-eeeeee
+  stable_id: knowledge/#section
+  scope: subtree
+  expected: present
+  by: human:ciso
+  at: 2026-08-25T09:00:00Z
+  reason: legal hold over the whole record
+`,
+    );
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+    expect(lockOf(root).documents.every((d) => d.admitted.length === 0)).toBe(true);
+  });
+});
+
 describe("ksor build — the ledger against its history (record spec §5)", () => {
   it("a deleted ledger line is refused as ksor-ledger-shrank, naming git history as the baseline", () => {
     const root = repo();
@@ -340,6 +393,25 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     // The lock carries digests, not entries, so it names the id and not the
     // field — which is why the git-history baseline is the richer one.
     expect(r.stderr).toContain("2026-08-24T10:00:00Z-aaaaaa");
+  });
+
+  /**
+   * The fifth of the verb's own refusals, and the only one nothing exercised —
+   * the fixture-coverage rule deliberately skips the verb's slugs. A corrupt
+   * committed lock is what a partial write or a version rollback leaves behind,
+   * and the branch that handles it had never executed.
+   */
+  it("a lock it cannot parse is ksor-lock-invalid, and nothing is written", () => {
+    for (const bad of ['{"format": 99}', "not json at all"]) {
+      const root = repo();
+      writeFileSync(path.join(root, "build.lock.json"), bad);
+      const before = readFileSync(path.join(root, "knowledge/index.md"), "utf8");
+      const r = build(root, "--as-of", AS_OF);
+      expect(r.status, `${bad}: ${r.stderr}`).toBe(1);
+      expect(r.stderr.split("\n")[0]).toBe("error: ksor-lock-invalid");
+      expect(readFileSync(path.join(root, "build.lock.json"), "utf8")).toBe(bad);
+      expect(readFileSync(path.join(root, "knowledge/index.md"), "utf8")).toBe(before);
+    }
   });
 
   it("a shallow clone refuses ksor-ledger-unverifiable unless --allow-unverifiable-ledger is explicit", () => {

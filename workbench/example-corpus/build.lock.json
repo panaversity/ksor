@@ -1,15 +1,15 @@
 {
   "format": 1,
-  "build_id": "sha256:1616e44d362e2c5e7fd6cc050e03aefa88b38e5051896fa08ddda24cc8961aa7",
+  "build_id": "sha256:a4eab34f7ede672a80031e375ce562ff0a7cc0455b953de439f82c15b48c451c",
   "ksor_version": "0.0.39",
   "okf": {
     "version": "0.2",
     "commit": "ad30107c31c06aec8a7d5636e0d1058118604e6f",
     "spec_sha256": "26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101"
   },
-  "source_commit": "38efee4317a672cb6e4be6cfe175b91f848e9bd5",
+  "source_commit": "bc320baf308397717a6105ba3626cc6eb5dcdc4b",
   "dirty": false,
-  "as_of": "2026-08-24T22:37:19.298Z",
+  "as_of": "2026-08-25T00:38:00.650Z",
   "drafts": "hidden",
   "instance_sha256": "04952385a9e0d0350673a13053b815d429d74890528db8910877de566bae231b",
   "policy_sha256": "41b63d4d203785563e4d821c4f30b11e06f13740ddd4f9a4e84e1ad83a60a3a5",
@@ -44,5 +44,6 @@
       "admitted": []
     }
   ],
-  "companions": []
+  "companions": [],
+  "assets": []
 }

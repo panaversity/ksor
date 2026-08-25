@@ -1,3 +1,4 @@
+import { parseLedger } from "@panaversity/ksor-content/record";
 import { describe, expect, it } from "vitest";
 
 import type { DbDenial } from "./denials.js";
@@ -104,5 +105,59 @@ describe("renderLedger", () => {
     if (!parsed.ok) return;
     expect(parsed.ledger.entries).toHaveLength(1);
     expect(parsed.ledger.entries[0]).toMatchObject({ kind: "denial", by: "human:ciso" });
+  });
+});
+
+/**
+ * `parseLedger` refuses any `scope: subtree` entry whose `stable_id` does not
+ * end in `#section`, and `repoint` rewrites only `/index` and `/README` — so
+ * every other subtree row was transcribed verbatim into a file migrate's own
+ * checker cannot load, with no refusal of its own. The round trip through
+ * `parseLedger` is what would have caught it, so the test does that.
+ */
+describe("toLedgerEntries — a subtree row must name a container", () => {
+  const dbRow = (stableId: string, scope: "node" | "subtree"): DbDenial => ({
+    stableId,
+    scope,
+    reason: "r",
+    at: "2026-08-01T00:00:00Z",
+    actor: "human:ciso",
+  });
+
+  it("refuses a subtree row that names an ordinary document", () => {
+    const out = toLedgerEntries([dbRow("knowledge/policies/pay", "subtree")], new Map());
+    expect(out.entries).toEqual([]);
+    expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-migrate-underivable"]);
+    expect(out.refusals[0]?.why).toContain("knowledge/policies/pay");
+    expect(out.refusals[0]?.why).toContain("#section");
+  });
+
+  it("accepts a subtree row already anchored, and its rendered file parses", () => {
+    const out = toLedgerEntries([dbRow("knowledge/policies#section", "subtree")], new Map());
+    expect(out.refusals).toEqual([]);
+    const parsed = parseLedger(
+      renderLedger(out.entries, new Set<string>()),
+      ".ksor/takedowns.yaml",
+    );
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+  });
+
+  it("an /index subtree row is repointed to the container anchor and parses", () => {
+    const out = toLedgerEntries([dbRow("knowledge/policies/index", "subtree")], new Map());
+    expect(out.entries[0]?.stableId).toBe("knowledge/policies#section");
+    const parsed = parseLedger(
+      renderLedger(out.entries, new Set<string>()),
+      ".ksor/takedowns.yaml",
+    );
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+  });
+
+  it("every node row it emits round-trips through parseLedger too", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/a", "node"), dbRow("knowledge/b/index", "node")],
+      new Map(),
+    );
+    const parsed = parseLedger(renderLedger(out.entries, new Set(["a"])), ".ksor/takedowns.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
   });
 });

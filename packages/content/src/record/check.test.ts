@@ -273,6 +273,33 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     ).toEqual(["ksor-instance-format"]);
   });
 
+  /**
+   * RECORDED, not overlooked (2026-08-25 review). `ksor.approval.by` is checked
+   * against the policy's resolved approval set, and a concept may no longer
+   * DECLARE `trust_tier` (`ksor-derived-key`) — but `verified[].by`, the input
+   * that COMPUTES that tier and therefore the `human-reviewed` badge on every
+   * page, twin and `llms-full.txt` block, is checked against no authority set
+   * at all. The policy has no verification family, so there is nothing to check
+   * it against: `verified` is a claim gated by pull-request review, and record
+   * spec §2.3 says so rather than leaving the asymmetry silent. Adding a
+   * `verification_authorities` family is an owner decision (it widens the
+   * Governance Policy, a public surface) and is left to one; this row exists so
+   * the state cannot change by accident in either direction.
+   */
+  it("a `verified` actor the policy never named is accepted, and does promote the tier", () => {
+    const out = checkRecord(
+      record({
+        "knowledge/a.md": doc(
+          "A",
+          `verified: { by: "human:nobody-asked", at: 2026-08-22T09:00:00Z }\n${PUBLIC}`,
+        ),
+      }),
+      { mode: "build" },
+    );
+    expect(out.refusals).toEqual([]);
+    expect(out.concepts[0]?.trustTier).toBe("human-reviewed");
+  });
+
   it("refusals are sorted by path, then slug — two runs print one order", () => {
     const out = checkRecord(
       record({
@@ -289,5 +316,82 @@ describe("checkRecord — one rule set (record spec §6)", () => {
       "knowledge/a.md",
       "knowledge/b.md",
     ]);
+  });
+});
+
+/**
+ * Assets have no audience of their own, so they inherit one by POSITION — the
+ * same way a companion inherits its parent's. A public concept linking
+ * `/secret/org-chart.png` staged `secret/org-chart.png` into the PUBLIC build:
+ * the image bytes and the directory name `secret/` both, which is the canary
+ * the visibility sweep asserts against, reached through the one path it does
+ * not model (`checkLinks` only refused links that resolve to CONCEPTS).
+ */
+describe("checkRecord — an asset is reached through the directory that holds it", () => {
+  // A `.svg`, so the PNG chunk check has nothing to say about the bytes.
+  const ASSET = new Uint8Array([0x3c, 0x73, 0x76, 0x67]);
+  const files = {
+    "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/secret/org-chart.svg)\n"),
+    "knowledge/secret/plan.md": doc("Plan", INTERNAL),
+  };
+  const assets = {
+    "knowledge/secret/org-chart.svg": ASSET,
+    "knowledge/secret/img/chart.svg": ASSET,
+  };
+
+  const run = (over: Record<string, string> = {}): string[] =>
+    checkRecord(
+      {
+        files: new Map(
+          Object.entries({
+            "instance.md": INSTANCE,
+            ".ksor/governance.yaml": POLICY,
+            ...files,
+            ...over,
+          }),
+        ),
+        dirs: ["knowledge/secret", "knowledge/secret/img"],
+        assets: new Map(Object.entries(assets)),
+      },
+      { mode: "build" },
+    ).refusals.map((r) => `${r.slug} ${r.path}`);
+
+  it("refuses a public link to an asset in a directory no public reader may enter", () => {
+    expect(run()).toEqual(["ksor-link-widens knowledge/policy.md"]);
+  });
+
+  it("allows it once something in that directory is public", () => {
+    expect(run({ "knowledge/secret/open.md": doc("Open", PUBLIC) })).toEqual([]);
+  });
+
+  // Found live on a real scaffold: nesting the asset ONE level deeper
+  // (`secret/img/chart.svg`) emptied the immediate directory of concepts, so the
+  // rule said nothing and `ksor build` exited 0 while a public stage carried
+  // `secret/img/chart.svg` — the restricted directory's name and the bytes both.
+  it("refuses it from a SUB-directory of the restricted directory", () => {
+    expect(
+      run({
+        "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/secret/img/chart.svg)\n"),
+      }),
+    ).toEqual(["ksor-link-widens knowledge/policy.md"]);
+  });
+
+  it("says nothing about an asset in a directory that holds no concept at all", () => {
+    expect(
+      checkRecord(
+        {
+          files: new Map(
+            Object.entries({
+              "instance.md": INSTANCE,
+              ".ksor/governance.yaml": POLICY,
+              "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/images/chart.svg)\n"),
+            }),
+          ),
+          dirs: ["knowledge/images"],
+          assets: new Map([["knowledge/images/chart.svg", ASSET]]),
+        },
+        { mode: "build" },
+      ).refusals.map((r) => `${r.slug} ${r.path}`),
+    ).toEqual([]);
   });
 });

@@ -66,10 +66,14 @@ export {
   type AdmissionConcept,
   type Drafts,
 } from "./lock";
+export { git, historicLedger, type HistoricLedger } from "./git-ledger";
 export { generateIndexes, parseIndex, humanise, type IndexInput } from "./index-file";
 export { checkFootnotes, linkTargets, resolveLink } from "./citations";
 export { checkRecord, type RecordFiles, type CheckOptions, type CheckResult } from "./check";
 export { loadRecord, loadScaffoldStructure, resolveInstanceDir } from "./load";
+// Its own line: the site's copy drops the `.js`, and one long export would then
+// fit on a line the formatter collapses — drift the mirror test cannot allow.
+export type { LoadedRecord } from "./load";
 export {
   checkHygiene,
   checkScaffoldStructure,

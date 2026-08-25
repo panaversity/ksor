@@ -52,6 +52,7 @@ export function lockWith(
       audiences: { registry: [], viewers: {} },
       documents: [],
       companions: [],
+      assets: [],
     },
     null,
     2,
@@ -352,6 +353,18 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-link-widens knowledge/bad.md"],
   },
   {
+    // The asset one level DEEPER than the restricted directory: `secret/img/`
+    // holds no concept of its own, so the rule has to ask its parent.
+    name: "ksor-link-widens (a nested asset)",
+    files: base({
+      "knowledge/secret/plan.md": doc("Plan", { audience: "internal" }),
+      "knowledge/bad.md": frontmatter(stable, "![chart](/secret/img/chart.svg)\n"),
+    }),
+    bytes: { "knowledge/secret/img/chart.svg": [0x3c, 0x73, 0x76, 0x67] },
+    dirs: ["knowledge/policies", "knowledge/secret", "knowledge/secret/img"],
+    expected: ["ksor-link-widens knowledge/bad.md"],
+  },
+  {
     name: "ksor-supersession-strands",
     files: base({
       // The successor a public reader cannot open.
@@ -413,6 +426,34 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     name: "ksor-legacy-key",
     files: base({ "knowledge/bad.md": frontmatter(`${stable}visibility: internal\n`) }),
     expected: ["ksor-legacy-key knowledge/bad.md"],
+  },
+  {
+    // One hyphen. It published an embargoed policy four weeks early.
+    name: "ksor-ksor-key-unknown",
+    files: base({
+      "knowledge/bad.md": frontmatter(
+        `${stable}`.replace(
+          "  audience: [public]",
+          "  audience: [public]\n  effective-from: 2026-09-01T00:00:00Z",
+        ),
+      ),
+    }),
+    expected: ["ksor-ksor-key-unknown knowledge/bad.md"],
+  },
+  {
+    // The build appends these under the record's frontmatter; declaring one
+    // publishes it twice and forges the stamp.
+    name: "ksor-derived-key",
+    files: base({
+      "knowledge/bad.md": frontmatter(`${stable}build_id: sha256:FORGED\n`),
+    }),
+    expected: ["ksor-derived-key knowledge/bad.md"],
+  },
+  {
+    // A top-level key one edit from `stale_after`: preserved, it never expires.
+    name: "ksor-key-near-miss",
+    files: base({ "knowledge/bad.md": frontmatter(`${stable}stale_afer: 2020-01-01T00:00:00Z\n`) }),
+    expected: ["ksor-key-near-miss knowledge/bad.md"],
   },
   {
     name: "ksor-instance-format",

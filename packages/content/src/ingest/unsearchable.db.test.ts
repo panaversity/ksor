@@ -35,10 +35,9 @@ const DB = "ksor_unsearchable";
 
 /**
  * Navigation: a page of links, which no search should ever return. Every link
- * resolves — `ksor-link-dead` refuses a record whose internal links do not,
- * and a fixture that could not be published is not evidence about what
- * publishing does. What is being measured is the SHAPE (a segment that is
- * mostly link lines), which four resolving links make exactly as well.
+ * names a document this record actually holds — the checker refuses a dead
+ * internal link by name (`ksor-link-dead`), and a fixture that cannot be
+ * ingested proves nothing about what ingest reports.
  */
 const NAV = profileDoc({
   title: "Handbook",
@@ -46,9 +45,8 @@ const NAV = profileDoc({
 # Handbook
 
 - [Probation](probation.md)
-- [Notice periods](probation.md#notice)
-- [Expense limits](expenses.md#limits)
-- [Travel](expenses.md#travel)
+- [Expense claims](expenses.md)
+- [The record](index.md)
 `,
 });
 

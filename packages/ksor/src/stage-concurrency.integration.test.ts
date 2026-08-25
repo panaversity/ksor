@@ -119,6 +119,10 @@ function project(root: string, options: { documents: number; audience: string })
     );
     documents.push({ path: `doc-${i}.md`, sha256: sha(file) });
   }
+  // The lock's freshness claim covers the three control files too, so the
+  // harness has to hash the ones it just wrote.
+  const sha256Text = (text: string): string =>
+    createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
   writeFileSync(
     path.join(root, "build.lock.json"),
     JSON.stringify({
@@ -129,9 +133,14 @@ function project(root: string, options: { documents: number; audience: string })
       dirty: false,
       as_of: "2026-08-25T12:00:00Z",
       drafts: "hidden",
+      instance_sha256: sha256Text(readFileSync(path.join(root, "instance.md"), "utf8")),
+      policy_sha256: sha256Text(readFileSync(path.join(root, ".ksor", "governance.yaml"), "utf8")),
+      ledger_sha256: sha256Text(""),
+      ledger_entries: [],
       audiences: { registry: ["internal"] },
       documents,
       companions: [],
+      assets: [],
     }),
   );
 

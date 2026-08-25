@@ -22,6 +22,7 @@ const INPUTS: BuildIdInputs = {
     { path: "a.md", sha256: "aa", admitted: ["internal", "public"] },
   ],
   companions: [{ path: "a.summary.md", sha256: "cc" }],
+  assets: [{ path: "a.png", sha256: "dd" }],
   instance_sha256: "ii",
   policy_sha256: "pp",
   ledger_sha256: "ll",
@@ -157,6 +158,7 @@ describe("composeLock + parseLock", () => {
       },
     ],
     companions: [{ path: "policies/x.summary.md", text: "s" }],
+    assets: [{ path: "policies/x.png", bytes: new Uint8Array([1, 2, 3]) }],
     denials: [],
   };
 
@@ -179,6 +181,9 @@ describe("composeLock + parseLock", () => {
       },
     ]);
     expect(lock.companions).toEqual([{ path: "policies/x.summary.md", sha256: sha256Hex("s") }]);
+    expect(lock.assets).toEqual([
+      { path: "policies/x.png", sha256: sha256Hex(new Uint8Array([1, 2, 3])) },
+    ]);
     expect(lock.ledger_sha256).toBe(sha256Hex(""));
     const parsed = parseLock(JSON.stringify(lock));
     expect(parsed.ok && parsed.lock).toEqual(lock);
@@ -195,6 +200,13 @@ describe("composeLock + parseLock", () => {
     };
     expect(composeLock(effective).build_id).not.toBe(base);
     expect(composeLock({ ...effective, asOf: NOW + 2 * DAY }).build_id).toBe(base);
+    // An asset's bytes are published, so they move the id like a document's.
+    expect(
+      composeLock({
+        ...input,
+        assets: [{ path: "policies/x.png", bytes: new Uint8Array([9]) }],
+      }).build_id,
+    ).not.toBe(base);
   });
 
   it("parseLock names what is wrong with a lock that is not one", () => {

@@ -32,7 +32,20 @@ export function resolveInstanceDir(start: string): string | null {
  * crashed the old checker with a raw ENOENT before any other problem was
  * reported, review 2026-08-18).
  */
-export function loadRecord(root: string): RecordFiles {
+/**
+ * What the LOADER always produces, as against the in-memory `RecordFiles` a
+ * test may hand-build: `assets` and `symlinks` are optional on that type
+ * because a fixture map omits them, and every caller that reads a real tree
+ * then had to re-prove they exist. The site's build was the one that noticed
+ * (`'record.assets' is possibly 'undefined'`) — its `tsc` runs over the
+ * template, which this repo's own typecheck does not.
+ */
+export interface LoadedRecord extends RecordFiles {
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+  readonly symlinks: readonly string[];
+}
+
+export function loadRecord(root: string): LoadedRecord {
   const files = new Map<string, string>();
   const assets = new Map<string, Uint8Array>();
   const dirs: string[] = [];

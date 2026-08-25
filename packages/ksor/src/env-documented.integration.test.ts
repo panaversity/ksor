@@ -31,10 +31,6 @@ const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const DOCUMENTED_ELSEWHERE = new Map([
   ["KSOR_BASE_PATH", "scaffold README + AGENTS.md — a site build flag, not a server variable"],
   ["KSOR_AUDIENCE", "scaffold README + AGENTS.md — a site build flag"],
-  [
-    "KSOR_DRAFTS",
-    "scaffold README + AGENTS.md — a site build flag (build spec §3: drafts on human surfaces)",
-  ],
   ["KSOR_INSTANCE", "a CLI convenience for --instance; the flag is the documented form"],
   // RETIRED, replaced by KSOR_AUTH. The code still READS them, solely to tell an
   // operator following an old runbook what replaced them — documenting them in
@@ -132,6 +128,30 @@ describe("the adopter's env contract covers what the code reads", () => {
         "or add it to DOCUMENTED_ELSEWHERE with the reason: " +
         missing.join(", "),
     ).toEqual([]);
+  });
+
+  /**
+   * An exemption that NAMES a file is a claim about that file. `KSOR_DRAFTS`
+   * was exempted as "scaffold README + AGENTS.md" and appeared in neither, so
+   * the one variable that decides whether unapproved drafts reach the open web
+   * was documented nowhere an adopter reads — and the guard whose whole purpose
+   * is to make that a decision was silenced by the claim itself.
+   */
+  it("an exemption that names a file is true of that file", () => {
+    const scaffold = path.join(repoRoot, "packages", "ksor", "templates", "scaffold");
+    const wrong: string[] = [];
+    for (const [name, reason] of DOCUMENTED_ELSEWHERE) {
+      for (const [needle, file] of [
+        ["README", "README.md"],
+        ["AGENTS.md", "AGENTS.md"],
+      ] as const) {
+        if (!reason.includes(needle)) continue;
+        if (!readFileSync(path.join(scaffold, file), "utf8").includes(name)) {
+          wrong.push(`${name} is not in templates/scaffold/${file}`);
+        }
+      }
+    }
+    expect(wrong, "an exemption names a place the variable is not documented").toEqual([]);
   });
 
   it("the exemption lists are honest — every name on them is still read", () => {

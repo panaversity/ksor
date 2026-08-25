@@ -288,16 +288,28 @@ one exists); `effective` → `ksor.effective_from` at midnight UTC; `review` →
 touching the file> }` (outside a repository, refused unless
 `--generated-at`); every `<doc>.summary.md` without frontmatter gains
 `type: Summary`; the instance's H1 into `title:`, `audiences:` into the
-policy, the stamp into `toolchain:`, `format: 2`; every `<dir>/index.md`,
-`index.mdx` or `README.md` with prose into `overview.md`, with `<dir>/index`
+policy, the stamp into `toolchain:`, `format: 2`; every `<dir>/index.md`
+or `README.md` with prose into `overview.md`, with `<dir>/index`
 and `<dir>/README` denylist rows re-pointed (`node` → `<dir>/overview`,
 `subtree` → `<dir>#section`); every existing denylist row into the ledger,
 with the actor from the latest `takedown_applied` log row, or from
 `--attribute <stable_id>=<actor>` (a human asserting it, recorded in the
 entry's `reason`), refusing by name otherwise; and the site's byte-copied
-rule modules offered as diffs (`--write-site`). It refuses, by name, a
-document whose `title` or `description` it cannot derive — migrate never
-authors knowledge. **`approved` becomes `draft`** unless the human running it
+rule modules offered as diffs (`--write-site`). (`index.mdx` was in this list
+and is not: `loadRecord` reads `.md` and `.yaml` as text and nothing else, so an
+`.mdx` never reaches migrate, and the record checker refuses one under
+`knowledge/` by name — `ksor-file-type`, the bundle is CommonMark, decision 8.
+An adopter carrying one moves it by hand, and the checker says so.) It DELETES `id:` and `name:`,
+which only ever restated the path the profile makes the identity. It refuses,
+by name, a document whose `title` or `description` it cannot derive — migrate
+never authors knowledge — a `sor_id:` (retiring it changes the document's
+stable id, so any takedown or citation keyed on the old one has to be
+re-denied against the new one first), a `superseded_by:` that climbs out of
+`knowledge/` (writing `null` there handed the checker frontmatter migrate had
+invented) or that sits on a document it is not deprecating (the checker
+refuses that tree as `ksor-supersession-strands`, and migrate knows it
+first), and a denylist row whose `scope` is neither `node` nor `subtree` or
+whose subtree entry names a document rather than a container. **`approved` becomes `draft`** unless the human running it
 passes `--approve-by human:<id>`, in which case every previously `approved`
 document becomes `stable` with that approval, because they performed the
 act. The upgrade runbook, in order: upgrade the CLI → `ksor schema --apply`

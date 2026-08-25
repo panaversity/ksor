@@ -249,6 +249,25 @@ export function migrateConcept(
       "pass --actor human:<id> — the person running this migration",
     );
   }
+  // `sor_id` is retired governance: under the profile the path IS the identity
+  // (record spec §1). Dropping it silently would CHANGE this document's
+  // stable_id from the sor_id value to its path, and every takedown row and
+  // citation keyed on the old one would quietly stop matching. Migrate does not
+  // author knowledge and does not retire identity either.
+  const sorId = str(fm["sor_id"]);
+  if (sorId !== null) {
+    refuse(
+      `\`sor_id: ${sorId}\` is retired: under the profile the path is the identity, so migrating this file changes its stable_id from \`${sorId}\` to \`${conceptIdOf(path)}\``,
+      "delete `sor_id:` deliberately — and before you do, re-deny anything the ledger or a denylist row keyed on the old id with `ksor takedown` against the new one",
+    );
+  }
+  const strayPointer = str(fm["superseded_by"]);
+  if (strayPointer !== null && status !== "deprecated") {
+    refuse(
+      `\`superseded_by: ${strayPointer}\` on a \`${status}\` document announces a successor no surface shows — the checker refuses that tree as \`ksor-supersession-strands\`, and migrate would have written it`,
+      "set `status: superseded` if the document really is withdrawn, or delete the pointer",
+    );
+  }
   if (refusals.length > 0) return { ok: false, refusals };
 
   const id = conceptIdOf(path);
@@ -292,11 +311,37 @@ export function migrateConcept(
     ksor["effective_from"] = instant;
   }
   const successor = str(fm["superseded_by"]);
-  if (successor !== null) ksor["superseded_by"] = resolveLink(id, successor);
+  if (successor !== null) {
+    const resolved = resolveLink(id, successor);
+    if (resolved === null) {
+      return {
+        ok: false,
+        refusals: [
+          {
+            slug: SLUG,
+            path,
+            why: `\`superseded_by: ${successor}\` climbs out of \`knowledge/\`, so there is no concept for it to point at — writing it as \`null\` would hand the checker frontmatter migrate invented`,
+            fix: "point it at a concept inside `knowledge/`, or delete the key",
+          },
+        ],
+      };
+    }
+    ksor["superseded_by"] = resolved;
+  }
   if (status === "deprecated") {
     ksor["deprecated"] = { by: ctx.actor!, at: ctx.instant };
   }
-  for (const key of ["visibility", "owner", "effective", "superseded", "superseded_by"]) {
+  // `id` and `name` only ever restated the path, which is the identity now, so
+  // they are deleted with the rest; `sor_id` never reaches here (refused above).
+  for (const key of [
+    "id",
+    "name",
+    "visibility",
+    "owner",
+    "effective",
+    "superseded",
+    "superseded_by",
+  ]) {
     doc.delete(key);
   }
   setValue(doc, "ksor", ksor);

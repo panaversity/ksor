@@ -94,7 +94,8 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
       "admitted": ["public", "internal"]
     }
   ],
-  "companions": [{ "path": "what-is-a-ksor.summary.md", "sha256": "…" }]
+  "companions": [{ "path": "what-is-a-ksor.summary.md", "sha256": "…" }],
+  "assets": [{ "path": "policies/diagram.png", "sha256": "…" }]
 }
 ```
 
@@ -117,8 +118,14 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   staleness therefore leaves the open web on the next build, and a scheduled
   rebuild is the operator's obligation (plan §5). `drafts` is `hidden` or
   `shown` (`KSOR_DRAFTS=show`, human surfaces only).
+- `assets[]` is every non-markdown file of the bundle, by bytes — images, PDFs,
+  anything the site copies. It is in the lock because the site PUBLISHES those
+  bytes: without it, replacing a diagram after the lock was written changed what
+  the site serves with no refusal anywhere, so "a projection only publishes what
+  was checked" stopped at the markdown, on records where the substance is often
+  in the diagram.
 - `build_id` = sha256 over everything a projection reads: the sorted
-  `documents[]` and `companions[]` `(path, sha256)` pairs, `instance_sha256`,
+  `documents[]`, `companions[]` and `assets[]` `(path, sha256)` pairs, `instance_sha256`,
   `policy_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each
   document's `admitted` list — the canonical viewers whose machine artefacts
   contain it at `as_of` (stable, effective, unexpired, not denied, audience
@@ -168,7 +175,31 @@ carries `rel="alternate" type="text/markdown"`; every page carries
 `/.well-known/mcp/server.json` carry `build_id`, `source_commit` (with
 `dirty` when set) and `ksor_version` (R14); `server.json` keeps its own
 `version`, which is the record's. The site build refuses without a fresh
-lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development, and
+lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development.
+**Fresh covers the CONTROL files, not only the documents**: `instance.md`,
+`.ksor/governance.yaml` and `.ksor/takedowns.yaml` are hashed against
+`instance_sha256`, `policy_sha256` and `ledger_sha256`, every asset against
+`assets[]`, and the lock's
+`ledger_entries` are passed to the checker as a `ksor-ledger-amended`
+baseline. Without that, a takedown was lifted by deleting four lines and the
+committed lock still validated (reproduced 2026-08-25) — a freshness claim
+that cannot see the ledger is not a freshness claim. The site reads GIT
+HISTORY as the second baseline, exactly as the emitted checker does (record
+spec §5): the lock is hand-editable and travels in the same change as the
+ledger, so on its own it cannot see an entry DELETED — recomputing
+`ledger_sha256` and emptying `ledger_entries` made the two agree about a
+denial that was gone, and the denied document staged again (reproduced
+2026-08-25). Outside a repository, and on a shallow clone, the site says
+`ksor-ledger-unverifiable` beside the build and falls back to the lock alone
+rather than refusing every shallow CI checkout — `ksor build` refuses that
+state outright. The drafts switch must
+agree in BOTH directions: a `drafts: shown` lock refuses a build that did not
+ask for drafts, because one preview lock accidentally committed would
+otherwise publish every draft on every later production deploy. `as_of` and
+`ksor_version` are VALIDATED, not merely non-empty — an `as_of` that does not
+parse made every lifecycle comparison false (fail-open on both sides), and a
+`ksor_version` the site cannot compare slipped past the outdated gate and was
+stamped verbatim into every machine artefact. The site
 refuses `ksor-site-outdated` when the lock's `ksor_version` is newer than
 the site's stamped rule-module version — the adopter-owned site is upgraded
 by `ksor migrate --write-site`, which offers the byte-copied rule modules as

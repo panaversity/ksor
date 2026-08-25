@@ -141,15 +141,6 @@ export {
   GovernanceGateError,
   GOVERNANCE_SINCE,
 } from "./governance-gate.js";
-export {
-  frontmatterMap,
-  isDenied,
-  scalarLike,
-  stableIdFrom,
-  recordPathFrom,
-  type DenylistManifest as SiteDenylistManifest,
-} from "./lib/denial-rule.js";
-
 // The record module (record spec; decision 26): the profile, the control
 // files and the checker `ksor build`, `ksor ingest` and the emitted checker
 // run. Also exported as the `./record` subpath, which is what the emitted

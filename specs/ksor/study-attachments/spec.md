@@ -175,7 +175,7 @@ CardSchedule` — no React, no storage, no ambient clock.
 The attachment rule is duplicated between the kernel (`isDoc`) and the site
 (`check.mjs`, staging, the globs), which is the precise shape decision 18
 names. It therefore lands as ONE canonical rule with a drift test, exactly as
-`audience-rule.ts` / `denial-rule.ts` / `order-rule.ts` already do.
+`audience-rule.ts` / `lifecycle-rule.ts` / `order-rule.ts` already do.
 
 ## 3 · Why one exclusion, and not five
 

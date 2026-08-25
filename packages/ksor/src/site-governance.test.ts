@@ -8,7 +8,9 @@
 // a site install; everything that needs the Fumadocs loader lives outside it.
 // Vocabulary: the profile's (record spec §2) — `draft | stable | deprecated`,
 // `ksor.owner`, `sources`, `ksor.superseded_by` as a concept id.
+import { parseConcept } from "@panaversity/ksor-content/record";
 import { describe, expect, it } from "vitest";
+import { parseDocument } from "yaml";
 
 import {
   agentFrontmatter,
@@ -403,6 +405,40 @@ describe("agentFrontmatter — the twin's and llms-full.txt's frontmatter", () =
         "",
       ].join("\n"),
     );
+  });
+
+  /**
+   * The twin is the record's bytes, so it has to be readable by the record's
+   * own reader. Nothing stopped an author declaring `trust_tier:` or
+   * `build_id:` and getting each key twice — which `uniqueKeys: true` refuses
+   * as `ksor-frontmatter-invalid`, and which a lenient consumer resolves by
+   * picking one of the two, forging the stamp. `DERIVED_KEYS` refuses those
+   * names in the checker, so the state cannot reach here; this is the
+   * end-to-end assertion that it cannot.
+   */
+  it("what it emits parses as one mapping, with no duplicate key", () => {
+    const block = agentFrontmatter(RAW, STABLE, STAMPED);
+    const inner = block.slice("---\n".length, block.lastIndexOf("\n---\n"));
+    const doc = parseDocument(inner, { uniqueKeys: true });
+    expect(doc.errors.map((e) => e.message)).toEqual([]);
+    const parsed = doc.toJS() as Record<string, unknown>;
+    expect(parsed["trust_tier"]).toBe("unverified");
+    expect(parsed["build_id"]).toBe("sha256:abc");
+  });
+
+  it("a concept that CLAIMS a derived key is refused by the checker, not published twice", () => {
+    const refusals = parseConcept("knowledge/x.md", {
+      type: "Document",
+      title: "T",
+      description: "D.",
+      status: "draft",
+      trust_tier: "human-reviewed",
+      build_id: "sha256:FORGED-BY-THE-AUTHOR",
+      ksor: { audience: ["public"] },
+    });
+    expect(refusals.ok).toBe(false);
+    if (refusals.ok) return;
+    expect(refusals.refusals.filter((r) => r.slug === "ksor-derived-key")).toHaveLength(2);
   });
 
   it("derives the tier from the record's verifications, never from the raw text", () => {

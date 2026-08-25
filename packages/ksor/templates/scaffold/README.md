@@ -255,14 +255,12 @@ runs the record checker, and writes `build.lock.json` — the committed record
 of what was published, from which commit, with which toolchain — and only
 then builds the site. A checker refusal stops the build before anything is
 written. Takedowns reach the site through `.ksor/takedowns.yaml`, the
-committed ledger (until the site half of this release lands, a record that
-declares a `database:` still writes `.ksor-denylist.json` with
-`ksor takedown --export` before the site build).
+committed ledger — a file in this repository, so the site build needs no
+database access at all.
 
-That is deliberate — a site built without asking would publish a document you
-withdrew. Give the build environment the same `KSOR_DB_URL` your server uses
-(read access is enough), or keep the record database-free, where the export
-writes "nothing denied" and exits 0.
+That is deliberate. The act that withdraws a document is one merged commit,
+and both surfaces read it: the door refuses immediately, the site at its next
+build. Merge the ledger entry, rebuild, redeploy.
 
 - **GitHub Pages, nginx, S3, anything static** — run `pnpm build` and
   upload `system/site/out/`. Hosted under a sub-path (like

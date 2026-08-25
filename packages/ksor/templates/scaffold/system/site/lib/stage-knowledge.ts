@@ -2,9 +2,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  lstatSync,
   readdirSync,
   rmSync,
-  statSync,
   watch,
   writeFileSync,
 } from "node:fs";
@@ -26,14 +26,27 @@ import {
 import { checkRecord } from "../record/check";
 import { linkTargets } from "../record/citations";
 import { splitFrontmatter } from "../record/frontmatter";
+import { historicLedger } from "../record/git-ledger";
 import { generateIndexes } from "../record/index-file";
-import { inForce, denies, parseLedger } from "../record/ledger";
+import {
+  inForce,
+  denies,
+  parseLedger,
+  type LedgerBaseline,
+  type LedgerBaselineEntry,
+} from "../record/ledger";
 import { loadRecord } from "../record/load";
 import type { Refusal } from "../record/refusal";
 
 const KNOWLEDGE = "knowledge/";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
-const COMPANION = /\.(summary\.mdx?|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
+const POLICY_PATH = ".ksor/governance.yaml";
+// Byte-for-byte the checker's set (`record/check.ts`): one answer to "what is
+// a companion" across the checker, the lock and the stage. `.summary.mdx` was
+// in this one and not in that one, so the two would have disagreed about the
+// lock's companion list — a permanent `ksor-lock-stale` had the record checker
+// not refused `.mdx` first.
+const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 
 /**
  * Everything this build may publish, as bytes at bundle-relative paths: the
@@ -74,20 +87,20 @@ function assetTarget(recordDir: string, documentRel: string, target: string): st
   if (!resolved.startsWith(recordDir + path.sep)) return null;
   if (/\.mdx?$/i.test(resolved)) return null;
   try {
-    return statSync(resolved).isFile() ? resolved : null;
+    // lstat, never stat: `statSync` FOLLOWS a symlink, and `readFileSync` below
+    // follows it too, so `knowledge/guides/leak.png -> /etc/secret` published
+    // whatever the build could read, under the record's own name. The checker
+    // refuses a symlink under knowledge/ by name (`ksor-symlink`) and runs
+    // before this, so the state is unreachable — this is the second lock on the
+    // same door, and the one that is local to the code that would publish it.
+    return lstatSync(resolved).isFile() ? resolved : null;
   } catch {
     return null;
   }
 }
 
 function planStage(recordDir: string, development: boolean): StagePlan {
-  // ONE rule set: the same checker `ksor build` and `ksor ingest` run, over
-  // the same in-memory tree. Staging never depends on the checker having run
-  // elsewhere — a red record refuses HERE, by its slug, before any byte moves.
   const record = loadRecord(projectRoot);
-  const checked = checkRecord(record, { mode: "build" });
-  if (checked.refusals.length > 0 || checked.policy === null) refuseRecord(checked.refusals);
-  const policy = checked.policy;
 
   const documents = new Map<string, string>();
   const companions = new Map<string, string>();
@@ -99,17 +112,54 @@ function planStage(recordDir: string, development: boolean): StagePlan {
     else if (name.endsWith(".md") && name !== "index.md")
       documents.set(rel, path.join(recordDir, rel));
   }
-  // A yaml companion beside a document is a file the record reader does not
-  // load (it reads `.md` and `.yaml` alike, but the lock lists every companion).
-  for (const file of walkFiles(recordDir)) {
-    const rel = path.relative(recordDir, file).split(path.sep).join("/");
-    if (COMPANION.test(path.basename(rel)) && !companions.has(rel)) companions.set(rel, file);
+  // The lock covers every asset, because this build publishes its bytes — so
+  // the stage's asset set must be the SET THE LOCK WAS BUILT FROM, not a second
+  // opinion about it. It is therefore taken from the record the loader already
+  // read, the same one `composeLock` reads. Re-walking the directory instead
+  // was two walkers with two answers, and both differences were live bugs: the
+  // loader skips OS junk, so a `.DS_Store` that Finder writes the first time an
+  // adopter opens `knowledge/` was in the tree, never in the lock, and refused
+  // `ksor-lock-stale` — unfixable, because the remedy that refusal prescribes
+  // writes the identical lock. And the loader reads no symlink as bytes, so a
+  // symlinked asset read stale here before ever reaching its own `ksor-symlink`.
+  const assetFiles = new Map<string, string>();
+  for (const file of record.assets.keys()) {
+    if (!file.startsWith(KNOWLEDGE)) continue;
+    const rel = file.slice(KNOWLEDGE.length);
+    assetFiles.set(rel, path.join(recordDir, rel));
   }
 
   const draftsRequested = process.env.KSOR_DRAFTS === "show";
+  // The lock is read BEFORE the checker runs, because the checker needs one of
+  // the two `ksor-ledger-amended` baselines out of it: the lock records each
+  // ledger entry's DIGEST, which is the only thing that can see an entry
+  // retargeted in place (same id, same actor, a different `stable_id`).
   const lock = development
     ? null
-    : readLock(projectRoot, { documents, companions }, { draftsRequested });
+    : readLock(
+        projectRoot,
+        {
+          documents,
+          companions,
+          assets: assetFiles,
+          control: {
+            instance: record.files.get("instance.md") ?? "",
+            policy: record.files.get(POLICY_PATH) ?? "",
+            ledger: record.files.get(LEDGER_PATH) ?? null,
+          },
+        },
+        { draftsRequested },
+      );
+
+  // ONE rule set: the same checker `ksor build` and `ksor ingest` run, over
+  // the same in-memory tree. Staging never depends on the checker having run
+  // elsewhere — a red record refuses HERE, by its slug, before any byte moves.
+  const checked = checkRecord(record, {
+    mode: "build",
+    ledgerBaselines: lock === null ? [] : ledgerBaselines(lock.ledger_entries),
+  });
+  if (checked.refusals.length > 0 || checked.policy === null) refuseRecord(checked.refusals);
+  const policy = checked.policy;
   // Lifecycle is evaluated at the lock's `as_of` for a build (staleness leaves
   // the open web on the next build; a scheduled rebuild is the operator's
   // obligation) and at now in development, where nothing is published.
@@ -236,6 +286,35 @@ function planStage(recordDir: string, development: boolean): StagePlan {
       pages,
     },
   };
+}
+
+/**
+ * BOTH baselines the ledger is judged against — the lock's, and git history's.
+ *
+ * The lock alone is not enough here, and the reason is the reason the emitted
+ * checker reads history too: the lock is hand-editable and travels in the SAME
+ * change as the ledger, so deleting an entry, recomputing `ledger_sha256` and
+ * emptying `ledger_entries` leaves the two agreeing about a denial that is
+ * gone. Walked: the denied document was staged again, exit 0.
+ *
+ * History it cannot read is SAID, not assumed away. A build that refused every
+ * shallow CI checkout would be turned off, and `ksor build` refuses that state
+ * outright — so this is a note beside the verdict, not a second refusal.
+ */
+function ledgerBaselines(fromLock: readonly LedgerBaselineEntry[]): LedgerBaseline[] {
+  const lockBaseline: LedgerBaseline = { source: "build.lock.json", entries: fromLock };
+  const history = historicLedger(projectRoot);
+  if (!history.repository) return [lockBaseline];
+  if (history.entries === null) {
+    console.error(
+      "ksor-ledger-unverifiable: .ksor/takedowns.yaml — the ledger's history could not be read " +
+        `(${history.unreadable === "shallow" ? "this is a shallow clone" : "git could not read the file's log"}), ` +
+        "so this build checked the ledger against the committed lock alone — an artefact that travels in the same change.\n" +
+        "  fix: `git fetch --unshallow` (or check out with fetch-depth: 0) and build again; `ksor build` refuses this state outright",
+    );
+    return [lockBaseline];
+  }
+  return [{ source: "git history", entries: history.entries }, lockBaseline];
 }
 
 function walkFiles(dir: string): string[] {

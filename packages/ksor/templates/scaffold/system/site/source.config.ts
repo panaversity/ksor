@@ -32,14 +32,11 @@ export const docs = defineDocs({
     // index never consults the tree. The regenerated `index.md` is rendered by
     // the folder page component instead (record spec §1: no route, no twin,
     // no llms.txt line — it carries no governance to publish under).
-    files: [
-      "**/*.md",
-      "**/*.mdx",
-      "!**/*.summary.md",
-      "!**/*.summary.mdx",
-      "!**/index.md",
-      "!**/index.mdx",
-    ],
+    // `.md` only: the record is CommonMark (record spec §1), the checker
+    // refuses an `.mdx` under knowledge/ by name (`ksor-file-type`), and
+    // staging copies nothing else — so an `.mdx` pattern here advertised a
+    // shape the stage can never contain.
+    files: ["**/*.md", "!**/*.summary.md", "!**/index.md"],
     schema: pageSchema
       .extend({
         type: z.string().optional(),

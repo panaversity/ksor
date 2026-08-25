@@ -134,8 +134,12 @@ export function runBuild(
     return refuse(
       io,
       "ksor-ledger-unverifiable",
-      "this is a shallow clone: the takedown ledger is append-only, and without history a deleted entry cannot be told from one that never existed",
-      "fetch full history (`git fetch --unshallow`; in CI, `fetch-depth: 0`), or pass --allow-unverifiable-ledger to build anyway",
+      facts.historyUnreadable === "shallow"
+        ? "this is a shallow clone: the takedown ledger is append-only, and without history a deleted entry cannot be told from one that never existed"
+        : "git could not read the takedown ledger's history (`git log -- .ksor/takedowns.yaml` failed, and this is not a shallow clone): the ledger is append-only, and without history a deleted entry cannot be told from one that never existed",
+      facts.historyUnreadable === "shallow"
+        ? "fetch full history (`git fetch --unshallow`; in CI, `fetch-depth: 0`), or pass --allow-unverifiable-ledger to build anyway"
+        : "check that `git log` works in this checkout, or pass --allow-unverifiable-ledger to build anyway",
     );
   }
   if (parsed.strict && facts.dirty) {
@@ -201,6 +205,10 @@ export function runBuild(
     companions: [...record.files]
       .filter(([p]) => /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(p))
       .map(([p, text]) => ({ path: p.slice("knowledge/".length), text })),
+    assets: [...(record.assets ?? new Map())].map(([p, bytes]) => ({
+      path: p.slice("knowledge/".length),
+      bytes,
+    })),
     denials,
   });
 

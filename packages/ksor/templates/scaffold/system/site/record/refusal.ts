@@ -38,6 +38,9 @@ export const REFUSAL_SLUGS = [
   "ksor-policy-missing",
   "ksor-policy-invalid",
   "ksor-legacy-key",
+  "ksor-ksor-key-unknown",
+  "ksor-key-near-miss",
+  "ksor-derived-key",
   "ksor-instance-format",
   "ksor-migrate-underivable",
   // Hygiene (record spec §6, ported from the scaffold's hand-written checker).

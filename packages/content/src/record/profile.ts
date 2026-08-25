@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { isIndividualActor } from "./actor.js";
 import { parseInstant } from "./instant.js";
+import { nearest } from "./near-miss.js";
 import { sortRefusals, type Refusal, type RefusalSlug } from "./refusal.js";
 
 export const RESERVED_TYPES = [
@@ -43,6 +44,24 @@ export const LEGACY_KEYS = [
   "sor_id",
 ] as const;
 
+/**
+ * The keys the BUILD writes into a concept's markdown twin and its
+ * `llms-full.txt` block — the derived trust tier and the R14 stamps. They are
+ * appended under the record's own frontmatter, intact, so a concept that
+ * declares one publishes it TWICE: the twin then fails the record's own reader
+ * (`uniqueKeys: true` → `ksor-frontmatter-invalid`), and a lenient consumer
+ * picks one of the two, which makes the derived tier non-authoritative and the
+ * build stamp forgeable by whoever writes the document.
+ */
+export const DERIVED_KEYS = [
+  "trust_tier",
+  "build_id",
+  "source_commit",
+  "ksor_version",
+  "dirty",
+  "unstamped",
+] as const;
+
 export const TRUST_TIERS = ["unverified", "machine-confirmed", "human-reviewed"] as const;
 export type TrustTier = (typeof TRUST_TIERS)[number];
 
@@ -56,16 +75,32 @@ const source = z.object({
   title: z.string().optional(),
 });
 
-const ksorBlock = z
-  .object({
-    audience: z.array(z.string().min(1)).min(1, "audience"),
-    owner: z.string().min(1).optional(),
-    approval: act.optional(),
-    effective_from: instant.optional(),
-    superseded_by: z.string().min(1).optional(),
-    deprecated: act.optional(),
-  })
-  .loose();
+/**
+ * The `ksor:` block's keys, CLOSED. The namespace is ksor's own, not OKF's, so
+ * §11's preserve-unknown-keys rule does not reach it — and the keys that fail
+ * open here are the OPTIONAL ones, because a typo in a required key already
+ * surfaces as `ksor-missing-key`. `ksor.effective-from` (one hyphen) published
+ * an embargoed policy four weeks early with nothing red, and a mistyped
+ * `stale_after` serves a document that should have expired forever
+ * (reproduced 2026-08-25).
+ */
+export const NAMESPACE_KEYS = [
+  "audience",
+  "owner",
+  "approval",
+  "effective_from",
+  "superseded_by",
+  "deprecated",
+] as const;
+
+const ksorBlock = z.object({
+  audience: z.array(z.string().min(1)).min(1, "audience"),
+  owner: z.string().min(1).optional(),
+  approval: act.optional(),
+  effective_from: instant.optional(),
+  superseded_by: z.string().min(1).optional(),
+  deprecated: act.optional(),
+});
 
 const conceptSchema = z
   .object({
@@ -120,6 +155,24 @@ export type ConceptResult =
 
 const FLOOR_KEYS = ["type", "title", "description", "status"] as const;
 
+/**
+ * The profile's own top-level keys. The concept schema stays OPEN (OKF §11: a
+ * consumer preserves keys it does not know), so this list is not a closed set
+ * — it is the target of the near-miss net below.
+ */
+const PROFILE_KEYS = [
+  "type",
+  "title",
+  "description",
+  "status",
+  "order",
+  "generated",
+  "sources",
+  "verified",
+  "stale_after",
+  "ksor",
+] as const;
+
 export function conceptIdOf(path: string): string {
   return path.replace(/^knowledge\//, "").replace(/\.md$/, "");
 }
@@ -138,6 +191,26 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
         "run `ksor migrate` to move it into the profile's shape, then delete it",
       );
     }
+  }
+  for (const key of DERIVED_KEYS) {
+    if (!(key in frontmatter)) continue;
+    refuse(
+      "ksor-derived-key",
+      `\`${key}\` is written by the BUILD, not by a document — the markdown twin and the \`llms-full.txt\` block append it under this frontmatter, so declaring it here publishes the key twice and the derived value stops being the authoritative one`,
+      `remove \`${key}:\` — the trust tier comes from \`verified\`, and the build stamps come from \`build.lock.json\``,
+    );
+  }
+  // OKF §11 keeps a key nobody knows — but a key ONE edit from a profile key is
+  // not an extension, it is the profile key failing open. `stale_afer:` never
+  // expires; `titel:` renders no title. Refusing beats preserving here.
+  for (const key of Object.keys(frontmatter)) {
+    const near = nearest(key, PROFILE_KEYS, 1);
+    if (near === null) continue;
+    refuse(
+      "ksor-key-near-miss",
+      `\`${key}\` is one edit from \`${near}\`, the profile key it is almost certainly meant to be — unknown keys are preserved (§2.7), so a near miss would be kept and the governance it carried would simply stop existing`,
+      `rename it to \`${near}:\`, or — if it really is an extension key of your own — give it a name no profile key is one edit from`,
+    );
   }
   for (const key of FLOOR_KEYS) {
     if (!(key in frontmatter)) {
@@ -159,6 +232,17 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
       "`ksor.audience` is required and is a non-empty list — omission is refused, never defaulted (record spec §2.4)",
       "add `ksor:\\n  audience: [public]`, or the registered audiences who may read this",
     );
+  }
+  if (typeof ksor === "object" && ksor !== null && !Array.isArray(ksor)) {
+    for (const key of Object.keys(ksor as Record<string, unknown>)) {
+      if ((NAMESPACE_KEYS as readonly string[]).includes(key)) continue;
+      const near = nearest(key, NAMESPACE_KEYS, 2);
+      refuse(
+        "ksor-ksor-key-unknown",
+        `\`ksor.${key}\` is not a key of the \`ksor:\` block — the block is ksor's own namespace and its key set is closed, so a key it does not read is a guarantee that stops existing rather than one the record announces`,
+        `${near === null ? `remove \`${key}:\`` : `did you mean \`${near}:\`?`} (allowed under \`ksor:\`: ${NAMESPACE_KEYS.join(", ")})`,
+      );
+    }
   }
   if (
     typeof frontmatter["status"] === "string" &&

@@ -177,3 +177,110 @@ describe("resolveOwner", () => {
     expect(r.refusal.slug).toBe("ksor-policy-invalid");
   });
 });
+
+/**
+ * A one-letter typo in a scope key silently widened authority record-wide:
+ * zod strips unknown keys, so `path:` for `paths:` left `scope: {}`, which
+ * `pathDepth` scores as depth 0 and `mostSpecific` matches against EVERY
+ * concept — a drafts-only rule became the record's fallback (reproduced end to
+ * end, 2026-08-25). The policy is the root of authority (record spec §4), so
+ * every object in it is closed, exactly as `instance.md`'s key set is.
+ */
+describe("parsePolicy — the policy's key set is closed", () => {
+  const typo = (body: string): ReturnType<typeof parsePolicy> => parsePolicy(body, P);
+
+  it("refuses a misspelled scope key instead of matching everything", () => {
+    const r = typo(`version: "0.1"
+approval_authorities:
+  - scope: { paths: ["policies/"] }
+    actors: [human:boss]
+  - scope: { path: ["drafts/"] }
+    actors: [human:intern]
+takedown_authorities:
+  actors: [human:boss]
+`);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-policy-invalid"]);
+    expect(r.refusals[0]?.why).toContain("path");
+    expect(r.refusals[0]?.fix).toContain("paths");
+  });
+
+  it("refuses an unknown key on an approval rule", () => {
+    expect(
+      slugsOf(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+    quorum: 2
+takedown_authorities:
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("refuses an unknown key on an ownership rule", () => {
+    expect(
+      slugsOf(`version: "0.1"
+ownership:
+  - owner: team:finance
+    escalate: human:cfo
+approval_authorities:
+  - actors: [human:boss]
+takedown_authorities:
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("refuses an unknown key on takedown_authorities", () => {
+    expect(
+      slugsOf(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+takedown_authorities:
+  actor: [human:boss]
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("refuses an unknown key on an audience entry and at the root", () => {
+    expect(
+      slugsOf(`version: "0.1"
+audiences:
+  internal:
+    description: Staff
+    descrption: Staff
+approval_authorities:
+  - actors: [human:boss]
+takedown_authorities:
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+    expect(
+      slugsOf(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+takedown_authoritys:
+  actors: [human:boss]
+takedown_authorities:
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("names the key it refused and the keys it would have taken", () => {
+    const r = typo(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+takedown_authorities:
+  actors: [human:boss]
+ownershp:
+  - owner: team:x
+`);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals[0]?.why).toContain("ownershp");
+    expect(r.refusals[0]?.fix).toContain("ownership");
+  });
+});

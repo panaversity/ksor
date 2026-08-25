@@ -59,6 +59,8 @@ const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 interface LinkTargets {
   readonly concepts: ReadonlyMap<string, Concept>;
   readonly exists: (id: string) => boolean;
+  /** Bundle-relative ids of the record's asset files — `secret/org-chart.png`. */
+  readonly assets: ReadonlySet<string>;
 }
 
 export function checkRecord(record: RecordFiles, options: CheckOptions): CheckResult {
@@ -123,6 +125,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   const dirSet = new Set(record.dirs);
   const targets: LinkTargets = {
     concepts,
+    assets: new Set([...assets.keys()].map((p) => p.slice(KNOWLEDGE.length))),
     exists: (id) =>
       id === "" ||
       concepts.has(id) ||
@@ -281,13 +284,59 @@ function checkLinks(
       continue;
     }
     const found = targets.concepts.get(id);
-    if (found === undefined || mayReach(audience, found.audience)) continue;
+    if (found === undefined) {
+      assetWidens(path, audience, id, targets, refusals);
+      continue;
+    }
+    if (mayReach(audience, found.audience)) continue;
     refusals.push({
       slug: "ksor-link-widens",
       path,
       why: `links to \`${id}\` (audience [${found.audience.join(", ")}]), which not every reader of this document (audience [${audience.join(", ")}]) may read`,
       fix: "widen the target's audience, narrow this document's, or remove the link",
     });
+  }
+}
+
+/**
+ * An asset declares no audience, so it inherits one by POSITION — the way a
+ * companion inherits its parent's. The directory it sits in is that position:
+ * if every concept under that directory is out of the linking document's reach,
+ * then linking the asset publishes both its bytes and the directory's NAME into
+ * a build that excludes everything else in it. Reproduced: a public policy with
+ * `![chart](/secret/org-chart.png)` put `secret/org-chart.png` in the public
+ * `out/`, past a sweep that asserts no byte of `secret/` appears.
+ *
+ * A directory holding NO concept says nothing about audience — an `images/`
+ * folder is shared furniture — so the question is passed UP to the nearest
+ * ancestor that does hold one. Found live: checking only the immediate
+ * directory was defeated by nesting the asset one level deeper
+ * (`secret/img/chart.svg`) — that directory holds no concept, so the rule said
+ * nothing and the public build carried `secret/img/` and its bytes. The walk
+ * stops below the bundle root, which stays furniture like `images/`: the root
+ * holds the linking document itself, so testing it could only ever pass.
+ */
+function assetWidens(
+  path: string,
+  audience: readonly string[],
+  id: string,
+  targets: LinkTargets,
+  refusals: Refusal[],
+): void {
+  if (!targets.assets.has(id)) return;
+  const concepts = [...targets.concepts.values()];
+  for (let cut = id.lastIndexOf("/"); cut !== -1; cut = id.lastIndexOf("/", cut - 1)) {
+    const dir = id.slice(0, cut);
+    const inside = concepts.filter((c) => c.id === dir || c.id.startsWith(`${dir}/`));
+    if (inside.length === 0) continue;
+    if (inside.some((c) => mayReach(audience, c.audience))) return;
+    refusals.push({
+      slug: "ksor-link-widens",
+      path,
+      why: `links to the asset \`${id}\`, which lives under \`${dir}/\` — a directory holding ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts that directory's name and its bytes in a build that excludes everything else in it`,
+      fix: `move the asset beside this document (or into a directory its readers may enter), or widen something under \`${dir}/\``,
+    });
+    return;
   }
 }
 
