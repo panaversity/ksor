@@ -43,6 +43,24 @@ export const LEGACY_KEYS = [
   "sor_id",
 ] as const;
 
+/**
+ * The keys the BUILD writes into a concept's markdown twin and its
+ * `llms-full.txt` block — the derived trust tier and the R14 stamps. They are
+ * appended under the record's own frontmatter, intact, so a concept that
+ * declares one publishes it TWICE: the twin then fails the record's own reader
+ * (`uniqueKeys: true` → `ksor-frontmatter-invalid`), and a lenient consumer
+ * picks one of the two, which makes the derived tier non-authoritative and the
+ * build stamp forgeable by whoever writes the document.
+ */
+export const DERIVED_KEYS = [
+  "trust_tier",
+  "build_id",
+  "source_commit",
+  "ksor_version",
+  "dirty",
+  "unstamped",
+] as const;
+
 export const TRUST_TIERS = ["unverified", "machine-confirmed", "human-reviewed"] as const;
 export type TrustTier = (typeof TRUST_TIERS)[number];
 
@@ -200,6 +218,14 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
         "run `ksor migrate` to move it into the profile's shape, then delete it",
       );
     }
+  }
+  for (const key of DERIVED_KEYS) {
+    if (!(key in frontmatter)) continue;
+    refuse(
+      "ksor-derived-key",
+      `\`${key}\` is written by the BUILD, not by a document — the markdown twin and the \`llms-full.txt\` block append it under this frontmatter, so declaring it here publishes the key twice and the derived value stops being the authoritative one`,
+      `remove \`${key}:\` — the trust tier comes from \`verified\`, and the build stamps come from \`build.lock.json\``,
+    );
   }
   // OKF §11 keeps a key nobody knows — but a key ONE edit from a profile key is
   // not an extension, it is the profile key failing open. `stale_afer:` never

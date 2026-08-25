@@ -428,6 +428,15 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-ksor-key-unknown knowledge/bad.md"],
   },
   {
+    // The build appends these under the record's frontmatter; declaring one
+    // publishes it twice and forges the stamp.
+    name: "ksor-derived-key",
+    files: base({
+      "knowledge/bad.md": frontmatter(`${stable}build_id: sha256:FORGED\n`),
+    }),
+    expected: ["ksor-derived-key knowledge/bad.md"],
+  },
+  {
     // A top-level key one edit from `stale_after`: preserved, it never expires.
     name: "ksor-key-near-miss",
     files: base({ "knowledge/bad.md": frontmatter(`${stable}stale_afer: 2020-01-01T00:00:00Z\n`) }),

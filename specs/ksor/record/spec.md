@@ -169,7 +169,15 @@ that would otherwise fail OPEN.
    edit from. Preserving is right for a key nobody knows and wrong for a key
    that is the profile's own with a letter missing: a mistyped `stale_after`
    serves an expired document forever, and nothing goes red.
-3. The **`ksor:` block's own key set is CLOSED** — `audience`, `owner`,
+3. The keys the BUILD derives — `trust_tier`, `build_id`, `source_commit`,
+   `ksor_version`, `dirty`, `unstamped` — are `ksor-derived-key` at a
+   concept's top level. The markdown twin and the `llms-full.txt` block append
+   them under the record's own frontmatter, so a document that declares one
+   publishes it TWICE: the twin then fails the record's own reader
+   (`uniqueKeys: true`), and a lenient consumer picks one of the two, which
+   makes the derived trust tier non-authoritative and the R14 build stamp
+   forgeable by whoever writes the document.
+4. The **`ksor:` block's own key set is CLOSED** — `audience`, `owner`,
    `approval`, `effective_from`, `superseded_by`, `deprecated` — and anything
    else there is `ksor-ksor-key-unknown`. That namespace is ksor's, not OKF's,
    so §11 does not reach it, and the keys that fail open are the OPTIONAL ones:
@@ -345,6 +353,7 @@ alone let a committed denial be retargeted in place),
 the policy's closed objects included), `ksor-legacy-key` (§2.6),
 `ksor-ksor-key-unknown` (a key outside the closed `ksor:` block, §2.7),
 `ksor-key-near-miss` (a top-level key one edit from a profile key, §2.7),
+`ksor-derived-key` (a concept claiming a key the build writes, §2.7),
 `ksor-instance-format` (§3: `format: 2`, the moved keys, a `name` outside
 `^[a-z0-9][a-z0-9-]{0,62}$`, a missing `title` or `description`, a key outside
 the closed set at any level, a group not written as a block, a non-boolean

@@ -311,3 +311,25 @@ describe("parseConcept — the ksor block is closed, the concept is not", () => 
     expect(refusal?.fix).toContain("stale_after");
   });
 });
+
+/**
+ * The site appends `trust_tier:` and the R14 stamps under the concept's own
+ * frontmatter to build its markdown twin, and neither name was reserved. A
+ * concept declaring `trust_tier: human-reviewed` and
+ * `build_id: sha256:FORGED-BY-THE-AUTHOR` therefore published a twin carrying
+ * each key TWICE — one of them the author's — which the record's own reader
+ * (uniqueKeys: true) refuses as `ksor-frontmatter-invalid`. A lenient consumer
+ * takes one of the two, so the derived tier is not authoritative in the bytes
+ * and the build stamp is forgeable by whoever writes a document.
+ */
+describe("parseConcept — the keys the build derives are not the author's to claim", () => {
+  for (const key of ["trust_tier", "build_id", "source_commit", "ksor_version", "dirty"]) {
+    it(`refuses \`${key}\` at a concept's top level`, () => {
+      const r = parseConcept(P, { ...STABLE, [key]: "anything" });
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      const refusal = r.refusals.find((x) => x.slug === "ksor-derived-key");
+      expect(refusal?.why, JSON.stringify(r.refusals)).toContain(key);
+    });
+  }
+});
