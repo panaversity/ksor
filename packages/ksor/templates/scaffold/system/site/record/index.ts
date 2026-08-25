@@ -70,7 +70,7 @@ export { git, historicLedger, type HistoricLedger } from "./git-ledger";
 export { generateIndexes, parseIndex, humanise, type IndexInput } from "./index-file";
 export { checkFootnotes, linkTargets, resolveLink } from "./citations";
 export { checkRecord, type RecordFiles, type CheckOptions, type CheckResult } from "./check";
-export { loadRecord, loadScaffoldStructure, resolveInstanceDir } from "./load";
+export { loadRecord, loadScaffoldStructure, resolveInstanceDir, type LoadedRecord } from "./load";
 export {
   checkHygiene,
   checkScaffoldStructure,
