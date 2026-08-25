@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { defineCollections, defineConfig, defineDocs } from "fumadocs-mdx/config";
+import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import { remarkCodeTab } from "fumadocs-core/mdx-plugins/remark-code-tab";
 import { rehypeGithubAlerts } from "./lib/alert-rule";
 import { rehypeEmbeds } from "./lib/embed-rule";
@@ -161,8 +162,18 @@ export default defineConfig({
      *
      * `lazy` so only the grammars a record actually uses are loaded, which is
      * also what keeps that first unknown fence from being fatal.
+     *
+     * The defaults are SPREAD, not replaced: `RehypeCodeOptions` is a full
+     * options object (it requires `themes`), so passing the two keys alone
+     * type-errors on a manager that resolves fumadocs fresh rather than from
+     * the pinned lockfile — found in CI on the npm and bun scaffolds, which
+     * ship no lockfile by design (decision 25).
      */
-    rehypeCodeOptions: { lazy: true, fallbackLanguage: "text" },
+    rehypeCodeOptions: {
+      ...rehypeCodeDefaultOptions,
+      lazy: true,
+      fallbackLanguage: "text",
+    },
     /**
      * WHERE the teaching aid sits: after the document's introduction, which
      * is everything before its first `##` section. The plugin only marks the
