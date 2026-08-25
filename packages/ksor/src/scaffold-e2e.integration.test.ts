@@ -1203,46 +1203,53 @@ ${body}
     expect(bare).not.toContain("Review by");
   }, 420_000);
 
-  it("resolves a successor pointer to the concept it names, not to a folder of the same name", () => {
-    // Regression (found live, 2026-08-20): a route cannot tell a FILE from a
-    // FOLDER INDEX, so resolving the successor pointer on routes had to guess
-    // and refused to link a record `pnpm check` calls well-formed. Here
-    // `knowledge/legal.md` points at its sibling `terms` while a
-    // `knowledge/legal/terms.md` also exists — the link must go to the sibling.
+  it("resolves a successor pointer to the concept it names, not to a same-named one deeper in", () => {
+    // Regression (found live, 2026-08-20): the successor pointer was resolved
+    // against ROUTES, and a route cannot tell a file from a folder index — so
+    // the resolver guessed, and refused to link a record `pnpm check` called
+    // well-formed. The original fixture for that (`knowledge/legal.md` beside
+    // `knowledge/legal/`) can no longer be written: the profile refuses it as
+    // `ksor-name-collides`, which is the stronger form of the same guarantee.
+    // What still has to be got right, and is what this pins, is that
+    // `ksor.superseded_by` is a bundle-relative CONCEPT ID — so `terms` is
+    // `knowledge/terms.md` and never the `terms.md` a folder below also has.
     write(
       "terms",
-      concept({ title: "Terms", description: "The sibling.", order: 8, body: "The sibling." }),
+      concept({ title: "Terms", description: "The successor.", order: 8, body: "The successor." }),
     );
     mkdirSync(path.join(project, "knowledge", "legal"), { recursive: true });
     writeFileSync(
       path.join(project, "knowledge", "legal", "terms.md"),
       concept({
         title: "Legal terms",
-        description: "A same-named folder child.",
+        description: "A same-named concept one level down.",
         order: 9,
-        body: "A same-named folder child.",
+        body: "A same-named concept one level down.",
       }),
     );
     write(
-      "legal",
+      "retired-terms",
       concept({
-        title: "Legal",
-        description: "Points at its sibling.",
+        title: "Retired terms",
+        description: "Points at the root concept, not the nested namesake.",
         status: "deprecated",
         order: 7,
         ksor: `  superseded_by: terms
   deprecated: { by: "human:ciso", at: 2026-08-10T00:00:00Z }
 `,
-        body: "Points at its sibling.",
+        body: "Points at the root concept.",
       }),
     );
 
     const result = buildScaffold(project);
     expect(result.status, `${result.stdout}${result.stderr}`.slice(-2000)).toBe(0);
-    const html = built(path.join("docs", "legal", "index.html"));
+    const html = built(path.join("docs", "retired-terms", "index.html"));
     const notice = /<aside[^>]*role="region"[\s\S]*?<\/aside>/.exec(html)?.[0] ?? "";
     expect(notice).toMatch(/href="\/docs\/terms\/?"/);
     expect(notice).toContain("Terms");
+    // …and never the namesake a level down, which is what resolving by name
+    // rather than by id would reach.
+    expect(notice, "the notice reached the nested namesake").not.toMatch(/\/docs\/legal\/terms/);
     // …and never the raw pointer, which is what the route-based resolver showed.
     expect(notice).not.toContain("superseded_by");
   }, 420_000);
@@ -1272,7 +1279,16 @@ ${body}
       expect(plain).not.toContain("Owner team:finance");
       expect(plain).not.toContain("Trust");
       expect(plain).not.toContain("Sources");
-      expect(plain).not.toContain("Board minutes");
+      // A source's title FROM THE SOURCES LIST. Not "Board minutes", which is
+      // also the text of the author's own footnote definition — so that canary
+      // matched body prose and read as a leak of governance the page had in
+      // fact suppressed (found live 2026-08-25).
+      expect(plain).not.toContain("Terms of service v4");
+      // …and the other half of the same claim: this key decides what the page
+      // publishes ABOUT a document, and may never edit what the author wrote.
+      expect(plain, "the author's own footnote is prose, not furniture").toContain(
+        "Board minutes, §2.",
+      );
       expect(plain).toContain("Deprecated");
       expect(plain).toContain("Refund policy v5");
 
