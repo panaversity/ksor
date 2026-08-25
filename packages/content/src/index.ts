@@ -44,6 +44,7 @@ export {
 } from "./lib/audience.js";
 export { servingPolicy, type ServingPolicy } from "./lib/policy-row.js";
 export {
+  GATE_PREDICATE_DIGEST,
   hybridSearch,
   keywordSearch,
   topOneScore,

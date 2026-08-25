@@ -164,7 +164,7 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
     const instancePath = path.join(work, "instance.md");
     writeFileSync(
       instancePath,
-      `---\nformat: 1\nname: ${TENANT}\ndatabase:\n  dsn_env: KSOR_TEST_DSN\nembedding:\n  provider: fake\n---\n\n# Auth record\n\nA record used to prove the bearer door refuses.\n`,
+      `---\nformat: 2\nname: ${TENANT}\ntitle: Auth record\ndescription: A record used to prove the bearer door refuses.\ndatabase:\n  dsn_env: KSOR_TEST_DSN\nembedding:\n  provider: fake\n---\n\n# Auth record\n\nA record used to prove the bearer door refuses.\n`,
       "utf8",
     );
 
@@ -178,17 +178,47 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
           code === 0 ? resolve() : reject(new Error(`${args[0]} → ${code}`)),
         );
       });
+    // A record in the PROFILE's shape (record spec §1–§5): the checker ingest
+    // runs refuses anything else, so a pre-profile fixture here would fail at
+    // the setup step and say nothing about auth.
     const knowledge = path.join(work, "knowledge");
     const { mkdirSync } = await import("node:fs");
     mkdirSync(knowledge, { recursive: true });
+    mkdirSync(path.join(work, ".ksor"), { recursive: true });
+    writeFileSync(
+      path.join(work, ".ksor", "governance.yaml"),
+      'version: "0.1"\napproval_authorities:\n  - actors: [human:cfo]\ntakedown_authorities:\n  actors: [human:ciso]\n',
+      "utf8",
+    );
     writeFileSync(
       path.join(knowledge, "policy.md"),
-      "---\ntitle: Policy\nstatus: approved\nowner: o@example.test\nprovenance:\n  - handbook\n---\n\n# Policy\n\nA governed document long enough to be prose rather than navigation, so the\nrecord has something real to serve to a caller whose token actually verifies.\n",
+      [
+        "---",
+        "type: Document",
+        'title: "Policy"',
+        'description: "The policy a verified caller is allowed to read."',
+        "status: stable",
+        'generated: { by: "fixture/1", at: 2026-08-20T09:00:00Z }',
+        "ksor:",
+        "  audience: [public]",
+        '  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }',
+        "---",
+        "",
+        "# Policy",
+        "",
+        "A governed document long enough to be prose rather than navigation, so the",
+        "record has something real to serve to a caller whose token actually verifies.",
+        "",
+      ].join("\n"),
       "utf8",
     );
     await run(["schema", "--instance", instancePath, "--apply"]);
     await run(["grant", "--instance", instancePath]);
-    await run(["ingest", "--instance", instancePath, "--knowledge", knowledge, "--flip"]);
+    // `ksor build` writes the generated indexes and build.lock.json; ingest
+    // refuses without a fresh lock. The tmp record is outside a repository, so
+    // the ledger's history cannot be walked.
+    await run(["build", "--instance", instancePath, "--allow-unverifiable-ledger"]);
+    await run(["ingest", "--instance", instancePath, "--flip"]);
 
     // The door in PUBLIC (bearer) mode, keys discovered from the AS metadata.
     gateway = spawn(process.execPath, [CLI], {
