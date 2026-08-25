@@ -28,19 +28,27 @@
  */
 
 /**
- * `denied` — every node_id that must not be served: directly-listed nodes (any
- * scope), plus every descendant of a `subtree`-scoped node. Must appear in a
- * `WITH RECURSIVE`, after `g`.
+ * The CTE named `name`, over the generation CTE named `gen` — every node_id
+ * that must not be served: directly-listed nodes (any scope), plus every
+ * descendant of a `subtree`-scoped node. Must appear in a `WITH RECURSIVE`,
+ * after `gen`.
+ *
+ * Parameterised on both for the reason `admittedCte` is: the read path decides
+ * governance on the LIVE generation while serving content from a pinned one,
+ * and a denied set is node_ids, which are per-generation. A denial itself is
+ * not — `takedown_denylist` matches on `stable_id` and has no generation column
+ * by design — so the two sets name the same withdrawals through different rows.
  */
-export const DENIED_CTE = `
-denied AS (
+export function deniedCte(name: string, gen: string): string {
+  return `
+${name} AS (
     SELECT n.node_id,
            EXISTS (SELECT 1 FROM takedown_denylist s
                     WHERE s.tenant_id = n.tenant_id AND s.corpus_id = $2
                       AND s.stable_id = n.stable_id AND s.scope = 'subtree'
                       AND s.revoked_at IS NULL) AS cascade
     FROM content_nodes n
-    JOIN g ON n.generation = g.gen
+    JOIN ${gen} ON n.generation = ${gen}.gen
     WHERE n.tenant_id = $1
       AND EXISTS (SELECT 1 FROM takedown_denylist d
                    WHERE d.tenant_id = n.tenant_id AND d.corpus_id = $2
@@ -49,10 +57,14 @@ denied AS (
   UNION
     SELECT c.node_id, TRUE
     FROM content_nodes c
-    JOIN g ON c.generation = g.gen
-    JOIN denied p ON c.parent_id = p.node_id
+    JOIN ${gen} ON c.generation = ${gen}.gen
+    JOIN ${name} p ON c.parent_id = p.node_id
     WHERE c.tenant_id = $1 AND p.cascade
 )`;
+}
+
+/** The set every serving statement binds, over the generation CTE `g`. */
+export const DENIED_CTE: string = deniedCte("denied", "g");
 
 /**
  * The deny predicate for a node aliased `n`. node_id is NOT NULL (a PK), so

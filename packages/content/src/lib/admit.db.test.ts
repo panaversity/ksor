@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { scopedTxn } from "@panaversity/ksor-postgres";
 import { contentPool } from "../db.js";
 import { ADMITTED, ADMITTED_CTE } from "./admit.js";
+import { DENIED_CTE } from "./takedown.js";
 import { audienceGucs, WHOLE_RECORD_SCOPE } from "./audience.js";
 import { trustGucs } from "./trust.js";
 import type pg from "pg";
@@ -183,6 +184,7 @@ describe.runIf(adminDsn !== "")("the admission seam (db)", () => {
 
   const sql = `
 WITH RECURSIVE g AS (SELECT active_generation AS gen FROM corpora WHERE tenant_id = $1 AND corpus_id = $2),
+${DENIED_CTE},
 ${ADMITTED_CTE}
 SELECT n.stable_id FROM content_nodes n JOIN g ON n.generation = g.gen
 WHERE n.tenant_id = $1 AND ${ADMITTED} ORDER BY n.stable_id`;
@@ -239,6 +241,92 @@ WHERE n.tenant_id = $1 AND ${ADMITTED} ORDER BY n.stable_id`;
     // open/live is unverified, so at human-reviewed nothing is left under `open`.
     const reviewed = await admitted({ ...WHOLE_RECORD_SCOPE, ...trustGucs("human-reviewed") });
     expect(reviewed).not.toContain("open");
+  });
+
+  /**
+   * Decision 19: a surface that refuses must refuse on BOTH surfaces. A section
+   * whose every descendant is taken down at the DEFAULT node scope used to
+   * survive here — `admittedCte` seeded from documents without ever consulting
+   * the deny seam, and a node-scoped denial of a child never denies its parent
+   * — so the door's `outline` kept the named container with `child_count: 0`
+   * while the site's staging pruned the directory completely. A section is
+   * never admitted with no documents at all, so that zero is a positive signal
+   * to an agent that something was withdrawn from a container it can name.
+   */
+  describe("denial empties a section, the way every other predicate does", () => {
+    const deny = async (stableId: string, scope: "node" | "subtree" = "node"): Promise<void> => {
+      await pool.query(
+        "INSERT INTO takedown_denylist (tenant_id, corpus_id, stable_id, scope, reason)" +
+          " VALUES ($1, 'c', $2, $3, 'test')",
+        [TENANT, stableId, scope],
+      );
+    };
+    const lift = async (): Promise<void> => {
+      await pool.query("DELETE FROM takedown_denylist WHERE tenant_id = $1", [TENANT]);
+    };
+
+    it("a node-scoped denial of a section's ONLY document removes the section too", async () => {
+      await deny("open/live");
+      try {
+        const rows = await admitted(audienceGucs(["public"]));
+        expect(rows).not.toContain("open/live");
+        expect(rows, "the container must not survive its last document").not.toContain("open");
+      } finally {
+        await lift();
+      }
+    });
+
+    it("a denial two levels down removes every section that held only it", async () => {
+      await deny("outer/mid/leaf");
+      try {
+        const rows = await admitted(audienceGucs(["public"]));
+        expect(rows).not.toContain("outer/mid");
+        expect(rows).not.toContain("outer");
+      } finally {
+        await lift();
+      }
+    });
+
+    it("a REVOKED denial denies nothing", async () => {
+      await deny("open/live");
+      await pool.query(
+        "UPDATE takedown_denylist SET revoked_ledger_id = 'r1', revoked_at = now()" +
+          " WHERE tenant_id = $1 AND stable_id = $2",
+        [TENANT, "open/live"],
+      );
+      try {
+        expect(await admitted(audienceGucs(["public"]))).toEqual(
+          expect.arrayContaining(["open", "open/live"]),
+        );
+      } finally {
+        await lift();
+      }
+    });
+
+    it("a section with a surviving sibling stays", async () => {
+      await deny("outer/mid/leaf");
+      const extra = await pool.query<{ node_id: string }>(
+        "SELECT node_id FROM content_nodes WHERE tenant_id = $1 AND stable_id = 'outer'",
+        [TENANT],
+      );
+      await pool.query(
+        `INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, parent_id, kind,
+             slug, title, audience, doc_status, trust_tier)
+         VALUES ($1, 'c', 1, 'outer/other', $2, 'document', 'outer-other', 'o', '{public}', 'stable', 0)`,
+        [TENANT, String(extra.rows[0]?.node_id)],
+      );
+      try {
+        const rows = await admitted(audienceGucs(["public"]));
+        expect(rows).toContain("outer");
+        expect(rows).not.toContain("outer/mid");
+      } finally {
+        await lift();
+        await pool.query("DELETE FROM content_nodes WHERE tenant_id = $1 AND stable_id = $2", [
+          TENANT,
+          "outer/other",
+        ]);
+      }
+    });
   });
 
   it("an UNBOUND viewer admits nothing — the seam fails closed", async () => {

@@ -5,10 +5,10 @@
  *
  * The index IS the listing: every projection regenerates its indexes from the
  * tree it was filtered to (record spec §1), so rendering the staged index is
- * rendering exactly what this viewer may see, in the generator's order —
- * concepts by `order:` then title, then folders by their first concept. The
- * sidebar, `llms.txt` and the folder pages all take their order from here,
- * which is what makes it ONE reading order rather than three.
+ * rendering exactly what this viewer may see, in the generator's order — one
+ * bullet list, concepts and folders interleaved by `order:` and ties broken on
+ * the name. The sidebar, `llms.txt` and the folder pages all take their order
+ * from here, which is what makes it ONE reading order rather than three.
  *
  * Pure: no framework, no filesystem, so the rule is unit-tested where the
  * package tests live.

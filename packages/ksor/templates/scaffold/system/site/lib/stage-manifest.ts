@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import type { LifecycleBadge } from "./lifecycle-rule";
-import { frontmatterText } from "../record/frontmatter";
+import { frontmatterText, splitFrontmatter } from "../record/frontmatter";
 import { parseIndex, type IndexEntry } from "../record/index-file";
 
 /**
@@ -101,4 +101,28 @@ export function readStagedIndex(dir: string): IndexEntry[] | null {
 export function stagedFrontmatter(pagePath: string): string {
   const file = path.resolve(process.cwd(), STAGE_DIR, pagePath.replaceAll("\\", "/"));
   return frontmatterText(readFileSync(file, "utf8")) ?? "";
+}
+
+/**
+ * The staged concept's BODY, verbatim — the bytes its markdown twin and its
+ * `llms-full.txt` block republish under the frontmatter above.
+ *
+ * Read from the STAGE for the same reason the frontmatter is, and for one more:
+ * the twin used to be built from fumadocs' PROCESSED markdown, which is the
+ * mdast serialized after every remark plugin has run. `remarkImage` replaces a
+ * local image with a generated import binding, so `![pub](../pub.png)` reached
+ * `/md/` and `llms-full.txt` as `<img alt="pub" src="__img0" />` — a variable
+ * name no consumer can resolve, while the MCP door over the SAME build returned
+ * the record's own bytes. Two machine surfaces of one publication disagreeing
+ * about one document is product principle 2, and `lib/alert-rule.ts` records
+ * the same discipline for alerts: nothing of this shell's dialect reaches the
+ * agent surfaces.
+ */
+export function stagedBody(pagePath: string): string {
+  const rel = pagePath.replaceAll("\\", "/");
+  const file = path.resolve(process.cwd(), STAGE_DIR, rel);
+  const split = splitFrontmatter(readFileSync(file, "utf8"), rel);
+  // A concept with no frontmatter is a checker refusal, so unreachable on a
+  // built record — but the twin must not crash on it.
+  return split.ok ? split.body : "";
 }

@@ -31,7 +31,14 @@ import {
 import { applySchema, renderSchema, schemaVersion, SchemaStateError } from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
-import { listTakedowns, readLedger } from "./takedown-ops.js";
+import {
+  ledgerActs,
+  ledgerDenials,
+  listTakedowns,
+  readLedger,
+  type LedgerRow,
+  type TakedownRow,
+} from "./takedown-ops.js";
 import { applyLedger, unmergedLines } from "./ingest/ledger-apply.js";
 import { appendEntry, mintLedgerId, parseLedger, type LedgerEntry } from "./record/ledger.js";
 import { resolveInstanceDir } from "./record/load.js";
@@ -798,6 +805,27 @@ async function grantCommand(args: string[]): Promise<number> {
   return 0;
 }
 
+/** One governance act per line, newest first: when, what, who, detail. */
+function printLedger(rows: readonly LedgerRow[]): void {
+  if (rows.length === 0) {
+    process.stdout.write("ledger: no governance acts recorded for this corpus yet\n");
+    return;
+  }
+  for (const r of rows) {
+    const when = r.createdAt.toISOString().replace("T", " ").slice(0, 19);
+    process.stdout.write(`${when}\t${r.action}\t${r.actor}\t${JSON.stringify(r.detail)}\n`);
+  }
+}
+
+/** One denial in force per line: what, at which scope, why. */
+function printDenials(rows: readonly TakedownRow[]): void {
+  if (rows.length === 0) {
+    process.stdout.write("takedown: nothing is denied in this corpus\n");
+    return;
+  }
+  for (const r of rows) process.stdout.write(`${r.stableId}\t${r.scope}\t${r.reason}\n`);
+}
+
 async function takedownCommand(args: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
     args,
@@ -908,10 +936,20 @@ async function takedownCommand(args: string[]): Promise<number> {
         );
         return 0;
       }
-      return fail(
-        REFUSED,
-        `${instancePath}: instance.md declares no database: block, and --${mode.kind} reads one`,
+      // Both flags are answerable from the committed file at this rung, and
+      // refusing them broke the documented workflow: `--revoke` takes a LEDGER
+      // ENTRY id and `--ledger` is what lists it, so a level-0 adopter had to
+      // open the YAML by hand to revoke anything.
+      process.stdout.write(
+        `${mode.kind === "ledger" ? "ledger" : "takedown"}: from .ksor/takedowns.yaml — ` +
+          "instance.md declares no database, so the committed ledger is the whole state\n",
       );
+      if (mode.kind === "ledger") {
+        printLedger(ledgerActs(parsedLedger.ledger));
+      } else {
+        printDenials(ledgerDenials(parsedLedger.ledger));
+      }
+      return 0;
     }
     const dsn = resolveDsn(instance);
     if (typeof dsn === "number") return dsn;
@@ -929,23 +967,10 @@ async function takedownCommand(args: string[]): Promise<number> {
     }
     if (mode.kind === "ledger") {
       // The §7 trail, read through the auditor role (schema 2.3).
-      const rows = await withPool(dsn, (pool) => readLedger(pool, instance!, 50));
-      if (rows.length === 0) {
-        process.stdout.write("ledger: no governance acts recorded for this corpus yet\n");
-        return 0;
-      }
-      for (const r of rows) {
-        const when = r.createdAt.toISOString().replace("T", " ").slice(0, 19);
-        process.stdout.write(`${when}\t${r.action}\t${r.actor}\t${JSON.stringify(r.detail)}\n`);
-      }
+      printLedger(await withPool(dsn, (pool) => readLedger(pool, instance!, 50)));
       return 0;
     }
-    const rows = await withPool(dsn, (pool) => listTakedowns(pool, instance!));
-    if (rows.length === 0) {
-      process.stdout.write("takedown: nothing is denied in this corpus\n");
-      return 0;
-    }
-    for (const r of rows) process.stdout.write(`${r.stableId}\t${r.scope}\t${r.reason}\n`);
+    printDenials(await withPool(dsn, (pool) => listTakedowns(pool, instance!)));
     return 0;
   }
 

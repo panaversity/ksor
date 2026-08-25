@@ -35,11 +35,19 @@ the contract and performs nothing.
 
 1. **Indexes, in memory.** One per directory, in OKF §8 form: the heading is
    the instance `title` at the root and the humanised directory name below
-   it; concept bullets `* [Title](file.md) - description` first, ordered by
-   `order:` then title; then subdirectory bullets `* [Name](dir/)` — no
-   description, a deviation from §8's SHOULD recorded in draft 10 (a folder
-   is a container; a concept describes itself) — ordered by the lowest
-   `order:` among the directory's concepts, then name; the root carries
+   it; ONE bullet list holding both kinds of child, concept bullets
+   `* [Title](file.md) - description` and subdirectory bullets
+   `* [Name](dir/)` — the folder carries no description, a deviation from §8's
+   SHOULD recorded in draft 10 (a folder is a container; a concept describes
+   itself). The list is ordered by the reading-order rule
+   (`packages/content/src/lib/order-rule.ts`, decision 18): declared `order:`
+   first and ties broken on the name with a markdown extension removed, case
+   preserved — NOT on the title, and NOT with folders emitted after
+   documents, both of which made the site's order and the MCP door's
+   `outline` disagree about the same record. A directory's `order:` is the
+   lowest among the concepts anywhere BENEATH it, so a folder sorts where its
+   first concept does even when that concept lives another level down. The
+   root carries
    `okf_version: "0.2"` as its only frontmatter and no summary line (the
    instance `description` seeds `llms.txt`, not the index — §8 is headings
    and bullets). Every status and every audience is listed: this is the

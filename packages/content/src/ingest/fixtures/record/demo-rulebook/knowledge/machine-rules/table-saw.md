@@ -3,7 +3,7 @@ type: Document
 title: "Rule 20: The Table Saw"
 description: "How the table saw is set up, guarded and used, and what is never cut on it."
 status: stable
-order: 1
+order: 31
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]

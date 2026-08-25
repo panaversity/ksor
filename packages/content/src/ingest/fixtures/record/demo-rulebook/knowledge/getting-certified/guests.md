@@ -3,7 +3,7 @@ type: Document
 title: "Rule 11: Guests and Minors"
 description: "What a guest or a minor may do in the workshop, and who is responsible for them."
 status: stable
-order: 2
+order: 22
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]

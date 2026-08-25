@@ -184,13 +184,20 @@ takedown_authorities:
       // A record with explicit order, folders, unordered documents whose
       // names interleave with a folder's, and a description — enough to tell
       // "renders the record" from "renders the example", and to pin the
-      // canonical reading order: the index generator's (build spec §1) —
-      // concepts by `order:` then title, then folders by their first concept.
+      // canonical reading order: the index generator's (build spec §1) — ONE
+      // bullet list, concepts and folders together, by `order:` then name.
       const knowledge = path.join(project, "knowledge");
+      // A BUNDLE-ABSOLUTE image, the other OKF §6.1 form (record spec §2.3).
+      // The checker accepts it and staging resolves it against `knowledge/`,
+      // while fumadocs' `remarkImage` resolved a `/`-rooted src against
+      // `<cwd>/public` — a directory this scaffold does not have — so the
+      // export died with "Module not found" on a record the tooling called
+      // valid. source.config.ts now points it at the stage.
       writeFileSync(
         path.join(knowledge, "beta.md"),
-        concept("Beta policy", "first by order", "Beta body.", 0),
+        concept("Beta policy", "first by order", "Beta body.\n\n![logo](/logo.png)", 0),
       );
+      writeFileSync(path.join(knowledge, "logo.png"), TINY_PNG);
       mkdirSync(path.join(knowledge, "hr"));
       // A folder's prose is a concept INSIDE it (record spec §1: `index.md` is
       // generated, never authored), with a real image beside it — the SME
@@ -394,22 +401,23 @@ takedown_authorities:
       expect(llms).toMatch(/^- ksor_version: \d+\.\d+\.\d+/m);
       expect(llms, `llms.txt:\n${llms}`).toContain("[Beta policy](/docs/beta): first by order");
       // The reading order is one truth across every surface: the index
-      // generator's. At the root, concepts by declared order then title
-      // (beta 0; then HR notes, MMM loose, Numbered intro by title), then the
-      // folders by their first concept (hr has order 1, aaa none). Inside hr:
-      // leave 1, overview 2, pay unordered.
+      // generator's. Concepts and folders sort TOGETHER, by declared order then
+      // by name — so `hr/` (order 1, through `leave.md`) is entered between
+      // `beta` (0) and the unordered documents, and `aaa/` between `01-intro`
+      // and `hr-notes`. Inside hr: leave 1, overview 2, pay unordered. Only
+      // documents appear here; a folder route is not a page.
       const sequence = lines
         .map((line) => /\]\((\/docs\/[^)]+)\)/.exec(line)?.[1])
         .filter((url): url is string => url !== undefined);
       expect(sequence, `llms.txt:\n${llms}`).toEqual([
         "/docs/beta",
-        "/docs/hr-notes",
-        "/docs/mmm",
-        "/docs/01-intro",
         "/docs/hr/leave",
         "/docs/hr/overview",
         "/docs/hr/pay",
+        "/docs/01-intro",
         "/docs/aaa/overview",
+        "/docs/hr-notes",
+        "/docs/mmm",
       ]);
       for (const target of sequence) {
         expect(
@@ -421,7 +429,18 @@ takedown_authorities:
         expect(existsSync(twin), `${target} has no twin`).toBe(true);
         expect(readFileSync(twin, "utf8")).toMatch(/^build_id: sha256:/m);
       }
+      // The twin is the record's OWN bytes, not fumadocs' processed markdown:
+      // an image reaches it as the author's `![alt](path)`. It used to arrive
+      // as `<img alt="chart" src="__img0" />` — a generated binding no consumer
+      // can resolve — while the MCP door over the SAME build returned the
+      // authored line, so two machine surfaces of one publication disagreed
+      // about one document (product principle 2).
+      const overviewTwin = readFileSync(path.join(outDir, "md", "hr", "overview.md"), "utf8");
+      expect(overviewTwin).toContain("![chart](./chart.png)");
+      const betaTwin = readFileSync(path.join(outDir, "md", "beta.md"), "utf8");
+      expect(betaTwin).toContain("![logo](/logo.png)");
       expect(existsSync(path.join(outDir, "llms-full.txt"))).toBe(true);
+      expect(readFileSync(path.join(outDir, "llms-full.txt"), "utf8")).not.toContain("__img");
       expect(readFileSync(path.join(outDir, "md", "index.md"), "utf8")).toMatch(
         /^okf_version: "0.2"$/m,
       );

@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { defineCollections, defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { remarkCodeTab } from "fumadocs-core/mdx-plugins/remark-code-tab";
 import { rehypeGithubAlerts } from "./lib/alert-rule";
@@ -8,6 +10,7 @@ import { QuizSchema } from "./lib/quiz";
 import { SlidesSchema } from "./lib/slides";
 import { isAttachment } from "./lib/attachment-rule";
 import { rehypeTeachingAid } from "./lib/teaching-aid-rule";
+import { STAGE_DIR } from "./lib/stage-manifest";
 import { knowledgeSourceDir } from "./lib/stage-knowledge";
 
 // The record lives at <repo>/knowledge — two levels up from this site. The
@@ -46,8 +49,11 @@ export const docs = defineDocs({
       })
       .catchall(z.any()),
     postprocess: {
-      // Exposes each page's processed markdown — llms.txt/llms-full.txt
-      // depend on it.
+      // Exposes each page's processed markdown, for the page's reading time.
+      // NOT for the machine surfaces: `/md/` and `llms-full.txt` republish the
+      // STAGED bytes, because the processed markdown is the mdast serialized
+      // after every remark plugin has run and carries this shell's rendering
+      // rather than the record's grammar (lib/stage-manifest.ts, `stagedBody`).
       includeProcessedMarkdown: true,
     },
   },
@@ -124,6 +130,23 @@ export const slides = defineCollections({
 
 export default defineConfig({
   mdxOptions: {
+    /**
+     * A bundle-absolute image (`![chart](/chart.png)`) resolves against the
+     * STAGE, which is where `/`-rooted links resolve everywhere else in the
+     * record.
+     *
+     * OKF §6.1 allows both link forms and record spec §2.3 says the record
+     * carries both, so the checker accepts `/chart.png` and staging copies the
+     * file to `.staged-knowledge/chart.png`. fumadocs' `remarkImage` is applied
+     * by default and resolves a `/`-rooted src against `<cwd>/public` — a
+     * directory this scaffold does not have — so it emitted
+     * `import __img0 from "../../public/chart.png"` and the export died with
+     * "Module not found" naming a path that exists nowhere in the record. Two
+     * halves of one pipeline resolving the same string against two roots; this
+     * gives them one root. Absolute, because `remarkImage` joins it with the
+     * src and then takes a path RELATIVE to the document's directory.
+     */
+    remarkImageOptions: { publicDir: path.resolve(process.cwd(), STAGE_DIR) },
     /**
      * WHERE the teaching aid sits: after the document's introduction, which
      * is everything before its first `##` section. The plugin only marks the

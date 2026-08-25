@@ -18,6 +18,7 @@ import type pg from "pg";
 
 import { runAuditRead, runRead } from "./db.js";
 import type { ContentInstance } from "./instance.js";
+import { inForce, type Ledger } from "./record/ledger.js";
 
 export type TakedownScope = "node" | "subtree";
 
@@ -70,8 +71,12 @@ export async function listTakedowns(
 ): Promise<TakedownRow[]> {
   return runRead(pool, instance.tenantId, async (client) => {
     const result = await client.query(
+      // `revoked_at IS NULL` is what `lib/takedown.ts` reads, and this is the
+      // operator's own view of the same state: a revoked row is denied nowhere,
+      // so listing it reports a withdrawal that no surface is enforcing.
       "SELECT stable_id, scope, reason, created_at FROM takedown_denylist" +
-        " WHERE tenant_id = $1 AND corpus_id = $2 ORDER BY created_at, stable_id",
+        " WHERE tenant_id = $1 AND corpus_id = $2 AND revoked_at IS NULL" +
+        " ORDER BY created_at, stable_id",
       [instance.tenantId, instance.corpusId],
     );
     return result.rows.map((r: Record<string, unknown>) => ({
@@ -81,4 +86,62 @@ export async function listTakedowns(
       createdAt: r.created_at as Date,
     }));
   });
+}
+
+/**
+ * The same two read-plane answers, from the committed ledger alone — the
+ * level-0 rung, where `instance.md` declares no `database:`.
+ *
+ * `.ksor/takedowns.yaml` is the record of every governance act and the row is a
+ * projection of it (record spec §5), so at this rung the file IS the state and
+ * both flags are answerable without a database. They used to refuse — which
+ * broke the workflow the scaffold's own AGENTS.md documents, since `--revoke`
+ * takes a LEDGER ENTRY id and `--ledger` is what lists it, leaving the adopter
+ * to open the YAML by hand.
+ */
+
+/** What `--list` prints: the denials in force, oldest first. */
+export function ledgerDenials(ledger: Ledger): TakedownRow[] {
+  return inForce(ledger)
+    .map((d) => ({
+      stableId: d.stableId,
+      scope: d.scope,
+      reason: d.reason ?? "",
+      createdAt: new Date(d.at),
+    }))
+    .sort(
+      (a, b) =>
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        (a.stableId < b.stableId ? -1 : a.stableId > b.stableId ? 1 : 0),
+    );
+}
+
+/**
+ * What `--ledger` prints: every entry the file records, newest first, in the
+ * shape the database trail uses — the act, who, and the detail.
+ *
+ * NOT the same trail as the database's: with a `database:` the flag reads §7
+ * `retrieval_log` acts, which include the APPLY. Here it is the file's own
+ * history, which is the only history this rung has and the one `--revoke` needs
+ * ids from.
+ */
+export function ledgerActs(ledger: Ledger): LedgerRow[] {
+  return [...ledger.entries]
+    .map((e): LedgerRow => {
+      const common = { ledger_id: e.id, reason: e.reason, via: "ledger" };
+      const detail =
+        e.kind === "denial"
+          ? { ...common, stable_id: e.stableId, scope: e.scope, expected: e.expected }
+          : e.kind === "revocation"
+            ? { ...common, revokes: e.revokes }
+            : { ...common, amends: e.amends };
+      return {
+        action: `takedown_${e.kind === "denial" ? "denied" : e.kind === "revocation" ? "revoked" : "amended"}`,
+        actor: e.by,
+        generation: null,
+        detail,
+        createdAt: new Date(e.at),
+      };
+    })
+    .reverse();
 }

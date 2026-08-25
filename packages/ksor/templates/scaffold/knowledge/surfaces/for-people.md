@@ -3,7 +3,7 @@ type: Document
 title: The human surface
 description: Pages for reading, reviewing and sharing the record.
 status: draft
-order: 1
+order: 5
 generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ksor:
   audience: [public]

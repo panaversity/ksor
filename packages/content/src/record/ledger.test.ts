@@ -381,6 +381,20 @@ describe("writing the ledger", () => {
     expect(parseLedger(second, "p").ok).toBe(true);
   });
 
+  /**
+   * The header is written at RUNTIME, so it never passes through init's prose
+   * translation (decision 25) and `assertNoForeignManager` — which scans the
+   * tree as emitted — cannot reach it. It named `pnpm check` in every scaffold,
+   * npm's and bun's included.
+   */
+  it("the header names no package manager, because nothing can translate it later", () => {
+    const header = appendEntry(null, denial).split("- id:")[0] ?? "";
+    expect(header).toContain("#");
+    for (const manager of ["pnpm", "npm run", "bun run", "yarn"]) {
+      expect(header, `the ledger header names \`${manager}\``).not.toContain(manager);
+    }
+  });
+
   it("a subtree denial names the `#section` anchor, and the reader agrees", () => {
     const text = appendEntry(null, {
       ...denial,

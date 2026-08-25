@@ -281,7 +281,11 @@ recorded actor, no `--actor` needed — ingest's step, on demand) as the fix;
 is `NOT NULL`, and the entry is the only place the withdrawal is ever
 explained. `--scope subtree` appends the `#section` anchor when the operator
 named the bare directory, and refuses one at the default scope. `--list` and
-`--ledger` read and need no actor (decision 21). `--export` is removed, with
+`--ledger` read and need no actor (decision 21), and need no database either:
+with no `database:` they answer from the committed ledger — the denials in
+force, and every entry with its id, which is what `--revoke` takes. With a
+`database:` `--list` reads the denylist rows in force and `--ledger` reads the
+§7 trail, which additionally records the apply. `--export` is removed, with
 `.ksor-denylist.json` and the scaffold's `export-denylist` step.
 
 The verb's own argument refusals, each slug-first on stderr and outside the §6

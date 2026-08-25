@@ -769,7 +769,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   inside it, such as `overview.md`, and the folder sorts where its
   lowest-`order:` document does.
 - Sidebar position is the governed `order:` key: documents that declare it come
-  first, ascending; the rest follow in name order.
+  first, ascending; the rest follow in name order. Folders sit in that SAME
+  list, not after it — so a folder can sit between two documents, and where it
+  sits is decided by the `order:` of the documents inside it.
 - One order drives every surface — the sidebar, `llms.txt`, the home page's
   first-document link, and the MCP `outline` tool an agent reads to decide what
   to read first. Set it once and they agree. The door picks up a reorder at the

@@ -99,6 +99,14 @@ function assetTarget(recordDir: string, documentRel: string, target: string): st
   }
 }
 
+/** The record-relative paths of every companion of `conceptPath` the record holds. */
+function companionPathsOf(conceptPath: string, companions: ReadonlyMap<string, string>): string[] {
+  const rel = conceptPath.slice(KNOWLEDGE.length);
+  return ATTACHMENT_SUFFIXES.map(({ suffix }) => rel.replace(/\.md$/, "") + suffix)
+    .filter((c) => companions.has(c))
+    .map((c) => `${KNOWLEDGE}${c}`);
+}
+
 function planStage(recordDir: string, development: boolean): StagePlan {
   const record = loadRecord(projectRoot);
 
@@ -236,10 +244,21 @@ function planStage(recordDir: string, development: boolean): StagePlan {
       const companion = rel.replace(/\.md$/, "") + suffix;
       if (companions.has(companion)) copy(companion, companions.get(companion)!);
     }
-    const body = splitFrontmatter(record.files.get(concept.path) ?? "", concept.path);
-    for (const target of linkTargets(body.ok ? body.body : "")) {
-      const asset = assetTarget(recordDir, rel, target);
-      if (asset !== null) assets.add(asset);
+    // The concept's own links AND its companions': the checker validates a
+    // summary's links against the parent's audience (record/check.ts), so an
+    // image referenced only from `<doc>.summary.md` is in the lock, inside
+    // `build_id`, and demanded to exist — while the stage never copied it and
+    // the export died with "Module not found" against a generated
+    // `.staged-knowledge/*.js` path, naming no record file. The checker's link
+    // set and the stage's copy set are the same set.
+    const bodies = [concept.path, ...companionPathsOf(concept.path, companions)];
+    for (const file of bodies) {
+      const text = record.files.get(file) ?? "";
+      const split = splitFrontmatter(text, file);
+      for (const target of linkTargets(split.ok ? split.body : text)) {
+        const asset = assetTarget(recordDir, rel, target);
+        if (asset !== null) assets.add(asset);
+      }
     }
   }
   for (const asset of assets) {

@@ -155,7 +155,15 @@ takedown_authorities:
     "public-policy.md",
     STABLE("Public policy PUBTITLE1", "PUBDESC1 in one line", "public", "", "1"),
   );
-  w("public-policy.summary.md", "---\ntype: Summary\n---\n\nSUMMARYBODY1\n");
+  // A summary that references an asset the PARENT's body never mentions. The
+  // checker validates a companion's links (record/check.ts), so this image is
+  // in the lock and inside `build_id` — and the stage used to scan the concept's
+  // body only, so the byte never arrived and the export died on it.
+  w(
+    "public-policy.summary.md",
+    "---\ntype: Summary\n---\n\nSUMMARYBODY1\n\n![s](./sumchart.png)\n",
+  );
+  w("sumchart.png", PNG);
   w(
     "internal-note.md",
     STABLE("Internal note CANARYTITLE", "CANARYDESC internal only", "internal", "", "2"),
@@ -392,6 +400,7 @@ describe("staging on the profile (build spec §3)", () => {
       "public-policy.summary.md",
       "revoked.md",
       "stale.md",
+      "sumchart.png",
     ]);
 
     // Acceptance 3: no byte of the internal concept's title, path or
@@ -405,8 +414,9 @@ describe("staging on the profile (build spec §3)", () => {
     }
 
     // The regenerated root index, in OKF §8 form, from the STAGED tree — never
-    // the committed one (there is none). Concepts by order then title; the
-    // folder after them; the internal-only folder gets no bullet.
+    // the committed one (there is none). ONE bullet list: concepts and folders
+    // by `order:` then name, so `guides/` lands BETWEEN two documents rather
+    // than behind all of them; the internal-only folder gets no bullet.
     const root = readFileSync(path.join(fixture.stage, "index.md"), "utf8");
     expect(root).toBe(
       `---
@@ -415,12 +425,12 @@ okf_version: "0.2"
 
 # Acme Handbook
 
+* [Guides](guides/)
 * [Public policy PUBTITLE1](public-policy.md) - PUBDESC1 in one line
 * [Future FUTURETITLE](future.md) - FUTUREDESC
 * [Old policy OLDTITLE](old-policy.md) - OLDDESC replaced
 * [Revoked REVOKEDTITLE](revoked.md) - REVOKEDDESC
 * [Stale STALETITLE](stale.md) - STALEDESC
-* [Guides](guides/)
 `,
     );
     expect(readFileSync(path.join(fixture.stage, "guides", "index.md"), "utf8")).toBe(

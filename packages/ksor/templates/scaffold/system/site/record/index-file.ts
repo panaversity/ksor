@@ -1,12 +1,23 @@
 /**
  * The generated `index.md`, one per directory, in OKF §8 form (build spec §1
- * step 1): a heading, concept bullets, folder bullets. Nothing here is
- * authored — an index carries no governance, so anything written into one
- * would be ungoverned knowledge on a served surface (research/okf-native.md
- * §2 item 4). Every projection regenerates its indexes from the tree it was
- * filtered to, so this function must be a pure function of that tree.
+ * step 1): a heading, then one bullet per child — concepts and folders in ONE
+ * reading order. Nothing here is authored — an index carries no governance, so
+ * anything written into one would be ungoverned knowledge on a served surface
+ * (research/okf-native.md §2 item 4). Every projection regenerates its indexes
+ * from the tree it was filtered to, so this function must be a pure function of
+ * that tree.
+ *
+ * The bullet order IS the site's reading order: `readingOrder` walks these
+ * bullets and every human surface ranks by that walk. So the order here and the
+ * order `ingest/adapters/plain-tree.ts` gives the MCP door's `outline` are one
+ * guarantee with two implementations — decision 18 — and both are asserted
+ * against `ORDER_CASES` through `lib/order-rule.ts`. They used to differ twice:
+ * folder bullets were all emitted AFTER the concept bullets (so nothing ever
+ * interleaved), and concept ties broke on the TITLE while the door broke them
+ * on the filename, which reordered every record that declares no `order:` at
+ * all. Both are gone; `compareSiblings` decides here as it does there.
  */
-import { UNORDERED } from "../lib/order-rule";
+import { compareSiblings, folderOrder, tieKey, UNORDERED } from "../lib/order-rule";
 
 export interface IndexConcept {
   /** Bundle-relative id (path without `.md`). */
@@ -24,10 +35,11 @@ export interface IndexInput {
   readonly dirs: readonly string[];
 }
 
-/** A subdirectory bullet: `Name`, and the lowest order among the folder's concepts. */
-interface Folder {
-  readonly name: string;
-  readonly minOrder: number;
+/** One child of a directory, as the sort sees it: a concept bullet or a folder bullet. */
+interface Child {
+  readonly order: number;
+  readonly tie: string;
+  readonly line: string;
 }
 
 /** Bundle-relative index path (`index.md`, `surfaces/index.md`) → bytes. Empty directories are absent. */
@@ -43,26 +55,39 @@ export function generateIndexes(input: IndexInput): Map<string, string> {
     for (let d = dir; d !== ""; d = dirOf(d)) populated.add(d);
   }
   const dirs = new Set(input.dirs);
+  // The shape `folderOrder` folds over: one directory, the orders of the
+  // concepts sitting directly in it.
+  const ordersByDir: (readonly [string, readonly number[]])[] = [...byDir].map(
+    ([d, cs]) => [d, cs.map(orderOf)] as const,
+  );
 
   const out = new Map<string, string>();
   for (const dir of populated) {
     if (dir !== "" && !dirs.has(dir)) continue;
-    const concepts = [...(byDir.get(dir) ?? [])].sort(
-      (a, b) => orderOf(a) - orderOf(b) || compare(a.title, b.title),
-    );
-    const folders: Folder[] = [...populated]
-      .filter((d) => d !== "" && dirOf(d) === dir)
-      .map((d) => ({
-        name: d.slice(dir === "" ? 0 : dir.length + 1),
-        minOrder: minOrder(byDir, d),
-      }))
-      .sort((a, b) => a.minOrder - b.minOrder || compare(a.name, b.name));
+    const children: Child[] = [];
+    for (const c of byDir.get(dir) ?? []) {
+      const name = baseOf(c.id);
+      children.push({
+        order: orderOf(c),
+        tie: tieKey(`${name}.md`),
+        line: `* [${c.title}](${name}.md) - ${c.description}`,
+      });
+    }
+    for (const d of populated) {
+      if (d === "" || dirOf(d) !== dir) continue;
+      const name = d.slice(dir === "" ? 0 : dir.length + 1);
+      children.push({
+        order: folderOrder(ordersByDir, d),
+        tie: tieKey(name),
+        line: `* [${humanise(name)}](${name}/)`,
+      });
+    }
+    children.sort(compareSiblings);
 
     const lines = [
       `# ${dir === "" ? input.title : humanise(dir.slice(dir.lastIndexOf("/") + 1))}`,
       "",
-      ...concepts.map((c) => `* [${c.title}](${baseOf(c.id)}.md) - ${c.description}`),
-      ...folders.map((f) => `* [${humanise(f.name)}](${f.name}/)`),
+      ...children.map((c) => c.line),
     ];
     const body = `${lines.join("\n")}\n`;
     out.set(
@@ -85,16 +110,6 @@ function orderOf(c: IndexConcept): number {
   return c.order ?? UNORDERED;
 }
 
-/** Lowest order among the concepts anywhere beneath `dir` — a folder sorts where its first concept does. */
-function minOrder(byDir: ReadonlyMap<string, readonly IndexConcept[]>, dir: string): number {
-  let min = UNORDERED;
-  for (const [d, concepts] of byDir) {
-    if (d !== dir && !d.startsWith(`${dir}/`)) continue;
-    for (const c of concepts) min = Math.min(min, orderOf(c));
-  }
-  return min;
-}
-
 function dirOf(id: string): string {
   const at = id.lastIndexOf("/");
   return at === -1 ? "" : id.slice(0, at);
@@ -102,10 +117,6 @@ function dirOf(id: string): string {
 
 function baseOf(id: string): string {
   return id.slice(id.lastIndexOf("/") + 1);
-}
-
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 export interface IndexEntry {

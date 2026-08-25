@@ -444,7 +444,14 @@ export function appendEntry(text: string | null, entry: LedgerEntry): string {
   return (text.endsWith("\n") ? text : `${text}\n`) + rendered;
 }
 
+// Manager-NEUTRAL on purpose. This file is written at RUNTIME by `ksor
+// takedown`, so it never passes through init's prose translation (decision 25)
+// — a package-manager command named here landed verbatim in every scaffold,
+// including the npm and bun ones that cannot run it, while the emitted
+// scaffold's own translated copy of this constant said something else beside
+// it. Naming the checker rather than a runner needs no threading and cannot
+// drift.
 const LEDGER_HEADER =
   "# The takedown ledger (record spec §5): append-only, written only by\n" +
-  "# `ksor takedown`, and validated by `pnpm check`, `ksor build` and ingest.\n" +
-  "# Lift a denial with a revocation entry; never delete a line.\n";
+  "# `ksor takedown`, and validated by the record checker, `ksor build` and\n" +
+  "# ingest. Lift a denial with a revocation entry; never delete a line.\n";

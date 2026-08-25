@@ -8,8 +8,15 @@
  *   `lib/lifecycle.ts`  the machine column of the §2.5 table
  *   `lib/trust.ts`      the floor under `verified` (§2.3)
  *
- * and denial stays separate (`lib/takedown.ts`), because it is a governance
- * act against an identity rather than a property of the document.
+ * and DENIAL (`lib/takedown.ts`) binds here as well as on the row being served.
+ * It is not a property of the document — it is a governance act against an
+ * identity — but the section branch has to see it, because a section is
+ * admitted through its descendants and a node-scoped denial of a document never
+ * denies its parent. Without it a section whose every descendant was withdrawn
+ * stayed in the door's `outline` with `child_count: 0` while the site's staging
+ * pruned the directory completely: decision 19's forbidden state, and — since a
+ * section with no documents is never admitted at all — a zero that told an
+ * agent something had been withdrawn from a container it could name.
  *
  * It is a SET and not a row predicate because of the SECTION branch. A section
  * has no body and declares no governance of its own (record spec §1), so there
@@ -32,20 +39,23 @@ import { LIFECYCLE_ADMITS } from "./lifecycle.js";
 import { TRUST_ADMITS } from "./trust.js";
 
 /**
- * The CTE named `name`, over the generation CTE named `gen`.
+ * The CTE named `name`, over the generation CTE named `gen` and the denied set
+ * named `denied` — which must be declared before it and walk the SAME
+ * generation, or its node_ids name rows this set never sees.
  *
- * Parameterised on both because the read path needs TWO: content is served
+ * Parameterised because the read path needs TWO of each: content is served
  * from the pinned generation while governance is decided on the LIVE one
  * (issue #87 — a pin must not freeze a withdrawal), so `read.ts` binds
- * `admitted_live` over `live` beside the ordinary one.
+ * `admitted_live` over `live` and `denied_live` beside the ordinary pair.
  */
-export function admittedCte(name: string, gen: string): string {
+export function admittedCte(name: string, gen: string, denied = "denied"): string {
   return `
 ${name} AS (
     SELECT n.node_id, n.parent_id
     FROM content_nodes n
     JOIN ${gen} ON n.generation = ${gen}.gen
     WHERE n.tenant_id = $1 AND n.status = 'published' AND n.kind <> 'section'
+      AND n.node_id NOT IN (SELECT node_id FROM ${denied})
       AND ${AUDIENCE_ALLOWED} AND ${LIFECYCLE_ADMITS} AND ${TRUST_ADMITS}
   UNION
     SELECT p.node_id, p.parent_id
@@ -53,6 +63,7 @@ ${name} AS (
     JOIN ${gen} ON p.generation = ${gen}.gen
     JOIN ${name} a ON a.parent_id = p.node_id
     WHERE p.tenant_id = $1 AND p.status = 'published' AND p.kind = 'section'
+      AND p.node_id NOT IN (SELECT node_id FROM ${denied})
 )`;
 }
 

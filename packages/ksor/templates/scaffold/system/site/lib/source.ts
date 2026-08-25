@@ -11,6 +11,7 @@ import { appName, appTitle, appDescription, showGovernance } from "./shared";
 import {
   readStagedIndex,
   readStageManifest,
+  stagedBody,
   stagedFrontmatter,
   stagePageOf,
 } from "./stage-manifest";
@@ -63,8 +64,8 @@ function stagedIndexes(): Map<string, IndexEntry[]> {
 }
 
 /**
- * Reading order is ONE rule — the index generator's (build spec §1: concepts
- * by `order:` then title, then folders by their first concept) — and every
+ * Reading order is ONE rule — the index generator's (build spec §1: one bullet
+ * list, concepts and folders together, by `order:` then name) — and every
  * surface takes it from the regenerated indexes rather than restating it. A
  * route the indexes never listed sorts last, by url.
  */
@@ -173,25 +174,27 @@ export function getMachinePages(): KnowledgePage[] {
 
 /**
  * One document as the full-corpus file and its twin carry it: heading, then the
- * record's OWN frontmatter intact under the build's stamps, then the body.
+ * record's OWN frontmatter intact under the build's stamps, then the record's
+ * OWN body.
  *
  * The frontmatter is the point — without it a consumer ingesting the corpus had
  * no way to tell a passage's status, owner or source, and nothing connecting it
- * to the publication it came from (R14) — and it is served intact so that what
- * a consumer parses is the profile's grammar rather than this shell's summary
- * of it.
+ * to the publication it came from (R14) — and both halves are served intact so
+ * that what a consumer parses is the profile's grammar rather than this shell's
+ * rendering of it. Body from the STAGE, never from fumadocs' processed
+ * markdown: see `stagedBody`, and the door, which serves these same bytes.
  */
-export async function getLLMText(page: KnowledgePage): Promise<string> {
-  const processed = await page.data.getText("processed");
+export function getLLMText(page: KnowledgePage): string {
+  const body = stagedBody(page.path);
   const front = agentFrontmatter(
     stagedFrontmatter(page.path),
     readGovernance(page.data, page.path),
     readStageManifest().stamps,
   );
-  // found live 2026-08-21: the processed markdown arrives with its own leading
-  // blank lines, so every block opened with three of them — and adding the
-  // frontmatter above made it four. One blank line between each part, always.
-  return [`# ${page.data.title} (${basePath}${page.url})`, front.trimEnd(), processed.trimStart()]
+  // found live 2026-08-21: the body arrives with its own leading blank lines,
+  // so every block opened with three of them — and adding the frontmatter above
+  // made it four. One blank line between each part, always.
+  return [`# ${page.data.title} (${basePath}${page.url})`, front.trimEnd(), body.trimStart()]
     .filter((part) => part !== "")
     .join("\n\n");
 }

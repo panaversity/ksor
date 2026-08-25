@@ -4,11 +4,34 @@
   "source_commit": "dev",
   "nodes": [
     {
+      "stable_id": "knowledge/overview",
+      "slug": "overview",
+      "title": "Workshop Safety Rulebook",
+      "kind": "document",
+      "position": 1,
+      "summary": "The official rules of the Maple Street Community Workshop, and how they bind every member.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
       "stable_id": "knowledge/emergencies#section",
       "slug": "emergencies",
       "title": "Emergencies",
       "kind": "section",
-      "position": 1,
+      "position": 2,
       "governance": {
         "audience": [
           "public"
@@ -92,7 +115,7 @@
       "slug": "getting-certified",
       "title": "Getting certified",
       "kind": "section",
-      "position": 2,
+      "position": 3,
       "governance": {
         "audience": [
           "public"
@@ -176,7 +199,7 @@
       "slug": "machine-rules",
       "title": "Machine rules",
       "kind": "section",
-      "position": 3,
+      "position": 4,
       "governance": {
         "audience": [
           "public"
@@ -254,32 +277,13 @@
         },
         "trust_tier": 0
       }
-    },
-    {
-      "stable_id": "knowledge/overview",
-      "slug": "overview",
-      "title": "Workshop Safety Rulebook",
-      "kind": "document",
-      "position": 4,
-      "summary": "The official rules of the Maple Street Community Workshop, and how they bind every member.",
-      "governance": {
-        "audience": [
-          "public"
-        ],
-        "doc_status": "stable",
-        "generated": {
-          "by": "ksor-fixture/1",
-          "at": "2026-08-20T09:00:00.000Z"
-        },
-        "approval": {
-          "by": "human:cfo",
-          "at": "2026-08-21T09:00:00.000Z"
-        },
-        "trust_tier": 0
-      }
     }
   ],
   "files": [
+    {
+      "path": "knowledge/overview.md",
+      "node": "knowledge/overview"
+    },
     {
       "path": "knowledge/emergencies/overview.md",
       "node": "knowledge/emergencies/overview"
@@ -315,10 +319,6 @@
     {
       "path": "knowledge/machine-rules/laser-cutter.md",
       "node": "knowledge/machine-rules/laser-cutter"
-    },
-    {
-      "path": "knowledge/overview.md",
-      "node": "knowledge/overview"
     }
   ]
 }

@@ -3,7 +3,7 @@ type: Document
 title: "Rule 30: Injuries"
 description: "Who to call, where the kit is, and what is recorded after an injury."
 status: stable
-order: 1
+order: 11
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]

@@ -61,6 +61,8 @@ interface LinkTargets {
   readonly exists: (id: string) => boolean;
   /** Bundle-relative ids of the record's asset files — `secret/org-chart.png`. */
   readonly assets: ReadonlySet<string>;
+  /** Bundle-relative directories — `secret`. A link may name one, and it inherits by POSITION. */
+  readonly directories: ReadonlySet<string>;
 }
 
 export function checkRecord(record: RecordFiles, options: CheckOptions): CheckResult {
@@ -76,6 +78,9 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   const assets = record.assets ?? new Map<string, Uint8Array>();
 
   // ── the bundle: concepts, companions, reserved names ───────────────────
+  // A document that fails to parse is not a concept, so the indexes generated
+  // below are the indexes of a DIFFERENT tree — see the staleness block.
+  let dropped = false;
   const concepts = new Map<string, Concept>();
   const bodies = new Map<string, string>();
   for (const path of paths) {
@@ -96,11 +101,13 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     const split = splitFrontmatter(text, path);
     if (!split.ok) {
       refusals.push(split.refusal);
+      dropped = true;
       continue;
     }
     const parsed = parseConcept(path, split.frontmatter ?? {});
     if (!parsed.ok) {
       refusals.push(...parsed.refusals);
+      dropped = true;
       continue;
     }
     concepts.set(parsed.concept.id, parsed.concept);
@@ -126,6 +133,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   const targets: LinkTargets = {
     concepts,
     assets: new Set([...assets.keys()].map((p) => p.slice(KNOWLEDGE.length))),
+    directories: new Set(dirs),
     exists: (id) =>
       id === "" ||
       concepts.has(id) ||
@@ -188,7 +196,14 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     if (policy !== null) checkAgainstPolicy(concept, policy, refusals);
   }
 
-  if (options.mode === "check") {
+  // Staleness is only answerable when every document parsed. A refused document
+  // is not a concept, so its directory generates a different index or none at
+  // all, and comparing against that produced one extra refusal per affected
+  // directory AND per ancestor — each prescribing "run `ksor build`", which
+  // refuses on the real error and writes nothing, and each saying of a correct
+  // index that it belongs to "a directory that earns none". One bad document,
+  // one problem; fix it and the next run answers this honestly.
+  if (options.mode === "check" && !dropped) {
     const expected = new Set(indexes.keys());
     const committed = paths.filter((p) => p.startsWith(KNOWLEDGE) && p.endsWith("/index.md"));
     for (const path of new Set([...expected, ...committed])) {
@@ -285,7 +300,7 @@ function checkLinks(
     }
     const found = targets.concepts.get(id);
     if (found === undefined) {
-      assetWidens(path, audience, id, targets, refusals);
+      nonConceptWidens(path, audience, id, targets, refusals);
       continue;
     }
     if (mayReach(audience, found.audience)) continue;
@@ -298,14 +313,27 @@ function checkLinks(
   }
 }
 
+/** A companion's id → its parent concept's, in both shapes `resolveLink` produces. */
+const COMPANION_TARGET = /\.(summary|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
+
 /**
- * An asset declares no audience, so it inherits one by POSITION — the way a
- * companion inherits its parent's. The directory it sits in is that position:
- * if every concept under that directory is out of the linking document's reach,
- * then linking the asset publishes both its bytes and the directory's NAME into
- * a build that excludes everything else in it. Reproduced: a public policy with
- * `![chart](/secret/org-chart.png)` put `secret/org-chart.png` in the public
- * `out/`, past a sweep that asserts no byte of `secret/` appears.
+ * Every link target that is NOT a concept, judged by the same audience rule a
+ * concept target is — because `targets.exists` admits five kinds and only one
+ * of them used to be judged at all.
+ *
+ * A COMPANION inherits its parent's audience entirely (decision 24), so a link
+ * to `secret/plan.summary.md` is a link to `secret/plan` under another name;
+ * refusing the second while publishing the first was one branch's worth of
+ * difference in a public build (found live: the id and the directory name both
+ * reached the page HTML, the `/md/` twin and `llms-full.txt`).
+ *
+ * Everything else declares no audience, so it inherits one by POSITION — the
+ * directory it names or sits in. If every concept under that directory is out
+ * of the linking document's reach, then linking it publishes the directory's
+ * NAME (and, for an asset, its bytes) into a build that excludes everything
+ * else in it. Reproduced: a public policy with `![chart](/secret/org-chart.png)`
+ * put `secret/org-chart.png` in the public `out/`, past a sweep that asserts no
+ * byte of `secret/` appears.
  *
  * A directory holding NO concept says nothing about audience — an `images/`
  * folder is shared furniture — so the question is passed UP to the nearest
@@ -316,25 +344,55 @@ function checkLinks(
  * stops below the bundle root, which stays furniture like `images/`: the root
  * holds the linking document itself, so testing it could only ever pass.
  */
-function assetWidens(
+function nonConceptWidens(
   path: string,
   audience: readonly string[],
   id: string,
   targets: LinkTargets,
   refusals: Refusal[],
 ): void {
-  if (!targets.assets.has(id)) return;
+  // The bundle root is the linking document's own directory.
+  if (id === "") return;
+
+  const parentId = id.replace(COMPANION_TARGET, "");
+  const parent = parentId === id ? undefined : targets.concepts.get(parentId);
+  if (parent !== undefined) {
+    if (mayReach(audience, parent.audience)) return;
+    refusals.push({
+      slug: "ksor-link-widens",
+      path,
+      why: `links to \`${id}\`, which is the companion of \`${parentId}\` (audience [${parent.audience.join(", ")}]) and inherits its audience entirely, which not every reader of this document (audience [${audience.join(", ")}]) may read`,
+      fix: "widen the parent's audience, narrow this document's, or remove the link",
+    });
+    return;
+  }
+
+  // Where the target sits: a directory (or its generated index) IS its own
+  // position; anything else takes the directory it lives in.
+  const asset = targets.assets.has(id);
+  const dirOfId = id.slice(0, Math.max(id.lastIndexOf("/"), 0));
+  const named = targets.directories.has(id);
+  const indexDir = id.endsWith("/index") ? id.slice(0, -"/index".length) : null;
+  const start = named ? id : (indexDir ?? dirOfId);
+  const what = named
+    ? `the directory \`${id}/\``
+    : indexDir !== null
+      ? `the generated index of \`${indexDir}/\``
+      : asset
+        ? `the asset \`${id}\``
+        : `the file \`${id}\``;
+  const carries = asset ? "that directory's name and its bytes" : "that directory's name";
+
   const concepts = [...targets.concepts.values()];
-  for (let cut = id.lastIndexOf("/"); cut !== -1; cut = id.lastIndexOf("/", cut - 1)) {
-    const dir = id.slice(0, cut);
+  for (let dir = start; dir !== ""; dir = dir.slice(0, Math.max(dir.lastIndexOf("/"), 0))) {
     const inside = concepts.filter((c) => c.id === dir || c.id.startsWith(`${dir}/`));
     if (inside.length === 0) continue;
     if (inside.some((c) => mayReach(audience, c.audience))) return;
     refusals.push({
       slug: "ksor-link-widens",
       path,
-      why: `links to the asset \`${id}\`, which lives under \`${dir}/\` — a directory holding ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts that directory's name and its bytes in a build that excludes everything else in it`,
-      fix: `move the asset beside this document (or into a directory its readers may enter), or widen something under \`${dir}/\``,
+      why: `links to ${what} — \`${dir}/\` holds ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts ${carries} in a build that excludes everything else in it`,
+      fix: `move it beside this document (or into a directory its readers may enter), or widen something under \`${dir}/\``,
     });
     return;
   }

@@ -111,7 +111,9 @@ applies the ledger in file order, and records the `build_id` it published;
 `GOVERNANCE_SINCE` is 2.5, so a carried-forward generation refuses to serve
 until it is re-ingested. `ksor takedown` is ledger-first (record spec §5):
 the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
-`--apply`, and `--export` and `.ksor-denylist.json` are gone.
+`--apply`, and `--export` and `.ksor-denylist.json` are gone. `--list` and
+`--ledger` read without a database too, from the committed ledger — the rung
+`ksor init` emits, and the only place `--revoke`'s entry id can be found there.
 
 **And serving now reads all of it.** `lib/lifecycle.ts` and `lib/trust.ts`
 join the audience overlap in ONE admitted set (`lib/admit.ts`), bound beside
@@ -119,8 +121,10 @@ join the audience overlap in ONE admitted set (`lib/admit.ts`), bound beside
 draft, a document before its `effective_from`, one past its `stale_after` and
 a deprecated one are absent from every machine surface (record spec §2.5),
 and a caller may name a `min_trust_tier` the arm enforces before ranking. A
-SECTION carries no governance of its own and is admitted iff a descendant is
-visible, by a recursive `parent_id` walk. `AUDIENCE_CASES` is the overlap
+SECTION carries no governance of its own and is admitted iff an UNDENIED
+descendant is visible, by a recursive `parent_id` walk — so a section whose
+every document has been withdrawn leaves the outline instead of advertising
+`child_count: 0`. `AUDIENCE_CASES` is the overlap
 table and every row of it — sections and refusals included — runs through
 real Postgres, as does every line of `LIFECYCLE_CASES`. A calibrated floor
 carries the digest of the predicate it was measured under, and one measured
