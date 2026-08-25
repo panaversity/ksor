@@ -152,7 +152,7 @@ pnpm fmt                  # oxfmt (<1s)
 pnpm guard                # guard-invariants.mjs (<1s)
 pnpm check:corpus         # the SHIPPED docs' frontmatter and links (<1s)
 pnpm test:unit            # *.test.ts, colocated, pure (<3s)
-pnpm build && pnpm test:integration   # built artifacts + repo-tree suites (<15s)
+pnpm build && pnpm test:integration   # built artifacts + repo-tree suites (~2 min)
 pnpm publint               # package manifest/tarball correctness (needs build)
 ```
 
@@ -1354,7 +1354,11 @@ assertion.
 - `*.test.ts` — unit, colocated (packages `src/` and `scripts/`): pure, no
   fs/subprocess/network (<3s total)
 - `*.integration.test.ts` — built artifacts, subprocesses, repo-tree scans,
-  tmp dirs (<15s)
+  tmp dirs (~2 min). The `<15s` this line used to claim was measured before the
+  tier spawned the built CLI per test, packed a tarball and installed it — the
+  costs that ARE the tier ("the test tier must install the same tree the
+  artifact installs"). It is a shape, not a budget: a suite belongs here
+  because of what it touches, never because of what it costs.
 - `*.db.test.ts` — real Postgres, gated on `KSOR_DB_URL` (`pnpm test:db`; CI
   provides the service). The kernel's guarantees are SQL, so the tier that runs
   them against a real database is where they are actually held.
