@@ -25,13 +25,6 @@ import { orderValue } from "../../content/src/lib/order-rule.js";
 import { readingOrder } from "../templates/scaffold/system/site/lib/index-routes.js";
 
 /**
- * The one row the generator does not satisfy yet — see the divergence test at
- * the bottom, which fails the day it does, so this exception cannot rot in
- * silence.
- */
-const INTERLEAVE_ROW = "a directory orders by its index document, beside the loose files";
-
-/**
  * The row as a record. A `.md` entry is a concept in the root directory; any
  * other entry is a DIRECTORY, given one concept so it earns an index.
  *
@@ -71,7 +64,7 @@ function siteOrder(kase: OrderCase): string[] {
 }
 
 describe("the website's reading order is the generated index's order", () => {
-  it.each(ORDER_CASES.filter((k) => k.name !== INTERLEAVE_ROW))("$name", (kase) => {
+  it.each(ORDER_CASES)("$name", (kase) => {
     expect(siteOrder(kase), kase.why).toEqual([...kase.expected]);
   });
 });
@@ -94,36 +87,11 @@ describe("the walk of the indexes is the order the sidebar and llms.txt share", 
         parseIndex(text),
       ]),
     );
-    // The folder's bullet is last today (see below), and the walk enters it
-    // exactly where the bullet sits — which is the property this pins.
-    expect(readingOrder(parsed)).toEqual(["/docs/later", "/docs/guides", "/docs/guides/first"]);
-  });
-});
-
-/**
- * The ONE row of the table the site does not satisfy, asserted as the
- * divergence it is rather than skipped (decision 22's shape).
- *
- * `generateIndexes` emits every concept bullet and THEN every folder bullet,
- * so a folder never interleaves with a document by `order:` — while the door's
- * tree adapter sorts concepts and directories together. Two surfaces, two
- * reading orders, which is what decision 18 exists to prevent. Fixing it is
- * the KERNEL's call and not this suite's, because interleaving forces one tie
- * key for concepts and folders together and the two halves tie on different
- * things today (title here, file name in the adapter) — a build-spec decision.
- *
- * When the generator interleaves, THIS test fails: delete it and drop
- * `INTERLEAVE_ROW` from the filter above, and the row starts being asserted.
- */
-describe("KNOWN DIVERGENCE: the generated index lists folders after documents", () => {
-  it("puts an `order: 1` folder behind an `order: 2` document", () => {
-    const kase = ORDER_CASES.find((k) => k.name === INTERLEAVE_ROW);
-    expect(kase, `ORDER_CASES no longer has the row "${INTERLEAVE_ROW}"`).toBeDefined();
-    expect(
-      siteOrder(kase!),
-      "the generator now interleaves folders with documents — delete this test and stop " +
-        "filtering INTERLEAVE_ROW out of the table above",
-    ).toEqual(["loose.md", "guides"]);
-    expect(kase!.expected).toEqual(["guides", "loose.md"]);
+    // `guides` folds to its child's `order: 1` and `later` carries `order: 2`,
+    // so the folder's bullet sits FIRST — and the walk enters it there, which
+    // is the property this pins. It reads better now than when folders were
+    // emitted last: the folder is in the middle of the walk, so "where the
+    // bullet sits" and "at the end" can no longer be confused for each other.
+    expect(readingOrder(parsed)).toEqual(["/docs/guides", "/docs/guides/first", "/docs/later"]);
   });
 });
