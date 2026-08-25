@@ -30,6 +30,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { bootLine } from "./boot-report.js";
+
 import { exportJWK, generateKeyPair, SignJWT, type JWK, type KeyObject } from "jose";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -249,8 +251,12 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
     // line, not on the string "oauth-authorization-server", which also appears
     // in the fallback ADVISORY. The looser form passed while the door was in
     // fact using the vendor guess and 503ing every request.
+    // Composed with `bootLine`, never spelled out: this assertion hard-coded
+    // the label's padding, so widening the value column by one — a fix for a
+    // label that printed as one unreadable word — turned this red for a
+    // spacing change it was never about (CI, 2026-08-25).
     expect(booted, `boot log:\n${booted}`).toContain(
-      `keys     oauth-authorization-server — ${as.issuer}/jwks`,
+      bootLine("keys", `oauth-authorization-server — ${as.issuer}/jwks`),
     );
     expect(booted, "a guess must not have been used").not.toContain("GUESS");
   }, 180_000);
