@@ -21,11 +21,18 @@ stays in the package.
 default registration, at ~4 chars/token. They depend on the code alone, so they
 are exact for every record:
 
-|                             | chars  | ~tokens |                                |
-| --------------------------- | ------ | ------- | ------------------------------ |
-| tool definitions, all three | 16,214 | 4,054   | **always resident in context** |
-| `search` alone              | 7,602  | 1,901   | always resident                |
-| `outline` + `read`          | 8,608  | 2,152   | always resident                |
+|                                  | chars  | ~tokens |                                |
+| -------------------------------- | ------ | ------- | ------------------------------ |
+| tool definitions, as transmitted | 16,214 | 4,054   | **always resident in context** |
+| `search` alone                   | 7,602  | 1,901   | always resident                |
+| `outline` alone                  | 3,332  | 833     | always resident                |
+| `read` alone                     | 5,276  | 1,319   | always resident                |
+| `outline` + `read`, if deleted   | 8,608  | 2,152   | the delete-both saving         |
+
+The first row is the JSON of the whole `tools` array; every other row is one
+tool's own object. The array carries four characters no tool's row does — two
+brackets and two separators — so the three tools sum to **16,210** and the
+array is **16,214**. Deleting a tool saves that tool's own row.
 
 **Replies** depend on the record's passages. These are the 2026-08-23
 measurement against the live book record (81 documents, 6,963 chunks) plus the

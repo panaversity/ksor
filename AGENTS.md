@@ -807,7 +807,8 @@ gateway` package, serve-by-spawn) is superseded._
     block, and `search` takes a `min_trust_tier` parameter. Measured exactly,
     from the served `tools/list` capture rather than an estimate: the three
     definitions are **16,214 chars ≈ 4,054 tokens, always resident** (was
-    ~2,990), of which `search` alone is 7,602 and `read` 5,276; a search hit
+    ~2,990) as transmitted — `search` 7,602 + `outline` 3,332 + `read` 5,276 =
+    16,210, plus the four characters the `tools` array itself carries; a search hit
     carries ~262 chars more than it did, so a `k=10` call is correspondingly
     dearer. The per-call figure is NOT re-measured here — the live 81-document
     book it was taken against does not exist in this tree, and an estimate
