@@ -105,23 +105,21 @@ function planStage(recordDir: string, development: boolean): StagePlan {
     else if (name.endsWith(".md") && name !== "index.md")
       documents.set(rel, path.join(recordDir, rel));
   }
-  // A yaml companion beside a document is a file the record reader does not
-  // load (it reads `.md` and `.yaml` alike, but the lock lists every companion);
-  // everything that is neither a concept nor a companion is an ASSET, which the
-  // lock also covers because this build publishes its bytes.
+  // The lock covers every asset, because this build publishes its bytes — so
+  // the stage's asset set must be the SET THE LOCK WAS BUILT FROM, not a second
+  // opinion about it. It is therefore taken from the record the loader already
+  // read, the same one `composeLock` reads. Re-walking the directory instead
+  // was two walkers with two answers, and both differences were live bugs: the
+  // loader skips OS junk, so a `.DS_Store` that Finder writes the first time an
+  // adopter opens `knowledge/` was in the tree, never in the lock, and refused
+  // `ksor-lock-stale` — unfixable, because the remedy that refusal prescribes
+  // writes the identical lock. And the loader reads no symlink as bytes, so a
+  // symlinked asset read stale here before ever reaching its own `ksor-symlink`.
   const assetFiles = new Map<string, string>();
-  for (const file of walkFiles(recordDir)) {
-    const rel = path.relative(recordDir, file).split(path.sep).join("/");
-    const name = path.basename(rel);
-    if (COMPANION.test(name)) {
-      if (!companions.has(rel)) companions.set(rel, file);
-    } else if (!/\.(md|yaml)$/.test(name)) {
-      // `.md` and `.yaml` are what the record READER reads as text, so the
-      // kernel counts neither as an asset; matching it exactly keeps the lock's
-      // asset list the same set on both sides. A non-companion `.yaml` is
-      // refused by the checker (`ksor-file-type`), not staged as bytes.
-      assetFiles.set(rel, file);
-    }
+  for (const file of record.assets.keys()) {
+    if (!file.startsWith(KNOWLEDGE)) continue;
+    const rel = file.slice(KNOWLEDGE.length);
+    assetFiles.set(rel, path.join(recordDir, rel));
   }
 
   const draftsRequested = process.env.KSOR_DRAFTS === "show";

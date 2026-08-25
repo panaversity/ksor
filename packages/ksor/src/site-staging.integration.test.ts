@@ -79,6 +79,9 @@ const PNG = Buffer.from(
 
 const AS_OF = "2026-08-25T12:00:00Z";
 
+/** What the record loader skips (`packages/content/src/record/load.ts`). */
+const OS_JUNK = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
+
 interface Fixture {
   readonly root: string;
   readonly site: string;
@@ -261,6 +264,11 @@ function writeLock(
   const walk = (dir: string, prefix: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const rel = `${prefix}${entry.name}`;
+      // What `ksor build` would have written: the record loader skips OS junk
+      // and never reads a symlink as bytes, so a lock containing either is a
+      // state no real build can produce — and a fabricated lock like that made
+      // the symlink case below reach the checker for the wrong reason.
+      if (entry.isSymbolicLink() || OS_JUNK.has(entry.name)) continue;
       if (entry.isDirectory()) walk(path.join(dir, entry.name), `${rel}/`);
       else if (/\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/.test(entry.name)) {
         companions.push({ path: rel, sha256: sha(path.join(dir, entry.name)) });
@@ -782,8 +790,34 @@ describe("the lock's freshness claim covers the control files", () => {
     writeFileSync(doc, before);
     writeLock(fixture.root);
     expect(r.status, r.stderr).not.toBe(0);
-    expect(r.stderr).toContain("ksor-symlink");
+    // The stage used to re-walk the tree itself and see the link as an ordinary
+    // asset, so the lock read stale before the checker ever ran and the operator
+    // was handed `ksor-lock-stale` — a diagnosis naming the wrong problem and a
+    // fix (`ksor build`) that could not apply. The record must refuse the LINK,
+    // by name. (`ksor-link-dead` on the linking document prints first only
+    // because refusals sort by path; both are the symlink, said twice.)
+    expect(r.stderr).not.toContain("ksor-lock-stale");
+    expect(r.stderr).toContain("ksor-symlink: knowledge/guides/leak.png");
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-[a-z-]+: knowledge\//);
     expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  /**
+   * Finder writes `.DS_Store` the first time an adopter opens `knowledge/`.
+   * The record loader skips it, so `ksor build` can never list it in the lock;
+   * the stage re-walked the tree with no exclusions, saw a file the lock did
+   * not have, and refused `ksor-lock-stale` — whose own fix line says to run
+   * `ksor build`, which writes the identical lock. Every local `pnpm build` on
+   * a mac was unbuildable and unfixable, and the scaffold's gitignore hides the
+   * file from review.
+   */
+  it("an OS junk file in the record does not make the build unfixable", () => {
+    const junk = path.join(fixture.root, "knowledge", ".DS_Store");
+    writeFileSync(junk, Buffer.from([0x00, 0x00, 0x00, 0x01]));
+    const r = stage(fixture);
+    rmSync(junk);
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(path.join(fixture.stage, ".DS_Store"))).toBe(false);
   });
 
   /**
