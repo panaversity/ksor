@@ -61,18 +61,16 @@ function approveStarter(knowledge: string): void {
   }
 }
 
-/** Every draft title the starter ships — what an all-draft build must publish nowhere. */
-function draftTitles(knowledge: string): string[] {
-  const titles: string[] = [];
+/** Every draft the starter ships, as the route it would occupy if it were published. */
+function draftSlugs(knowledge: string): string[] {
+  const slugs: string[] = [];
   for (const rel of readdirSync(knowledge, { recursive: true, encoding: "utf8" })) {
     const name = path.basename(rel);
     if (!name.endsWith(".md") || name === "index.md" || isAttachment(name)) continue;
-    const text = readFileSync(path.join(knowledge, rel), "utf8");
-    if (!/^status: draft$/m.test(text)) continue;
-    const title = /^title: (.+)$/m.exec(text)?.[1];
-    if (title !== undefined) titles.push(title.replace(/^["']|["']$/g, ""));
+    if (!/^status: draft$/m.test(readFileSync(path.join(knowledge, rel), "utf8"))) continue;
+    slugs.push(rel.split(path.sep).join("/").replace(/\.md$/, ""));
   }
-  return titles;
+  return slugs;
 }
 
 /** What the first `pnpm build` of an untouched scaffold produced, captured before anything is approved. */
@@ -81,7 +79,8 @@ interface StarterBuild {
   readonly output: string;
   readonly docsIndex: string | null;
   readonly llms: string | null;
-  readonly titles: readonly string[];
+  readonly routes: readonly string[];
+  readonly slugs: readonly string[];
 }
 
 describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
@@ -151,14 +150,20 @@ takedown_authorities:
       const file = path.join(project, "system", "site", "out", ...parts);
       return existsSync(file) ? readFileSync(file, "utf8") : null;
     };
-    const titles = draftTitles(path.join(project, "knowledge"));
+    const slugs = draftSlugs(path.join(project, "knowledge"));
     const starter = buildScaffold(project);
+    const outDocs = path.join(project, "system", "site", "out", "docs");
     starterBuild = {
       status: starter.status,
       output: `${starter.stdout ?? ""}\n${starter.stderr ?? ""}`.slice(-2000),
       docsIndex: read("docs", "index.html"),
       llms: read("llms.txt"),
-      titles,
+      routes: existsSync(outDocs)
+        ? readdirSync(outDocs, { recursive: true, encoding: "utf8" }).map((r) =>
+            r.split(path.sep).join("/"),
+          )
+        : [],
+      slugs,
     };
 
     approveStarter(path.join(project, "knowledge"));
@@ -187,11 +192,15 @@ takedown_authorities:
     // The root index still renders: a record waiting for its first approval is
     // a record, not a missing stage.
     expect(starterBuild.docsIndex, "out/docs/index.html was not written").not.toBeNull();
-    expect(starterBuild.titles.length, "the starter ships no drafts to check").toBeGreaterThan(0);
-    for (const title of starterBuild.titles) {
-      expect(starterBuild.docsIndex, `draft "${title}" was published`).not.toContain(title);
-      expect(starterBuild.llms ?? "", `draft "${title}" is in llms.txt`).not.toContain(title);
+    expect(starterBuild.slugs.length, "the starter ships no drafts to check").toBeGreaterThan(0);
+    for (const slug of starterBuild.slugs) {
+      expect(starterBuild.routes, `draft ${slug} got a page`).not.toContain(`${slug}/index.html`);
     }
+    // `llms.txt`'s document list, not the whole file: the record's own scope
+    // paragraph quotes the starter's subject matter, and a substring sweep read
+    // that as a published draft (it is the `>` line, above `## Documents`).
+    const listed = (starterBuild.llms ?? "").split("## Documents")[1] ?? "";
+    expect(listed.trim(), "llms.txt lists a document").toBe("");
   });
 
   it("static build serves the record: llms.txt index, distinct themes, no console errors, no external requests", async () => {
