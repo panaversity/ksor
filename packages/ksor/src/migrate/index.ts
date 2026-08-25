@@ -131,7 +131,12 @@ function parseArgs(args: readonly string[]): Parsed | string {
 }
 
 const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
-const RESERVED = new Set(["index.md", "index.mdx", "README.md"]);
+// `.md` only. `loadRecord` reads `.md` and `.yaml` as text and nothing else, so
+// an `.mdx` never enters `record.files` at all — and the record checker refuses
+// one under `knowledge/` by name (`ksor-file-type`: the bundle is CommonMark,
+// decision 8). The `index.mdx` and `.mdx` branches this file used to carry were
+// unreachable in both directions.
+const RESERVED = new Set(["index.md", "README.md"]);
 
 /** A generated index: no governance frontmatter, and every body line a heading or a bullet. */
 function isGeneratedIndex(text: string, path: string): boolean {
@@ -224,7 +229,7 @@ export async function runMigrate(
   };
   const conceptIds = new Set<string>();
   for (const [rel, text] of [...record.files].sort()) {
-    if (!rel.startsWith("knowledge/") || !/\.(md|mdx)$/.test(rel)) continue;
+    if (!rel.startsWith("knowledge/") || !rel.endsWith(".md")) continue;
     const name = rel.slice(rel.lastIndexOf("/") + 1);
     if (name === "log.md") continue;
     if (COMPANION.test(name)) {
@@ -256,7 +261,7 @@ export async function runMigrate(
       continue;
     }
     for (const a of out.outcome.audiences) registry.add(a);
-    conceptIds.add(target.slice("knowledge/".length).replace(/\.mdx?$/, ""));
+    conceptIds.add(target.slice("knowledge/".length).replace(/\.md$/, ""));
     if (target !== rel) {
       // A reserved name is emptied and its prose lands in a concept beside it;
       // `ksor build` regenerates index.md from the tree at the next build.

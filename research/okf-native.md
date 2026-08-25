@@ -288,14 +288,18 @@ one exists); `effective` → `ksor.effective_from` at midnight UTC; `review` →
 touching the file> }` (outside a repository, refused unless
 `--generated-at`); every `<doc>.summary.md` without frontmatter gains
 `type: Summary`; the instance's H1 into `title:`, `audiences:` into the
-policy, the stamp into `toolchain:`, `format: 2`; every `<dir>/index.md`,
-`index.mdx` or `README.md` with prose into `overview.md`, with `<dir>/index`
+policy, the stamp into `toolchain:`, `format: 2`; every `<dir>/index.md`
+or `README.md` with prose into `overview.md`, with `<dir>/index`
 and `<dir>/README` denylist rows re-pointed (`node` → `<dir>/overview`,
 `subtree` → `<dir>#section`); every existing denylist row into the ledger,
 with the actor from the latest `takedown_applied` log row, or from
 `--attribute <stable_id>=<actor>` (a human asserting it, recorded in the
 entry's `reason`), refusing by name otherwise; and the site's byte-copied
-rule modules offered as diffs (`--write-site`). It DELETES `id:` and `name:`,
+rule modules offered as diffs (`--write-site`). (`index.mdx` was in this list
+and is not: `loadRecord` reads `.md` and `.yaml` as text and nothing else, so an
+`.mdx` never reaches migrate, and the record checker refuses one under
+`knowledge/` by name — `ksor-file-type`, the bundle is CommonMark, decision 8.
+An adopter carrying one moves it by hand, and the checker says so.) It DELETES `id:` and `name:`,
 which only ever restated the path the profile makes the identity. It refuses,
 by name, a document whose `title` or `description` it cannot derive — migrate
 never authors knowledge — a `sor_id:` (retiring it changes the document's

@@ -416,9 +416,17 @@ site build and the door, not to the record checker (build spec §3).
    it cannot read are refused (`ksor-migrate-underivable`) rather than
    silently dropped — dropping any of them retires an identity or narrows a
    takedown with nothing recording that it happened.
-6. A bare OKF reader with no ksor code (the reference `OKFDocument.parse`)
-   reads every non-reserved `.md` under the emitted starter's `knowledge/`
-   as a typed concept.
+6. A bare OKF reader with no ksor code reads every non-reserved `.md` under
+   the emitted starter's `knowledge/` as a typed concept — `type` (OKF §4.1's
+   only always-required key), a `title` to display, a `description` to preview,
+   a body, and every `sources` entry naming its `resource` — with the reserved
+   root index carrying `okf_version` and nothing else, and a non-root index no
+   frontmatter at all. There is no reference `OKFDocument.parse` to run here
+   (the spec is vendored, the implementation is not), so the reader is written
+   out from the vendored spec in `okf-reader.integration.test.ts` and shares no
+   code with `packages/content/src/record`: it splits the fence itself and
+   parses YAML with the parser directly. If it ever needs a ksor import to
+   pass, that import is the finding.
 7. A ledger with a deleted line is refused by `ksor build` (in a repository
    with history) and by ingest; a hand-appended revocation by an unnamed
    actor is refused by check, build and ingest alike; a revocation by a named
