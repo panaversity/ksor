@@ -341,10 +341,13 @@ timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
 `ksor-attachment-orphan`, `ksor-link-widens` (a link to a concept whose
 audience this document's readers do not reach — and a link to an ASSET whose
-DIRECTORY holds concepts and not one of them reachable: an asset declares no
-audience, so it inherits one by position, and a public document linking
-`/secret/chart.png` otherwise published that directory's name and bytes into
-the public build), `ksor-supersession-strands`
+NEAREST ANCESTOR DIRECTORY holding any concept holds not one reachable: an
+asset declares no audience, so it inherits one by position, and a public
+document linking `/secret/chart.png` otherwise published that directory's name
+and bytes into the public build. The ancestor walk is what makes the rule
+whole — asking only the asset's own directory was defeated by nesting it one
+level deeper, `/secret/img/chart.png`, whose directory holds no concept at
+all), `ksor-supersession-strands`
 (a `deprecated` concept whose `ksor.superseded_by` names a concept that does
 not exist, is not `stable`, or fails the widening rule — and the pointer on a
 concept that is not `deprecated` at all, which the old checker refused and

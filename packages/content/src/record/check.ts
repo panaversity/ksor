@@ -308,7 +308,13 @@ function checkLinks(
  * `out/`, past a sweep that asserts no byte of `secret/` appears.
  *
  * A directory holding NO concept says nothing about audience — an `images/`
- * folder is shared furniture — so it is left alone rather than guessed at.
+ * folder is shared furniture — so the question is passed UP to the nearest
+ * ancestor that does hold one. Found live: checking only the immediate
+ * directory was defeated by nesting the asset one level deeper
+ * (`secret/img/chart.svg`) — that directory holds no concept, so the rule said
+ * nothing and the public build carried `secret/img/` and its bytes. The walk
+ * stops below the bundle root, which stays furniture like `images/`: the root
+ * holds the linking document itself, so testing it could only ever pass.
  */
 function assetWidens(
   path: string,
@@ -318,19 +324,20 @@ function assetWidens(
   refusals: Refusal[],
 ): void {
   if (!targets.assets.has(id)) return;
-  const cut = id.lastIndexOf("/");
-  if (cut === -1) return;
-  const dir = id.slice(0, cut);
-  const inside = [...targets.concepts.values()].filter(
-    (c) => c.id === dir || c.id.startsWith(`${dir}/`),
-  );
-  if (inside.length === 0 || inside.some((c) => mayReach(audience, c.audience))) return;
-  refusals.push({
-    slug: "ksor-link-widens",
-    path,
-    why: `links to the asset \`${id}\`, which lives under \`${dir}/\` — a directory holding ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts that directory's name and its bytes in a build that excludes everything else in it`,
-    fix: `move the asset beside this document (or into a directory its readers may enter), or widen something under \`${dir}/\``,
-  });
+  const concepts = [...targets.concepts.values()];
+  for (let cut = id.lastIndexOf("/"); cut !== -1; cut = id.lastIndexOf("/", cut - 1)) {
+    const dir = id.slice(0, cut);
+    const inside = concepts.filter((c) => c.id === dir || c.id.startsWith(`${dir}/`));
+    if (inside.length === 0) continue;
+    if (inside.some((c) => mayReach(audience, c.audience))) return;
+    refusals.push({
+      slug: "ksor-link-widens",
+      path,
+      why: `links to the asset \`${id}\`, which lives under \`${dir}/\` — a directory holding ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts that directory's name and its bytes in a build that excludes everything else in it`,
+      fix: `move the asset beside this document (or into a directory its readers may enter), or widen something under \`${dir}/\``,
+    });
+    return;
+  }
 }
 
 function checkSupersession(

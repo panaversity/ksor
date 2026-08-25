@@ -353,6 +353,18 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-link-widens knowledge/bad.md"],
   },
   {
+    // The asset one level DEEPER than the restricted directory: `secret/img/`
+    // holds no concept of its own, so the rule has to ask its parent.
+    name: "ksor-link-widens (a nested asset)",
+    files: base({
+      "knowledge/secret/plan.md": doc("Plan", { audience: "internal" }),
+      "knowledge/bad.md": frontmatter(stable, "![chart](/secret/img/chart.svg)\n"),
+    }),
+    bytes: { "knowledge/secret/img/chart.svg": [0x3c, 0x73, 0x76, 0x67] },
+    dirs: ["knowledge/policies", "knowledge/secret", "knowledge/secret/img"],
+    expected: ["ksor-link-widens knowledge/bad.md"],
+  },
+  {
     name: "ksor-supersession-strands",
     files: base({
       // The successor a public reader cannot open.

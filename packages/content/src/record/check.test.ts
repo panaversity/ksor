@@ -307,7 +307,10 @@ describe("checkRecord — an asset is reached through the directory that holds i
     "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/secret/org-chart.svg)\n"),
     "knowledge/secret/plan.md": doc("Plan", INTERNAL),
   };
-  const assets = { "knowledge/secret/org-chart.svg": ASSET };
+  const assets = {
+    "knowledge/secret/org-chart.svg": ASSET,
+    "knowledge/secret/img/chart.svg": ASSET,
+  };
 
   const run = (over: Record<string, string> = {}): string[] =>
     checkRecord(
@@ -320,7 +323,7 @@ describe("checkRecord — an asset is reached through the directory that holds i
             ...over,
           }),
         ),
-        dirs: ["knowledge/secret"],
+        dirs: ["knowledge/secret", "knowledge/secret/img"],
         assets: new Map(Object.entries(assets)),
       },
       { mode: "build" },
@@ -332,6 +335,18 @@ describe("checkRecord — an asset is reached through the directory that holds i
 
   it("allows it once something in that directory is public", () => {
     expect(run({ "knowledge/secret/open.md": doc("Open", PUBLIC) })).toEqual([]);
+  });
+
+  // Found live on a real scaffold: nesting the asset ONE level deeper
+  // (`secret/img/chart.svg`) emptied the immediate directory of concepts, so the
+  // rule said nothing and `ksor build` exited 0 while a public stage carried
+  // `secret/img/chart.svg` — the restricted directory's name and the bytes both.
+  it("refuses it from a SUB-directory of the restricted directory", () => {
+    expect(
+      run({
+        "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/secret/img/chart.svg)\n"),
+      }),
+    ).toEqual(["ksor-link-widens knowledge/policy.md"]);
   });
 
   it("says nothing about an asset in a directory that holds no concept at all", () => {
