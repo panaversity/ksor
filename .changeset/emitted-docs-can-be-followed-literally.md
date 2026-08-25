@@ -17,7 +17,7 @@ doc that already got it right.
 - **"The ordered path is:" was not the order.** The command block ran before
   the instruction to uncomment `database:` in `instance.md`, which sat thirteen
   lines below it, so step two died with `instance.md declares no database:
-  block`. The emitted `AGENTS.md` had the right order all along; the README now
+block`. The emitted `AGENTS.md` had the right order all along; the README now
   matches it — config, environment, then commands.
 - **The Docker smoke test refused with the `.env` the README told you to
   write.** A container sets `$PORT`, so the door binds `0.0.0.0` and

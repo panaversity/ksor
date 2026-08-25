@@ -27,7 +27,7 @@ printed output literally.
 
 - **A port already held now names its remedy.** `ksor serve` printed its boot
   lines and then `error: listen EADDRINUSE: address already in use
-  127.0.0.1:8080` — a bare Node errno, with no mention of `KSOR_MCP_PORT`. It
+127.0.0.1:8080` — a bare Node errno, with no mention of `KSOR_MCP_PORT`. It
   now says what is wrong, why, how to find the process holding the port, and how
   to serve on another one; `EACCES` and `EADDRNOTAVAIL` get their own remedies,
   because the next command differs. The exit code is unchanged: a bind failure
