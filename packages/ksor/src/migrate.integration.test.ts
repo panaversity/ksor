@@ -466,6 +466,52 @@ describe("ksor migrate — what it refuses to invent", () => {
     expect(r.stderr).toContain("--actor");
   });
 
+  /**
+   * The three LEGACY_KEYS migrate never handled. `sor_id` is refused because
+   * dropping it changes the document's stable_id from the sor_id value to its
+   * path, which silently breaks every denylist row and citation keyed on the
+   * old one; `id`/`name` are deleted. Leaving them produced a tree the checker
+   * refuses AND an infinite fix-loop, because `hasProfileShape` stays false
+   * while any legacy key is present and each pass re-minted `ksor.approval.at`
+   * — a governance instant moving on every run.
+   */
+  it("refuses sor_id by name and writes nothing", () => {
+    const root = repo([
+      instance,
+      [
+        "knowledge/a.md",
+        "---\ntitle: A\ndescription: A doc.\nstatus: draft\nsor_id: legacy-a\n---\n\nBody.\n",
+      ],
+    ]);
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-migrate-underivable");
+    expect(r.stderr).toContain("legacy-a");
+    expect(tree(root)).toEqual(before);
+  });
+
+  it("drops id and name, leaves a green record, and a second run reports nothing to migrate", () => {
+    const root = repo([
+      instance,
+      [
+        "knowledge/a.md",
+        "---\nid: a\nname: a\ntitle: A\ndescription: A doc.\nstatus: approved\n---\n\nBody.\n",
+      ],
+    ]);
+    const first = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(first.status, first.stderr).toBe(0);
+    const written = read(root, "knowledge/a.md");
+    expect(written).not.toContain("\nid:");
+    expect(written).not.toContain("\nname:");
+    expect(refusalsOf(root)).toEqual([]);
+
+    const second = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(second.status, second.stderr).toBe(0);
+    // The approval instant is a governance act: a second pass must not move it.
+    expect(read(root, "knowledge/a.md")).toBe(written);
+  });
+
   it("refuses a malformed --attribute", () => {
     const root = repo([instance]);
     const r = run(root, "migrate", "--attribute", "knowledge/x");

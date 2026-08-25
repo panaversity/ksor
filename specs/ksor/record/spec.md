@@ -397,7 +397,11 @@ site build and the door, not to the record checker (build spec §3).
    written by hand) produces trees that pass this checker, with every
    `approved` document `draft` unless `--approve-by` was given, a tier
    expanded to every tier at or above it, and every existing denylist row
-   present in the ledger.
+   present in the ledger. `id`/`name` are deleted; `sor_id`, an escaping or
+   stranded `superseded_by`, and a denylist row whose scope or subtree target
+   it cannot read are refused (`ksor-migrate-underivable`) rather than
+   silently dropped — dropping any of them retires an identity or narrows a
+   takedown with nothing recording that it happened.
 6. A bare OKF reader with no ksor code (the reference `OKFDocument.parse`)
    reads every non-reserved `.md` under the emitted starter's `knowledge/`
    as a typed concept.

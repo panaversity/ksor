@@ -180,6 +180,62 @@ describe("migrateConcept", () => {
     );
   });
 
+  /**
+   * The three LEGACY_KEYS migrate never touched. `sor_id` is the dangerous one:
+   * dropping it silently CHANGES the document's stable_id from the sor_id value
+   * to its path, which breaks every denylist row and citation keyed on the old
+   * one. `id`/`name` are pure duplicates of the path and are deleted. Leaving
+   * all three in place produced a tree the checker refuses AND an infinite
+   * fix-loop that re-minted `ksor.approval.at` on every pass, because
+   * `hasProfileShape` stays false while any legacy key is present.
+   */
+  it("refuses sor_id by name rather than dropping a stable_id nobody can recover", () => {
+    const r = run("title: A\ndescription: A.\nstatus: draft\nsor_id: legacy-purchase-approval\n");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-migrate-underivable"]);
+    expect(r.refusals[0]!.why).toContain("legacy-purchase-approval");
+    expect(r.refusals[0]!.why).toContain("`a`");
+    expect(r.refusals[0]!.fix).toMatch(/denylist|takedown/);
+  });
+
+  it("deletes id and name, which only ever restated the path", () => {
+    const r = run("title: A\ndescription: A.\nstatus: draft\nid: a\nname: a\n");
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    expect(r.outcome.text).not.toContain("\nid:");
+    expect(r.outcome.text).not.toContain("\nname:");
+    // Idempotent: the rewritten tree is in the profile's shape, so a second
+    // run is a no-op and cannot re-mint a governance instant.
+    const again = migrateConcept("knowledge/a.md", r.outcome.text, AT, CTX);
+    expect(again.ok && again.outcome.changed).toBe(false);
+    expect(again.ok && again.outcome.text).toBe(r.outcome.text);
+  });
+
+  it("refuses a superseded_by that escapes the record instead of writing null", () => {
+    const r = migrateConcept(
+      "knowledge/a.md",
+      doc("title: A\ndescription: A.\nstatus: superseded\nsuperseded_by: ../../elsewhere/b.md\n"),
+      AT,
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-migrate-underivable"]);
+    expect(r.refusals[0]!.why).toContain("../../elsewhere/b.md");
+  });
+
+  it("refuses a superseded_by on a document that is not being deprecated", () => {
+    // The checker refuses that tree as `ksor-supersession-strands`; migrate
+    // knows it first, and a refusal migrate produced itself is not a fix loop.
+    const r = run("title: A\ndescription: A.\nstatus: draft\nsuperseded_by: ./b.md\n");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-migrate-underivable"]);
+    expect(r.refusals[0]!.why).toContain("ksor-supersession-strands");
+    expect(r.refusals[0]!.fix).toContain("status: superseded");
+  });
+
   it("leaves a document that is already in the profile byte-identical", () => {
     const already = doc(
       "type: Document\ntitle: A\ndescription: A.\nstatus: draft\nksor:\n  audience: [public]\n",

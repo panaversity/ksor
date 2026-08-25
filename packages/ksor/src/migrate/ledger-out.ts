@@ -66,6 +66,19 @@ export function toLedgerEntries(
       continue;
     }
     const stableId = repoint(row.stableId, row.scope);
+    // `parseLedger` refuses a `subtree` entry that does not name a container's
+    // `#section` anchor, so transcribing one verbatim would write a ledger
+    // migrate's own checker cannot load — and a subtree denial narrowed to a
+    // node is a takedown that stops covering descendants (decision 14).
+    if (row.scope === "subtree" && !stableId.endsWith("#section")) {
+      refusals.push({
+        slug: "ksor-migrate-underivable",
+        path: ".ksor/takedowns.yaml",
+        why: `the subtree denial of \`${row.stableId}\` names a document, not a container — a subtree entry names \`knowledge/<dir>#section\`, and only the container form covers the descendants a later change adds`,
+        fix: `re-deny it after the migration: \`ksor takedown --subtree <dir>\` for the container it meant, or a plain node denial if it only ever covered \`${row.stableId}\``,
+      });
+      continue;
+    }
     entries.push({
       id: ledgerIdFor(stableId, row.at),
       stableId,

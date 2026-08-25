@@ -466,10 +466,15 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   → human-reviewed), `stale_after`, `ksor.effective_from`. Actors are
   `human:<id>`, `process:<id>` or `<producer>/<version>`; `team:<id>` only in
   `ksor.owner`. Every timestamp is an ISO 8601 instant with an offset
-  (`2026-08-25T09:00:00Z`) — never a bare date. Unknown keys are preserved;
-  the pre-profile keys `visibility`, `owner`, `provenance`, `effective`,
-  `superseded`, `id`, `name` and `sor_id` are refused by name (`ksor migrate`
-  moves them).
+  (`2026-08-25T09:00:00Z`) — never a bare date. Unknown keys are preserved, unless
+  the name is one edit from a profile key — `stale_afer:` is refused rather
+  than kept, because a preserved near miss is the key it meant, failing open.
+  The `ksor:` block's own key set is closed. The pre-profile keys
+  `visibility`, `owner`, `provenance`, `effective`, `superseded` and
+  `superseded_by` are refused by name and `ksor migrate` moves them; `id` and
+  `name` it deletes (the path is the identity); `sor_id` it REFUSES rather
+  than drops, because retiring it changes the document's stable id and any
+  takedown keyed on the old one must be re-denied against the new one first.
 - **Each page says how long it takes to read**, counted from the document's own
   words when the site is built. Fenced code and frontmatter do not count toward
   it, so a short page carrying a long example is not reported as a long read.
