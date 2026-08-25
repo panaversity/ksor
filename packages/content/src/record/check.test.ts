@@ -291,3 +291,65 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     ]);
   });
 });
+
+/**
+ * Assets have no audience of their own, so they inherit one by POSITION — the
+ * same way a companion inherits its parent's. A public concept linking
+ * `/secret/org-chart.png` staged `secret/org-chart.png` into the PUBLIC build:
+ * the image bytes and the directory name `secret/` both, which is the canary
+ * the visibility sweep asserts against, reached through the one path it does
+ * not model (`checkLinks` only refused links that resolve to CONCEPTS).
+ */
+describe("checkRecord — an asset is reached through the directory that holds it", () => {
+  // A `.svg`, so the PNG chunk check has nothing to say about the bytes.
+  const ASSET = new Uint8Array([0x3c, 0x73, 0x76, 0x67]);
+  const files = {
+    "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/secret/org-chart.svg)\n"),
+    "knowledge/secret/plan.md": doc("Plan", INTERNAL),
+  };
+  const assets = { "knowledge/secret/org-chart.svg": ASSET };
+
+  const run = (over: Record<string, string> = {}): string[] =>
+    checkRecord(
+      {
+        files: new Map(
+          Object.entries({
+            "instance.md": INSTANCE,
+            ".ksor/governance.yaml": POLICY,
+            ...files,
+            ...over,
+          }),
+        ),
+        dirs: ["knowledge/secret"],
+        assets: new Map(Object.entries(assets)),
+      },
+      { mode: "build" },
+    ).refusals.map((r) => `${r.slug} ${r.path}`);
+
+  it("refuses a public link to an asset in a directory no public reader may enter", () => {
+    expect(run()).toEqual(["ksor-link-widens knowledge/policy.md"]);
+  });
+
+  it("allows it once something in that directory is public", () => {
+    expect(run({ "knowledge/secret/open.md": doc("Open", PUBLIC) })).toEqual([]);
+  });
+
+  it("says nothing about an asset in a directory that holds no concept at all", () => {
+    expect(
+      checkRecord(
+        {
+          files: new Map(
+            Object.entries({
+              "instance.md": INSTANCE,
+              ".ksor/governance.yaml": POLICY,
+              "knowledge/policy.md": doc("Policy", PUBLIC, "![chart](/images/chart.svg)\n"),
+            }),
+          ),
+          dirs: ["knowledge/images"],
+          assets: new Map([["knowledge/images/chart.svg", ASSET]]),
+        },
+        { mode: "build" },
+      ).refusals.map((r) => `${r.slug} ${r.path}`),
+    ).toEqual([]);
+  });
+});

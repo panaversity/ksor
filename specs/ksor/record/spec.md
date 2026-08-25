@@ -339,7 +339,12 @@ timestamp that is not an instant with an explicit offset, §2.3),
 `ksor-footnote-unkeyed`,
 `ksor-reserved-name`, `ksor-index-stale` (check only),
 `ksor-attachment-frontmatter` (any key but `type: Summary`),
-`ksor-attachment-orphan`, `ksor-link-widens`, `ksor-supersession-strands`
+`ksor-attachment-orphan`, `ksor-link-widens` (a link to a concept whose
+audience this document's readers do not reach — and a link to an ASSET whose
+DIRECTORY holds concepts and not one of them reachable: an asset declares no
+audience, so it inherits one by position, and a public document linking
+`/secret/chart.png` otherwise published that directory's name and bytes into
+the public build), `ksor-supersession-strands`
 (a `deprecated` concept whose `ksor.superseded_by` names a concept that does
 not exist, is not `stable`, or fails the widening rule — and the pointer on a
 concept that is not `deprecated` at all, which the old checker refused and
