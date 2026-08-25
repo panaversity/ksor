@@ -20,7 +20,11 @@ And one operating principle:
 
 > **Govern knowledge once. Project it many ways.**
 
-Humans, AI systems, agents, and other knowledge systems reach the same institutional truth through different governed surfaces. Development tooling such as `AGENTS.md` and reusable skills can help maintain that record, but it never becomes a competing source of truth.
+> **You cannot build predictable AI systems on an undefined source of truth.**
+
+KSoR does not make a probabilistic language model deterministic. It makes the **knowledge environment predictable and governed**: which source is authoritative, which version is current, who approved it, who may see it, which knowledge may be retrieved, and when an agent must abstain rather than improvise.
+
+Humans, AI systems, agents, and other knowledge systems then reach the same institutional truth through different governed surfaces. Development tooling such as `AGENTS.md` and reusable skills can help maintain that record, but it never becomes a competing source of truth.
 
 The result is not merely a documentation site, knowledge base, vector database, RAG system, or MCP wrapper.
 
@@ -37,21 +41,21 @@ manager everywhere:
 **npm**
 
 ```bash
-npx @panaversity/ksor@latest init my-knowledge-sor
+npx @panaversity/ksor init my-knowledge-sor
 cd my-knowledge-sor && npm install && npm run dev
 ```
 
 **pnpm**
 
 ```bash
-pnpm dlx @panaversity/ksor@latest init my-knowledge-sor
+pnpm dlx @panaversity/ksor init my-knowledge-sor
 cd my-knowledge-sor && pnpm install && pnpm dev
 ```
 
 **bun**
 
 ```bash
-bunx @panaversity/ksor@latest init my-knowledge-sor
+bunx @panaversity/ksor init my-knowledge-sor
 cd my-knowledge-sor && bun install && bun run dev
 ```
 
@@ -134,7 +138,118 @@ There is often no authoritative answer to:
 
 > **Which knowledge should the AI trust?**
 
+A model cannot reliably infer institutional authority when the institution itself has not defined it. Better prompting, a larger context window, or a more accurate embedding model does not resolve that missing source of truth.
+
 KSoR exists to solve that problem.
+
+---
+
+## Predictable AI Needs a Knowledge System of Record
+
+The more autonomy an AI agent receives, the more important its knowledge boundary becomes.
+
+A KSoR does **not** make the underlying model fully deterministic. Models may still vary in wording, reasoning paths, and generated explanations. What KSoR makes controlled and testable is the environment the agent is allowed to operate from:
+
+- which knowledge is authoritative,
+- which version is in force,
+- who owns and approved it,
+- which audience may see it,
+- which sources support it,
+- what retrieval is permitted,
+- and when the system must abstain.
+
+That distinction matters in both enterprises and education.
+
+### In an enterprise
+
+Without a Knowledge System of Record, an agent may encounter several plausible sources:
+
+```text
+                          AI Agent
+                             │
+        ┌────────────┬───────┼────────┬─────────────┐
+        ▼            ▼       ▼        ▼             ▼
+     old wiki     current   Slack    stale RAG   model memory
+                  policy   message    chunks
+        │            │       │        │             │
+        └────────────┴───────┼────────┴─────────────┘
+                             ▼
+                  Which source should win?
+```
+
+The agent can rank relevance. It cannot manufacture organizational authority.
+
+With a KSoR:
+
+```text
+                    Governed KSoR
+                         │
+              authoritative knowledge
+                         │
+                 governance boundary
+                         │
+                         ▼
+                      AI Agent
+                         │
+                         ▼
+             predictable, bounded action
+```
+
+The agent may still reason probabilistically, but it reasons from a controlled institutional truth rather than choosing among conflicting versions of that truth.
+
+> **A company cannot expect predictable AI-agent behavior while its agents operate from unpredictable knowledge.**
+
+### In education
+
+The same problem appears when AI agents become tutors, teaching assistants, assessment agents, or curriculum assistants.
+
+Without an authoritative academic record, two students in the same course can be taught from different model memory, different web sources, different editions of course material, or outdated instructor notes. Personalization then becomes curricular inconsistency.
+
+An education KSoR can govern the academic truth:
+
+```text
+                       Education KSoR
+                            │
+          ┌─────────────────┼─────────────────┐
+          ▼                 ▼                 ▼
+      Curriculum         Pedagogy         Assessment
+          │                 │                 │
+          └─────────────────┼─────────────────┘
+                            ▼
+                    governed course record
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+           AI Tutor      Teacher AI    Assessment AI
+```
+
+The AI can still adapt:
+
+- explanation,
+- examples,
+- pacing,
+- language,
+- difficulty,
+- practice,
+- and remediation.
+
+But the KSoR can keep stable:
+
+- learning objectives,
+- canonical concepts and definitions,
+- prerequisites,
+- approved source material,
+- course sequence,
+- assessment rules,
+- grading criteria,
+- and the current course version.
+
+> **Personalization should vary the teaching path, not the authoritative curriculum.**
+
+So the same architectural principle applies in both settings:
+
+> **Enterprise agents need a KSoR so they operate from the same governed institutional truth.**  
+> **Education agents need a KSoR so they teach from the same governed academic truth.**
 
 ---
 
@@ -569,7 +684,24 @@ Product Management KSoR
 Company Operations KSoR
 Security KSoR
 AI Governance KSoR
+University KSoR
+School KSoR
 ```
+
+### Education KSoRs
+
+Examples:
+
+```text
+University Curriculum KSoR
+Degree Program KSoR
+Course KSoR
+Faculty Teaching KSoR
+Assessment KSoR
+Professional Certification KSoR
+```
+
+An education KSoR lets AI tutors and teaching agents personalize instruction while remaining grounded in the same approved curriculum, learning objectives, source material, and assessment rules.
 
 ### Domain KSoRs
 
@@ -1647,7 +1779,9 @@ See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
 > **A traditional System of Record tells an AI system what is true about the business; a Knowledge System of Record tells humans, agents, and software what the organization knows and how it should operate.**
 
-KSoR makes that knowledge **authoritative, governed, traceable, human-readable, agent-readable, machine-readable, and vendor-neutral**.
+> **You cannot build predictable AI systems on an undefined source of truth.**
+
+KSoR makes the knowledge environment **authoritative, governed, traceable, human-readable, agent-readable, machine-readable, and vendor-neutral**, so AI can adapt and reason without inventing which institutional or academic truth it should operate from.
 
 ---
 
