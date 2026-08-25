@@ -50,6 +50,11 @@ the machinery instead of the value:
   open standard: one corpus will answer in any assistant, agent framework, or
   worker the owner writes. What a customer owns is the source; runtimes are
   interchangeable. Never position ksor as an integration with one assistant.
+  Since decision 27 the SOURCE is open too, not only the protocol: the record
+  is an OKF bundle in the KSoR Profile, so `knowledge/` handed to any OKF
+  consumer reads as a conformant bundle with no ksor in the loop. That is the
+  strongest available form of this claim — say it that way rather than
+  reasoning from the protocol alone.
 - **The interesting problem is not retrieval.** Chunking, embedding, and
   hybrid search are commodity. Whether an agent can be _trusted_ is decided by
   the governance of what it reads — provenance, something citable, and a
@@ -64,17 +69,33 @@ the machinery instead of the value:
 
 Used precisely; do not repurpose.
 
-| Term                | Means                                                                                        |
-| ------------------- | -------------------------------------------------------------------------------------------- |
-| **corpus**          | the governed markdown under `knowledge/` — the source of truth                               |
-| **instance**        | one deployment configured (`instance.md`): corpus, floors, budgets. **Not governance**       |
-| **build**           | one execution of `ksor build`, identified by a `build_id`                                    |
-| **generation**      | the monotonic version of published content — what a citation pins                            |
-| **build.lock.json** | the committed record of a build: what was published, from which commit, with which toolchain |
-| **surface**         | something that serves the corpus — the website and the MCP server                            |
-| **scaffold**        | what `ksor init` writes into an adopter's repo — owned by the adopter (decision 4)           |
-| **level**           | how much governance a project has climbed to, 0–4 — a ladder, not a gate                     |
-| **abstain**         | the corpus does not cover this — a correct answer, never an error                            |
+| Term                | Means                                                                                         |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| **corpus**          | the governed markdown under `knowledge/` — the source of truth. It is an OKF bundle (27)      |
+| **concept**         | one governed document in the bundle. Its id is its bundle-relative path without `.md`         |
+| **companion**       | a file attached to a concept — summary, flashcards, quiz, slides. Never a concept itself (24) |
+| **instance**        | one deployment configured (`instance.md`): identity, floors, budgets. **Not governance**      |
+| **policy**          | `.ksor/governance.yaml` — the audience registry and the approval/takedown authorities (27)    |
+| **ledger**          | `.ksor/takedowns.yaml` — the committed, append-only record of every takedown act (27)         |
+| **build**           | one execution of `ksor build`, identified by a `build_id`                                     |
+| **build_id**        | what every machine artefact stamps — the content hash of everything a projection reads        |
+| **generation**      | the monotonic version of published content — what a citation pins. **Not `build_id`**         |
+| **build.lock.json** | the committed record of a build: what was published, from which commit, with which toolchain  |
+| **surface**         | something that serves the corpus — the website and the MCP server                             |
+| **scaffold**        | what `ksor init` writes into an adopter's repo — owned by the adopter (decision 4)            |
+| **audience**        | an identifier a concept lists and a viewer holds; the concept is admitted when they overlap   |
+| **viewer**          | the audience list a build or a request is made for — always contains `public`                 |
+| **trust tier**      | unverified · machine-confirmed · human-reviewed — derived from `verified[]`, never declared   |
+| **abstain**         | the corpus does not cover this — a correct answer, never an error                             |
+
+Two pairs are confused often enough to be worth naming. **`build_id` is not a
+`generation`**: the first connects every projection of one publication, the
+second is the kernel's counter a citation pins, and they move independently.
+**Audience is not `visibility`**: `visibility` was one ranked tier per document
+and is now a refused key — a concept holds a LIST, a viewer holds a LIST, and
+membership decides rather than rank (decision 27). "Level", the 0–4 numeric
+ladder, is retired with it: what a record meets is the conformance floor, and
+what it climbs is the trust tiers (product principle 7).
 
 ## Repository layout
 
@@ -158,7 +179,13 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    own study of its mechanics): the adopter owns what `ksor init` emits;
    updates are offered as diffs and applied only by explicit overwrite.
    Reversed per-file if a scaffold file must stay framework-owned to preserve
-   a product guarantee.
+   a product guarantee. _Revision 2026-08-25 (decision 27): the update vehicle
+   this decision promised without naming now exists — `ksor migrate --write`
+   rewrites the adopter's record into the profile, and `--write-site` offers
+   the byte-copied rule modules to the adopter-owned `system/site` as diffs.
+   Ownership is unchanged: migrate prints the diff and changes nothing until
+   `--write`, and it refuses by name rather than authoring anything the
+   adopter has to mean (a title, a description, the actor behind a takedown)._
 5. **Toolchain** per the `research/base-environment.md` §2 ledger: TS 7 native
    (never depend on its compiler API before 7.1 — guard rule 6), Node ≥24,
    pnpm exact-pinned, pure ESM, tsdown with `isolatedDeclarations` (explicit
@@ -189,6 +216,14 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    directory is an unanswered question in the adopter's repo — directories
    appear when the ladder or the work demands them); **the site is preview and
    review, not an editor** (the agent writes; the human checks).
+   _Revision 2026-08-25 (decision 27): two clauses gain a sharper form and
+   neither is reversed. "The governance level is derived, never declared"
+   holds, but the NUMERIC ladder it derived is gone — tools report the
+   conformance floor a record meets and the trust rung its `verified[]`
+   earns; there is still no `governance:` key to declare. And "the site is
+   preview and review" becomes load-bearing rather than descriptive: the
+   preview is now the ONLY surface a `draft` reaches, so the review step is
+   enforced by what every build excludes rather than by convention._
    _Revision 2026-08-20: the serving clause read "local serve binds loopback
    with auth off", describing a default the code has never had — `buildAuth`
    refuses to boot unless SSO is configured OR `KSOR_AUTH=disabled-local` is
@@ -230,7 +265,18 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    `trailingSlash: true` — harmless while the project was static-only —
    308-redirected **every door route including `POST /mcp`**, which would have
    broken the MCP endpoint of every adopter who deployed. It is removed; the
-   site's own Next config already sets it where it belongs._
+   site's own Next config already sets it where it belongs._ _Revision
+   2026-08-25 (decision 27): the closed root set gains `.ksor/` — the
+   Governance Policy and the takedown ledger, both committed — and
+   `build.lock.json`. The `.env.example` reasoning applies unchanged: these
+   are answered questions, not empty directories, and the ledger in
+   particular is why a record with no database can take a document down at
+   all. `.gitignore` becomes `.ksor/*` with the two files negated, because
+   the directory form `.ksor/` cannot be negated (verified against git).
+   "CommonMark only, framework-free forever" gains exactly ONE extension, GFM
+   footnotes, for the reason decision 27 gives: it is the only extension that
+   degrades to readable text in a plain renderer, which is what
+   "framework-free" was protecting._
 9. **Site shell: one in core — Next.js + Fumadocs + shadcn** (owner,
    2026-08-18), replacing Docusaurus natively before v1 traffic. No shell
    selector at init (one obvious way; a flag forks every skill, test, and
@@ -313,6 +359,15 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     unaffected. Verified live: an emitted scaffold's `pnpm install` resolves the
     pinned dep, links the `ksor` bin, and `pnpm exec ksor` runs. Reversed only
     by an explicit owner decision recorded here._
+
+    _Revision 2026-08-25 (decision 27): the database-free clause GROWS rather
+    than narrowing. `ksor build` joins `init` and the site on the free side of
+    the ladder — it generates the indexes, runs the record checker and writes
+    `build.lock.json` with no database, no provider key and no network, so the
+    governance decision now runs for static output at level 0. What moved the
+    other way is that `ksor ingest` runs the SAME checker and refuses without
+    a fresh lock: the served rung can no longer publish a record the free rung
+    would have refused._
 
 12. **The kernel's dependency set** (2026-08-19, with decision 11; each
     entry individually reversible by a better tool winning a recorded
@@ -448,6 +503,22 @@ gateway` package, serve-by-spawn) is superseded._
     guess. Reversed per-clause with evidence; the `node` default is not
     reversible without an owner decision (it is the identity guarantee).
 
+    _Revision 2026-08-25 (decision 27). Four changes, one of them an owner
+    decision against the clause above. **`sor_id` is retired** — path is
+    identity, so a renamed denied document gets a new id and "immune to
+    reorganization" is weakened knowingly; the compensating control is
+    `ksor-takedown-dangling`, which refuses the BUILD when an in-force entry
+    names a concept that no longer exists, so a rename goes red rather than
+    republishing. **A denial is a ledger entry first and a row second**:
+    `.ksor/takedowns.yaml` is committed and append-only, the verb writes both
+    in one act, and a lift is a revocation ENTRY setting `revoked_at` on the
+    row rather than a deleted line. **An entry may be marked `removed`**, the
+    sanctioned way to delete a denied file, after which the path reappearing
+    refuses. **A directory is ALWAYS the `#section` node** — previously only
+    an index-less one was — which is the anchor a `subtree` entry names. The
+    `parent_id` walk, the per-node default and the explicit container choice
+    are untouched._
+
 15. **Governance is stored on the record, not re-derived per surface**
     (2026-08-20, from the end-to-end review). The ingest adapter kept four
     frontmatter keys and dropped the rest, so `visibility`, the authored
@@ -460,6 +531,18 @@ gateway` package, serve-by-spawn) is superseded._
     the single serving seam, bound the way `lib/takedown.ts` binds denial. A
     new guarantee about a document is a COLUMN plus a seam, never a filter in
     one surface's build step. Reversed only by an owner decision recorded here.
+    _Revision 2026-08-25 (decision 27): the rule is unchanged and the row got
+    much wider. Schema 2.5 carries the audience LIST (`audience TEXT[]`, GIN
+    indexed, replacing the ranked `visibility`), the authored status on the
+    new vocabulary, the OKF trust block as JSONB (`sources`, `verified`,
+    `generated`, `approval`, `deprecated`), `effective_from`/`stale_after`,
+    and a derived `trust_tier`; the run carries `build_id`, the policy as a
+    row with its digest, and the ledger's id set. The single seam widened with
+    it — `lib/admit.ts` composes audience overlap, `lib/lifecycle.ts` and
+    `lib/trust.ts` into ONE admitted set, bound beside `DENY` in both search
+    arms, `read`, `outline` and the calibration sampler — so the door reads
+    lifecycle and trust the way it already read audience: from columns, not
+    from markdown each surface parsed for itself._
 
 16. **Forward migrations exist and are walked, not sorted** (2026-08-20).
     `schema/migrations/<from>-<to>__<slug>.sql`: each file names both ends of
@@ -569,7 +652,17 @@ gateway` package, serve-by-spawn) is superseded._
     schema 2.4 stamps each generation with the schema it was built against so
     the first is detectable at all. When a new refusal lands on either surface,
     the question to answer is what the OTHER surface does in that state.
-    Reversed only by an owner decision recorded here.
+    Reversed only by an owner decision recorded here. _Revision 2026-08-25
+    (decision 27): the shared refusal is now a TABLE rather than a pair of
+    boot checks — record spec §2.5 says what each status is admitted to on
+    human and on machine surfaces, both surfaces read it, and
+    `LIFECYCLE_CASES` asserts it through real Postgres and against the site's
+    copy the way `AUDIENCE_CASES` does. The boot gate grew with it: a denylist
+    row no ledger entry accounts for refuses, one whose entry was never merged
+    is reported, and a floor calibrated under a different serving predicate
+    boots into the declared-but-uncalibrated refusal instead of quietly
+    reading as `gate: off` — which would have made a refusing record answer
+    everything, the exact inversion this decision exists to catch._
 
 20. **The keyword arm stays in Postgres — never reimplemented in JS**
     (2026-08-21, from an adversarial review of the artifact rung). A
@@ -601,7 +694,16 @@ gateway` package, serve-by-spawn) is superseded._
     applied to attribution, and it generalises: a column that records WHO must
     never be populated from ambient state. Reversed only by an identity source
     the tool can VERIFY rather than read — a bearer token's subject qualifies,
-    an environment variable never will.
+    an environment variable never will. _Revision 2026-08-25 (decision 27):
+    the requirement extends from the VERB to the FILE. A takedown is now a
+    committed YAML entry, which anyone with write access can append by hand,
+    so every entry's actor — denial, revocation, amendment — is validated
+    against the policy's `takedown_authorities` by `pnpm check`, `ksor build`
+    AND ingest, not only by the verb. It also names what this decision asked
+    for and did not get: a policy allowlist is AUTHORISATION, not
+    verification. Every envelope says `checked: policy` for exactly that
+    reason, and change-control verification against repository history is
+    what would let it say otherwise._
 
 22. **Navigation is a SHAPE, not a length** (2026-08-22, issue #55 — the first
     DELIBERATE divergence from the converted oracle). `classify()` labelled any
@@ -714,6 +816,16 @@ gateway` package, serve-by-spawn) is superseded._
     resident surface is the price of governance an agent can read, and `k` is
     still the lever (`packages/ksor/docs/tool-surface.md`)._
 
+    _Revision 2026-08-25 (decision 27): the exchange holds — the registration
+    is still adopter-owned code, the door still inspects its own served
+    surface at boot — but a governance parameter had to reach a file the
+    adopter may have scaffolded months earlier. `min_trust_tier`'s DEFAULT and
+    its enforcement therefore live in the HANDLER, not in the registration: a
+    registration written before the parameter existed keeps working, and the
+    boot inspection NOTICES its absence, naming the tool and the line to
+    paste, instead of refusing to boot. That is the shape a later parameter
+    should take — refuse on a missing floor, notice a missing affordance._
+
 24. **Study attachments are part of their parent, and the collection is where
     that is enforced** (2026-08-23, porting the predecessor's summaries and
     flashcards under decision 6). A document may carry `<doc>.summary.md` and
@@ -820,6 +932,18 @@ gateway` package, serve-by-spawn) is superseded._
     a reader who only wanted the policy never announces that to a slide host.
     Contract: `specs/ksor/slides/spec.md`. Reversed per-clause with evidence._
 
+    _Revision 2026-08-25 (decision 27): the class refusal becomes a one-key
+    ALLOW-LIST for one kind. `<doc>.summary.md` must now carry exactly
+    `type: Summary` and nothing else — the profile needs a marker to tell a
+    companion from a concept, and an allow-list of one closes precisely the
+    leaks the class refusal closed (`visibility:` widening, takedown escape,
+    governance claimed by something that is not a node) while admitting the
+    marker. The other four kinds are unchanged: `.yaml` companions are
+    invisible to OKF and declare nothing. The `index.summary.md` row retires
+    with the authored index — `index.md` is generated, creates no node, and
+    cannot carry a summary of its own. The no-independent-id clause, which is
+    the governance guarantee and the owner-only one, is untouched._
+
 25. **The scaffold meets the adopter's package manager** (owner, 2026-08-24,
     issue #28). Decision 1 makes Node the one prerequisite; requiring a
     SPECIFIC manager on top re-added the second-prerequisite tax that decision
@@ -873,6 +997,193 @@ gateway` package, serve-by-spawn) is superseded._
     `yaml`), and decision 18 (the scaffold's copy of a rule becomes generated
     at package-build time, not hand-kept; the drift test stays until it is)._
 
+27. **The record is Markdown in the KSoR Profile of OKF** (2026-08-25; plan
+    `research/okf-native.md`, contracts `specs/ksor/record/spec.md` and
+    `specs/ksor/build/spec.md`). The README already told the public that a
+    KSoR record IS an OKF bundle constrained by the KSoR Profile (KSP-001
+    §4). A fact-map of the tree on 2026-08-24 found the code agreeing on no
+    axis: five hand-written frontmatter scanners, not one of which could read
+    the profile's nested `ksor:` block; no serving path that read a
+    document's status at all, so a draft was searched and read exactly like
+    an approved one; a takedown ledger that lived only in Postgres and was
+    EXPORTED to a gitignored file the site read, which is the direction OKF
+    §4.1.4 forbids; and machine artefacts carrying no build id, no commit and
+    no tool version. Decision 26 gave the record one parser. This gives it
+    one grammar, and gives both surfaces one decision to make about a
+    document. What was decided, each clause reversible on its own except
+    where marked:
+
+    **The conformance floor replaces the numeric ladder.** Level 0 was
+    `title` + `status`. The floor is `type`, `title`, `description`,
+    `status`, `ksor.audience`, and a policy naming approval and takedown
+    actors. The escape for a record that wants neither owners nor sources is
+    a NON-RESERVED type: the profile names one, `Document`, and promises
+    never to reserve it, so the type-keyed rules never fire on a project that
+    has not asked for them. Nothing is demanded of a level-0 record beyond
+    saying who its documents are for and who may approve them — both of which
+    it has to know anyway to publish anything at all. Governance is still a
+    ladder (principle 7); what "the ladder" NAMES is now the trust rungs —
+    unverified, machine-confirmed, human-reviewed — derived from `verified[]`
+    and never declared. Reversed if a real adopter cannot reach the floor.
+
+    **Audience is a required list, matched by overlap, and omission is
+    refused.** A concept holds a list of identifiers; a viewer holds a list
+    that must contain `public`; the concept is admitted when the two overlap.
+    Rank moves to the viewer and membership stays on the document, which is
+    what lets every row of `AUDIENCE_CASES` keep its meaning while the
+    document stops carrying one ordered tier. `KSOR_AUDIENCE` becomes a comma
+    list (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`); the
+    registry lives in the policy; a document that declares no audience is
+    refused rather than defaulted, because the visibility leak recurred FOUR
+    times while the default lived in someone's head (decision 18). This
+    reverses the visibility spec's "one value, never a list — set
+    intersection is where access-control bugs live", and it is reversed with
+    the evidence that sentence asked for: the decision table now asserts
+    overlap through real Postgres and against the site's copy, so a wrong
+    intersection fails on the row it broke rather than in production.
+    **Owner-only:** this clause is the leak guarantee and is not reversible
+    without an owner decision recorded here.
+
+    **Drafts live in the preview; every other status is admitted per surface
+    by ONE table.** `pnpm dev` is the review surface (decision 7) and marks
+    them; every build excludes them from every surface — pages, sidebar,
+    search index, `llms.txt`, twins, the door — because a static site's
+    sidebar and search index are machine artefacts too. `KSOR_DRAFTS=show`
+    admits them to human surfaces only, is recorded in the lock and in
+    `build_id`, and marks the build `noindex`. A stable concept before its
+    `effective_from`, one past its `stale_after`, and a deprecated one each
+    render for people with a badge and stay off every machine surface. The
+    table is record spec §2.5 and it is the whole rule, so both surfaces
+    refuse the same states (decision 19) instead of each deciding for itself.
+
+    **`index.md` is generated, committed, drift-checked, and never copied
+    into a stage.** It carries no frontmatter, so it can carry no governance,
+    so anything authored there would be ungoverned knowledge on a served
+    surface. Section prose becomes an ordinary concept in the folder
+    (`overview.md`). The COMMITTED index is the record's own map and lists
+    every status and every audience — anyone with the repository has the
+    files anyway — and every projection REGENERATES its index from the tree
+    it was filtered to, which is the clause that matters: copying the
+    committed index into a public stage would have published every internal
+    title as a folder page, the exact leak the visibility work exists to
+    prevent. Reversed to export-only if committed generated files prove a
+    review burden.
+
+    **`x.summary.md` carries exactly `type: Summary`, and nothing else.**
+    Decision 24 refused a companion's frontmatter as a CLASS; the profile
+    needs a marker, so the class refusal becomes a one-key allow-list that
+    closes the same three leaks — `visibility:` widening, takedown escape,
+    and governance claimed by something that is not a node. `Summary` is a
+    companion marker outside the concept type system, not a reserved type;
+    ingest still creates no node; the widening rule evaluates a companion's
+    body with its parent's audience. Decision 24's no-independent-id clause
+    is untouched, and under bare OKF a summary reads as a concept — the
+    no-id guarantee is a PROFILE rule and KSP-001 draft 10 says so.
+
+    **`instance.md` is a profile-shaped document beside the bundle; authority
+    lives in `.ksor/governance.yaml`.** `format: 2`, with `name` (the one
+    sanctioned identity key), `title`, `description`,
+    `toolchain: { requires, scaffolded }` and the deployment keys — no
+    `status` and no audience, because identity is not knowledge and the
+    lifecycle table does not apply to it. The bundle root is `knowledge/`, so
+    a bare OKF consumer handed that directory sees a conformant bundle and
+    nothing of the site. `audiences:` and `default_visibility:` LEAVE the
+    instance: two homes for the audience registry is decision 18's failure
+    mode with a different filename. The policy and the ledger are INGESTED —
+    registry, authority sets, entry ids, digests — so the door binds to rows
+    rather than to files a served container does not carry.
+
+    **Takedown is an append-only committed ledger that the verb also applies
+    immediately.** File first, row second, in one act. A revocation is a new
+    entry naming the one it revokes, never a deleted line; deleting a denied
+    file is an amendment plus the deletion in one change; every entry's actor
+    is validated against `takedown_authorities` by the checker, the build AND
+    ingest, not only by the verb, because a committed YAML file is something
+    anyone with write access can append to. A ledger that SHRANK against its
+    own git history or the committed lock refuses the build. What this buys
+    that the database never could: a level-0 record with no Postgres gets
+    takedown for the first time, and the site reads the denial from the
+    repository instead of from an exported artefact. The window between the
+    verb and the merge is the pull request's review time, disclosed — the
+    door refuses at once, the site follows the merged ledger at its next
+    build, which is the latency it already had.
+
+    **Two verbs: `ksor build` and `ksor migrate`.** `build` is database-free,
+    generates every index in memory, runs the checker, and only then writes —
+    the indexes whose bytes changed, and `build.lock.json`. It is the one
+    place the governance decision runs for static output, which is what stops
+    the site and the door reading different truths without a database in the
+    loop. `migrate --write` is the update vehicle decision 4 promised: it
+    rewrites a pre-profile record and refuses, by name, everything it cannot
+    know — a title, a description, a `generated.at`, the actor behind an
+    existing takedown. Two identities are named apart and never confused in
+    prose: `build_id` is what the machine artefacts stamp and what connects
+    every projection of one publication; `generation` remains the kernel's
+    monotonic counter a citation pins.
+
+    **Every timestamp is an ISO 8601 instant with an explicit offset.**
+    Upstream OKF made the same move under the unchanged `0.2` label, so the
+    pin is to a commit rather than to a version string, vendored byte-exact
+    at `specs/ksor/record/okf-SPEC.md` and asserted against the digest every
+    lock stamps — a pin that names bytes the tree does not hold is not a pin.
+    A bare `YYYY-MM-DD` is refused (`ksor-instant-form`); `ksor migrate`
+    widens one to midnight UTC. The cost is that a date is now longer to
+    type; what it buys is that an embargo, a review deadline and an approval
+    can be compared across time zones without a convention nobody wrote down.
+
+    **`sor_id` is retired — path is identity, everywhere.** **Owner-only:**
+    this runs against decision 14's node-scope clause, which was recorded as
+    "immune to reorganization" and not reversible without an owner decision.
+    It is weakened knowingly: with path as identity, renaming a denied
+    document gives it a new id. The compensating control is
+    `ksor-takedown-dangling` — an in-force ledger entry naming a concept that
+    no longer exists refuses the BUILD — so a rename goes red on both
+    surfaces instead of quietly republishing, which is the failure the 0.0.18
+    attack found and the reason the clause existed. `ksor migrate` refuses a
+    document carrying `sor_id` rather than dropping it, because dropping it
+    silently retires an identity that takedowns and citations are keyed on.
+
+    **`stable` needs approval and NOT verification** — a deliberate
+    divergence from KSP 4.2.2.3, which requires `verified` on every stable
+    concept. Coupling them manufactures the event R17 forbids deriving from
+    approval: an author with an approver and no reviewer would simply write a
+    `verified` entry, and the tier that exists to say "nobody has checked
+    this" would never appear. A stable, approved, unverified concept is the
+    honest state, and it is exactly what tier _unverified_ is for. This is
+    also what makes the day-one turn possible — five starter drafts, one
+    human approval, five stable documents — without the tool recording a
+    review no human performed (R25). The correction is carried in KSP-001
+    draft 10 rather than worked around locally.
+
+    **GFM footnotes are the one extension to CommonMark.** Reference and
+    definition, the grammar OKF's per-claim citation uses, with the label
+    matched against `sources[].id` in both directions. It is the one
+    extension because it is the only one that DEGRADES: a footnote read by a
+    pure CommonMark renderer is still readable text, where a directive is
+    literal colons. This revises decision 8's "CommonMark only" and settles
+    nothing about the directive grammar, which remains unratified.
+
+    **What it cost, recorded rather than argued away.** Day one publishes
+    nothing until a human approves — one conversational turn, and the claim
+    made visible. Every adopter with a numeric floor re-measures it, because
+    the serving predicate changed and a floor measured under another
+    predicate is a declared-but-uncalibrated floor; until they do, the door
+    refuses every search as uncalibrated, which is the invariant rather than
+    a regression. An upgraded served record has an outage window between
+    `ksor schema --apply` and the first 2.5 ingest. `approved` becomes
+    `draft` on migration unless the human approves in the same act. Whether
+    an edit bumped `generated.at` is UNVERIFIED until change-control
+    verification lands — the checker compares two authored instants and no
+    more, and every envelope says `checked: policy` rather than implying
+    otherwise. Actor ids are published with the content, exactly as a commit
+    author is in a public repository. Stale documents leave the open web at
+    the next build, so a record with `stale_after` dates needs a scheduled
+    rebuild.
+
+    Reversed per clause with evidence, recorded here; the two clauses marked
+    **owner-only** — the audience leak guarantee, and retiring `sor_id`
+    against decision 14 — are not reversible without an owner decision.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as
@@ -914,7 +1225,13 @@ floor package; neither blocks the content SoR, both must be answered before
    must never require editing a corpus.
 3. **Identity derives from file path.** A doc's path is its ID, its site route,
    and its MCP resource URI. No authored `id:`/`name:` fields — the corpus
-   check rejects them.
+   check rejects them. _Revision 2026-08-25 (decision 27): stronger for
+   concepts, with one named exception. `sor_id` is retired, so a concept's id
+   is its bundle-relative path without `.md` and nothing can override it; `id`
+   and `name` inside a concept are refused by name (`ksor-legacy-key`). The
+   exception is the INSTANCE: `instance.md` carries `name`, the machine
+   identity citations and `llms.txt` use, because the record itself has no
+   path to derive one from._
 4. **Errors are documentation.** Every failure states what is wrong, why the
    rule exists, and how to fix it. The CLI's exit codes are a contract
    (1 refused, 2 not implemented, 3 environment), and when refusals gain
@@ -928,7 +1245,15 @@ floor package; neither blocks the content SoR, both must be answered before
    right is a separate mechanism — never sell one as the other.
 7. **Governance is a ladder, not a gate.** Level 0 works immediately; projects
    climb only as far as their domain needs. Demanding level 4 of a level-0
-   project is a bug, not rigour.
+   project is a bug, not rigour. _Revision 2026-08-25 (decision 27): the
+   principle stands and the RUNGS are renamed. There is no numeric 0–4 ladder
+   any more: there is a conformance floor every record meets (`type`, `title`,
+   `description`, `status`, `ksor.audience`, and a policy naming approval and
+   takedown actors — with `Document`, the never-reserved type, as the escape
+   from owners and sources), and above it the trust rungs each concept climbs
+   on its own — unverified, machine-confirmed, human-reviewed. "Demanding
+   level 4 of a level-0 project" becomes: demanding `human-reviewed` of a
+   record that has not asked anyone to review it._
 8. **Discoverability determines whether agents find you at all**: bundled docs,
    `llms.txt`, an MCP registry entry, a typed SDK.
 
@@ -949,7 +1274,12 @@ it lands here, and tests assert them from day one of that slice:
 - **Zero chunk overlap.** Concatenating a node's chunks in order reproduces
   the body byte-exact.
 - **Reproducibility is a testable claim.** Same corpus tree + same toolchain
-  ⇒ same `build_id`. Test by building twice and diffing `build.lock.json`.
+  - same `as_of` ⇒ same `build_id`. Test by building twice and diffing
+    `build.lock.json`. The `as_of` clause is decision 27's: `build_id` covers
+    each document's ADMITTED set, so moving `as_of` across an `effective_from`
+    or a `stale_after` changes what the build publishes and must change the id.
+    Two runs without `--as-of` differ only in the `as_of` field itself; with
+    `--as-of` repeated they are byte-identical.
 
 ## How we work
 
@@ -1032,6 +1362,14 @@ assertion.
 The tiers are a contract, not a preference: a file that reads the filesystem
 belongs in the second one however small it is. Seven did not, and drifted there
 because the unit tier is the fastest to run (round-9 review of PR 43).
+
+The tiers themselves did not change with decision 27; what it added is a fourth
+obligation that cuts across them. The record's rules are now executed by THREE
+programs — the kernel's `record/` modules, the emitted `check.mjs` built from
+them, and the site's byte-copies — so a rule is only held when one conformance
+fixture is judged identically by all three, and the drift tests are what make
+the copies trustworthy rather than merely present. A rule asserted in one
+program alone is the shape decision 18 was written about.
 
 Agent evals land with `ksor serve` (CI-only — they spend model tokens), in
 three classes, and being explicit about which class gates is the design:
@@ -1124,14 +1462,16 @@ review findings were fixed or recorded, never quietly dropped.
 - Do not weaken provenance, citation, abstention, or governance to make a test
   pass.
 - Do not add runtime dependencies without a recorded decision (guard rule 5).
-- Do not author `id:`/`name:` fields where the path is the identity.
+- Do not author `id:`/`name:` fields where the path is the identity — they are
+  refused by name in a concept (`ksor-legacy-key`). `instance.md`'s `name` is
+  the one exception, because a record has no path to derive one from.
 - Do not edit ALLOWED import graphs without review.
 - Do not commit `.only` or skipped tests (guard rule 7 rejects them).
 - Do not carry a predecessor mechanism across without asking what it was for,
   and never without tests here — conversion is granted (decision 6), blind
   copying is not.
-- Do not create `knowledge/`, `governance/`, or `instance.md` at this repo's
-  root — those belong to scaffolded projects (the fixture lives under
+- Do not create `knowledge/`, `governance/`, `.ksor/`, `build.lock.json`, or
+  `instance.md` at this repo's root — those belong to scaffolded projects (the fixture lives under
   `workbench/`), and a root `instance.md` additionally makes `ksor init`
   refuse `error: nested` anywhere inside the checkout (guard rule 10).
 - Do not create GitHub issues/comments or publish packages on your own
