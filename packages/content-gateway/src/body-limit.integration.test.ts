@@ -93,17 +93,28 @@ function rawRefusal(): Promise<string> {
     let buf = "";
     const done = (): void => resolve(buf.split("\r\n\r\n")[0] ?? "");
     const sock = connect(PORT, "127.0.0.1", () => {
-      const body = `{"p":"${OVERSIZED}"}`;
+      // Declare an oversized body and send almost NONE of it. The door refuses
+      // on the DECLARED Content-Length, before reading the body — which is the
+      // whole reason it closes rather than draining. Actually writing the two
+      // megabytes raced the refusal: the server closed mid-write, the client's
+      // socket errored, and the 413 that had already been sent went with it, so
+      // the assertion saw an empty header block. Flaky 4 runs in 5, always in
+      // the direction that fails a correct server.
       sock.write(
         `POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:${PORT}\r\nContent-Type: application/json\r\n` +
-          `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+          `Content-Length: ${OVERSIZED.length + 64}\r\n\r\n{"p":"start`,
       );
     });
     sock.on("data", (d) => {
       buf += d;
+      if (buf.includes("\r\n\r\n")) done();
     });
-    sock.on("close", done);
-    sock.on("error", done);
+    sock.on("close", () => {
+      if (buf !== "") done();
+    });
+    sock.on("error", () => {
+      if (buf !== "") done();
+    });
     setTimeout(done, 5_000);
   });
 }

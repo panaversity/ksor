@@ -207,7 +207,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
         slug: "ksor-attachment-frontmatter",
         path,
         why: `a summary's frontmatter is exactly \`type: Summary\` — it inherits its parent's audience, status and takedown, and any other key would claim governance a non-node cannot carry (found: ${keys.length === 0 ? "none" : keys.join(", ")})`,
-        fix: "replace the frontmatter with `---\\ntype: Summary\\n---`",
+        fix: "write exactly these three lines:\n---\ntype: Summary\n---",
       });
       continue;
     }

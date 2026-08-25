@@ -62,7 +62,7 @@ function checkFrontmatter(file, rel) {
       rel,
       "no frontmatter block",
       "corpus documents carry their identity and lifecycle in frontmatter; without it the document is ungoverned",
-      `start the file with ---\\ntitle: ...\\nstatus: draft\\n--- (required keys: ${REQUIRED_KEYS.join(", ")})`,
+      `start the file with these lines (required keys: ${REQUIRED_KEYS.join(", ")}):\n---\ntitle: ...\nstatus: draft\n---`,
     );
     return;
   }

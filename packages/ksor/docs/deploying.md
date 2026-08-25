@@ -82,16 +82,21 @@ The emitted `Dockerfile` names no host. It installs the pinned
 
 ```sh
 docker build -t my-record .
-docker run --rm -p 8080:80 --env-file .env my-record
+docker run --rm -p 8080:80 --env-file .env \
+  -e KSOR_AUTH=disabled-public my-record
 ```
 
 Two things about that command, both of which bite:
 
 - **The image listens on 80**, which is why the mapping is `8080:80`. If your
   `.env` sets `PORT`, change the right-hand side to match.
-- **`.env` must contain `KSOR_AUTH=disabled-public`, even locally.** A container
-  gets `$PORT` and therefore binds `0.0.0.0` — a public bind — and
-  `disabled-local` refuses there by design. Your laptop is not the exception.
+- **`KSOR_AUTH=disabled-public` is required, even locally.** A container gets
+  `$PORT` and therefore binds `0.0.0.0` — a public bind — and the
+  `disabled-local` a scaffolded `.env` carries refuses there by design. Your
+  laptop is not the exception. Pass it with `-e` rather than editing `.env`, so
+  a plain `ksor serve` outside the container keeps its loopback posture; `-e`
+  overrides `--env-file`. A real deployment sets it — or the SSO variables — in
+  the host's environment, since `.dockerignore` keeps `.env` out of the image.
 
 That runs on Cloud Run, Fly, Render, ECS, Kubernetes, or a VPS with no changes.
 `vercel.json` **points at this same file** rather than replacing it, which is

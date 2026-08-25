@@ -90,5 +90,17 @@ function compare(a: string, b: string): number {
  * `problem:` carries the slug so a reader can grep for the rule.
  */
 export function formatRefusal(r: Refusal): string {
-  return `${r.path}\n    problem: ${r.slug}\n    why: ${r.why}\n    fix: ${r.fix}`;
+  // A remedy is OBEYED, not read — the scaffold's own skill tells the adopter to
+  // "obey the printed fix literally", so a `fix:` line is a paste target. A
+  // remedy that needs more than one line therefore has to ARRIVE as more than
+  // one line: two of them printed the characters `\` and `n` where they meant a
+  // break, and obeying either wrote a one-line file that the same rule refused
+  // again with the same remedy — a loop whose only advice was the thing that
+  // made it (first-hour walkthrough, 2026-08-26).
+  //
+  // Continuations are indented under the value column so the paste is
+  // unambiguous about where the remedy starts and stops. A single-line remedy
+  // is byte-identical to what it was, because adopters' CI logs read this shape.
+  const fix = r.fix.split("\n").join(`\n${" ".repeat("    fix: ".length)}`);
+  return `${r.path}\n    problem: ${r.slug}\n    why: ${r.why}\n    fix: ${fix}`;
 }

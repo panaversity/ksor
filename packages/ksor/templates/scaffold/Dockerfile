@@ -8,7 +8,11 @@
 #
 # Build and run it anywhere:
 #   docker build -t my-record .
-#   docker run --rm -p 8080:80 --env-file .env my-record
+#   docker run --rm -p 8080:80 --env-file .env -e KSOR_AUTH=disabled-public my-record
+#
+# The -e is not optional. ENV PORT below makes this a PUBLIC bind (0.0.0.0), and
+# the KSOR_AUTH=disabled-local a local .env carries refuses there on purpose —
+# see the CMD comment. Keep the deliberate value on the command, not in .env.
 #
 # This image serves; it does not publish. `ksor ingest` is a write plane that
 # runs from CI or your machine against the same database — see the deployment

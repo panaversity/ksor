@@ -107,9 +107,9 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 3. **Bring it up.** Once, then every time:
 
    ```sh
-   pnpm provision   # schema (or migrate) + grant — the privileged acts, run once
-   pnpm refresh # ingest the record, collect retired generations
-   pnpm serve   # the MCP server (one supervised process)
+   pnpm provision  # schema (or migrate) + grant — the privileged acts, run once
+   pnpm refresh    # build, ingest the record, collect retired generations
+   pnpm serve      # the MCP server (one supervised process)
    ```
 
    `provision` is separate on purpose: applying DDL and granting ingest are acts
@@ -466,8 +466,16 @@ The other surface is a live process, so it ships as one. `Dockerfile` and
 
 ```sh
 docker build -t my-record .
-docker run --rm -p 8080:80 --env-file .env my-record
+docker run --rm -p 8080:80 --env-file .env \
+  -e KSOR_AUTH=disabled-public my-record
 ```
+
+The `-e` is required and must not be dropped: the image sets `$PORT`, so the
+door binds `0.0.0.0` — a PUBLIC bind — and the `KSOR_AUTH=disabled-local` in
+`.env` refuses there, correctly. Never "fix" that refusal by editing `.env`;
+put the deliberate value on the command, so the owner's ordinary `pnpm serve`
+keeps its loopback posture. A real deployment sets it — or the SSO variables —
+in the host's environment, since `.dockerignore` keeps `.env` out of the image.
 
 That image runs on Cloud Run, Fly, Render, ECS, Kubernetes or a VPS unchanged.
 `vercel.json` declares BOTH surfaces — a `site` service built from

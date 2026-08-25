@@ -324,7 +324,7 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
     refuse(
       "ksor-audience-missing",
       "`ksor.audience` is required and is a non-empty list — omission is refused, never defaulted (record spec §2.4)",
-      "add `ksor:\\n  audience: [public]`, or the registered audiences who may read this",
+      "add these two lines to the frontmatter, naming the audiences who may read this:\nksor:\n  audience: [public]",
       "ksor",
       "ksor.audience",
     );

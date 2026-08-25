@@ -46,10 +46,25 @@ you.
 **What you write starts unpublished.** A new document is `status: draft`, and
 `pnpm build` admits a draft to no surface at all: no page, no sidebar row, no
 `/llms.txt` entry, nothing for an agent to read. `pnpm dev` shows it, marked —
-the preview is where drafts live. To publish one, approve it: `status: stable`
-with a `ksor.approval: { by, at }` naming an actor `.ksor/governance.yaml`
-authorises. That act is yours, so the record never claims authority nobody
-granted.
+the preview is where drafts live.
+
+Publishing one adds two keys beside `status: stable` — what produced the text,
+and who approved it. Both, or `pnpm check` refuses the document:
+
+```yaml
+status: stable
+generated: { by: "human:you", at: 2026-01-31T09:00:00Z }
+ksor:
+  audience: [public] # already there — every document carries it, drafts too
+  approval: { by: "human:you", at: 2026-01-31T09:00:00Z }
+```
+
+`generated` is provenance: it names whatever produced the text — a person, or
+the agent that drafted it — and nothing has to authorise it. `approval.by` is
+authority, so it must name an actor `.ksor/governance.yaml` lists, and its `at`
+may not be earlier than `generated.at` — the text that was approved has to be
+the text that was written. That act is yours, so the record never claims
+authority nobody granted.
 
 ### Presenting a document
 
@@ -102,25 +117,43 @@ opening, and the skill will say so rather than write one.
 The record's other surface is an MCP server for AI agents — the same
 knowledge, cited, with honest abstention. It is the climbed rung: it needs a
 Postgres store (with pgvector) and an embedding provider key, so it is not
-part of `pnpm dev`. The ordered path is:
+part of `pnpm dev`. Three steps, and the order is load-bearing: the command
+block is last because it needs both of the things above it. Skip ahead to it
+and `pnpm provision` refuses, naming the config step 1 writes.
 
-```sh
-cp .env.example .env    # fill in KSOR_DB_URL, GEMINI_API_KEY, KSOR_AUTH=disabled-local
-pnpm provision         # once: apply the schema, authorize ingest
-pnpm refresh           # ingest the record, collect retired generations
-pnpm serve             # the MCP server
+**1. Uncomment the `database:` block already in `instance.md`.** It names the
+VARIABLE holding your DSN, never the DSN itself:
+
+```yaml
+database:
+  dsn_env: KSOR_DB_URL
 ```
 
-`ksor` reads `.env` automatically — nothing to export. `KSOR_AUTH=disabled-local`
-is required for a local run: serve refuses to boot unauthenticated on purpose,
-so a server is never open by accident.
-
-Uncomment the `database:` block already in `instance.md` — it names the
-VARIABLE holding your DSN, never the DSN itself. That is the whole required
-config:
-`embedding:` already defaults to Gemini at 1536 dimensions, and leaving
+Nothing below works until it is there — `pnpm provision` refuses with
+`instance.md declares no database: block`. That is also the whole required
+config: `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
 `retrieval:` out starts you with the abstention gate off and honest about it
 (turn it on afterwards with `ksor calibrate`, once the record is serving).
+
+**2. Copy the environment file**, then fill in `KSOR_DB_URL`, `GEMINI_API_KEY`
+and `KSOR_AUTH=disabled-local`:
+
+```sh
+cp .env.example .env
+```
+
+`ksor` reads `.env` automatically — there is nothing to export, and where a
+refusal tells you to _export_ that variable, putting it in `.env` is the same
+thing. `KSOR_AUTH=disabled-local` is required for a local run: serve refuses to
+boot unauthenticated on purpose, so a server is never open by accident.
+
+**3. Bring it up.**
+
+```sh
+pnpm provision  # once: apply the schema, authorize ingest
+pnpm refresh    # build, ingest the record, collect retired generations
+pnpm serve      # the MCP server
+```
 
 `pnpm provision` runs once — it applies the schema (or migrates it forward) and
 authorizes ingest, the two privileged acts that should not happen on every
@@ -129,10 +162,9 @@ runs the server. They are separate because publishing is an act, not a side
 effect of starting a process. A rerun on an unchanged record
 costs nothing: no new generation, no embedding, no rows. Edit a document and
 the next run picks up exactly that change. `AGENTS.md` → "Serving to agents" is the
-full runbook; your coding agent reads it first. `pnpm serve` refuses to boot
-unauthenticated: a local run declares `KSOR_AUTH=disabled-local` (already in
-`.env.example`) and binds loopback, so a server is never left open by accident;
-a public bind needs a configured SSO door instead. Any other operation is
+full runbook; your coding agent reads it first. A public bind needs a
+configured SSO door rather than `disabled-local` — see step 2 and
+"The agent surface deploys separately" below. Any other operation is
 `pnpm exec ksor <verb>`.
 
 ### Test the agent surface with an actual agent
@@ -218,6 +250,40 @@ routine install never picks up a day-zero compromised release. bun has no
 equivalent (its default refusal of dependency install scripts covers the
 OTHER half of that posture), and this sentence is the disclosure.
 <!-- /ksor:pm -->
+
+### A note on `audit`
+
+An audit of this scaffold reports vulnerabilities in `next`, and will keep
+doing so: a framework that large always has open advisories against whatever
+version you have pinned.
+<!-- ksor:pm npm -->
+`npm install` prints the count at the end of every install, so you meet it
+before you have run anything, next to an invitation to run
+`npm audit fix --force`.
+<!-- /ksor:pm -->
+<!-- ksor:pm pnpm -->
+pnpm reports it only when you run `pnpm audit`.
+<!-- /ksor:pm -->
+<!-- ksor:pm bun -->
+bun reports it only when you run `bun audit`.
+<!-- /ksor:pm -->
+
+**Never let an audit tool raise the pin for you.** It moves off the version
+this scaffold was built and tested against, and that pin is the whole reason
+two machines produce the same site. Bump it deliberately instead — take the
+newer pin a newer `ksor init` emits, or raise it yourself and re-run
+`pnpm build` and the deploy check above.
+
+It also reads worse than it is, for one structural reason worth knowing:
+**this site is a static export.** `pnpm build` writes HTML, JS and CSS to
+`system/site/out/`, and no framework server ever runs in front of your
+readers — no middleware, no server actions, no rewrites, no image optimizer.
+Most framework advisories describe exactly those request paths, so they have
+nothing here to reach. Two things that argument does NOT cover, and you should
+treat as real: an advisory in the **build** toolchain, which does run, on your
+machine and in your CI; and any advisory at all if you later add a served route
+and stop exporting. Read what an advisory affects before deciding it is inert —
+the static export is a reason, not a blanket.
 
 ## The files, explained
 
@@ -320,8 +386,19 @@ Cloud Run, Fly, Render, ECS, Kubernetes or a VPS:
 
 ```sh
 docker build -t my-record .
-docker run --rm -p 8080:80 --env-file .env my-record
+docker run --rm -p 8080:80 --env-file .env \
+  -e KSOR_AUTH=disabled-public my-record
 ```
+
+**That last flag is not boilerplate, and it is not a workaround.** The image
+sets `$PORT`, so the door binds `0.0.0.0` — a PUBLIC bind — and the
+`KSOR_AUTH=disabled-local` your `.env` carries refuses there by design, saying
+so in as many words. Your laptop is not the exception: a container really is
+reachable from outside itself, and `disabled-public` is you saying you know
+that. It goes on the command rather than into `.env` so your ordinary
+`pnpm serve` keeps the loopback posture — and a real deployment sets it (or,
+better, the SSO variables) in the host's environment, since `.dockerignore`
+keeps `.env` out of the image entirely.
 
 One thing surprises people: **deploying does not publish.** The door serves
 whatever generation is already in the database, so a first deploy with no
