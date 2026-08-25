@@ -6,16 +6,25 @@ updated: 2026-08-25.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.35** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.39** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
-`ksor calibrate` and `ksor gc` all run from the one `ksor` binary. Only `dev`
-still reports "designed but not implemented" and exits `2` (`ksor build` is
-implemented on the unreleased `okf-native-spec` branch, below); an
-unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
-slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
-docs ship inside the tarball under `docs/`.
+`ksor calibrate` and `ksor gc` all run from the one `ksor` binary. In the
+PUBLISHED package `dev` and `build` both report "designed but not implemented"
+and exit `2`, and there is no `migrate` verb; an unknown verb is refused with
+exit `1` and a stable `error: unknown-verb` stderr slug. The package root
+exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the
+tarball under `docs/`.
+
+0.0.36 emitted the invoking package manager's scaffold (decision 25); 0.0.37
+stated the KSoR architecture in the package README; 0.0.38 added the
+`make-summary` skill, put the breadcrumb on every page and moved the teaching
+aid after a document's introduction; 0.0.39 stopped a malformed
+`KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal.
+
+**Everything under the next heading is UNRELEASED** — it is the
+`okf-native-spec` branch, and no adopter has any of it yet.
 
 Verified end to end against each published version. The full KERNEL walk was
 last run against **0.0.18** (2026-08-22: fresh `npm install` into a bare
@@ -132,10 +141,41 @@ Every serving act's `retrieval_log` row records the viewer list, the trust
 floor that applied, whether it abstained and how many results it returned —
 and never content or the query.
 
-**Not yet converted on this branch:** the site still stages against the RANKED
-audience model (`decideVisible` and `RANKED_AUDIENCE_CASES` exist only for it),
-reads `.ksor-denylist.json`, renders the H1 of `instance.md` as the title and
-does not exclude `index.md` from its docs collection.
+**And the site publishes the same record.** Staging runs for EVERY build — the
+level-0 fast path that served `knowledge/` unstaged is gone, because no record
+is safe to serve raw once every one of them has drafts, a ledger and generated
+indexes. `KSOR_AUDIENCE` is a comma list validated against the lock's registry
+and required to include `public`; admission is the overlap rule and the §2.5
+lifecycle table, decided once at the lock's `as_of`. Each directory's
+`index.md` is REGENERATED from the staged tree rather than the committed one
+copied, so a public folder page cannot list an internal title, and `index.md`
+is excluded from the docs collection. Denials come from `.ksor/takedowns.yaml`
+in ledger order — the `.ksor-denylist.json` reader is gone, and a stray one
+changes nothing. `llms.txt`, `llms-full.txt`, every `/md/` twin and
+`/.well-known/mcp/server.json` carry `build_id`, `source_commit` and
+`ksor_version`; the build refuses `ksor-lock-missing` / `ksor-lock-stale`
+without a fresh lock outside development, and `ksor-site-outdated` when the
+lock was written by a newer `ksor` than the site's rule modules carry. The
+display title is `instance.md`'s `title:` key; there is no body H1 to read.
+
+**What is NOT built, on this branch or anywhere** — phase B of
+`research/okf-native.md` §4.2, none of it started:
+
+- **`ksor build --bundles`** parses and exits `2` with the honest notice. One
+  OKF bundle per registered audience, for exchange, is designed and unwritten.
+- **Change-control verification of approvals and ledger actors** (KSP R22–R25
+  against repository history). Until it exists an approval is POLICY-checked,
+  and every envelope says so in its own idiom: `approval.checked: "policy"`.
+  Whether an edit to a stable concept bumped `generated.at` is likewise
+  unverified — the checker compares two authored instants and no more.
+- **`llms.txt` v2 URL forms and path-scoped files.** The site emits the form
+  it emitted before.
+- **OKF import** (R26) — reading a foreign bundle INTO a record. Demand-gated:
+  it needs a second ingest adapter and a verb, and nobody has asked yet.
+
+The ranked audience rule is dead code rather than a live surface:
+`decideVisible` and `RANKED_AUDIENCE_CASES` are still present in the kernel and
+in the site's byte-copy, asserted only against each other. Nothing reads them.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
@@ -653,13 +693,18 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   deck text in **0** files against a positive control of 26. `ksor ingest` creates no node
   for either, so neither is independently citable — previously `isDoc` accepted
   `x.summary.md` and gave it its own `stable_id`, which is the one cause behind
-  four cross-surface leaks (decision 24).
+  four cross-surface leaks (decision 24). Since the profile landed a
+  `<doc>.summary.md` carries exactly `type: Summary` and nothing else
+  (decision 27): the class refusal became a one-key allow-list, because the
+  bundle needs a marker to tell a companion from a concept. The other four
+  kinds still declare nothing.
 
   Refusals carry remedies and fire in both `pnpm check` and `pnpm build`:
   `ksor-attachment-orphan` (an attachment whose document is missing) and
-  `ksor-attachment-frontmatter` (an attachment declaring any frontmatter — the
-  rule that closes `visibility:` widening, `sor_id:` takedown escape, and
-  claimed governance a non-node cannot carry). `.yml` is refused by name.
+  `ksor-attachment-frontmatter` (a `<doc>.summary.md` whose frontmatter is
+  anything but exactly `type: Summary`, absence included — the rule that closes
+  `visibility:` widening, takedown escape, and claimed governance a non-node
+  cannot carry). `.yml` is refused by name.
 
   Each document also reports how long it takes to read, counted at build
   time from its own markdown — so the figure is in the shipped HTML rather than
@@ -800,14 +845,24 @@ date`. The same badge marks the row in the sidebar, in every listing and in
 ## Designed, not implemented
 
 - `ksor dev` — still exits `2` with an honest notice; the scaffold's own
-  `pnpm dev` works today without it. (`ksor build` is implemented on the
-  unreleased `okf-native-spec` branch, above.)
-  `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
-  `ksor calibrate` and `ksor gc` ARE implemented and released — the bundled
-  kernel provides them from the one `ksor` binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
-  `3` with a remedy when it is missing).
-- Build provenance records (`build.lock.json`) — written by `ksor build` on
-  the unreleased branch; not yet stamped into any surface.
+  `pnpm dev` works today without it. `ksor serve`, `ksor ingest`,
+  `ksor schema`, `ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc`
+  ARE implemented and released — the bundled kernel provides them from the one
+  `ksor` binary. `serve` runs the MCP server in-process (reads
+  `./instance.md`; exits `3` with a remedy when it is missing). `ksor build`
+  and `ksor migrate` are implemented on the unreleased branch and exit `2` in
+  the published package.
+- `ksor build --bundles` — parses, prints the honest notice, exits `2`. It is
+  phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
+  its contract: one OKF bundle per registered audience under
+  `.ksor/out/bundles/<audience>/`, for exchange.
+- Change-control verification (KSP R22–R25) against repository history, which
+  is what would let an approval say `checked: "change-control"` instead of
+  `checked: "policy"`, and what would verify that an edit to a stable concept
+  bumped its `generated.at`. Phase B.
+- `llms.txt` v2 URL forms and path-scoped files. Phase B.
+- OKF import (R26) — reading a foreign bundle into a record. Demand-gated: a
+  second ingest adapter plus a verb, when someone asks for it.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
 - The agent-eval harness's RELEVANCE and CORRECTNESS classes. The
