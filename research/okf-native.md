@@ -274,8 +274,8 @@ consumer reads it with no ksor in the loop. Import stays demand-gated.
 ### 1.8 An existing record
 
 ```
-ksor migrate            # shows the diff
-ksor migrate --write    # applies it
+ksor migrate                                                      # shows the diff
+ksor migrate --write --actor human:<you> --approve-by human:<you> # applies it
 ```
 
 Mechanical, and honest about what it cannot know. It rewrites: `visibility`
@@ -318,11 +318,17 @@ first), and a denylist row whose `scope` is neither `node` nor `subtree` or
 whose subtree entry names a document rather than a container. **`approved` becomes `draft`** unless the human running it
 passes `--approve-by human:<id>`, in which case every previously `approved`
 document becomes `stable` with that approval, because they performed the
-act. The upgrade runbook, in order: upgrade the CLI → `ksor schema --apply`
+act. **The flag belongs in the runbook**, because leaving it off is not a
+smaller migration but a stopped one: every document lands as a `draft`, drafts
+reach no machine surface, and the next `ksor build` reports `0 admitted to a
+machine surface` at exit 0 — or, where one document supersedes another,
+refuses with `ksor-supersession-strands` because the successor is now a
+draft. The upgrade runbook, in order: upgrade the CLI → `ksor schema --apply`
 (2.4→2.5 maps carried rows `approved`→`stable`, `review`→`draft`,
 `superseded`→`deprecated`, sets `audience = ARRAY[visibility]`, and raises
 `GOVERNANCE_SINCE` so a pre-2.5 generation refuses to serve until
-re-ingested) → `ksor migrate --write` → commit → `ksor ingest` (attaches
+re-ingested) → `ksor migrate --write --actor human:<you> --approve-by
+human:<you>` → commit → `ksor ingest` (attaches
 ledger ids to pre-existing rows by `stable_id`) → restart `serve`. The door
 refuses unledgered rows between the schema step and the ingest, which is the
 outage window §5 lists.

@@ -1597,8 +1597,18 @@ a description or the actor behind a takedown.
 
 ```bash
 ksor migrate
-ksor migrate --write --actor human:you
+ksor migrate --write --actor human:you --approve-by human:you
 ```
+
+`--approve-by` is not optional decoration. Without it every `approved`
+document becomes a `draft`, and a draft reaches no machine surface: the
+following `ksor build` reports `0 admitted to a machine surface` and the
+record's `llms.txt`, `/md/` twins and MCP door publish nothing until a human
+approves. Where one document supersedes another, `ksor build` refuses outright
+with `ksor-supersession-strands` — the successor migrate just demoted is a
+draft, and a reader sent to it would be stranded. Pass it when you are the
+person `.ksor/governance.yaml` authorises to approve; otherwise plan to
+approve the record document by document before it publishes again.
 
 ### `ksor serve` — implemented (the climbed rung)
 
