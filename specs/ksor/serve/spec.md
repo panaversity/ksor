@@ -87,6 +87,12 @@ revision is not a cutoff for assistants that have not moved. Both eras are
 pinned by acceptance tests — the MCP client alone cannot prove which era is
 served, because it negotiates whichever the server offers.
 
+**The snapshot token binds the viewer.** A pin re-serves the generation a
+search answered from, so without the viewer in its digest a token minted for a
+public caller would re-serve that generation to an internal one, and back — the
+one route where a value the CALLER holds could widen or narrow what they are
+shown. Proved from the door with two servers differing only in `KSOR_AUDIENCE`.
+
 **Visibility.** Serve reads the staged tier of the audience it is built
 for — the same seam and five guarantees as the site shells
 (`specs/ksor/visibility/spec.md`). Nothing outside the tier is on disk for
@@ -142,8 +148,33 @@ set bound beside the takedown denial in search's two arms, read, outline and
 the calibration sampler. A section declares no governance of its own and is
 admitted iff a descendant is visible, by a recursive `parent_id` walk. The
 caller's trust floor is `ServiceContext.minTrustTier` (0 unverified, 1
-machine-confirmed, 2 human-reviewed; absent = 0); exposing it as a
-`min_trust_tier` tool parameter is the door's work and is not wired yet.
+machine-confirmed, 2 human-reviewed; absent = 0), and the door exposes it as
+`search`'s `min_trust_tier`. The deployment's own floor is
+`KSOR_MIN_TRUST_TIER`; the two compose by the higher of the pair, so
+configuration TIGHTENS and a request never loosens. The default and the
+enforcement live in the HANDLER, not in the adopter-owned registration
+(decision 23), so a registration emitted before the parameter existed keeps
+working and the boot inspection NOTICES the absence rather than refusing it.
+
+**Every hit carries its governance**: `status`, `trust_tier`, the latest
+`verified` act (or null), `effective_from`, `stale_after`, and `approval` with
+`checked: "policy"` — honest absence in the envelope's own idiom, exactly as
+`gate: "off"` is: the approver was checked against the Governance Policy's
+authority list and NOT against change control, which is phase B. It travels
+with the PASSAGE, because an agent deciding whether to rely on a sentence is
+deciding about the document it came from, and a per-response summary cannot
+say which of several hits was the reviewed one.
+
+**`read` returns the concept's frontmatter byte-exact** — the author's bytes
+from `sources.frontmatter`, never a re-serialisation of the parsed columns:
+the profile preserves unknown keys, so a re-rendered block would hand an agent
+a document the record does not contain.
+
+**Every serving act's `retrieval_log` row records its scope**: the viewer list,
+the trust floor that applied, whether it abstained, how many results it
+returned, and the generation. Never content and never the query — telemetry
+that accumulated passages would be a second copy of the record with no
+audience predicate over it and no takedown seam bound to it.
 
 ## Out of scope
 

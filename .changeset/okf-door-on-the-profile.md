@@ -1,0 +1,17 @@
+---
+"@panaversity/ksor": patch
+---
+
+The MCP door now says what the record knows about a passage, and lets a caller ask for better.
+
+`search` accepts `min_trust_tier` — `unverified`, `machine-confirmed` or `human-reviewed` — so an agent can ask to be answered only from documents someone has reviewed. `KSOR_MIN_TRUST_TIER` sets the deployment's own floor, and the two compose by one rule: the higher of the pair. Configuration TIGHTENS and a request never loosens, so a door configured for `human-reviewed` cannot be talked down by an argument. The floor is bound into the retrieval arms, never applied to the hits afterwards — a floor enforced after ranking has already let a lower-tier passage decide what the answer was.
+
+The default and the enforcement live in the handler, not in `system/gateways/content.ts`. A registration scaffolded before this release keeps working exactly as it did; the door NOTICES the missing parameter at boot, names the tool by the name you gave it and prints the line to paste, and then opens. Nothing is weakened by its absence — only the capability is gone.
+
+**Every hit now carries `governance`**: the document's `status`, its `trust_tier`, the latest `verified` act (or null when nobody has reviewed it — an honest state of a governed record, not a defect), `effective_from`, `stale_after`, and `approval` with `checked: "policy"`. That last word is deliberate and is the whole point of the key: the approver was checked against your Governance Policy's authority list and NOT against change control, which lands in phase B. An envelope that said only "approval" would let an agent report more verification than happened.
+
+**`read` returns the concept's frontmatter**, byte-exact as its author wrote it — comments and keys ksor has never heard of included. Not a re-serialisation: the profile preserves unknown keys, so a re-rendered block would be a different document wearing the record's name. Schema 2.5 gains `sources.frontmatter` for it, additively; existing records pick it up at their next `ksor ingest`.
+
+**Every serving act's audit row records its scope** — the viewer list, the trust floor that applied, whether it abstained, how many results came back, and the generation. Never the passages and never the query: a trail that accumulated content would be a second copy of your record with no audience predicate over it and no takedown seam bound to it.
+
+Costs, recorded rather than argued away: the three tool definitions grew from 11,960 to 14,334 characters (~2,990 → ~3,584 always-resident tokens), and each `search` hit carries about 262 characters more. `packages/ksor/docs/tool-surface.md` has the re-measured table and says which of its numbers are exact and which are derived.

@@ -111,13 +111,27 @@ carries the digest of the predicate it was measured under, and one measured
 under another (or under none) enters the declared-but-uncalibrated refusal
 rather than reading as `gate: off`. The snapshot token binds the viewer list.
 
+**And the door says what it knows.** `search` accepts `min_trust_tier`
+(`unverified` | `machine-confirmed` | `human-reviewed`), and
+`KSOR_MIN_TRUST_TIER` sets the deployment's own floor; the two compose by one
+rule — the higher of the pair — so configuration tightens and an argument
+never loosens, asserted through real Postgres across every configuration.
+The default and the enforcement live in the HANDLER, so a registration
+scaffolded before the parameter existed keeps working and the boot inspection
+NOTICES its absence instead of refusing it. Every hit carries its
+`governance` — `status`, `trust_tier`, the latest `verified` act,
+`effective_from`, `stale_after`, and `approval` with `checked: "policy"`,
+which is honest absence in the envelope's own idiom: policy-checked, not yet
+change-control-verified. `read` returns the concept's frontmatter byte-exact
+(`sources.frontmatter`, the author's own bytes, never a re-serialisation).
+Every serving act's `retrieval_log` row records the viewer list, the trust
+floor that applied, whether it abstained and how many results it returned —
+and never content or the query.
+
 **Not yet converted on this branch:** the site still stages against the RANKED
 audience model (`decideVisible` and `RANKED_AUDIENCE_CASES` exist only for it),
 reads `.ksor-denylist.json`, renders the H1 of `instance.md` as the title and
-does not exclude `index.md` from its docs collection; and the door does not yet
-expose `min_trust_tier` as a tool parameter, carry the trust signals on a hit
-or return frontmatter from `read` — the seam under it is
-`ServiceContext.minTrustTier`.
+does not exclude `index.md` from its docs collection.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
@@ -234,7 +248,12 @@ the file is supported and asserted: the compiled default serves the identical
 surface, compared over the protocol. The measurement that motivated it: three
 tool definitions cost ~2,990 always-resident tokens and one default `search`
 call ~3,541 — an agent pays for a record's tool surface out of its context
-window, so the record's owner decides what it says.
+window, so the record's owner decides what it says. Re-measured 2026-08-25
+after the trust floor and the per-hit governance landed: the definitions are
+**14,334 chars / ~3,584 tokens** (exact, they depend on the code alone);
+the per-call figures were NOT re-measured against that record, and
+`packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
+measurement plus the governance block's exactly-measured 262 chars a hit.
 
 ### One auth switch, spelled like what it does (0.0.29)
 
