@@ -168,7 +168,21 @@ carries `rel="alternate" type="text/markdown"`; every page carries
 `/.well-known/mcp/server.json` carry `build_id`, `source_commit` (with
 `dirty` when set) and `ksor_version` (R14); `server.json` keeps its own
 `version`, which is the record's. The site build refuses without a fresh
-lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development, and
+lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development.
+**Fresh covers the CONTROL files, not only the documents**: `instance.md`,
+`.ksor/governance.yaml` and `.ksor/takedowns.yaml` are hashed against
+`instance_sha256`, `policy_sha256` and `ledger_sha256`, and the lock's
+`ledger_entries` are passed to the checker as a `ksor-ledger-amended`
+baseline. Without that, a takedown was lifted by deleting four lines and the
+committed lock still validated (reproduced 2026-08-25) — a freshness claim
+that cannot see the ledger is not a freshness claim. The drafts switch must
+agree in BOTH directions: a `drafts: shown` lock refuses a build that did not
+ask for drafts, because one preview lock accidentally committed would
+otherwise publish every draft on every later production deploy. `as_of` and
+`ksor_version` are VALIDATED, not merely non-empty — an `as_of` that does not
+parse made every lifecycle comparison false (fail-open on both sides), and a
+`ksor_version` the site cannot compare slipped past the outdated gate and was
+stamped verbatim into every machine artefact. The site
 refuses `ksor-site-outdated` when the lock's `ksor_version` is newer than
 the site's stamped rule-module version — the adopter-owned site is upgraded
 by `ksor migrate --write-site`, which offers the byte-copied rule modules as

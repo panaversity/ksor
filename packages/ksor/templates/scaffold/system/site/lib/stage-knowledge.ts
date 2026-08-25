@@ -33,6 +33,7 @@ import type { Refusal } from "../record/refusal";
 
 const KNOWLEDGE = "knowledge/";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
+const POLICY_PATH = ".ksor/governance.yaml";
 const COMPANION = /\.(summary\.mdx?|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 
 /**
@@ -81,13 +82,7 @@ function assetTarget(recordDir: string, documentRel: string, target: string): st
 }
 
 function planStage(recordDir: string, development: boolean): StagePlan {
-  // ONE rule set: the same checker `ksor build` and `ksor ingest` run, over
-  // the same in-memory tree. Staging never depends on the checker having run
-  // elsewhere — a red record refuses HERE, by its slug, before any byte moves.
   const record = loadRecord(projectRoot);
-  const checked = checkRecord(record, { mode: "build" });
-  if (checked.refusals.length > 0 || checked.policy === null) refuseRecord(checked.refusals);
-  const policy = checked.policy;
 
   const documents = new Map<string, string>();
   const companions = new Map<string, string>();
@@ -107,9 +102,36 @@ function planStage(recordDir: string, development: boolean): StagePlan {
   }
 
   const draftsRequested = process.env.KSOR_DRAFTS === "show";
+  // The lock is read BEFORE the checker runs, because the checker needs one of
+  // the two `ksor-ledger-amended` baselines out of it: the lock records each
+  // ledger entry's DIGEST, which is the only thing that can see an entry
+  // retargeted in place (same id, same actor, a different `stable_id`).
   const lock = development
     ? null
-    : readLock(projectRoot, { documents, companions }, { draftsRequested });
+    : readLock(
+        projectRoot,
+        {
+          documents,
+          companions,
+          control: {
+            instance: record.files.get("instance.md") ?? "",
+            policy: record.files.get(POLICY_PATH) ?? "",
+            ledger: record.files.get(LEDGER_PATH) ?? null,
+          },
+        },
+        { draftsRequested },
+      );
+
+  // ONE rule set: the same checker `ksor build` and `ksor ingest` run, over
+  // the same in-memory tree. Staging never depends on the checker having run
+  // elsewhere — a red record refuses HERE, by its slug, before any byte moves.
+  const checked = checkRecord(record, {
+    mode: "build",
+    ledgerBaselines:
+      lock === null ? [] : [{ source: "build.lock.json", entries: lock.ledger_entries }],
+  });
+  if (checked.refusals.length > 0 || checked.policy === null) refuseRecord(checked.refusals);
+  const policy = checked.policy;
   // Lifecycle is evaluated at the lock's `as_of` for a build (staleness leaves
   // the open web on the next build; a scheduled rebuild is the operator's
   // obligation) and at now in development, where nothing is published.

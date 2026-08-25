@@ -29,6 +29,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { ledgerDigests, parseLedger } from "@panaversity/ksor-content/record";
+
 const SITE = fileURLToPath(new URL("../templates/scaffold/system/site/", import.meta.url));
 const KSOR_NODE_MODULES = fileURLToPath(new URL("../node_modules/", import.meta.url));
 
@@ -244,6 +246,14 @@ function writeLock(
   root: string,
   options: { asOf?: string; drafts?: "hidden" | "shown"; ksorVersion?: string } = {},
 ): void {
+  // The three control files are hashed the way `composeLock` hashes them: over
+  // the text `loadRecord` read, and the empty string for a ledger that is not
+  // there. They are part of the lock's freshness claim, not commentary on it.
+  const controlText = (rel: string): string | null =>
+    existsSync(path.join(root, rel)) ? readFileSync(path.join(root, rel), "utf8") : null;
+  const ledgerText = controlText(".ksor/takedowns.yaml");
+  const parsedLedger = parseLedger(ledgerText, ".ksor/takedowns.yaml");
+  const ledgerEntries = parsedLedger.ok ? ledgerDigests(parsedLedger.ledger) : [];
   const knowledge = path.join(root, "knowledge");
   const documents: { path: string; sha256: string }[] = [];
   const companions: { path: string; sha256: string }[] = [];
@@ -271,10 +281,10 @@ function writeLock(
         dirty: false,
         as_of: options.asOf ?? AS_OF,
         drafts: options.drafts ?? "hidden",
-        instance_sha256: "x",
-        policy_sha256: "x",
-        ledger_sha256: "x",
-        ledger_ids: [],
+        instance_sha256: sha256Text(controlText("instance.md") ?? ""),
+        policy_sha256: sha256Text(controlText(".ksor/governance.yaml") ?? ""),
+        ledger_sha256: sha256Text(ledgerText ?? ""),
+        ledger_entries: ledgerEntries,
         audiences: { registry: ["internal"], viewers: { public: ["public"] } },
         documents,
         companions,
@@ -287,6 +297,10 @@ function writeLock(
 
 function sha(file: string): string {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function sha256Text(text: string): string {
+  return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
 }
 
 interface Staged {
@@ -598,5 +612,153 @@ okf_version: "0.2"
     });
     // Lifecycle at now: the 2030 concept is still not effective.
     expect(r.manifest.pages["future.md"]).toMatchObject({ machine: false });
+  });
+});
+
+/**
+ * The lock's freshness claim has to cover the CONTROL files, not only the
+ * documents. It did not, and the hole was the whole governance surface: with a
+ * lock written and untouched, deleting a denial's four lines from
+ * `.ksor/takedowns.yaml` staged the denied document, deleting the ledger
+ * outright staged the denied document AND the subtree, and editing
+ * `instance.md`'s title published a title nothing checked — all exit 0, no
+ * slug. `readLock`'s own refusal text claims "the lock records the exact record
+ * `ksor build` checked", which was false for the two files holding the
+ * governance (reproduced 2026-08-25).
+ */
+describe("the lock's freshness claim covers the control files", () => {
+  let work: string;
+  let fixture: Fixture;
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-lock-control-")));
+    fixture = writeRecord(path.join(work, "record"));
+    writeLock(fixture.root);
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  const restore = (rel: string, before: string): void =>
+    writeFileSync(path.join(fixture.root, rel), before);
+
+  it("a denial deleted from the ledger refuses ksor-lock-stale, naming the ledger", () => {
+    const rel = ".ksor/takedowns.yaml";
+    const before = readFileSync(path.join(fixture.root, rel), "utf8");
+    writeFileSync(
+      path.join(fixture.root, rel),
+      before.replace(
+        `- id: 2026-08-20T10:00:00Z-aaaaaa
+  stable_id: knowledge/denied
+  scope: node
+  expected: present
+  by: human:ciso
+  at: 2026-08-20T10:00:00Z
+`,
+        "",
+      ),
+    );
+    const r = stage(fixture);
+    restore(rel, before);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain(".ksor/takedowns.yaml");
+    expect(existsSync(fixture.stage), "a refused build left a stage").toBe(false);
+  });
+
+  it("the whole ledger deleted refuses too, and never stages the denied documents", () => {
+    const rel = ".ksor/takedowns.yaml";
+    const before = readFileSync(path.join(fixture.root, rel), "utf8");
+    rmSync(path.join(fixture.root, rel));
+    const r = stage(fixture);
+    restore(rel, before);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr).toContain(".ksor/takedowns.yaml");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  it("an edited instance.md refuses, naming instance.md", () => {
+    const rel = "instance.md";
+    const before = readFileSync(path.join(fixture.root, rel), "utf8");
+    writeFileSync(path.join(fixture.root, rel), before.replace("Acme Handbook", "TAMPERED TITLE"));
+    const r = stage(fixture);
+    restore(rel, before);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain("instance.md");
+  });
+
+  it("an edited governance policy refuses, naming the policy", () => {
+    const rel = ".ksor/governance.yaml";
+    const before = readFileSync(path.join(fixture.root, rel), "utf8");
+    writeFileSync(path.join(fixture.root, rel), `${before}# a comment nobody checked\n`);
+    const r = stage(fixture);
+    restore(rel, before);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain(".ksor/governance.yaml");
+  });
+
+  it("a ledger entry RETARGETED in place refuses ksor-ledger-amended at the site build", () => {
+    // Same id, same actor, a different `stable_id`: the id set is unchanged, so
+    // only the entry digests the lock carries can see it.
+    const rel = ".ksor/takedowns.yaml";
+    const before = readFileSync(path.join(fixture.root, rel), "utf8");
+    writeFileSync(
+      path.join(fixture.root, rel),
+      before.replace("stable_id: knowledge/denied", "stable_id: knowledge/revoked"),
+    );
+    // The lock is re-written so the FILE hash agrees; only the entry moved.
+    const lockBefore = readFileSync(path.join(fixture.root, "build.lock.json"), "utf8");
+    const lock = JSON.parse(lockBefore) as Record<string, unknown>;
+    lock["ledger_sha256"] = sha256Text(readFileSync(path.join(fixture.root, rel), "utf8"));
+    writeFileSync(path.join(fixture.root, "build.lock.json"), JSON.stringify(lock, null, 2));
+    const r = stage(fixture);
+    restore(rel, before);
+    writeFileSync(path.join(fixture.root, "build.lock.json"), lockBefore);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr).toContain("ksor-ledger-amended");
+    expect(r.stderr).toContain("2026-08-20T10:00:00Z-aaaaaa");
+  });
+
+  it("an as_of that is not an instant refuses instead of admitting everything", () => {
+    // NaN made every date comparison false, which is fail-OPEN on both sides:
+    // a policy effective in 2030 was published as current and carried no badge.
+    for (const bad of ["not-a-date", "yesterday", "2026-08-25"]) {
+      writeLock(fixture.root, { asOf: bad });
+      const r = stage(fixture);
+      expect(r.status, `as_of ${bad} was accepted`).not.toBe(0);
+      expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+      expect(r.stderr).toContain("as_of");
+    }
+    writeLock(fixture.root);
+  });
+
+  it("a ksor_version the site cannot compare refuses instead of passing the outdated gate", () => {
+    for (const bad of ["999", "next"]) {
+      writeLock(fixture.root, { ksorVersion: bad });
+      const r = stage(fixture);
+      expect(r.status, `ksor_version ${bad} was accepted`).not.toBe(0);
+      expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+      expect(r.stderr).toContain("ksor_version");
+    }
+    writeLock(fixture.root);
+  });
+
+  it("a lock built with drafts shown refuses a plain build — the switch must agree both ways", () => {
+    // One accidental `KSOR_DRAFTS=show ksor build` committed would otherwise
+    // publish every draft on every later production deploy, with no
+    // environment signal and nothing red; noindex is a hint, not a control.
+    writeLock(fixture.root, { drafts: "shown" });
+    const r = stage(fixture);
+    writeLock(fixture.root);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain("KSOR_DRAFTS");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  it("still builds when every control file is the one the lock recorded", () => {
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).not.toContain("denied.md");
   });
 });
