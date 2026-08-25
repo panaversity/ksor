@@ -449,12 +449,14 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   publishes that as fact) and `superseded` (a legacy marker — prefer `status`)
   are available. No other keys; never
   `id:` or `name:` — the path is the identity.
-- **Each page says how long it takes to read**, just above the body, counted from the
-  document's own words when the site is built. Fenced code and frontmatter do
-  not count toward it, so a short page carrying a long example is not reported
-  as a long read. Nothing to author — it is derived. A document with a summary
-  shows the figure on both tabs, so a reader can see at a glance how much the
-  summary saves them.
+- **Each page says how long it takes to read**, counted from the document's own
+  words when the site is built. Fenced code and frontmatter do not count toward
+  it, so a short page carrying a long example is not reported as a long read.
+  Nothing to author — it is derived. It sits with the owner and the effective
+  date, in the row under the title; a document with a SUMMARY moves it onto
+  that view's own strip instead, where it reports the view you are reading
+  rather than the document. Each tab names its own figure to a screen reader,
+  so the cost of each view is available without switching to it.
 - **The governance keys are rendered, so they are worth filling in.** Each
   page shows its owner and effective date under the title, lists every
   `provenance` entry separately at the foot, and — for a superseded document —
@@ -663,6 +665,57 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   A tool the site knows gets its own colour and mark on its tab; anything else
   renders in the site's accent. The list lives in `system/site/app/global.css`
   and is yours — adding a tool is one colour and one mark.
+
+- **A passage the reader must not miss, as a CALLOUT.** GitHub's alert syntax —
+  a blockquote whose first line is the kind in brackets:
+
+  ```markdown
+  > [!WARNING]
+  > This threshold changed in March. The figure below is the old one.
+  ```
+
+  Five kinds: `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`. The site tints
+  the panel in that kind's colour and rules its left edge; every other reader
+  of the record — GitHub, a plain editor, `/md/`, `llms-full.txt` — shows an
+  ordinary blockquote carrying a visible label, so nothing is lost and nothing
+  becomes punctuation.
+
+  **Not `:::warning`.** That form is a dialect: a record written in one renders
+  as literal colons in every reader except the one site that understands it.
+
+- **A long line is the reader's to unwrap.** Nothing to author — a fenced block
+  wider than the column gets a button beside its copy button that wraps it, and
+  a block that fits gets no button at all.
+- **Something running, as an embed.** A document that wants to show a page in
+  motion — a simulation, a player, a dashboard — links to it and gives the link
+  the title `embed`:
+
+  ```markdown
+  [Play run-until-done](goal-loop.sim.html "embed")
+  ```
+
+  Still CommonMark: a link title is a tooltip everywhere else, so GitHub, a
+  plain editor, `/md/` and `llms-full.txt` all show the author's link. Nothing
+  loads until a reader clicks, which is what keeps a built page free of
+  external requests — and the panel names what it is about to reach, so the
+  click is informed.
+
+  **You do not state a height.** A page carried in the record is measured, so
+  the frame is exactly as tall as what it holds — on this record's own seven,
+  to the pixel. A number written into a document would be a number some other
+  measure makes wrong.
+
+  **Carry the page in where you can.** A file named `<name>.sim.html`, sitting
+  beside its document exactly like a figure, is published by the build and
+  served from this site — so it works offline, tells nobody outside what
+  someone is reading, and is versioned with the document instead of changing
+  under it. It is an ASSET, not an attachment: named freely, as many per
+  document as the prose needs.
+
+  An `https:` link works too, for a page you cannot carry. It is the weaker
+  option for a reason worth knowing: many hosts send `X-Frame-Options:
+SAMEORIGIN`, which forbids any other site from framing them, and a browser
+  enforces that whatever this record does. Check before you rely on one.
 
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, and name the source in `provenance`.

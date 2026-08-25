@@ -1,5 +1,7 @@
 import { defineCollections, defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { remarkCodeTab } from "fumadocs-core/mdx-plugins/remark-code-tab";
+import { rehypeGithubAlerts } from "./lib/alert-rule";
+import { rehypeEmbeds } from "./lib/embed-rule";
 import { metaSchema, pageSchema } from "fumadocs-core/source/schema";
 import { z } from "zod";
 import { DeckSchema } from "./lib/deck";
@@ -123,7 +125,36 @@ export default defineConfig({
      * place; the page decides whether there is a deck to put there. See
      * lib/teaching-aid-rule.ts.
      */
-    rehypePlugins: [[rehypeTeachingAid, { isAttachment }]],
+    rehypePlugins: [
+      [rehypeTeachingAid, { isAttachment }],
+      /**
+       * A passage the reader must not miss, as a CALLOUT.
+       *
+       * GitHub's alert syntax: a blockquote whose first line is `[!WARNING]`.
+       * GitHub renders it as a styled alert, every other viewer renders an
+       * ordinary blockquote carrying a visible label, and it reaches `/md/`
+       * and `llms-full.txt` as the author's blockquote rather than as markup.
+       *
+       * Not `:::warning`. fumadocs ships `remarkAdmonition` for that form and
+       * deprecates it in favour of a `remark-directive` setup — but the deeper
+       * objection is that `:::` is a dialect, and a record written in one
+       * renders as literal punctuation everywhere it is read outside this site.
+       *
+       * REHYPE rather than remark, and lib/alert-rule.ts records why: the
+       * record's markdown is serialized from the mdast, so converting there
+       * publishes this site's React component to the agent surface.
+       */
+      rehypeGithubAlerts,
+      /**
+       * An interactive page the document points at, as a click-to-load
+       * frame. Authored as an ordinary link titled `embed`, so the record
+       * stays CommonMark and every other reader of it sees a link.
+       *
+       * REHYPE, so `/md/` and `llms-full.txt` keep the author's link
+       * rather than this site's component. See lib/embed-rule.ts.
+       */
+      rehypeEmbeds,
+    ],
     /**
      * Alternative versions of the same instruction, as TABS.
      *

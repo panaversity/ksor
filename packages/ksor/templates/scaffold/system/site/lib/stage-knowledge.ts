@@ -14,6 +14,7 @@ import path from "node:path";
 import { ATTACHMENT_SUFFIXES, isAttachment, parentDocumentOf } from "./attachment-rule";
 import { audienceModel, buildAudience, refuse, visibleInBuild } from "./audience";
 import { isDenied, recordPathFrom, stableIdFrom, type DenylistManifest } from "./denial-rule";
+import { publicSimPath, SIM_SUFFIX } from "./embed-rule";
 import { appName, instanceFrontmatter } from "./shared";
 
 // Both relative to the site directory — the directory every build runs from
@@ -21,6 +22,8 @@ import { appName, instanceFrontmatter } from "./shared";
 // resolves a collection's `dir`.
 const RECORD_DIR = "../../knowledge";
 const STAGE_DIR = "./.staged-knowledge";
+// Served, not bundled. Next copies public/ into the export as-is.
+const PUBLIC_SIM_DIR = "./public/sims";
 
 // ONE frontmatter boundary, the checker's exactly: BOM stripped, CRLF
 // normalized, lax close (a `----` line closes — review finding 2026-08-19:
@@ -444,7 +447,20 @@ function withStageLock<T>(stageDir: string, work: () => T): T {
       writeFileSync(lockFile, String(process.pid), { flag: "wx" });
       break;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      // EEXIST is "someone holds it". EPERM is the SAME THING on Windows: a
+      // create against a path whose file is in the pending-delete state — the
+      // window between another process calling `rmSync` and the filesystem
+      // actually releasing the name — raises EPERM, not EEXIST. Rethrowing it
+      // failed the build for the ordinary contended case, and only on Windows,
+      // and only sometimes: green on five CI runs of this same code and red on
+      // the next two, because it depends on landing inside a window a few
+      // milliseconds wide (2026-08-25, `Init acceptance (Windows)`).
+      //
+      // Waiting is safe for both: a holder that has died leaves a lock
+      // `lockIsAbandoned` breaks, so neither code can wait forever on a
+      // process that is gone.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST" && code !== "EPERM") throw error;
       if (lockIsAbandoned(lockFile)) {
         rmSync(lockFile, { force: true });
         continue;
@@ -541,13 +557,17 @@ function fillStage(recordDir: string, stageDir: string, denied: DenylistManifest
       removeStage(stageDir);
       throw error;
     }
-    if (stageHolds(recordDir, stageDir, plan)) return;
+    if (stageHolds(recordDir, stageDir, plan)) {
+      publishSims(stageDir);
+      return;
+    }
     removeStage(stageDir);
     for (const from of plan.files) {
       const to = path.join(stageDir, path.relative(recordDir, from));
       mkdirSync(path.dirname(to), { recursive: true });
       copyFileSync(from, to);
     }
+    publishSims(stageDir);
   });
 }
 
@@ -686,6 +706,73 @@ function watchRecord(recordDir: string, stageDir: string): void {
  * per-request filter leaked on the fifth and sixth consumer of the record
  * its own author had not enumerated (research/visibility.md §4–§5).
  */
+
+/**
+ * A sim is the one asset that has to be SERVED rather than bundled: it is a
+ * page, and a page needs a url before anything can frame it. Next copies
+ * `public/` into the export as-is, so that is where it goes.
+ *
+ * A PASS OF ITS OWN, over the directory the collection actually reads — not a
+ * rider on staging. Staging runs only for a record that declares `audiences:`
+ * or carries a takedown, and most records declare neither, so a sim hung off
+ * it published for the rare record and silently vanished for the common one
+ * (found live 2026-08-24: nothing reached `public/` on the level-0 path).
+ * Reading the SOURCE dir inherits the filtering when there is any, and works
+ * when there is none. What it does NOT inherit at level 0 is the staging
+ * plan's rule that only a REFERENCED asset ships: a record with no audiences
+ * and no takedowns publishes every document anyway, so an unreferenced sim
+ * ships its bytes there. Said rather than fixed, because the moment either
+ * governance exists the staged dir is what this walks and the rule applies.
+ */
+/** Whether the record carries a sim at all — a lock nobody needs is churn. */
+function hasSims(dir: string): boolean {
+  return walkFiles(dir).some((file) => file.endsWith(SIM_SUFFIX));
+}
+
+function publishSims(sourceDir: string): void {
+  const target = path.resolve(process.cwd(), PUBLIC_SIM_DIR);
+
+  const walk = (dir: string, rel: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const from = path.join(dir, entry.name);
+      const next = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(from, next);
+        continue;
+      }
+      if (!entry.name.endsWith(SIM_SUFFIX)) continue;
+      const to = path.join(target, publicSimPath(next));
+      // Same size AND same mtime is this file's own definition of unchanged
+      // (see `stageHolds`). Skipping the write is what keeps the common
+      // build from touching the tree at all.
+      try {
+        const source = statSync(from);
+        const published = statSync(to);
+        if (published.size === source.size && published.mtimeMs >= source.mtimeMs) continue;
+      } catch {
+        // Not published yet, which is the ordinary first-build case.
+      }
+      mkdirSync(path.dirname(to), { recursive: true });
+      copyFileSync(from, to);
+    }
+  };
+
+  // The CALLER holds the stage lock, and this takes none of its own — for the
+  // reason `withStageLock` records at length, plus one this change learned on
+  // Windows: taking it a SECOND time per evaluation doubles the create/delete
+  // churn on one lock file, and `wx` create against a file in Windows'
+  // pending-delete state fails as `EPERM`, which is not `EEXIST` and so is
+  // rethrown. Green on macOS and Linux, red on Windows CI, from a pass that
+  // was correct about needing the lock and wrong about taking it again.
+  walk(sourceDir, "");
+}
+
 export function knowledgeSourceDir(): string {
   const stageDir = path.resolve(process.cwd(), STAGE_DIR);
   const recordDir = path.resolve(process.cwd(), RECORD_DIR);
@@ -704,9 +791,19 @@ export function knowledgeSourceDir(): string {
     // because two evaluations removing one tree is the `ENOTEMPTY` shape of the
     // same race; the existence check keeps a record that never stages from
     // taking a lock on every build.
-    if (existsSync(stageDir)) withStageLock(stageDir, () => removeStage(stageDir));
     refuseVisibilityWithoutAudiences(recordDir);
     assertAttachmentsWellFormed(recordDir);
+    // ONE acquisition on this path too, doing both jobs — and keyed on the
+    // stage path rather than the record's, because `${recordDir}.lock` would
+    // drop a lock file beside `knowledge/`, in the adopter's repo, for a build
+    // that never stages anything.
+    const stale = existsSync(stageDir);
+    if (stale || hasSims(recordDir)) {
+      withStageLock(stageDir, () => {
+        if (stale) removeStage(stageDir);
+        publishSims(recordDir);
+      });
+    }
     return RECORD_DIR;
   }
   if (audienceModel === null) refuseVisibilityWithoutAudiences(recordDir);

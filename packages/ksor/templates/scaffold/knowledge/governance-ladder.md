@@ -18,6 +18,11 @@ record of such documents is already publishable, searchable and citable.
 
 Each rung is worth climbing when the domain asks for it, and not before.
 
+> [!TIP]
+> Climb one rung at a time, and only when something has gone wrong without it.
+> A record that adds owners before anyone disputes a document spends review
+> effort buying nothing.
+
 ### Owners and sources
 
 An owner names who stands behind a document. Provenance names where its claims

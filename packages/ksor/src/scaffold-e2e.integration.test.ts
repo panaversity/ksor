@@ -554,6 +554,146 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
    * ten-section document picks their tool ten times. Nothing errors, so only
    * an assertion on the shipped bytes catches it.
    */
+  it("gives a new record its reading surface, with nothing configured", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const doc = path.join(project, "knowledge", "surface-host.md");
+    try {
+      writeFileSync(
+        doc,
+        "---\ntitle: Surface host\nstatus: approved\n---\n\n" +
+          "> [!WARNING]\n> zzalertbodyzz\n\n" +
+          "| Head | Other |\n| --- | --- |\n| zzcellzz | second |\n\n" +
+          "```text\nzzverbatimzz\n```\n",
+      );
+      expect(buildScaffold(project).status, "build with the affordances").toBe(0);
+
+      const page = readFileSync(path.join(outDir, "docs", "surface-host", "index.html"), "utf8");
+
+      // The alert became a callout. Its marker must NOT survive as text: a
+      // record that writes `[!WARNING]` and reads `[!WARNING]` got nothing.
+      expect(page, "the alert did not become a callout").toContain("--callout-color");
+      expect(page, "the marker was served as literal text").not.toContain("[!WARNING]");
+      expect(page).toContain("zzalertbodyzz");
+
+      // And the agent surface keeps what the author wrote, because the
+      // conversion is a rehype step. This is the clause that fails if anyone
+      // moves it to remark.
+      const twin = readFileSync(path.join(outDir, "md", "surface-host.md"), "utf8");
+      expect(twin, "the markdown twin lost the author's alert").toContain("[!WARNING]");
+      expect(twin, "the markdown twin served a React component").not.toContain("Callout");
+
+      // The stylesheet SHIPS the rules — asserted on the built bytes rather
+      // than on the source, because a rule that never reaches the export is a
+      // default the adopter does not have.
+      const stylesheets: string[] = [];
+      const collect = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) collect(full);
+          else if (entry.name.endsWith(".css")) stylesheets.push(readFileSync(full, "utf8"));
+        }
+      };
+      collect(path.join(outDir, "_next"));
+      const css = stylesheets.join("");
+      expect(stylesheets.length, "the export shipped no stylesheet at all").toBeGreaterThan(0);
+      for (const rule of [
+        "--callout-color", // callouts are tinted and ruled
+        "thead", // the table head is a band
+        "nth-child(odd)", // and its rows alternate
+        "data-wrapped", // a long line can be unwrapped
+        "--shiki-light", // a language-less block is set as a passage
+      ]) {
+        expect(css, `the export does not carry the rule for ${rule}`).toContain(rule);
+      }
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("frames a link titled `embed`, requests nothing until asked, and leaves /md/ alone", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const doc = path.join(project, "knowledge", "embed-host.md");
+    const URL = "https://sims.example.org/zzsimzz";
+    try {
+      writeFileSync(
+        doc,
+        "---\ntitle: Embed host\nstatus: approved\n---\n\n" +
+          // The marked link, alone in its paragraph.
+          `[Play the zzsimzz](${URL} "embed")\n\n` +
+          // An ordinary link to the SAME url, which must stay a link — the
+          // opt-in is the title, so this pair is the whole rule in one file.
+          `See [the zzsimzz](${URL}) for more.\n`,
+      );
+      expect(buildScaffold(project).status, "build with an embed").toBe(0);
+
+      const page = readFileSync(path.join(outDir, "docs", "embed-host", "index.html"), "utf8");
+
+      // Nothing is requested until a reader asks: the built page ships the
+      // placeholder, and the frame is created on click. This is the clause
+      // that keeps the zero-external-request guarantee true.
+      expect(page, "an embed must not ship a frame").not.toContain("<iframe");
+      expect(page, "the host must be named, so the click is informed").toContain(
+        "sims.example.org",
+      );
+
+      // The ordinary link survives as a link.
+      expect(page, "the plain link was reframed").toContain("See ");
+
+      // REHYPE, not remark: the agent surface keeps the author's link rather
+      // than this site's component. The whole reason for the phase choice.
+      const twin = readFileSync(path.join(outDir, "md", "embed-host.md"), "utf8");
+      expect(twin, "the markdown twin lost the author's link").toContain(URL);
+      expect(twin, "the markdown twin served a React component").not.toContain("<Embed");
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("serves a sim the record carries, from this site, under the record's own path", () => {
+    const outDir = path.join(project, "system", "site", "out");
+    const dir = path.join(project, "knowledge", "sims-host");
+    const doc = path.join(dir, "index.md");
+    const sim = path.join(dir, "zzloopzz.sim.html");
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(sim, "<!doctype html><title>zzsimtitlezz</title><p>zzsimbodyzz</p>\n");
+      writeFileSync(
+        doc,
+        "---\ntitle: Sims host\nstatus: approved\n---\n\n" +
+          // Written as a link to the file BESIDE the document, exactly the way
+          // a figure is. The served url is derived, never authored.
+          '[Play it](zzloopzz.sim.html "embed")\n',
+      );
+      expect(buildScaffold(project).status, "build with a carried sim").toBe(0);
+
+      // Published where it can be SERVED, under the record path — so two
+      // documents may each own a `zzloopzz.sim.html` without colliding.
+      const served = path.join(outDir, "sims", "sims-host", "zzloopzz.html");
+      expect(existsSync(served), "the sim was not published where it can be served").toBe(true);
+      expect(readFileSync(served, "utf8")).toContain("zzsimbodyzz");
+
+      const page = readFileSync(path.join(outDir, "docs", "sims-host", "index.html"), "utf8");
+      // The derived url, not the record path.
+      expect(page).toContain("/sims/sims-host/zzloopzz.html");
+      expect(page, "the record's own path must not reach the page").not.toContain(
+        "zzloopzz.sim.html",
+      );
+      // Still click-to-load, and now honestly described: it IS part of the
+      // record, so the panel may not say a third party runs it.
+      expect(page, "a sim must not ship a frame").not.toContain("<iframe");
+      expect(page).toContain("Part of this record");
+
+      // No route and no markdown twin: a sim is an asset, not a document.
+      expect(existsSync(path.join(outDir, "docs", "sims-host", "zzloopzz.sim"))).toBe(false);
+      expect(existsSync(path.join(outDir, "md", "sims-host", "zzloopzz.sim.html"))).toBe(false);
+
+      // And it never becomes a document: nothing in the record index names it.
+      expect(readFileSync(path.join(outDir, "llms.txt"), "utf8")).not.toContain("zzloopzz");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("renders code tabs from a fence's info string, and carries the group", () => {
     const knowledge = path.join(project, "knowledge");
     const doc = path.join(knowledge, "tabbed.md");

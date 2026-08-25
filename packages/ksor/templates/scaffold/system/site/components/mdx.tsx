@@ -1,4 +1,7 @@
 import defaultMdxComponents from "fumadocs-ui/mdx";
+
+import { WrappableCodeBlock } from "@/components/code-block";
+import { Embed } from "@/components/embed";
 import { CodeBlockTabsTrigger } from "fumadocs-ui/components/codeblock";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import type { MDXComponents } from "mdx/types";
@@ -32,9 +35,14 @@ export function getMDXComponents(components?: MDXComponents) {
     // here or a document whose page forgot to pass one serves a 500 rather
     // than a page without an aid.
     TeachingAid: () => null,
+    // A long line is the reader's to unwrap, per block — see
+    // components/code-block.tsx. Replaces fumadocs' own `pre`.
+    pre: WrappableCodeBlock,
+    // `rehypeEmbeds` (source.config.ts) rewrites a link titled `embed` into
+    // this; an unknown component fails the build, so it has to be in the map.
+    Embed,
     // `remarkCodeTab` (source.config.ts) rewrites consecutive fenced blocks
-    // that declare `tab="…"` into these, so they have to be in the map or the
-    // build fails on an unknown component rather than at authoring time.
+    // that declare `tab="…"` into these, for the same reason.
     Tabs,
     Tab,
     CodeBlockTabsTrigger: BrandedTabsTrigger,
