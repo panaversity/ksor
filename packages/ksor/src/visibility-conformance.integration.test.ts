@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
+import { starterApprover } from "./e2e-starter.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -180,7 +181,11 @@ describe.runIf(enabled).each(SHELLS)(
 
       // The registry lives in the Governance Policy, not in instance.md
       // (record spec §4): `public` is reserved and may not be declared, and
-      // every other identifier a concept names must appear here.
+      // every other identifier a concept names must appear here. The STARTER
+      // PRODUCER keeps its authority beside `human:kim`: the emitted samples
+      // stay in this record and ship approved by that actor, so dropping it
+      // refuses the build with `ksor-approver-unauthorised` before any viewer
+      // is rendered.
       writeFileSync(
         path.join(project, ".ksor", "governance.yaml"),
         `version: "0.1"
@@ -190,7 +195,7 @@ audiences:
   restricted:
     description: Compensation committee
 approval_authorities:
-  - actors: [human:kim]
+  - actors: [human:kim, ${starterApprover(project)}]
 takedown_authorities:
   actors: [human:ciso]
 `,

@@ -309,14 +309,14 @@ function planStage(recordDir: string, development: boolean): StagePlan {
   }
 
   // Three states, and only the middle one is a mistake. An empty RECORD is
-  // refused upstream (`ksor-record-empty`). A record nobody has approved yet is
-  // the emitted starter on day one — every concept a draft, which is what R25
-  // forces at `ksor init` — and it BUILDS, publishing nothing (build spec §4,
-  // acceptance 4): the first governance act is one conversational turn away and
-  // a wall here would meet the adopter before the record does. An empty VIEWER
-  // over a record that HAS approved knowledge is the misconfiguration, and it
-  // would otherwise surface as "the record has no documents" against a record
-  // full of them.
+  // refused upstream (`ksor-record-empty`). A record nobody has approved yet —
+  // every concept a draft, which is where an owner lands after replacing the
+  // samples with their own first documents — BUILDS, publishing nothing (build
+  // spec §4, acceptance 4): the first governance act is one conversational turn
+  // away and a wall here would meet the adopter before the record does. An
+  // empty VIEWER over a record that HAS approved knowledge is the
+  // misconfiguration, and it would otherwise surface as "the record has no
+  // documents" against a record full of them.
   const approved = checked.concepts.some((c) => c.status === "stable");
   if (admitted.length === 0 && checked.concepts.length > 0 && approved) {
     refuse(

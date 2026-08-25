@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
+import { starterApprover } from "./e2e-starter.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -55,44 +56,30 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
     // `ksor-approver-unauthorised` tells them to do. Writing the documents
     // without it made every case here fail on the authority check rather than
     // on what it meant to test (found running this suite, 2026-08-25).
+    //
+    // The STARTER PRODUCER is kept beside them: the five sample documents ship
+    // approved by it, so dropping it here would make the emitted record itself
+    // unauthorised — the same failure, one line earlier.
     writeFileSync(
       path.join(project, ".ksor", "governance.yaml"),
       [
         'version: "0.1"',
         "approval_authorities:",
-        "  - actors: [human:kim]",
+        `  - actors: [human:kim, ${starterApprover(project)}]`,
         "takedown_authorities:",
         "  actors: [human:ciso]",
         "",
       ].join("\n"),
     );
-    // …and APPROVE the starter, which `ksor init` cannot do for itself: R25
-    // forbids the tool recording an approval, so an emitted record is all
-    // drafts and a build admits none of them to any surface. That state is a
-    // correct one and has its own coverage (build spec §4 acceptance 4, the
-    // last clause of this file); it is not the state a walkthrough of the
-    // PUBLISHED site can be run against, so this does what an adopter does on
-    // day one — read the starter, approve it, build.
-    const knowledge = path.join(project, "knowledge");
-    const starter = readdirSync(knowledge, { recursive: true, encoding: "utf8" }).filter(
-      (file) =>
-        file.endsWith(".md") && path.basename(file) !== "index.md" && !file.endsWith(".summary.md"),
-    );
-    expect(starter.length, "the starter ships no concept to approve").toBeGreaterThan(0);
-    for (const file of starter) {
-      const before = readFileSync(path.join(knowledge, file), "utf8");
-      const after = before
-        .replace(/^status: draft$/m, "status: stable")
-        .replace(
-          /^ {2}audience: \[public\]$/m,
-          '  audience: [public]\n  approval: { by: "human:kim", at: 2026-08-25T09:00:00Z }',
-        );
-      // A silent no-op here would leave the record unpublished and every
-      // clause below failing somewhere far from the cause.
-      expect(after, `${file} is not the starter shape this approval edits`).not.toBe(before);
-      writeFileSync(path.join(knowledge, file), after);
-    }
-    // …and COMMIT it, which is the state build spec §4 acceptance 1 describes
+    // The starter itself is used AS EMITTED. It ships stable and approved by
+    // the producer that generated it, so a fresh record publishes on its first
+    // build — which is the state a walkthrough of the PUBLISHED site needs, and
+    // the state an adopter actually gets. A record whose documents are all
+    // drafts still admits none of them to any surface, and that guarantee has
+    // its own coverage against an authored draft (build spec §4 acceptance 4,
+    // the last clause of this file).
+    //
+    // COMMIT it, which is the state build spec §4 acceptance 1 describes
     // ("the emitted starter after its first commit"). `ksor init` leaves a
     // repository with no commit, and a record with no commit honestly
     // publishes no `source_commit` stamp at all (`stampLines` omits a null
@@ -113,7 +100,7 @@ describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
       "commit.gpgsign=false",
       "commit",
       "-m",
-      "The starter, approved",
+      "The starter, as emitted",
     );
     // Resolve the scaffold's `@panaversity/ksor` self-pin to the LOCAL build,
     // not the registry: the pin is the exact (unpublished-in-CI) CLI version.
@@ -376,9 +363,8 @@ ${body}
     // WITHOUT `NODE_ENV`. vitest sets it to `test` and a spawned child
     // inherits it, so this dev server came up as a BUILD: staging read
     // `build.lock.json` instead of the record, hid drafts, and `watchRecord`
-    // returned early — which is why an edit here never reached the staged copy,
-    // and why against the emitted all-draft starter the page did not exist at
-    // all and the poll below saw 500 for its full two minutes (diagnosed live
+    // returned early — which is why an edit here never reached the staged copy
+    // and the poll below saw 500 for its full two minutes (diagnosed live
     // 2026-08-25, by running `NODE_ENV=test pnpm dev` on a real scaffold and
     // watching it refuse `ksor-lock-stale`). An adopter's shell carries no
     // NODE_ENV and `next dev` sets `development` itself, so the faithful thing

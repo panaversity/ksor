@@ -181,9 +181,19 @@ describe("ksor build — acceptance 1: the emitted starter", () => {
     const lock = lockOf(root);
     expect(lock.dirty).toBe(false);
     expect(lock.source_commit).toBe(git(root, "rev-parse", "HEAD"));
-    // Every starter document is a draft (a tool may not record a human
-    // approval), so nothing reaches a machine surface until the owner approves.
-    expect(lock.documents.every((d) => d.status === "draft" && d.admitted.length === 0)).toBe(true);
+    // Every starter document PUBLISHES: the samples ship `status: stable`,
+    // approved by the producer that generated them and authorised by the
+    // emitted policy, so a fresh record has a machine surface on its first
+    // build rather than an empty one (decision 27 revision 2026-08-25). The
+    // approver is a producer, never a person — `human:you` in the same policy
+    // is the placeholder the owner replaces, and it approved nothing.
+    expect(lock.documents.map((d) => [d.path, d.status, d.admitted])).toEqual([
+      ["governance-ladder.md", "stable", ["public"]],
+      ["surfaces/for-agents.md", "stable", ["public"]],
+      ["surfaces/for-people.md", "stable", ["public"]],
+      ["surfaces/overview.md", "stable", ["public"]],
+      ["what-is-a-ksor.md", "stable", ["public"]],
+    ]);
     expect(readFileSync(path.join(root, "knowledge/index.md"), "utf8")).toMatch(
       /^---\nokf_version: "0.2"\n---\n/,
     );

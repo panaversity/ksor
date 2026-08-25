@@ -1150,10 +1150,9 @@ gateway` package, serve-by-spawn) is superseded._
     approval: an author with an approver and no reviewer would simply write a
     `verified` entry, and the tier that exists to say "nobody has checked
     this" would never appear. A stable, approved, unverified concept is the
-    honest state, and it is exactly what tier _unverified_ is for. This is
-    also what makes the day-one turn possible — five starter drafts, one
-    human approval, five stable documents — without the tool recording a
-    review no human performed (R25). The correction is carried in KSP-001
+    honest state, and it is exactly what tier _unverified_ is for. It is also
+    what lets the emitted starter ship approved without claiming a review
+    (the 2026-08-25 revision below). The correction is carried in KSP-001
     draft 10 rather than worked around locally.
 
     **GFM footnotes are the one extension to CommonMark.** Reference and
@@ -1166,11 +1165,12 @@ gateway` package, serve-by-spawn) is superseded._
 
     **What it cost, recorded rather than argued away.** Day one publishes
     nothing until a human approves — one conversational turn, and the claim
-    made visible. Every adopter with a numeric floor re-measures it, because
-    the serving predicate changed and a floor measured under another
-    predicate is a declared-but-uncalibrated floor; until they do, the door
-    refuses every search as uncalibrated, which is the invariant rather than
-    a regression. An upgraded served record has an outage window between
+    made visible. _Reversed 2026-08-25 — see the revision below._ Every
+    adopter with a numeric floor re-measures it, because the serving
+    predicate changed and a floor measured under another predicate is a
+    declared-but-uncalibrated floor; until they do, the door refuses every
+    search as uncalibrated, which is the invariant rather than a regression.
+    An upgraded served record has an outage window between
     `ksor schema --apply` and the first 2.5 ingest. `approved` becomes
     `draft` on migration unless the human approves in the same act. Whether
     an edit bumped `generated.at` is UNVERIFIED until change-control
@@ -1180,6 +1180,48 @@ gateway` package, serve-by-spawn) is superseded._
     author is in a public repository. Stale documents leave the open web at
     the next build, so a record with `stale_after` dates needs a scheduled
     rebuild.
+
+    _Revision 2026-08-25 (owner): **the emitted starter PUBLISHES on the
+    first build.** What is reversed is the cost clause "day one publishes
+    nothing until a human approves" and the sentence that read "five starter
+    drafts, one human approval, five stable documents"; both are corrected
+    above. The five sample documents now ship `status: stable` carrying
+    `ksor.approval: { by: "ksor-starter/<cli version>" }`, and the emitted
+    `.ksor/governance.yaml` authorises that actor — so `ksor init` followed by
+    `ksor build` reports **5 admitted to a machine surface** where it reported
+    **0**._
+
+    _WHY: the all-draft starter did not cost one conversational turn, it cost
+    the entire first build. An adopter's `llms.txt` had an empty
+    `## Documents`, the `/md/` twins were empty, no document route existed at
+    all, and a door pointed at that record answered nothing — on the
+    hello-world, which has to be simple to get started. The claim the empty
+    build made visible was visible to nobody, because the surfaces that would
+    have carried it were the surfaces it emptied._
+
+    _HOW this stays inside R25 and decision 21: the approver is a PRODUCER,
+    not a person. `ksor-starter/<version>` is the form `generated.by` already
+    uses; no human handle appears, so the tool is not recording that somebody
+    reviewed something. What R25 forbids is a self-asserted string wearing a
+    schema, indistinguishable from a person who was never there — a producer
+    id is distinguishable by construction. The trust tier stays `unverified`,
+    which is the honest word for nobody having checked it, and no `verified`
+    entry is written. **This is not the starter being pre-approved by the
+    adopter, and must never be described that way.**_
+
+    _WHAT IT COSTS, recorded rather than sold: an actor that is not a person
+    holds approval authority in the adopter's OWN `.ksor/governance.yaml`
+    from the moment they scaffold, and stays there until they delete it. And
+    an adopter who never reads the samples publishes five documents they did
+    not write, about KSoR rather than about their organisation, on a record
+    whose whole purpose is settling which copy governs. Neither is fixable by
+    the tool, so both are disclosed instead — in the emitted README, the
+    emitted AGENTS.md, a comment in the policy file itself, and the
+    intake-interview skill, each naming the producer and saying to delete it
+    once the samples are gone. UNCHANGED is everything the owner writes: a new
+    document is `draft` and reaches no machine surface until a human approves
+    it. Reversed by an owner decision recorded here, or by evidence that
+    adopters are shipping the samples as their own record._
 
     Reversed per clause with evidence, recorded here; the two clauses marked
     **owner-only** — the audience leak guarantee, and retiring `sor_id`

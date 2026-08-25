@@ -74,20 +74,26 @@ act on:
 - Write `.ksor/governance.yaml` from questions 6 and 7: `version: "0.1"`,
   the `audiences:` registry if there is one, and the two authority sets with
   real actors. That file is the root of authority — every approval, every
-  deprecation and every ledger entry is checked against it.
-- **Offer to approve the starter documents the owner is keeping — and write
-  an approval only if they say yes.** All five ship `status: draft`, and a
-  build publishes no draft on any surface, so until this turn happens the
-  site and `llms.txt` are empty. Say it plainly: "The five starter documents
-  are drafts, so a build publishes nothing yet. Approve the ones you are
-  keeping? I will set `status: stable` and record
-  `ksor.approval: { by: <their actor>, at: <now> }`. They will be stable at
-  trust tier _unverified_ until someone records a review." On a yes, write the
-  approval with the actor from question 7 and an instant with an offset; on a
-  no, leave them drafts and tell them the record stays unpublished until they
-  approve or replace them. Never record an approval nobody gave, and never
-  write a `verified` entry — the approval is not a review, and inventing one
-  would retire the tier that exists to say nobody has checked this.
+  deprecation and every ledger entry is checked against it. **Keep
+  `ksor-starter/KSOR-STAMP-VERSION` in `approval_authorities` while any starter
+  document is still in `knowledge/`.** Those five are approved by it, so a
+  policy rewritten without it refuses the next build by name
+  (`ksor-approver-unauthorised`). It leaves when the last sample does.
+- **Offer to start replacing the starter documents — they are already
+  published.** All five ship `status: stable`, approved by
+  `ksor-starter/KSOR-STAMP-VERSION`, so the site and `llms.txt` carry them from
+  the first build. They describe KSoR itself rather than the owner's
+  organisation. Say it plainly: "Five sample documents about KSoR are published
+  on your record right now. The tool that wrote them approved them — nobody has
+  reviewed them, which is what the _unverified_ tier on each page says. Shall we
+  start replacing them with yours?" Replacing means deleting the sample and
+  writing a real document at `status: draft`; the owner approves it afterwards,
+  and that act is theirs. When the last sample is gone, delete
+  `ksor-starter/KSOR-STAMP-VERSION` from `approval_authorities` in the same
+  change — nothing of theirs should be approved by a tool. Never record an
+  approval nobody gave, and never write a `verified` entry: the approval is not
+  a review, and inventing one would retire the tier that exists to say nobody
+  has checked this.
 - Run `ksor build` afterwards: it regenerates every folder's `index.md` from
   the new title and refuses anything the profile does not accept.
 - Restart `pnpm dev` afterwards so the site picks the new title up, and

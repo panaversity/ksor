@@ -6,16 +6,13 @@
 tooling actually does.** Six sentences an adopter acts on were false about the
 project `ksor init` hands them.
 
-- **Day one publishes nothing, and now the record says so.** All five starter
-  documents ship `status: draft`, and a build admits a draft to no surface at
-  all — no page, no sidebar row, no `llms.txt` entry. That is decision 27
-  working as designed, but the emitted README contained the word "draft"
-  nowhere and told the adopter to verify a deploy by loading "one document
-  page", which a fresh record does not have. The README and AGENTS.md now
-  state it where the reader meets it, and the `intake-interview` skill gains
-  the approval turn that resolves it in one conversation — offered, never
-  performed on the owner's behalf, and never beside an invented `verified`
-  entry.
+- **The record now says what a fresh build publishes.** The emitted README
+  and AGENTS.md said nothing about the starter's publication state at all, and
+  the `intake-interview` skill never raised it. All three now do, and the
+  skill's turn is offered rather than performed on the owner's behalf, never
+  beside an invented `verified` entry. (Which state they describe moved in the
+  same release — see "A freshly scaffolded record now publishes on its first
+  build".)
 - **`ksor takedown --list` and `--ledger`** were documented as needing
   "nothing". They need no ACTOR; the sentence now says that, and says they
   read the committed `.ksor/takedowns.yaml` on a record with no database.

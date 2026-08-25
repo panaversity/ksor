@@ -26,21 +26,30 @@ The first `pnpm install` also fetches the
 `ksor` tool (pinned in `package.json`) and writes it into your lockfile —
 commit the updated lockfile.
 
-**The starter documents are drafts, so a build publishes none of them.**
-`pnpm dev` shows all five — the preview is where drafts live, each marked as
-one — but `pnpm build` admits a draft to no surface at all: no page, no
-sidebar row, no `/llms.txt` entry, nothing for an agent to read. That is on
-purpose. Day one publishes nothing until a human approves, so the record never
-claims authority nobody granted.
+**The five starter documents publish on the first build.** They ship
+`status: stable`, so `pnpm dev` and `pnpm build` both give you a working
+record straight away — pages, a sidebar, a `/llms.txt` an agent can read —
+instead of an empty shelf. They are approved by `ksor-starter/KSOR-STAMP-VERSION`:
+the tool that wrote them, named as a producer rather than as a person, because
+no person reviewed a word of it. That is what the trust tier _unverified_ on
+every one of those pages says, and it is true.
 
-To publish, approve — or delete. Approving a document means `status: stable`
+**So your first act here is replacing them.** They describe KSoR, not your
+organisation, and a record that describes the wrong thing describes it on every
+surface. Delete each one as your own knowledge arrives — and when the last is
+gone, delete `ksor-starter/KSOR-STAMP-VERSION` from `approval_authorities` in
+`.ksor/governance.yaml` too. Nothing of yours should be approved by a tool. Ask
+your coding agent to run the intake interview: it replaces the `human:you`
+placeholder in that file with your real handle and writes `instance.md` with
+you.
+
+**What you write starts unpublished.** A new document is `status: draft`, and
+`pnpm build` admits a draft to no surface at all: no page, no sidebar row, no
+`/llms.txt` entry, nothing for an agent to read. `pnpm dev` shows it, marked —
+the preview is where drafts live. To publish one, approve it: `status: stable`
 with a `ksor.approval: { by, at }` naming an actor `.ksor/governance.yaml`
-authorises, and `ksor init` writes `human:you` there as a placeholder for your
-real handle. Ask your coding agent to run the intake interview: it replaces the
-placeholder, and it can approve the starters you are keeping in the same
-conversation. Delete the rest as your own knowledge arrives. Until something in
-`knowledge/` is approved, `ksor build` prints `0 admitted to a machine surface`
-and means it.
+authorises. That act is yours, so the record never claims authority nobody
+granted.
 
 ### Presenting a document
 
@@ -286,11 +295,11 @@ build. Merge the ledger entry, rebuild, redeploy.
 - **GitHub Pages, nginx, S3, anything static** — run `pnpm build` and
   upload `system/site/out/`. Hosted under a sub-path (like
   `user.github.io/repo`)? Build with `KSOR_BASE_PATH=/repo pnpm build`.
-- **Verify any deploy** the same way: the home page and `/llms.txt` load,
-  and each names the documents this record has approved. On a record whose
-  documents are all still drafts both come up empty, which is the correct
-  answer, not a broken deploy — approve a document and rebuild to see it
-  change.
+- **Verify any deploy** the same way: the home page, one document page and
+  `/llms.txt` load, and each names the documents this record has approved. On a
+  record whose documents are all still drafts, the home page and `/llms.txt`
+  come up empty and there is no document page at all — which is the correct
+  answer, not a broken deploy. Approve a document and rebuild to see it change.
 
 ### The agent surface deploys separately
 

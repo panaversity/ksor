@@ -16,14 +16,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import {
-  copyFileSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -142,35 +135,14 @@ try {
   // build spec §2). Without it ingest refuses `ksor-lock-missing` — which is
   // the deploy order every adopter's own scripts follow, so the walk follows
   // it too rather than reaching past it.
-  // APPROVE the starter first, which `ksor init` cannot do for itself: R25
-  // forbids the tool recording an approval no human performed, so an emitted
-  // record is all drafts and a draft reaches no machine surface. Ingesting
-  // one publishes a generation with nothing in it, and the first thing that
-  // notices is the MCP question at the end of this walk — which abstained
-  // with `hits: []` and read as a retrieval failure rather than as an
-  // unapproved record (found in CI, 2026-08-25). `human:you` is the actor the
-  // EMITTED `.ksor/governance.yaml` authorises, so this approves as the
-  // record's own policy allows rather than rewriting the policy to suit the
-  // walk.
-  const knowledge = path.join(project, "knowledge");
-  const starter = readdirSync(knowledge, { recursive: true, encoding: "utf8" }).filter(
-    (file) =>
-      file.endsWith(".md") && path.basename(file) !== "index.md" && !file.endsWith(".summary.md"),
-  );
-  if (starter.length === 0) fail("the starter ships no concept to approve");
-  for (const file of starter) {
-    const before = readFileSync(path.join(knowledge, file), "utf8");
-    const after = before
-      .replace(/^status: draft$/m, "status: stable")
-      .replace(
-        /^ {2}audience: \[public\]$/m,
-        '  audience: [public]\n  approval: { by: "human:you", at: 2026-08-25T09:00:00Z }',
-      );
-    // A silent no-op would leave the record unpublished and fail far from here.
-    if (after === before) fail(`${file} is not the starter shape this approval edits`);
-    writeFileSync(path.join(knowledge, file), after);
-  }
-
+  // The record is used AS EMITTED — no approval step. The starter ships
+  // `status: stable` approved by its producer, so `ksor init` alone gives this
+  // walk a record with something in it, which is the point: the MCP question at
+  // the end asks the container about the knowledge an adopter actually
+  // receives. While the samples were drafts this walk had to approve them first
+  // or the generation published nothing, and the abstention that followed read
+  // as a retrieval failure rather than as an unapproved record (found in CI,
+  // 2026-08-25).
   ksor(["build"]);
   ksor(["schema", "--instance", "instance.md", "--apply"]);
   ksor(["grant", "--instance", "instance.md"]);

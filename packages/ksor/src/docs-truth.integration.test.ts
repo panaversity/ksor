@@ -87,61 +87,90 @@ describe("every runbook that migrates a record shows how to keep it published", 
 });
 
 /**
- * The starter documents ship as drafts, and a build admits a draft to NO
- * surface — not the pages, not the sidebar, not llms.txt (record spec §2.5).
- * That is decision 27's "day one publishes nothing until a human approves",
- * and it is deliberate. What was missing is that the two documents the adopter
- * and their coding agent actually read said nothing about it, while the emitted
- * README told them to verify a deploy by loading "one document page" — an
- * artefact a fresh record does not have.
+ * The starter PUBLISHES on the first build (decision 27 revision 2026-08-25):
+ * all five samples ship `status: stable` with a `ksor.approval` naming the
+ * producer that generated them, and the emitted policy authorises that actor.
+ * It replaces the all-draft starter, whose first build reported `0 admitted to
+ * a machine surface` and left the adopter with an empty `llms.txt`.
  *
- * The premise is read from the templates, so if the starter ever ships
- * approved again these assertions stop being demanded rather than going stale.
+ * The exchange has a cost and the emitted documents have to carry it: a
+ * PRODUCER now appears in the adopter's own `.ksor/governance.yaml`, and an
+ * adopter who never reads the samples publishes five documents they did not
+ * write. So what these clauses demand is that the two documents the adopter and
+ * their coding agent actually read say what shipped approved and how to stop
+ * approving it.
+ *
+ * The premise is ASSERTED rather than used as a guard: a starter that goes back
+ * to drafts must fail here, naming the documents to rewrite, instead of quietly
+ * making these clauses vacuous.
  */
-describe("the emitted scaffold says what its all-draft starter publishes", () => {
-  const starterStatuses = (): string[] => {
+describe("the emitted scaffold says what its published starter publishes", () => {
+  const starterFrontmatter = (): { path: string; status: string; approver: string | null }[] => {
     const dir = path.join(repoRoot, SCAFFOLD, "knowledge");
-    const walk = (d: string): string[] =>
+    const walk = (d: string): { path: string; status: string; approver: string | null }[] =>
       readdirSync(d, { withFileTypes: true }).flatMap((e) => {
         const full = path.join(d, e.name);
         if (e.isDirectory()) return walk(full);
-        if (!e.name.endsWith(".md") || e.name === "index.md") return [];
-        const m = /^status:\s*(\S+)\s*$/m.exec(readFileSync(full, "utf8"));
-        return m === null ? [] : [m[1] as string];
+        if (!e.name.endsWith(".md") || e.name === "index.md" || e.name.endsWith(".summary.md")) {
+          return [];
+        }
+        const text = readFileSync(full, "utf8");
+        const status = /^status:\s*(\S+)\s*$/m.exec(text)?.[1];
+        if (status === undefined) return [];
+        return [
+          {
+            path: path.relative(path.join(repoRoot, SCAFFOLD), full),
+            status,
+            approver: /^ {2}approval: \{ by: "([^"]+)"/m.exec(text)?.[1] ?? null,
+          },
+        ];
       });
-    return walk(dir);
+    return walk(dir).sort((a, b) => (a.path < b.path ? -1 : 1));
   };
 
-  const allDrafts = (): boolean => {
-    const s = starterStatuses();
-    return s.length > 0 && s.every((v) => v === "draft");
-  };
-
-  it("has starter documents to judge", () => {
-    expect(starterStatuses().length).toBeGreaterThan(0);
+  it("every starter document ships approved by the starter producer", () => {
+    const docs = starterFrontmatter();
+    expect(docs.length, "the starter ships no document to judge").toBeGreaterThan(0);
+    // One readable line per document, so a failure names the file that moved
+    // rather than printing a truncated array of arrays.
+    expect(
+      docs.map((d) => `${d.path} status=${d.status} approver=${d.approver ?? "none"}`),
+      "the starter no longer publishes on the first build — the emitted README, " +
+        "AGENTS.md and intake-interview skill describe a record that publishes, and " +
+        "every clause below is written against that",
+    ).toEqual(docs.map((d) => `${d.path} status=stable approver=ksor-starter/KSOR-STAMP-VERSION`));
   });
 
-  it("README does not promise a document page the starter does not publish", () => {
-    if (!allDrafts()) return;
-    const text = read(`${SCAFFOLD}/README.md`);
+  it("the emitted policy authorises the producer, and says to delete it", () => {
+    const policy = read(`${SCAFFOLD}/.ksor/governance.yaml`);
     expect(
-      text.includes("one document page"),
-      `${SCAFFOLD}/README.md: every starter document is a draft, so a fresh ` +
-        `\`ksor build\` publishes no document page at all — verifying a deploy by loading ` +
-        `one sends the adopter looking for an artefact that does not exist.`,
-    ).toBe(false);
+      policy,
+      `${SCAFFOLD}/.ksor/governance.yaml: the samples are approved by ` +
+        `ksor-starter/KSOR-STAMP-VERSION, so a policy that does not name it refuses the ` +
+        `first build with ksor-approver-unauthorised`,
+    ).toContain("ksor-starter/KSOR-STAMP-VERSION");
+    expect(
+      /delete/i.test(policy),
+      `${SCAFFOLD}/.ksor/governance.yaml: a tool holding approval authority in the ` +
+        `adopter's own policy is the cost of publishing on day one. Say, in the file, ` +
+        `that it goes once the samples do.`,
+    ).toBe(true);
   });
 
   it.each([
     [`${SCAFFOLD}/README.md`, "the human's first read"],
     [`${SCAFFOLD}/AGENTS.md`, "the coding agent's first read"],
-  ])("%s says the starter is unpublished until approved", (file, why) => {
-    if (!allDrafts()) return;
-    const text = read(file);
+  ])("%s says the starter publishes, and who approved it", (file, why) => {
+    const text = flat(read(file));
     expect(
-      /\bdraft/i.test(text) && /approv/i.test(text),
-      `${file} (${why}): the starter ships as drafts and a build publishes none of ` +
-        `them. Say so where the reader meets it, and name the act that fixes it.`,
+      /ksor-starter/.test(text),
+      `${file} (${why}): five documents publish on the first build under an approval ` +
+        `the adopter did not make. Name the actor that made it where the reader meets it.`,
+    ).toBe(true);
+    expect(
+      /replace|delete/i.test(text) && /approv/i.test(text),
+      `${file} (${why}): say what the first act on this record is — replacing the ` +
+        `samples — and that the producer leaves the policy with them.`,
     ).toBe(true);
   });
 });

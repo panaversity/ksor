@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { isAttachment } from "../templates/scaffold/system/site/lib/attachment-rule.js";
 import { buildScaffold } from "./e2e-build.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
+import { starterApprover } from "./e2e-starter.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -29,11 +30,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 //
 // The record is the profile's (record spec §2): every document this suite
 // writes is a stable, approved concept, because a BUILD admits nothing else
-// to `llms.txt` — the starter's own documents are drafts and are therefore
-// absent from every artefact asserted here, which is why nothing below
-// depends on what the starter says. `pnpm build` is `ksor build` followed by
-// the site build (build spec §1), so the lock the site refuses without is
-// written by the same command.
+// to `llms.txt`. The emitted starter publishes too, so the clauses below are
+// written against what this suite itself wrote and never against what the
+// starter says — except the draft probe, which authors its own. `pnpm build`
+// is `ksor build` followed by the site build (build spec §1), so the lock the
+// site refuses without is written by the same command.
 const enabled = process.env.KSOR_E2E === "1";
 
 const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
@@ -78,6 +79,16 @@ ksor:
 
 ${body}
 `;
+}
+
+/** Every file under a built export whose BYTES contain the probe. */
+function filesContaining(dir: string, probe: string): string[] {
+  const needle = Buffer.from(probe);
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return filesContaining(full, probe);
+    return readFileSync(full).includes(needle) ? [full] : [];
+  });
 }
 
 /** knowledge-relative .md path → site slug under /docs (no trailing slash). */
@@ -170,12 +181,14 @@ describe.runIf(enabled).each(SHELLS)(
       // below is approved by `human:kim`, so the policy has to name them, or
       // `ksor-approver-unauthorised` refuses the build before any surface is
       // rendered and every clause here fails on the authority check rather
-      // than on what it means to test.
+      // than on what it means to test. The STARTER PRODUCER stays beside it:
+      // the emitted samples ship approved by that actor, so dropping it makes
+      // the record `ksor init` wrote unauthorised.
       writeFileSync(
         path.join(project, ".ksor", "governance.yaml"),
         `version: "0.1"
 approval_authorities:
-  - actors: [human:kim]
+  - actors: [human:kim, ${starterApprover(project)}]
 takedown_authorities:
   actors: [human:ciso]
 `,
@@ -244,6 +257,26 @@ takedown_authorities:
       writeFileSync(
         path.join(knowledge, "01-intro.md"),
         concept("Numbered intro", "intro body", "Numbered intro body."),
+      );
+      // A DRAFT, authored here because the starter no longer ships one: the
+      // emitted samples publish on the first build (decision 27 revision
+      // 2026-08-25). "A draft is on no surface of a build" is still a contract
+      // clause, so the record under test has to contain one. The strings are
+      // distinctive, because a probe that matches prose the record uses
+      // elsewhere cannot tell a leak from a coincidence.
+      writeFileSync(
+        path.join(knowledge, "pending.md"),
+        `---
+type: Document
+title: ZZPENDINGTITLEZZ
+description: ZZPENDINGDESCZZ, still being written.
+status: draft
+ksor:
+  audience: [public]
+---
+
+ZZPENDINGBODYZZ.
+`,
       );
 
       swap?.(project);
@@ -322,8 +355,9 @@ takedown_authorities:
     });
 
     it("clause 2: a draft is on no surface of a build", () => {
-      // The starter's own documents are drafts (research/okf-native.md §1.1),
-      // and nothing this suite wrote is — so the starter's are the probe.
+      // The record's drafts, found rather than named: this suite authors
+      // `pending.md`, and the scan would pick up a starter draft too if one
+      // ever came back.
       const knowledge = path.join(project, "knowledge");
       const drafts = readdirSync(knowledge, { recursive: true, encoding: "utf8" })
         .filter(
@@ -332,9 +366,9 @@ takedown_authorities:
         )
         .filter((f) => /^status:[ \t]*draft/m.test(readFileSync(path.join(knowledge, f), "utf8")));
       expect(
-        drafts.length,
-        "the starter ships drafts; without one this clause proves nothing",
-      ).toBeGreaterThan(0);
+        drafts,
+        "this suite authors a draft; without one this clause proves nothing",
+      ).toContain("pending.md");
       for (const file of drafts) {
         const slug = docSlug(file);
         expect(existsSync(path.join(outDir, "docs", slug, "index.html")), `${file} built`).toBe(
@@ -342,11 +376,7 @@ takedown_authorities:
         );
         const llms = readFileSync(path.join(outDir, "llms.txt"), "utf8");
         // The ROUTE, because a route is the identity (product principle 3) and
-        // nothing else in the file can spell it. A TITLE cannot carry this on
-        // its own: the starter's first document is titled with the opening
-        // words of the record's own description, which `llms.txt` publishes as
-        // the record's scope line — so the title probe failed on a build that
-        // had correctly excluded every draft (found 2026-08-25).
+        // nothing else in the file can spell it.
         expect(llms, `${file} reached llms.txt`).not.toContain(`/docs/${slug}`);
         // …and the title still has to stay out of the DOCUMENT LIST, which is
         // where a leaked draft would appear.
@@ -357,6 +387,12 @@ takedown_authorities:
             .exec(readFileSync(path.join(knowledge, file), "utf8"))?.[1]
             ?.trim() ?? "";
         expect(llms.slice(at), `${file} is listed as a document`).not.toContain(title);
+      }
+      // And nowhere in the whole export, which is the only form of "no surface"
+      // that four named files cannot game.
+      for (const canary of ["ZZPENDINGTITLEZZ", "ZZPENDINGDESCZZ", "ZZPENDINGBODYZZ"]) {
+        const hits = filesContaining(outDir, canary);
+        expect(hits, `the draft canary "${canary}" reached: ${hits.join(", ")}`).toEqual([]);
       }
     });
 

@@ -6,6 +6,12 @@
 #       description: Employees
 version: "0.1"
 approval_authorities:
-  - actors: [human:you]
+  # `ksor-starter/...` approved the five sample documents it shipped, so a fresh
+  # record PUBLISHES on the first build instead of admitting nothing. It is a
+  # producer, not a person: it cannot be mistaken for a human who reviewed
+  # anything, and the trust tier stays `unverified`, which is the honest word
+  # for "nobody has checked this". Delete this actor once the samples are gone
+  # — nothing of yours should ever be approved by a tool.
+  - actors: [human:you, ksor-starter/KSOR-STAMP-VERSION]
 takedown_authorities:
   actors: [human:you]

@@ -4,10 +4,11 @@
  * install: the module runs under Node's type stripping the way
  * `stage-concurrency` runs it, and every assertion reads the stage it wrote.
  *
- * The record here is a conformant fixture of its own (the scaffold's starter is
- * being rewritten in parallel), with one document per state the §2.5 table
- * names, an `[internal]` canary, a folder that only an internal viewer may see,
- * a companion, an asset, and a ledger with a denial, a revocation and a subtree.
+ * The record here is a conformant fixture of its own rather than the scaffold's
+ * starter, because it needs one document per state the §2.5 table names and the
+ * starter has no reason to carry them: an `[internal]` canary, a folder that
+ * only an internal viewer may see, a companion, an asset, and a ledger with a
+ * denial, a revocation and a subtree.
  */
 
 import { createHash } from "node:crypto";
@@ -615,11 +616,12 @@ okf_version: "0.2"
   });
 
   it("a record with nothing approved yet builds — the empty stage is not a refusal", () => {
-    // The emitted starter is all drafts (research/okf-native.md §1.1) and build
-    // spec §4 acceptance 4 requires it to BUILD: "a level-0 record with one
-    // draft and a committed index builds out/ with no byte of the draft's
-    // title". `ksor-audience-empty` is about a mis-scoped VIEWER, and a record
-    // nobody has approved yet is a different state with a different remedy.
+    // Build spec §4 acceptance 4 requires this to BUILD: "a level-0 record with
+    // one draft and a committed index builds out/ with no byte of the draft's
+    // title". It is the state an adopter reaches by writing their first
+    // documents before anyone has approved them — a wall there would meet them
+    // before the record does. `ksor-audience-empty` is about a mis-scoped
+    // VIEWER, which is a different state with a different remedy.
     const alt = writeRecord(path.join(work, "all-draft"));
     // The draft is the ONE document left: a record with no concept at all is a
     // different state again, and `ksor-record-empty` refuses it by name.

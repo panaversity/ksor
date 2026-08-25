@@ -434,19 +434,28 @@ including `public` — builds for a wider viewer, and that build belongs
 behind that audience's own access control, never on a public host.
 Details in README → Deploying.
 
-**A build publishes nothing until a human approves.** The five starter
-documents ship `status: draft`, and §2.5 admits a draft to NO surface of a
-build — not the page, not the sidebar, not the search index, not `llms.txt`.
-So the first `pnpm build` of a fresh record emits a site with zero document
-pages and an empty `## Documents` section, reports `0 admitted to a machine
-surface`, and is working correctly. `pnpm dev` shows the drafts, which is what
-the preview is for. Never approve on the owner's behalf to make a build look
-fuller: approving is `status: stable` plus a `ksor.approval: { by, at }` naming
-an actor `.ksor/governance.yaml` authorises, and it is the owner's act. Ask
-them, then write down what they said (`.agents/skills/intake-interview/`).
-`KSOR_DRAFTS=show pnpm build` publishes drafts to the HUMAN surface only, marks
-the build `noindex` and records itself in `build.lock.json` — a review link,
-never a way to ship.
+**The starter publishes; what the owner writes does not, until they approve
+it.** The five starter documents ship `status: stable`, approved by
+`ksor-starter/KSOR-STAMP-VERSION` — a PRODUCER actor, not a person, and
+`.ksor/governance.yaml` authorises it so the first `pnpm build` emits a record
+with something in it. Two things follow, and both are your job. The samples
+describe KSoR rather than this organisation, so replacing them is the owner's
+first act on this record; and when the last one goes, the producer goes with it
+— delete `ksor-starter/KSOR-STAMP-VERSION` from `approval_authorities`, because
+nothing the owner wrote should be approved by a tool.
+
+Everything written after that starts at `status: draft`, and §2.5 admits a
+draft to NO surface of a build — not the page, not the sidebar, not the search
+index, not `llms.txt`. A build of a record whose documents are all drafts emits
+a site with zero document pages and an empty `## Documents` section, reports
+`0 admitted to a machine surface`, and is working correctly. `pnpm dev` shows
+the drafts, which is what the preview is for. Never approve on the owner's
+behalf to make a build look fuller: approving is `status: stable` plus a
+`ksor.approval: { by, at }` naming an actor `.ksor/governance.yaml` authorises,
+and it is the owner's act. Ask them, then write down what they said
+(`.agents/skills/intake-interview/`). `KSOR_DRAFTS=show pnpm build` publishes
+drafts to the HUMAN surface only, marks the build `noindex` and records itself
+in `build.lock.json` — a review link, never a way to ship.
 
 ### The MCP door is a container
 

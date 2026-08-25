@@ -238,7 +238,11 @@ diffs (decision 4).
 1. `ksor build` on the emitted starter after its first commit: exit `0`;
    every directory has an `index.md` matching the golden; the root carries
    `okf_version`; a second run changes no index and the lock differs only in
-   `as_of`; with `--as-of` repeated, byte-identical.
+   `as_of`; with `--as-of` repeated, byte-identical. All five documents are
+   `stable` and `admitted: ["public"]` — the emitted starter PUBLISHES, so the
+   run reports `5 admitted to a machine surface` (init spec, `knowledge/` row,
+   2026-08-25 owner decision). The all-draft record is still a state this spec
+   requires to build, and acceptance 4's last clause is where it is asserted.
 2. Editing one document's `description` and rebuilding changes exactly that
    file's index entry, its hash, and `build_id`. Appending a ledger entry
    changes `build_id`. Moving `--as-of` across a concept's `effective_from`
@@ -256,7 +260,9 @@ diffs (decision 4).
    concept's page names its successor and is absent from `llms.txt`; a
    not-yet-effective and a stale stable concept render with their badges and
    are absent from `llms.txt`; a level-0 record with one draft and a
-   committed index builds `out/` with no byte of the draft's title.
+   committed index builds `out/` with no byte of the draft's title — a record
+   nobody has approved is not a refusal, which is where an owner lands after
+   replacing the samples with their own first documents.
 5. The three manager scaffolds' `build` scripts run `ksor build` and no
    `export-denylist`, walked per manager as today; a site build without a
    lock, or with a stale one, refuses outside development.

@@ -2,11 +2,12 @@
 type: Document
 title: Surfaces
 description: One source, published through several synchronized projections.
-status: draft
+status: stable
 order: 4
 generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ksor:
   audience: [public]
+  approval: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ---
 
 The record is written once and published through surfaces that cannot disagree,

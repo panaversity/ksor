@@ -69,14 +69,21 @@ every historic version and the committed lock, a shallow clone refused.
 record module at package-build time into both skill trees (gitignored in the
 templates), read-only, refusing a stale index; a conformance fixture is judged
 identically by it and by `checkRecord`. **The starter is in the profile**:
-`instance.md` format 2, `.ksor/governance.yaml`, five `type: Document` drafts,
-generated indexes, `surfaces/overview.md`; every manager's `build` script is
-`ksor build` then the site build, `export-denylist` gone. Because all five are
-drafts, a fresh record's first build publishes NO document on any surface
-(`0 admitted to a machine surface`, an empty `## Documents` in `llms.txt`, no
-document route) until a human approves one — decision 27's day-one cost, said
-in the emitted README, AGENTS.md and the intake-interview skill so an adopter
-does not read it as a broken build.
+`instance.md` format 2, `.ksor/governance.yaml`, five `type: Document`
+concepts, generated indexes, `surfaces/overview.md`; every manager's `build`
+script is `ksor build` then the site build, `export-denylist` gone. **The
+starter PUBLISHES on the first build** (owner, 2026-08-25): all five ship
+`status: stable` with `ksor.approval` naming `ksor-starter/<cli version>`, a
+PRODUCER actor the emitted policy authorises, so `ksor init` then `ksor build`
+reports `5 admitted to a machine surface` instead of `0`. This replaces
+decision 27's day-one cost, whose real price was the whole first surface — an
+empty `llms.txt`, empty `/md/` twins and a door that answered nothing. The new
+cost is that a non-human actor holds approval authority in the adopter's own
+policy and five documents they did not write are published: the emitted README,
+AGENTS.md, `.ksor/governance.yaml` and the intake-interview skill all say so,
+and all four say to delete the producer once the samples are replaced. What the
+owner writes is unaffected — a new document is `draft` and reaches no machine
+surface until they approve it.
 
 **`ksor migrate` runs** (research/okf-native.md §1.8): `--write`,
 `--instance`, `--actor`, `--approve-by`, `--attribute`, `--generated-at`,

@@ -2,11 +2,12 @@
 type: Document
 title: What a Knowledge System of Record is
 description: The authoritative, governed knowledge layer humans, agents and software operate from.
-status: draft
+status: stable
 order: 1
 generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ksor:
   audience: [public]
+  approval: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ---
 
 A traditional system of record establishes what is true about the current state
