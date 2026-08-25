@@ -45,7 +45,10 @@ function repo(): string {
   };
   for (const [rel, text] of Object.entries(VALID.files)) write(rel, text);
   const files = new Map(Object.entries(VALID.files));
-  const indexes = checkRecord({ files, dirs: VALID.dirs ?? [] }, { mode: "build" }).indexes;
+  const indexes = checkRecord(
+    { files, dirs: VALID.dirs ?? [] },
+    { mode: "build", ledgerBaselines: [] },
+  ).indexes;
   for (const [rel, text] of indexes) write(rel, text);
   git(root, "init", "-q", "-b", "main");
   git(root, "config", "user.email", "t@example.com");

@@ -50,7 +50,7 @@ function repo(): string {
   // fixture's own files then win wherever it declares one.
   const indexes = checkRecord(
     { files: new Map(Object.entries(VALID.files)), dirs: [...(VALID.dirs ?? [])] },
-    { mode: "build" },
+    { mode: "build", ledgerBaselines: [] },
   ).indexes;
   for (const [rel, text] of indexes) if (!(rel in VALID.files)) write(rel, text);
   for (const [rel, text] of Object.entries(VALID.files)) write(rel, text);

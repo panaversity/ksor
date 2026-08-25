@@ -50,7 +50,7 @@ describe("loadRecord + checkRecord on a real tree", () => {
       "knowledge/surfaces/b.md",
     ]);
     expect(record.dirs).toEqual(["knowledge/surfaces", "knowledge/surfaces/empty"]);
-    const out = checkRecord(record, { mode: "build" });
+    const out = checkRecord(record, { mode: "build", ledgerBaselines: [] });
     expect(out.refusals).toEqual([]);
     expect([...out.indexes.keys()]).toEqual(["knowledge/index.md", "knowledge/surfaces/index.md"]);
     expect(out.indexes.get("knowledge/index.md")).toBe(
@@ -59,7 +59,7 @@ describe("loadRecord + checkRecord on a real tree", () => {
   });
 
   it("check mode on the same tree refuses the two missing indexes by path", () => {
-    const out = checkRecord(loadRecord(scratch()), { mode: "check" });
+    const out = checkRecord(loadRecord(scratch()), { mode: "check", ledgerBaselines: [] });
     expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
       "ksor-index-stale knowledge/index.md",
       "ksor-index-stale knowledge/surfaces/index.md",
@@ -78,7 +78,7 @@ describe("loadRecord — assets, symlinks and OS junk", () => {
     expect([...(record.assets?.get("knowledge/pic.png") ?? [])]).toEqual([1, 2, 3]);
     expect(record.symlinks).toEqual(["knowledge/dangling.md"]);
     expect(record.files.has("knowledge/dangling.md")).toBe(false);
-    const out = checkRecord(record, { mode: "build" });
+    const out = checkRecord(record, { mode: "build", ledgerBaselines: [] });
     expect(out.refusals.map((r) => r.slug).sort()).toEqual(["ksor-asset-corrupt", "ksor-symlink"]);
   });
 });

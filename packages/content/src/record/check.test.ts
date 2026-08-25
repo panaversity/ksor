@@ -44,12 +44,17 @@ function slugs(
   dirs: string[] = [],
   mode: "check" | "build" = "build",
 ): string[] {
-  return checkRecord(record(files, dirs), { mode }).refusals.map((r) => `${r.slug} ${r.path}`);
+  return checkRecord(record(files, dirs), { mode, ledgerBaselines: [] }).refusals.map(
+    (r) => `${r.slug} ${r.path}`,
+  );
 }
 
 describe("checkRecord — one rule set (record spec §6)", () => {
   it("a level-0 record with one public concept passes and yields its indexes", () => {
-    const out = checkRecord(record({ "knowledge/a.md": doc("A", PUBLIC) }), { mode: "build" });
+    const out = checkRecord(record({ "knowledge/a.md": doc("A", PUBLIC) }), {
+      mode: "build",
+      ledgerBaselines: [],
+    });
     expect(out.refusals).toEqual([]);
     expect(out.indexes.get("knowledge/index.md")).toContain(
       "# Acme\n\n* [A](a.md) - One sentence.\n",
@@ -59,15 +64,15 @@ describe("checkRecord — one rule set (record spec §6)", () => {
 
   it("ksor-policy-missing when .ksor/governance.yaml is absent", () => {
     const files: RecordFiles = { files: new Map([["instance.md", INSTANCE]]), dirs: [] };
-    expect(checkRecord(files, { mode: "build" }).refusals.map((r) => r.slug)).toContain(
-      "ksor-policy-missing",
-    );
+    expect(
+      checkRecord(files, { mode: "build", ledgerBaselines: [] }).refusals.map((r) => r.slug),
+    ).toContain("ksor-policy-missing");
   });
 
   it("refusals from a concept carry its path; ksor-audience-unregistered names the registry", () => {
     const r = checkRecord(
       record({ "knowledge/a.md": doc("A", PUBLIC.replace("[public]", "[board]")) }),
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     );
     expect(r.refusals.map((x) => [x.slug, x.path])).toEqual([
       ["ksor-audience-unregistered", "knowledge/a.md"],
@@ -128,7 +133,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
           ),
           dirs: [],
         },
-        { mode: "build" },
+        { mode: "build", ledgerBaselines: [] },
       ).refusals.map((r) => `${r.slug} ${r.path}`);
     expect(withPolicy({ "knowledge/a.md": base("human:kim", "human:mallory") })).toEqual([]);
     expect(withPolicy({ "knowledge/a.md": base("human:mallory", "human:mallory") })).toEqual([
@@ -154,7 +159,9 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     expect(slugs(files, [], "check")).toEqual(["ksor-index-stale knowledge/index.md"]);
     expect(slugs(files, [], "build")).toEqual([]);
     const fresh =
-      checkRecord(record(files), { mode: "build" }).indexes.get("knowledge/index.md") ?? "";
+      checkRecord(record(files), { mode: "build", ledgerBaselines: [] }).indexes.get(
+        "knowledge/index.md",
+      ) ?? "";
     expect(slugs({ ...files, "knowledge/index.md": fresh }, [], "check")).toEqual([]);
   });
 
@@ -215,7 +222,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
       const body = /\.mdx?$/.test(suffix) ? "---\ntype: Summary\n---\n" : "x: 1\n";
       const out = checkRecord(
         record({ "knowledge/a.md": doc("A", PUBLIC), [`knowledge/${name}`]: body }),
-        { mode: "build" },
+        { mode: "build", ledgerBaselines: [] },
       );
       const orphan = out.refusals.find((r) => r.slug === "ksor-attachment-orphan");
       expect(orphan?.path, `knowledge/${name} was not recognised as an attachment`).toBe(
@@ -252,7 +259,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     // concept, so the orphan check asks only whether the FILE is in the tree —
     // and it is. Building the record first and committing what it generates is
     // the only way this test meets the state an author would actually create.
-    const indexes = checkRecord(record(base, dirs), { mode: "build" }).indexes;
+    const indexes = checkRecord(record(base, dirs), { mode: "build", ledgerBaselines: [] }).indexes;
     const withIndexes = { ...base, ...Object.fromEntries(indexes) };
     expect(
       slugs(withIndexes, dirs, "check"),
@@ -261,7 +268,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
 
     const out = checkRecord(
       record({ ...withIndexes, "knowledge/finance/index.summary.md": SUMMARY }, dirs),
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     );
     expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
       "ksor-attachment-of-index knowledge/finance/index.summary.md",
@@ -275,6 +282,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     expect(
       checkRecord(record({ ...withIndexes, "knowledge/index.summary.md": SUMMARY }, dirs), {
         mode: "build",
+        ledgerBaselines: [],
       }).refusals.map((r) => r.slug),
     ).toEqual(["ksor-attachment-of-index"]);
   });
@@ -288,7 +296,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
         "knowledge/a.md": doc("A", PUBLIC),
         "knowledge/.summary.md": "---\ntype: Summary\n---\n",
       }),
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     );
     expect(out.refusals.map((r) => r.slug)).not.toContain("ksor-attachment-orphan");
     expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toContain(
@@ -419,7 +427,11 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     // write access can do — so it grants nothing, and neither does no baseline.
     expect(run([{ source: "git history", entries }])).toEqual(["ksor-takedown-unauthorised"]);
     expect(run([])).toEqual(["ksor-takedown-unauthorised"]);
-    expect(run(undefined)).toEqual(["ksor-takedown-unauthorised"]);
+    // `run(undefined)` used to live here, asserting that omitting the
+    // baselines got the strict rule. `CheckOptions.ledgerBaselines` is
+    // required now, so that state does not compile — which is the fix, not
+    // a gap: ingest reached it by omission and refused a departed authority
+    // the site had already published.
   });
 
   it("the ledger: an unauthorised actor, a dangling entry, and a shrink against a baseline", () => {
@@ -458,15 +470,17 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     const a = { "knowledge/a.md": doc("A", PUBLIC) };
     const one = INSTANCE.replace("format: 2", "format: 1");
     expect(
-      checkRecord(record({ ...a, "instance.md": one }), { mode: "build" }).refusals.map(
-        (r) => r.slug,
-      ),
+      checkRecord(record({ ...a, "instance.md": one }), {
+        mode: "build",
+        ledgerBaselines: [],
+      }).refusals.map((r) => r.slug),
     ).toEqual(["ksor-instance-format"]);
     const moved = INSTANCE.replace("title: Acme", "title: Acme\naudiences: [public, internal]");
     expect(
-      checkRecord(record({ ...a, "instance.md": moved }), { mode: "build" }).refusals.map(
-        (r) => r.slug,
-      ),
+      checkRecord(record({ ...a, "instance.md": moved }), {
+        mode: "build",
+        ledgerBaselines: [],
+      }).refusals.map((r) => r.slug),
     ).toEqual(["ksor-instance-format"]);
   });
 
@@ -491,7 +505,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
           `verified: { by: "human:nobody-asked", at: 2026-08-22T09:00:00Z }\n${PUBLIC}`,
         ),
       }),
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     );
     expect(out.refusals).toEqual([]);
     expect(out.concepts[0]?.trustTier).toBe("human-reviewed");
@@ -503,7 +517,7 @@ describe("checkRecord — one rule set (record spec §6)", () => {
         "knowledge/b.md": doc("B", PUBLIC.replace("human:cfo", "human:x")),
         "knowledge/a.md": "no frontmatter\n",
       }),
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     );
     expect(out.refusals.map((r) => r.path)).toEqual([
       "knowledge/a.md",
@@ -550,7 +564,7 @@ describe("checkRecord — an asset is reached through the directory that holds i
         dirs: ["knowledge/secret", "knowledge/secret/img"],
         assets: new Map(Object.entries(assets)),
       },
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     ).refusals.map((r) => `${r.slug} ${r.path}`);
 
   it("refuses a public link to an asset in a directory no public reader may enter", () => {
@@ -587,7 +601,7 @@ describe("checkRecord — an asset is reached through the directory that holds i
           dirs: ["knowledge/images"],
           assets: new Map([["knowledge/images/chart.svg", ASSET]]),
         },
-        { mode: "build" },
+        { mode: "build", ledgerBaselines: [] },
       ).refusals.map((r) => `${r.slug} ${r.path}`),
     ).toEqual([]);
   });
@@ -698,7 +712,8 @@ describe("checkRecord — a refused document produces ONE problem, not a cascade
   const good = doc("Returns", PUBLIC);
   const typo = good.replace("ksor:", "ksor:\n  effective-from: 2026-01-01T00:00:00Z");
   const indexes = (files: Record<string, string>): ReadonlyMap<string, string> =>
-    checkRecord(record(files, ["knowledge/policies"]), { mode: "build" }).indexes;
+    checkRecord(record(files, ["knowledge/policies"]), { mode: "build", ledgerBaselines: [] })
+      .indexes;
 
   it("the green record checks clean, indexes and all", () => {
     const files = { "knowledge/policies/returns.md": good };
@@ -844,7 +859,9 @@ describe("checkRecord — a refused document produces ONE problem, not a cascade
       dirs: ["knowledge/policies"],
     };
     expect(
-      checkRecord(missing, { mode: "check" }).refusals.map((r) => `${r.slug} ${r.path}`),
+      checkRecord(missing, { mode: "check", ledgerBaselines: [] }).refusals.map(
+        (r) => `${r.slug} ${r.path}`,
+      ),
     ).toEqual(["ksor-instance-format instance.md"]);
   });
 });

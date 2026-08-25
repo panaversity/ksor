@@ -51,7 +51,13 @@ import { applyLedger, unledgeredRefusal, unmergedLines } from "./ledger-apply.js
 import { checkLock, formatRefusals, LOCK_PATH, type IngestRefusal } from "./lock-gate.js";
 import { checkRecord } from "../record/check.js";
 import { splitFrontmatter } from "../record/frontmatter.js";
-import { checkLedgerAppendOnly, parseLedger, type Ledger } from "../record/ledger.js";
+import {
+  checkLedgerAppendOnly,
+  parseLedger,
+  type Ledger,
+  type LedgerBaseline,
+  type LedgerBaselineEntry,
+} from "../record/ledger.js";
 import { loadRecord } from "../record/load.js";
 import type { Policy } from "../record/policy.js";
 import type { Refusal } from "../record/refusal.js";
@@ -392,6 +398,42 @@ export interface BuildGenerationOptions {
  * no. Thrown BEFORE anything is written, so a red ingest leaves the database
  * as it found it; the CLI prints the refusals slug-first and exits 1.
  */
+
+/**
+ * The `(id, digest)` pairs a committed lock recorded, read NARROWLY.
+ *
+ * The baseline needs exactly two fields, so it asks for exactly two. Requiring
+ * the WHOLE lock to validate would make the departed-authority escape depend on
+ * parts of the lock that have nothing to do with it — and it did: the ingest
+ * fixtures write a deliberately narrow lock whose `build_id` is not a sha256,
+ * so `parseLock` refused it, the baseline came back empty, and the escape was
+ * untestable through the only helper that can reach ingest.
+ *
+ * Nothing is skipped by being tolerant here. A lock this cannot read yields no
+ * accepted entries, which is the strict rule; and a lock that is malformed in
+ * any other way is refused by `checkLock` three lines below, before a
+ * generation is allocated.
+ */
+function lockLedgerEntries(text: string): readonly LedgerBaselineEntry[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const raw = (parsed as { ledger_entries?: unknown } | null)?.ledger_entries;
+  if (!Array.isArray(raw)) return [];
+  const out: LedgerBaselineEntry[] = [];
+  for (const e of raw) {
+    const id = (e as { id?: unknown })?.id;
+    const digest = (e as { digest?: unknown })?.digest;
+    if (typeof id === "string" && id !== "" && typeof digest === "string" && digest !== "") {
+      out.push({ id, digest });
+    }
+  }
+  return out;
+}
+
 export class RecordRefused extends Error {
   override readonly name: string = "RecordRefused";
   readonly refusals: readonly (Refusal | IngestRefusal)[];
@@ -671,12 +713,28 @@ export async function buildGeneration(
   // ---- the record, checked: ONE rule set (record spec §6), before any write
   const root = resolve(options.recordRoot);
   const record = loadRecord(root);
-  const check = checkRecord(record, { mode: "build" });
-  if (check.refusals.length > 0 || check.policy === null) throw new RecordRefused(check.refusals);
-  const policy = check.policy;
   const lockText = existsSync(join(root, LOCK_PATH))
     ? readFileSync(join(root, LOCK_PATH), "utf8")
     : null;
+  // The lock is read BEFORE the check because it is one of the ledger's two
+  // baselines, and this call used to pass none. Every other caller passed the
+  // lock as accepted; ingest did not, so a takedown authority who left the
+  // company still refused HERE while `ksor build` and the site published — the
+  // site up, the door down, on one record. Decision 19's forbidden state,
+  // reached through the seam rather than through either surface's own rule.
+  //
+  // The lock ONLY, deliberately: `ksor build` already judges the ledger against
+  // git history and gates the deploy, and a shallow clone — the ordinary shape
+  // of a deploy checkout — cannot read history at all. Adding it here would put
+  // `ksor-ledger-unverifiable` in front of every containerised ingest, with no
+  // flag to answer it.
+  const lockBaseline: readonly LedgerBaseline[] =
+    lockText === null
+      ? []
+      : [{ source: LOCK_PATH, entries: lockLedgerEntries(lockText), accepted: true }];
+  const check = checkRecord(record, { mode: "build", ledgerBaselines: lockBaseline });
+  if (check.refusals.length > 0 || check.policy === null) throw new RecordRefused(check.refusals);
+  const policy = check.policy;
   const lock = checkLock(lockText, record);
   if (!lock.ok) throw new RecordRefused([lock.refusal]);
   const policyText = record.files.get(".ksor/governance.yaml") ?? "";

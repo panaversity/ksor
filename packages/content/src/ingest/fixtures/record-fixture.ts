@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import type { ContentInstance } from "../../instance.js";
 import { checkRecord } from "../../record/check.js";
 import { loadRecord } from "../../record/load.js";
+import { ledgerDigests, parseLedger } from "../../record/ledger.js";
 import {
   assetHashes,
   companionHashes,
@@ -123,7 +124,7 @@ export function writeRecord(root: string, spec: RecordSpec): string {
 /** Regenerate every index and the lock from the tree as it is now (what `ksor build` will do). */
 export function writeIndexesAndLock(root: string, buildId: string = "sha256:fixture"): void {
   const record = loadRecord(root);
-  const check = checkRecord(record, { mode: "build" });
+  const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
   for (const [path, text] of check.indexes) {
     const abs = join(root, path);
     mkdirSync(dirname(abs), { recursive: true });
@@ -146,6 +147,21 @@ export function writeLock(root: string, buildId: string = "sha256:fixture"): voi
     instance_sha256: sha256OfDocument(record.files.get("instance.md") ?? ""),
     policy_sha256: sha256OfDocument(record.files.get(".ksor/governance.yaml") ?? ""),
     ledger_sha256: sha256OfDocument(record.files.get(".ksor/takedowns.yaml") ?? ""),
+    // The ENTRIES, not just their digest. `composeLock` writes them because
+    // they are one of the ledger's two baselines, and a fixture lock that
+    // omitted them silently held nothing — so the departed-authority escape
+    // could not be exercised through this helper at all, which is how ingest
+    // shipped without it.
+    ledger_entries: ledgerDigests(
+      (() => {
+        const parsed = parseLedger(
+          record.files.get(".ksor/takedowns.yaml") ?? null,
+          ".ksor/takedowns.yaml",
+        );
+        if (!parsed.ok) throw new Error("fixture ledger does not parse");
+        return parsed.ledger;
+      })(),
+    ),
     documents: list(conceptHashes(record)),
     companions: list(companionHashes(record)),
     assets: list(assetHashes(record)),

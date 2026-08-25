@@ -47,7 +47,7 @@ function slugs(
   files: Record<string, string>,
   extra: { dirs?: string[]; assets?: Record<string, Uint8Array>; symlinks?: string[] } = {},
 ): string[] {
-  return checkRecord(record(files, extra), { mode: "build" }).refusals.map(
+  return checkRecord(record(files, extra), { mode: "build", ledgerBaselines: [] }).refusals.map(
     (r) => `${r.slug} ${r.path}`,
   );
 }
@@ -75,7 +75,7 @@ describe("hygiene — names are portable identities", () => {
     ["knowledge/..md", "hidden"],
     ["knowledge/a\\b.md", "backslash"],
   ])("%s is ksor-name-unportable (%s)", (path, word) => {
-    const out = checkRecord(record({ ...A, [path]: DOC }), { mode: "build" });
+    const out = checkRecord(record({ ...A, [path]: DOC }), { mode: "build", ledgerBaselines: [] });
     const hit = out.refusals.find((r) => r.slug === "ksor-name-unportable");
     expect(hit?.path).toBe(path);
     expect(`${hit?.why}`).toMatch(new RegExp(word, "i"));
@@ -87,7 +87,10 @@ describe("hygiene — names are portable identities", () => {
    * would not say what it stopped.
    */
   it("a dot-prefixed document is not a concept the door can serve while the site hides it", () => {
-    const out = checkRecord(record({ ...A, "knowledge/.secret.md": DOC }), { mode: "build" });
+    const out = checkRecord(record({ ...A, "knowledge/.secret.md": DOC }), {
+      mode: "build",
+      ledgerBaselines: [],
+    });
     // Refused, so it never reaches ingest as `knowledge/.secret`. The site's
     // docs collection globs `**/*.md`, and picomatch 4.0.5 does not match that
     // against `.secret.md` (verified directly; fumadocs' own walk was not run
@@ -111,7 +114,10 @@ describe("hygiene — names are portable identities", () => {
     // Legal in one POSIX filename, a path SEPARATOR on Windows: `git checkout`
     // fails on the whole tree, which is the failure the portable-name rule
     // directly above it in hygiene.ts is written for.
-    const out = checkRecord(record({ ...A, "knowledge/a\\b.md": DOC }), { mode: "build" });
+    const out = checkRecord(record({ ...A, "knowledge/a\\b.md": DOC }), {
+      mode: "build",
+      ledgerBaselines: [],
+    });
     const hit = out.refusals.find((r) => r.slug === "ksor-name-unportable");
     expect(`${hit?.why}`).toMatch(/backslash/i);
   });
@@ -190,6 +196,7 @@ describe("hygiene — what a file may be", () => {
   it("a bare .html is told the shape a carried page has to take", () => {
     const r = checkRecord(record(A, { assets: { "knowledge/page.html": new Uint8Array() } }), {
       mode: "build",
+      ledgerBaselines: [],
     });
     const hit = r.refusals.find((x) => x.path === "knowledge/page.html");
     expect(`${hit?.why} ${hit?.fix}`).toContain(".sim.html");
@@ -198,7 +205,10 @@ describe("hygiene — what a file may be", () => {
   it("ksor-attachment-near-miss names the extension the author meant, and nothing else about the file", () => {
     const out = slugs({ ...A, "knowledge/a.quiz.yml": "q: 1\n" });
     expect(out).toEqual(["ksor-attachment-near-miss knowledge/a.quiz.yml"]);
-    const r = checkRecord(record({ ...A, "knowledge/a.quiz.yml": "q: 1\n" }), { mode: "build" });
+    const r = checkRecord(record({ ...A, "knowledge/a.quiz.yml": "q: 1\n" }), {
+      mode: "build",
+      ledgerBaselines: [],
+    });
     expect(r.refusals[0]?.fix).toContain("a.quiz.yaml");
   });
 
@@ -221,6 +231,7 @@ describe("hygiene — what a file may be", () => {
       const path = `knowledge/a${suffix}`;
       const out = checkRecord(record(A, { assets: { [path]: new Uint8Array([120]) } }), {
         mode: "build",
+        ledgerBaselines: [],
       });
       expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
         `ksor-attachment-near-miss ${path}`,
@@ -291,9 +302,9 @@ describe("hygiene — the instance's closed key set", () => {
       files: new Map([[".ksor/governance.yaml", POLICY], ...Object.entries(A)]),
       dirs: [],
     };
-    expect(checkRecord(files, { mode: "build" }).refusals.map((r) => r.slug)).toEqual([
-      "ksor-instance-format",
-    ]);
+    expect(
+      checkRecord(files, { mode: "build", ledgerBaselines: [] }).refusals.map((r) => r.slug),
+    ).toEqual(["ksor-instance-format"]);
   });
 
   it.each([
@@ -305,7 +316,7 @@ describe("hygiene — the instance's closed key set", () => {
     ["a group written as a scalar", `${BASE}site: yes\n`, /site/],
     ["site.governance that is not a boolean", `${BASE}site:\n  governance: nope\n`, /governance/],
   ])("refuses %s as ksor-instance-format", (_what, fm, why) => {
-    const out = checkRecord(record(instance(fm)), { mode: "build" });
+    const out = checkRecord(record(instance(fm)), { mode: "build", ledgerBaselines: [] });
     const hit = out.refusals.find((r) => r.slug === "ksor-instance-format");
     expect(hit, out.refusals.map((r) => r.slug).join()).toBeDefined();
     expect(hit?.why).toMatch(why);

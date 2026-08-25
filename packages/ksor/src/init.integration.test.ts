@@ -716,7 +716,7 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
     const root = path.join(dir, "my-sor");
     expect(existsSync(path.join(root, ".ksor", "takedowns.yaml"))).toBe(false);
     const { checkRecord, loadRecord } = await import("@panaversity/ksor-content/record");
-    const result = checkRecord(loadRecord(root), { mode: "check" });
+    const result = checkRecord(loadRecord(root), { mode: "check", ledgerBaselines: [] });
     expect(result.refusals.map((r) => `${r.path}: ${r.slug}`)).toEqual([]);
     expect(result.ledgerEntries).toEqual([]);
   });

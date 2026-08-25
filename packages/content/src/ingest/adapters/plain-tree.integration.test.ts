@@ -52,7 +52,7 @@ afterEach(async () => {
 
 function adapt(root: string, corpusId = "c"): PlainTreeResult {
   const record = loadRecord(root);
-  const check = checkRecord(record, { mode: "check" });
+  const check = checkRecord(record, { mode: "check", ledgerBaselines: [] });
   if (check.refusals.length > 0) throw new Error(JSON.stringify(check.refusals, null, 2));
   return buildManifestFromRecord(check, record.dirs, { corpusId, sourceCommit: "dev" });
 }
@@ -63,7 +63,7 @@ function adaptUnchecked(
   corpusId = "c",
 ): { result: PlainTreeResult; slugs: string[] } {
   const record = loadRecord(root);
-  const check = checkRecord(record, { mode: "check" });
+  const check = checkRecord(record, { mode: "check", ledgerBaselines: [] });
   return {
     result: buildManifestFromRecord(check, record.dirs, { corpusId, sourceCommit: "dev" }),
     slugs: check.refusals.map((r) => r.slug),
@@ -78,7 +78,7 @@ describe("demo-rulebook golden", () => {
   });
 
   it("the committed fixture passes the checker in check mode — its indexes are fresh", () => {
-    const check = checkRecord(loadRecord(DEMO), { mode: "check" });
+    const check = checkRecord(loadRecord(DEMO), { mode: "check", ledgerBaselines: [] });
     expect(check.refusals).toEqual([]);
   });
 
@@ -156,7 +156,7 @@ describe("adversarial trees", () => {
         "sect/README.md": "# B\n\ntwo\n",
       },
     });
-    const check = checkRecord(loadRecord(root), { mode: "build" });
+    const check = checkRecord(loadRecord(root), { mode: "build", ledgerBaselines: [] });
     expect(check.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
       "ksor-reserved-name knowledge/sect/README.md",
     ]);

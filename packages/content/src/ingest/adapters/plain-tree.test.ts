@@ -50,7 +50,7 @@ function build(files: Record<string, string>, dirs: string[] = []): PlainTreeRes
     ),
     dirs,
   };
-  const check = checkRecord(record, { mode: "build" });
+  const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
   if (check.refusals.length > 0) throw new Error(JSON.stringify(check.refusals));
   return buildManifestFromRecord(check, dirs, { corpusId: "c", sourceCommit: "dev" });
 }
@@ -67,7 +67,7 @@ function buildUnchecked(files: Record<string, string>, dirs: string[] = []): Pla
     ),
     dirs,
   };
-  const check = checkRecord(record, { mode: "build" });
+  const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
   return buildManifestFromRecord(check, dirs, { corpusId: "c", sourceCommit: "dev" });
 }
 
@@ -124,7 +124,7 @@ describe("identity — path is the id (decision 26 retires sor_id)", () => {
         dirs: [],
         assets: new Map([["knowledge/goal-loop.sim.html", new Uint8Array()]]),
       },
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     );
     expect(check.refusals, "the checker refused a sim it is meant to admit").toEqual([]);
     expect(
@@ -268,7 +268,7 @@ describe("slugs", () => {
         ),
         dirs: [],
       },
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     ).refusals.map((r) => r.slug);
     expect(refused).toContain("ksor-name-unportable");
     const { manifest } = buildUnchecked(files);

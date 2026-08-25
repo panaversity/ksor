@@ -122,7 +122,9 @@ function tree(root: string): Map<string, string> {
   return out;
 }
 const refusalsOf = (root: string): readonly string[] =>
-  checkRecord(loadRecord(root), { mode: "build" }).refusals.map((r) => `${r.path}: ${r.slug}`);
+  checkRecord(loadRecord(root), { mode: "build", ledgerBaselines: [] }).refusals.map(
+    (r) => `${r.path}: ${r.slug}`,
+  );
 
 const ACTOR = "human:kim";
 
@@ -1245,7 +1247,7 @@ describe("the repository's own fixture corpus is a migrated record", () => {
   // so this asserts the indexes in the repository are the ones the tree
   // generates — without writing a byte into the working tree.
   it("passes the record checker, committed indexes included", () => {
-    const result = checkRecord(loadRecord(workbench), { mode: "check" });
+    const result = checkRecord(loadRecord(workbench), { mode: "check", ledgerBaselines: [] });
     expect(result.refusals.map((r) => `${r.path}: ${r.slug}`)).toEqual([]);
     expect(result.concepts.map((c) => [c.id, c.status])).toEqual([
       ["about", "stable"],

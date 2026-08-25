@@ -99,7 +99,10 @@ const portable = (kase: OrderCase): boolean =>
 describe("the MCP door's outline follows that rule — the adapter's own sort", () => {
   it("a non-numeric order never reaches the adapter: the checker refuses it by name", () => {
     for (const kase of ORDER_CASES.filter((k) => !numeric(k))) {
-      const slugs = checkRecord(recordFor(kase), { mode: "build" }).refusals.map((r) => r.slug);
+      const slugs = checkRecord(recordFor(kase), {
+        mode: "build",
+        ledgerBaselines: [],
+      }).refusals.map((r) => r.slug);
       expect(slugs, kase.name).toContain("ksor-frontmatter-invalid");
     }
   });
@@ -108,14 +111,17 @@ describe("the MCP door's outline follows that rule — the adapter's own sort", 
     const cases = ORDER_CASES.filter((k) => numeric(k) && !portable(k));
     expect(cases.length, "the table lost its unportable case").toBeGreaterThan(0);
     for (const kase of cases) {
-      const slugs = checkRecord(recordFor(kase), { mode: "build" }).refusals.map((r) => r.slug);
+      const slugs = checkRecord(recordFor(kase), {
+        mode: "build",
+        ledgerBaselines: [],
+      }).refusals.map((r) => r.slug);
       expect(slugs, kase.name).toContain("ksor-name-unportable");
     }
   });
 
   it.each(ORDER_CASES.filter(numeric))("$name", (kase) => {
     const record = recordFor(kase);
-    const check = checkRecord(record, { mode: "build" });
+    const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
     if (portable(kase)) {
       expect(check.refusals, "the fixture must pass the checker").toEqual([]);
     }
@@ -153,7 +159,7 @@ describe("the MCP door's outline follows that rule — the adapter's own sort", 
 describe("the WEBSITE's reading order follows that rule — the index generator's bullets", () => {
   it.each(ORDER_CASES.filter(numeric))("$name", (kase) => {
     const record = recordFor(kase);
-    const check = checkRecord(record, { mode: "build" });
+    const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
     const indexes = generateIndexes({
       title: "Acme",
       concepts: conceptsOf(check),

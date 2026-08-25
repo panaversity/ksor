@@ -117,7 +117,7 @@ takedown_authorities:
         ]),
         dirs: ["knowledge/secret"],
       },
-      { mode: "build" },
+      { mode: "build", ledgerBaselines: [] },
     ).refusals.map((r) => `${r.slug} ${r.path}`);
 
   /**

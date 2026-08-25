@@ -58,7 +58,7 @@ function committedIndexes(record: ConformanceRecord): ReadonlyMap<string, string
       if (d.startsWith("knowledge/")) dirs.add(d);
     }
   }
-  return checkRecord({ files, dirs: [...dirs] }, { mode: "build" }).indexes;
+  return checkRecord({ files, dirs: [...dirs] }, { mode: "build", ledgerBaselines: [] }).indexes;
 }
 
 /** Write a fixture record to a scratch project that also satisfies the structure rules. */
