@@ -130,6 +130,12 @@ try {
 
   // 4. Publish a generation. This is a DEPLOY step, never something the
   //    container does at boot — the whole point of the serve/ingest split.
+  // `ksor build` FIRST: ingest publishes only a tree the record checker has
+  // passed, and records that build's id on the generation (record spec §1,
+  // build spec §2). Without it ingest refuses `ksor-lock-missing` — which is
+  // the deploy order every adopter's own scripts follow, so the walk follows
+  // it too rather than reaching past it.
+  ksor(["build"]);
   ksor(["schema", "--instance", "instance.md", "--apply"]);
   ksor(["grant", "--instance", "instance.md"]);
   ksor(["ingest", "--instance", "instance.md", "--flip"]);

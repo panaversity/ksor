@@ -149,6 +149,21 @@ export default defineConfig({
      */
     remarkImageOptions: { publicDir: path.resolve(process.cwd(), STAGE_DIR) },
     /**
+     * A fence in a language the highlighter does not carry renders as PLAIN
+     * TEXT rather than failing the build.
+     *
+     * A record is not a code project: an author writing ```promql, ```logql or
+     * ```gotemplate is describing their own stack, and shiki throws on a
+     * language it has no grammar for. Without this, one fence anywhere in the
+     * record takes the whole site down with a stack trace naming a file in
+     * node_modules — found live on a real 187-document handbook, where three
+     * such languages appeared across 3,000 fences.
+     *
+     * `lazy` so only the grammars a record actually uses are loaded, which is
+     * also what keeps that first unknown fence from being fatal.
+     */
+    rehypeCodeOptions: { lazy: true, fallbackLanguage: "text" },
+    /**
      * WHERE the teaching aid sits: after the document's introduction, which
      * is everything before its first `##` section. The plugin only marks the
      * place; the page decides whether there is a deck to put there. See

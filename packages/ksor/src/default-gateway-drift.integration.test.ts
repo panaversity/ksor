@@ -30,8 +30,14 @@ const CANONICAL_IMPORT = '} from "./gateway-api.js";';
 const EMITTED_IMPORT = '} from "@panaversity/ksor/gateway";';
 
 describe("the emitted registration file is the canonical one", () => {
-  const canonical = readFileSync(CANONICAL, "utf8");
-  const emitted = readFileSync(EMITTED, "utf8");
+  // Line endings are the CHECKOUT's, not the rule's: `.gitattributes` pins
+  // `*.md` to LF and these are `.ts`, so a Windows checkout hands one of them
+  // back with CRLF and a byte comparison fails on a difference no author made
+  // (Windows CI, 2026-08-25 — the sibling record-module drift test already
+  // normalizes for the same reason).
+  const text = (file: string): string => readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+  const canonical = text(CANONICAL);
+  const emitted = text(EMITTED);
 
   it("differs ONLY in the import specifier", () => {
     expect(canonical).toContain(CANONICAL_IMPORT);
