@@ -395,3 +395,93 @@ describe("checkRecord — an asset is reached through the directory that holds i
     ).toEqual([]);
   });
 });
+
+/**
+ * `ksor-link-widens` used to be evaluated only for a link that resolved to a
+ * CONCEPT, or — through `assetWidens` — to an ASSET. But `targets.exists`
+ * admits three more kinds, and none of them was judged against any audience
+ * rule: a companion (`<doc>.summary.md`), a directory, and a directory's
+ * generated `index.md`. So a public document could publish a restricted
+ * concept's id and a restricted directory's name into the public page, its
+ * `/md/` twin and `llms-full.txt`, while the identical link spelled `.md` was
+ * refused one branch away (found live on a real scaffold).
+ */
+describe("checkRecord — every link target is judged, not only a concept", () => {
+  const files = {
+    "knowledge/policy.md": doc("Policy", PUBLIC),
+    "knowledge/secret/plan.md": doc("Plan", INTERNAL),
+    "knowledge/secret/plan.summary.md": "---\ntype: Summary\n---\nShort.\n",
+  };
+  const run = (body: string, over: Record<string, string> = {}): string[] =>
+    slugs(
+      { ...files, "knowledge/policy.md": doc("Policy", PUBLIC, body), ...over },
+      ["knowledge/secret"],
+      "build",
+    );
+
+  it("refuses a public link to a restricted concept's COMPANION", () => {
+    expect(run("See [s](/secret/plan.summary.md).\n")).toEqual([
+      "ksor-link-widens knowledge/policy.md",
+    ]);
+  });
+
+  it("refuses a public link to a restricted DIRECTORY", () => {
+    expect(run("See [d](/secret/).\n")).toEqual(["ksor-link-widens knowledge/policy.md"]);
+  });
+
+  it("refuses a public link to a restricted directory's generated index", () => {
+    expect(run("See [i](/secret/index.md).\n")).toEqual(["ksor-link-widens knowledge/policy.md"]);
+  });
+
+  it("the control: the same link spelled `.md` was already refused", () => {
+    expect(run("See [p](/secret/plan.md).\n")).toEqual(["ksor-link-widens knowledge/policy.md"]);
+  });
+
+  it("allows the directory and its index once something in that directory is public", () => {
+    const open = { "knowledge/secret/open.md": doc("Open", PUBLIC) };
+    expect(run("See [d](/secret/) and [i](/secret/index.md).\n", open)).toEqual([]);
+  });
+
+  /**
+   * A companion inherits its PARENT's audience, not the directory's — so a
+   * public sibling in the same folder widens the folder and not the companion.
+   */
+  it("allows the companion only when its parent is reachable", () => {
+    const open = { "knowledge/secret/open.md": doc("Open", PUBLIC) };
+    expect(run("See [s](/secret/plan.summary.md).\n", open)).toEqual([
+      "ksor-link-widens knowledge/policy.md",
+    ]);
+    expect(
+      run("See [s](/secret/plan.summary.md).\n", {
+        "knowledge/secret/plan.md": doc("Plan", PUBLIC),
+      }),
+    ).toEqual([]);
+  });
+
+  it("says nothing about a directory that holds no concept at all", () => {
+    expect(
+      slugs(
+        { ...files, "knowledge/policy.md": doc("Policy", PUBLIC, "See [x](/images/).\n") },
+        ["knowledge/secret", "knowledge/images"],
+        "build",
+      ),
+    ).toEqual([]);
+  });
+
+  it("an internal document may still link the internal companion and directory", () => {
+    expect(
+      slugs(
+        {
+          ...files,
+          "knowledge/other.md": doc(
+            "Other",
+            INTERNAL,
+            "See [s](/secret/plan.summary.md) and [d](/secret/).\n",
+          ),
+        },
+        ["knowledge/secret"],
+        "build",
+      ),
+    ).toEqual([]);
+  });
+});
