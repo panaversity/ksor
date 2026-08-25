@@ -69,7 +69,12 @@ templates), read-only, refusing a stale index; a conformance fixture is judged
 identically by it and by `checkRecord`. **The starter is in the profile**:
 `instance.md` format 2, `.ksor/governance.yaml`, five `type: Document` drafts,
 generated indexes, `surfaces/overview.md`; every manager's `build` script is
-`ksor build` then the site build, `export-denylist` gone.
+`ksor build` then the site build, `export-denylist` gone. Because all five are
+drafts, a fresh record's first build publishes NO document on any surface
+(`0 admitted to a machine surface`, an empty `## Documents` in `llms.txt`, no
+document route) until a human approves one — decision 27's day-one cost, said
+in the emitted README, AGENTS.md and the intake-interview skill so an adopter
+does not read it as a broken build.
 
 **`ksor migrate` runs** (research/okf-native.md §1.8): `--write`,
 `--instance`, `--actor`, `--approve-by`, `--attribute`, `--generated-at`,
@@ -852,8 +857,13 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   ARE implemented and released — the bundled kernel provides them from the one
   `ksor` binary. `serve` runs the MCP server in-process (reads
   `./instance.md`; exits `3` with a remedy when it is missing). `ksor build`
-  and `ksor migrate` are implemented on the unreleased branch and exit `2` in
-  the published package.
+  and `ksor migrate` are both implemented on the unreleased branch, and the
+  published package answers them DIFFERENTLY: `ksor build` reports "designed
+  but not implemented" and exits `2`, while `migrate` is not in the published
+  vocabulary at all, so it is refused with exit `1` under the stable
+  `error: unknown-verb` slug. The two codes are a contract (product
+  principle 4) — `2` says designed and coming, `1` says this is not a ksor
+  verb — so they are worth stating apart rather than together.
 - `ksor build --bundles` — parses, prints the honest notice, exits `2`. It is
   phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
   its contract: one OKF bundle per registered audience under
