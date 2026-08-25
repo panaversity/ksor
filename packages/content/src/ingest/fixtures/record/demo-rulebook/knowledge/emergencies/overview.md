@@ -3,7 +3,7 @@ type: Document
 title: "Emergencies"
 description: "What every member does first in an emergency, before any machine-specific step."
 status: stable
-order: 0
+order: 10
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]

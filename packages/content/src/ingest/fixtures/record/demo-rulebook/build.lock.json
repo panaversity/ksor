@@ -5,39 +5,39 @@
   "documents": [
     {
       "path": "emergencies/injuries.md",
-      "sha256": "4fded16cfe5c4c967dc960a5d79bfdd2c4320a801a321e028a7a5ff3efc009f3"
+      "sha256": "a73e244f68f0b9356a32dcf757bd3398d1439c1f725a3df422a576ab3b5dbe4d"
     },
     {
       "path": "emergencies/overview.md",
-      "sha256": "b899ff3b120e780bd9182aa5461542a57fcac6bed5768ca8bffa2970d025cf5e"
+      "sha256": "40ed411b264b29be28cb718c9643f616b3e9b9000a293ff1412aba208d432a4f"
     },
     {
       "path": "emergencies/power-and-fire.md",
-      "sha256": "96e700c8d5b3fca7abe6e22bacfa61cc8458512e93e7c82fe8b53959eaf4b9d2"
+      "sha256": "a13536c1bb884451fc0f2d0cad4addcec22db48ee5dcdd9070a1b246cc220f9e"
     },
     {
       "path": "getting-certified/badges.md",
-      "sha256": "bf206b97c10122b035b3ec5d717f0c69716c527d2aecd45647c6b889c22eb878"
+      "sha256": "fb62bd16443fa152ea848b6f8606eced016caeede8d5d14a10ff8cd7ba2d06c8"
     },
     {
       "path": "getting-certified/guests.md",
-      "sha256": "65fcc16feec583720d18e007c2f97bd9e327744024f23d641384e3c6b588a24d"
+      "sha256": "b5ba94f8e8a1081812519efbc0755d14b2d9e0c9981ea26ba2185c56bfed05c8"
     },
     {
       "path": "getting-certified/overview.md",
-      "sha256": "11036d7a9131430cb87a301b65403c11256922ebdc239e4d084536c080ff6274"
+      "sha256": "599ed49a9e853f3c49a5f2bac736bbd26f627dec7ebb40ceb48aeeacbc910d9b"
     },
     {
       "path": "machine-rules/laser-cutter.md",
-      "sha256": "9cb8c501cf9389d35cc61b80ec143d35feb6cfa914eaa3e6bdd306d9b4afb262"
+      "sha256": "4d78de43b57434a3e12ee95e82af9f0931844b33ea147b44276380541ba8ffca"
     },
     {
       "path": "machine-rules/overview.md",
-      "sha256": "e72bfb83c6beb3fe4e547e5b2bc376749afb6181ed3c39bd6da01a3b422f0109"
+      "sha256": "ee2c889d6254d11d163bfc14018f6c35348f63594639fd418c65372d7f32d5bd"
     },
     {
       "path": "machine-rules/table-saw.md",
-      "sha256": "193201225977188dcad3ebc00667ae21743bf1535f2c1674148f4769010bfb1f"
+      "sha256": "60395ae1a31015a2843eaa6efa8f0e3862dd779e67b4a8dc4dda619a9a79fe0f"
     },
     {
       "path": "overview.md",

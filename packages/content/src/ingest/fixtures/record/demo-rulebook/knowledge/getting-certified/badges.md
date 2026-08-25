@@ -3,7 +3,7 @@ type: Document
 title: "Rule 10: Machine Badges"
 description: "Which badges exist, what each permits, and how one is earned or revoked."
 status: stable
-order: 1
+order: 21
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]

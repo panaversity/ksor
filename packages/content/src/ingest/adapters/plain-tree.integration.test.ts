@@ -11,6 +11,15 @@
 // `overview.md`, and governance is projected from the profile. What the oracle
 // fixed and this still holds is asserted below: one node per concept, one per
 // directory, positions dense per sibling set, sources for every file.
+//
+// REGENERATED again the same day, for the reading-order rule (decision 18):
+// this fixture WAS the divergence. Its committed `knowledge/index.md` listed
+// `overview.md` first and the three folders after it, while the adapter — which
+// took a folder's key from the folder's own concepts, all of them `order: 0` —
+// sorted the three sections ahead of it. Site first, door last, same record.
+// The fixture's folder documents are renumbered 10/20/30 so the ROOT order it
+// always meant is now something it says; the order inside each folder, and
+// every position within a sibling set, is unchanged.
 
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -81,7 +90,8 @@ describe("demo-rulebook golden", () => {
       "knowledge/getting-certified#section",
       "knowledge/machine-rules#section",
     ]);
-    expect(sections.map((s) => s.position)).toEqual([1, 2, 3]);
+    // 2, 3, 4: the root `overview.md` is position 1 on BOTH surfaces now.
+    expect(sections.map((s) => s.position)).toEqual([2, 3, 4]);
     expect(manifest.nodes.filter((n) => n.kind === "document")).toHaveLength(10);
     expect(manifest.files).toHaveLength(10);
     expect([...sources.keys()].some((p) => p.endsWith("index.md"))).toBe(false);

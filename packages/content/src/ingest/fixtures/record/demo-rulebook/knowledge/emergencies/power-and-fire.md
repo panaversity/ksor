@@ -3,7 +3,7 @@ type: Document
 title: "Rule 31: Power Cuts and Fire"
 description: "What to do when the power fails or a fire starts, and where the shut-offs are."
 status: stable
-order: 2
+order: 12
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]

@@ -3,7 +3,7 @@ type: Document
 title: "Getting Certified"
 description: "How a member earns a machine badge and what a checkout covers."
 status: stable
-order: 0
+order: 20
 generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
 ksor:
   audience: [public]
