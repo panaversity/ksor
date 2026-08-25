@@ -256,13 +256,20 @@ ${body}
     const { chromium } = await import("playwright");
     const browser = await chromium.launch();
     try {
-      // The agent-facing index: headed by THIS instance's name (not a generic
-      // "# Docs"), and every link it advertises must actually resolve.
+      // The agent-facing index: headed by THIS record's display title (not a
+      // generic "# Docs") and carrying the machine identity a citation pins,
+      // and every link it advertises must actually resolve. The two are
+      // separate keys since the profile — `title` is what a reader sees,
+      // `name` is what the record is called by machines (record spec §3) — so
+      // the heading alone no longer identifies the project.
       const llms = await (await fetch(`${base}/llms.txt`)).text();
       expect(
         llms.split("\n")[0],
         `llms.txt first line: ${JSON.stringify(llms.slice(0, 120))}`,
-      ).toBe("# walkthrough");
+      ).toBe("# KSoR");
+      expect(llms, `llms.txt head: ${JSON.stringify(llms.slice(0, 300))}`).toContain(
+        "- name: walkthrough",
+      );
       const firstLink = /^- \[[^\]]*]\((?<url>[^)]+)\)/m.exec(llms)?.groups?.url;
       expect(firstLink, `llms.txt body: ${JSON.stringify(llms.slice(0, 300))}`).toBeDefined();
       const linked = await fetch(`${base}${firstLink}`);
@@ -366,38 +373,90 @@ ${body}
     // detached: SIGTERM to the pnpm wrapper alone orphans `next dev`, which
     // keeps the port and lets a re-run's poll green-light the stale server
     // (review finding, 2026-08-18) — kill the whole process group instead.
+    // WITHOUT `NODE_ENV`. vitest sets it to `test` and a spawned child
+    // inherits it, so this dev server came up as a BUILD: staging read
+    // `build.lock.json` instead of the record, hid drafts, and `watchRecord`
+    // returned early — which is why an edit here never reached the staged copy,
+    // and why against the emitted all-draft starter the page did not exist at
+    // all and the poll below saw 500 for its full two minutes (diagnosed live
+    // 2026-08-25, by running `NODE_ENV=test pnpm dev` on a real scaffold and
+    // watching it refuse `ksor-lock-stale`). An adopter's shell carries no
+    // NODE_ENV and `next dev` sets `development` itself, so the faithful thing
+    // is to hand the child an environment without it.
+    const { NODE_ENV: _runnerEnv, ...devEnv } = process.env;
     const dev = spawn("pnpm", ["dev", "--port", "3217"], {
       cwd: project,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       detached: true,
+      env: devEnv,
     });
+    // Captured, not discarded: when this poll times out the only evidence of
+    // WHY is the server's own output, and `stdio: "ignore"` threw it away —
+    // a 500 for the full two minutes said nothing at all about its cause
+    // (found running this suite, 2026-08-25).
+    let devLog = "";
+    dev.stdout?.on("data", (chunk: Buffer) => (devLog += chunk.toString()));
+    dev.stderr?.on("data", (chunk: Buffer) => (devLog += chunk.toString()));
     try {
       // Wait for the dev server, then confirm the page, then edit and poll.
       const url = "http://localhost:3217/docs/what-is-a-ksor/";
-      await expect
-        .poll(
-          async () => {
-            try {
-              const res = await fetch(url);
-              return res.status;
-            } catch {
-              return 0;
-            }
-          },
-          { timeout: 120_000, interval: 1_000 },
-        )
-        .toBe(200);
-      // The slug lives in llms.txt (pages now show the display title), and
-      // the slug is the identity this guard exists to check.
+      let lastStatus = 0;
+      try {
+        await expect
+          .poll(
+            async () => {
+              try {
+                const res = await fetch(url);
+                lastStatus = res.status;
+                return res.status;
+              } catch {
+                lastStatus = 0;
+                return 0;
+              }
+            },
+            { timeout: 120_000, interval: 1_000 },
+          )
+          .toBe(200);
+      } catch (error) {
+        // `expect.poll`'s message option is a plain string, evaluated before
+        // the log exists — so the evidence is attached here instead.
+        throw new Error(
+          `${(error as Error).message}\nlast status ${lastStatus}; dev server said:\n${devLog.slice(-4000)}`,
+        );
+      }
+      // Proof we reached OUR server: the record's MACHINE identity, which is
+      // `name:` in the instance and not the display title every KSoR starter
+      // shares (record spec §3).
       expect(
-        (await (await fetch("http://localhost:3217/llms.txt")).text()).split("\n")[0],
+        await (await fetch("http://localhost:3217/llms.txt")).text(),
         "the dev server must be this project's",
-      ).toBe("# walkthrough");
+      ).toContain("- name: walkthrough");
       const marker = "hot-reload-proof-4173";
       appendFileSync(path.join(project, "knowledge", "what-is-a-ksor.md"), `\n${marker}\n`);
-      await expect
-        .poll(async () => (await fetch(url)).text(), { timeout: 60_000, interval: 2_000 })
-        .toContain(marker);
+      try {
+        await expect
+          .poll(async () => (await fetch(url)).text(), { timeout: 60_000, interval: 2_000 })
+          .toContain(marker);
+      } catch (error) {
+        // Which HALF broke. The path is two steps — the record watcher carries
+        // the edit into the staged copy (`lib/stage-knowledge.ts`, whose
+        // refresh swallows every error by design so a half-saved file cannot
+        // take the dev server down), and the shell rebuilds the page from that
+        // copy. A bare "the page never showed it" names neither, and the two
+        // have different fixes.
+        const staged = path.join(
+          project,
+          "system",
+          "site",
+          ".staged-knowledge",
+          "what-is-a-ksor.md",
+        );
+        const carried = existsSync(staged) && readFileSync(staged, "utf8").includes(marker);
+        throw new Error(
+          `${(error as Error).message}\nthe staged copy ${carried ? "DID" : "did NOT"} receive the edit` +
+            `\ndev server said:\n${devLog.slice(-4000)}`,
+        );
+      }
     } finally {
       try {
         if (dev.pid !== undefined) process.kill(-dev.pid, "SIGTERM");
