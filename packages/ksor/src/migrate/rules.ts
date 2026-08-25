@@ -421,6 +421,41 @@ const INSTANCE_ORDER = [
   "version",
 ];
 
+export type InstanceNameResult =
+  | { readonly ok: true; readonly name: string }
+  | { readonly ok: false; readonly why: string; readonly fix: string };
+
+/**
+ * The record's machine identity, from the pre-profile frontmatter or — when it
+ * declared none — the directory it lives in. ONE derivation, because the
+ * database read needs the same answer the rewritten instance will carry
+ * (`name:` is `tenant_id` and `corpus_id` both, in format 1 as in format 2).
+ *
+ * The two failing states get two messages. Blaming the directory for a
+ * declared-but-invalid `name:` states a falsehood about a directory that is
+ * fine and prescribes adding a key that is already there (product principle 4).
+ */
+export function instanceNameOf(
+  fm: Readonly<Record<string, unknown>>,
+  directory: string,
+): InstanceNameResult {
+  const declared = str(fm["name"]);
+  if (declared !== null) {
+    if (INSTANCE_NAME.test(declared)) return { ok: true, name: declared };
+    return {
+      ok: false,
+      why: `\`name: ${declared}\` is not ${INSTANCE_NAME.source} — it is the machine identity every citation carries, so it is ascii lowercase letters, digits and hyphens`,
+      fix: "correct `name:` in instance.md and run it again",
+    };
+  }
+  if (INSTANCE_NAME.test(directory)) return { ok: true, name: directory };
+  return {
+    ok: false,
+    why: `no usable \`name:\` — it is the machine identity every citation carries, and the directory name (${directory}) is not ${INSTANCE_NAME.source}`,
+    fix: "add `name: <this-record>` (ascii lowercase letters, digits and hyphens) to instance.md and run it again",
+  };
+}
+
 export function migrateInstance(text: string, ctx: InstanceContext): InstanceResult {
   const path = "instance.md";
   const refusals: Refusal[] = [];
@@ -450,13 +485,9 @@ export function migrateInstance(text: string, ctx: InstanceContext): InstanceRes
     };
   }
 
-  const name = str(fm["name"]) ?? (INSTANCE_NAME.test(ctx.directory) ? ctx.directory : null);
-  if (name === null || !INSTANCE_NAME.test(name)) {
-    refuse(
-      `no usable \`name:\` — it is the machine identity every citation carries, and the directory name (${ctx.directory}) is not ${INSTANCE_NAME.source}`,
-      "add `name: <this-record>` (ascii lowercase letters, digits and hyphens) to instance.md and run it again",
-    );
-  }
+  const identity = instanceNameOf(fm, ctx.directory);
+  const name = identity.ok ? identity.name : null;
+  if (!identity.ok) refuse(identity.why, identity.fix);
   const title = str(fm["title"]) ?? firstHeading(split.body);
   if (title === null) {
     refuse(

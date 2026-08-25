@@ -32,16 +32,18 @@ import {
 } from "@panaversity/ksor-content/record";
 
 import { exitCodes } from "../index.js";
-import { readDbDenials, type DbDenial } from "./denials.js";
+import { DenialReadError, readDbDenials, type DbDenial } from "./denials.js";
 import { renderLedger, toLedgerEntries, type LedgerDenial } from "./ledger-out.js";
 import { renderDiff, type FileChange } from "./diff.js";
 import {
+  instanceNameOf,
   migrateConcept,
   migrateInstance,
   migrateSummary,
   modelOf,
   NO_AUDIENCE_MODEL,
   type AudienceModel,
+  type InstanceNameResult,
 } from "./rules.js";
 
 export interface MigrateIo {
@@ -281,7 +283,13 @@ export async function runMigrate(
   const hadLedger = record.files.has(".ksor/takedowns.yaml");
   const denials = hadLedger
     ? []
-    : await collectDenials(root, oldFm, parsed.attributions, refusals, io);
+    : await collectDenials(
+        instanceNameOf(oldFm, path.basename(root)),
+        oldFm,
+        parsed.attributions,
+        refusals,
+        io,
+      );
   const takedownActors = new Set<string>(denials.map((d) => d.by));
   if (denials.length > 0) {
     changes.push({
@@ -351,7 +359,7 @@ function generatedAtOf(root: string, rel: string, override: string | null): stri
 
 /** Reads the database's denylist, or refuses; an empty list when the record declares none. */
 async function collectDenials(
-  root: string,
+  identity: InstanceNameResult,
   fm: Readonly<Record<string, unknown>>,
   attributions: ReadonlyMap<string, string>,
   refusals: Refusal[],
@@ -361,6 +369,9 @@ async function collectDenials(
   if (typeof database !== "object" || database === null || Array.isArray(database)) return [];
   const dsnEnv = (database as Record<string, unknown>)["dsn_env"];
   if (typeof dsnEnv !== "string" || dsnEnv === "") return [];
+  // A record with no readable identity has no rows to scope a query by;
+  // `migrateInstance` has already refused it by name, so say nothing twice.
+  if (!identity.ok) return [];
   const dsn = process.env[dsnEnv];
   if (dsn === undefined || dsn === "") {
     refusals.push({
@@ -373,12 +384,26 @@ async function collectDenials(
   }
   let rows: readonly DbDenial[];
   try {
-    rows = await readDbDenials(path.join(root, "instance.md"), dsn);
+    rows = await readDbDenials({ tenantId: identity.name, corpusId: identity.name }, dsn);
   } catch (error) {
+    // A refusal raised by the transcription itself is already a what/why/fix;
+    // nesting it inside another one's `why:` printed two `why:` lines at two
+    // indents and blamed the database for a decision about a row.
+    if (error instanceof DenialReadError) {
+      refusals.push({
+        slug: "ksor-migrate-underivable",
+        path: ".ksor/takedowns.yaml",
+        why: error.why,
+        fix: error.fix,
+      });
+      return [];
+    }
     refusals.push({
       slug: "ksor-migrate-underivable",
       path: "instance.md",
-      why: `the takedown denials could not be read from ${dsnEnv}: ${error instanceof Error ? error.message : String(error)}`,
+      // One line: a driver error's own multi-line detail nested inside a
+      // refusal reads as a second, malformed refusal.
+      why: `the takedown denials could not be read from ${dsnEnv}: ${firstLine(error)}`,
       fix: `make the database reachable and run it again — the ledger is the record's copy of those rows and cannot be derived without them`,
     });
     return [];
@@ -387,6 +412,11 @@ async function collectDenials(
   const outcome = toLedgerEntries(rows, attributions);
   refusals.push(...outcome.refusals);
   return outcome.entries;
+}
+
+function firstLine(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split("\n")[0] ?? "";
 }
 
 interface PolicyInput {
