@@ -61,9 +61,33 @@ function approveStarter(knowledge: string): void {
   }
 }
 
+/** Every draft title the starter ships — what an all-draft build must publish nowhere. */
+function draftTitles(knowledge: string): string[] {
+  const titles: string[] = [];
+  for (const rel of readdirSync(knowledge, { recursive: true, encoding: "utf8" })) {
+    const name = path.basename(rel);
+    if (!name.endsWith(".md") || name === "index.md" || isAttachment(name)) continue;
+    const text = readFileSync(path.join(knowledge, rel), "utf8");
+    if (!/^status: draft$/m.test(text)) continue;
+    const title = /^title: (.+)$/m.exec(text)?.[1];
+    if (title !== undefined) titles.push(title.replace(/^["']|["']$/g, ""));
+  }
+  return titles;
+}
+
+/** What the first `pnpm build` of an untouched scaffold produced, captured before anything is approved. */
+interface StarterBuild {
+  readonly status: number | null;
+  readonly output: string;
+  readonly docsIndex: string | null;
+  readonly llms: string | null;
+  readonly titles: readonly string[];
+}
+
 describe.runIf(enabled)("scaffold e2e — the site, in a real browser", () => {
   let work: string;
   let project: string;
+  let starterBuild: StarterBuild;
 
   beforeAll(() => {
     work = mkdtempSync(path.join(tmpdir(), "ksor-e2e-"));
@@ -118,6 +142,25 @@ takedown_authorities:
     // reader and an agent see, so it performs the adopter's first real act:
     // approve what the starter shipped. Every other clause writes its own
     // concepts.
+    // BEFORE anything is approved: the state build spec §4 acceptance 4
+    // describes, and the one no e2e clause ever built. `generateStaticParams`
+    // threw "the record has no documents" whenever a build published no page,
+    // so `pnpm build` failed on EVERY freshly scaffolded project — and the only
+    // all-draft test stopped at staging, which never reaches the route module.
+    const read = (...parts: string[]): string | null => {
+      const file = path.join(project, "system", "site", "out", ...parts);
+      return existsSync(file) ? readFileSync(file, "utf8") : null;
+    };
+    const titles = draftTitles(path.join(project, "knowledge"));
+    const starter = buildScaffold(project);
+    starterBuild = {
+      status: starter.status,
+      output: `${starter.stdout ?? ""}\n${starter.stderr ?? ""}`.slice(-2000),
+      docsIndex: read("docs", "index.html"),
+      llms: read("llms.txt"),
+      titles,
+    };
+
     approveStarter(path.join(project, "knowledge"));
     // `ksor init` leaves a repository with NO commit, and `source_commit` is
     // null there — honestly (build spec §2). The stamps clause is about a
@@ -133,10 +176,22 @@ takedown_authorities:
       const r = spawnSync("git", args, { cwd: project, encoding: "utf8" });
       expect(r.status, `git ${args.join(" ")}: ${r.stderr}`).toBe(0);
     }
-  }, 300_000);
+  }, 600_000);
 
   afterAll(() => {
     if (work) rmSync(work, { recursive: true, force: true });
+  });
+
+  it("the untouched starter — all drafts — builds, and publishes not one of them", () => {
+    expect(starterBuild.status, starterBuild.output).toBe(0);
+    // The root index still renders: a record waiting for its first approval is
+    // a record, not a missing stage.
+    expect(starterBuild.docsIndex, "out/docs/index.html was not written").not.toBeNull();
+    expect(starterBuild.titles.length, "the starter ships no drafts to check").toBeGreaterThan(0);
+    for (const title of starterBuild.titles) {
+      expect(starterBuild.docsIndex, `draft "${title}" was published`).not.toContain(title);
+      expect(starterBuild.llms ?? "", `draft "${title}" is in llms.txt`).not.toContain(title);
+    }
   });
 
   it("static build serves the record: llms.txt index, distinct themes, no console errors, no external requests", async () => {

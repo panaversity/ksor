@@ -116,7 +116,16 @@ Actor ids are published with the content; use handles, not addresses. Every
 timestamp is an ISO 8601 instant with an explicit offset; `ksor migrate`
 widens a bare date to midnight UTC. Trust tier derives from `verified`: none
 → unverified; machine actors only → machine-confirmed; any `human:` →
-human-reviewed.
+human-reviewed. **`verified` is a claim gated by pull-request review, NOT by
+the policy** — the Governance Policy has no verification family, so
+`verified[].by` is checked for its actor FORM and for nothing else, and any
+well-formed `human:` actor promotes the tier. This is asymmetric with
+`ksor.approval.by`, which the policy's resolved approval set does gate
+(`ksor-approver-unauthorised`), and it is recorded here rather than left
+silent: a concept may not DECLARE `trust_tier` (`ksor-derived-key`) but may
+supply the input that computes it. Closing it means adding a
+`verification_authorities` family to §4, which widens a public surface and is
+an owner decision.
 
 **2.4 Audience.** A list of identifiers; `public` is reserved; every other
 identifier must be in the policy's registry. A **viewer** holds a list that

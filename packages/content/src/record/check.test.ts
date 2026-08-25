@@ -273,6 +273,33 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     ).toEqual(["ksor-instance-format"]);
   });
 
+  /**
+   * RECORDED, not overlooked (2026-08-25 review). `ksor.approval.by` is checked
+   * against the policy's resolved approval set, and a concept may no longer
+   * DECLARE `trust_tier` (`ksor-derived-key`) — but `verified[].by`, the input
+   * that COMPUTES that tier and therefore the `human-reviewed` badge on every
+   * page, twin and `llms-full.txt` block, is checked against no authority set
+   * at all. The policy has no verification family, so there is nothing to check
+   * it against: `verified` is a claim gated by pull-request review, and record
+   * spec §2.3 says so rather than leaving the asymmetry silent. Adding a
+   * `verification_authorities` family is an owner decision (it widens the
+   * Governance Policy, a public surface) and is left to one; this row exists so
+   * the state cannot change by accident in either direction.
+   */
+  it("a `verified` actor the policy never named is accepted, and does promote the tier", () => {
+    const out = checkRecord(
+      record({
+        "knowledge/a.md": doc(
+          "A",
+          `verified: { by: "human:nobody-asked", at: 2026-08-22T09:00:00Z }\n${PUBLIC}`,
+        ),
+      }),
+      { mode: "build" },
+    );
+    expect(out.refusals).toEqual([]);
+    expect(out.concepts[0]?.trustTier).toBe("human-reviewed");
+  });
+
   it("refusals are sorted by path, then slug — two runs print one order", () => {
     const out = checkRecord(
       record({
