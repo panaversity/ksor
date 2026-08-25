@@ -63,28 +63,28 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 ## Start here
 
-All you need is Node 24 or newer. Use whichever package manager you already
+All you need is [Node 24 or newer](https://nodejs.org/en/download). Use whichever package manager you already
 have — npm, pnpm, or bun — and the project it creates will use that same
 manager everywhere:
 
 **npm**
 
 ```bash
-npx @panaversity/ksor init my-knowledge-sor
+npx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && npm install && npm run dev
 ```
 
 **pnpm**
 
 ```bash
-pnpm dlx @panaversity/ksor init my-knowledge-sor
+pnpm dlx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && pnpm install && pnpm dev
 ```
 
 **bun**
 
 ```bash
-bunx @panaversity/ksor init my-knowledge-sor
+bunx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && bun install && bun run dev
 ```
 
