@@ -18,7 +18,6 @@ import { fileURLToPath } from "node:url";
 import { isAttachment } from "../templates/scaffold/system/site/lib/attachment-rule.js";
 import { buildScaffold } from "./e2e-build.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
-import { starterApprover } from "./e2e-starter.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -181,18 +180,27 @@ describe.runIf(enabled).each(SHELLS)(
       // below is approved by `human:kim`, so the policy has to name them, or
       // `ksor-approver-unauthorised` refuses the build before any surface is
       // rendered and every clause here fails on the authority check rather
-      // than on what it means to test. The STARTER PRODUCER stays beside it:
-      // the emitted samples ship approved by that actor, so dropping it makes
-      // the record `ksor init` wrote unauthorised.
+      // than on what it means to test.
       writeFileSync(
         path.join(project, ".ksor", "governance.yaml"),
         `version: "0.1"
 approval_authorities:
-  - actors: [human:kim, ${starterApprover(project)}]
+  - actors: [human:kim]
 takedown_authorities:
   actors: [human:ciso]
 `,
       );
+
+      // The samples go, which is what an adopter does with them — and what
+      // this suite needs, because the clauses below pin the EXACT reading
+      // order of the record it authors. The starter ships approved now, so
+      // leaving it in put five documents nobody here wrote into `llms.txt`
+      // and the sidebar, and the order clause failed on a record that was
+      // otherwise correct. Deleting them also drops the starter's producer
+      // from the policy above: with no sample left, nothing it approved
+      // remains.
+      rmSync(path.join(project, "knowledge"), { recursive: true, force: true });
+      mkdirSync(path.join(project, "knowledge"), { recursive: true });
 
       // A record with explicit order, folders, unordered documents whose
       // names interleave with a folder's, and a description — enough to tell
