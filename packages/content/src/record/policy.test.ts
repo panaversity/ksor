@@ -284,3 +284,107 @@ ownershp:
     expect(r.refusals[0]?.fix).toContain("ownership");
   });
 });
+
+/**
+ * A scope path is a bundle-relative DIRECTORY PREFIX (KSP-001 §4.2.5), and a
+ * concept's id never carries its `.md` — `conceptIdOf` strips it. So
+ * `paths: ["hr/handbook.md"]` matched NOTHING: the tightly scoped rule an
+ * author wrote never applied, and resolution fell through to whatever broader
+ * rule was left, with nothing red on any surface. The same silence covered
+ * `paths: ["knowledge/hr/"]`, which is the prefix the takedown ledger's
+ * `stable_id` uses and the one a hand writes next.
+ */
+describe("parsePolicy — a scope path that cannot match is refused, never normalised away", () => {
+  const scopedApproval = (path: string): string => `version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+  - scope: { paths: ["${path}"] }
+    actors: [human:hr]
+takedown_authorities:
+  actors: [human:boss]
+`;
+
+  it("refuses a path carrying a document extension, and names the path it would have to be", () => {
+    const r = parsePolicy(scopedApproval("hr/handbook.md"), P);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-policy-invalid"]);
+    expect(r.refusals[0]?.why).toContain("hr/handbook.md");
+    expect(r.refusals[0]?.fix).toContain("hr/handbook");
+  });
+
+  it("refuses `.mdx` the same way", () => {
+    expect(slugsOf(scopedApproval("hr/handbook.mdx"))).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("refuses a path that repeats the `knowledge/` prefix — scope paths are bundle-relative", () => {
+    const r = parsePolicy(scopedApproval("knowledge/hr/"), P);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-policy-invalid"]);
+    expect(r.refusals[0]?.why).toContain("knowledge/hr/");
+    expect(r.refusals[0]?.fix).toContain("hr/");
+  });
+
+  it("refuses it on an `ownership` rule too — one rule, both families", () => {
+    expect(
+      slugsOf(`${LEVEL0}ownership:
+  - scope: { paths: ["hr/handbook.md"] }
+    owner: team:hr
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("keeps every form that does match: a folder, a bare concept id, a leading slash", () => {
+    const p = policyOf(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+  - scope: { paths: ["hr/"] }
+    actors: [human:hr]
+  - scope: { paths: ["/legal"] }
+    actors: [human:counsel]
+  - scope: { paths: ["ops/runbook"] }
+    actors: [human:sre]
+takedown_authorities:
+  actors: [human:boss]
+`);
+    expect(resolveApprovers(p, "hr/handbook", "Document")).toEqual({
+      ok: true,
+      actors: ["human:hr"],
+    });
+    expect(resolveApprovers(p, "legal/terms", "Document")).toEqual({
+      ok: true,
+      actors: ["human:counsel"],
+    });
+    expect(resolveApprovers(p, "ops/runbook", "Document")).toEqual({
+      ok: true,
+      actors: ["human:sre"],
+    });
+  });
+
+  /**
+   * `/` alone is the whole record: it normalises to the empty prefix, which
+   * matches every concept at depth 0 — exactly what omitting `paths` means, so
+   * a deeper rule still wins. Pinned because it is the one path form that
+   * matches everything, and a reader meeting it needs to know it is deliberate.
+   */
+  it("`/` is the whole record — the depth-0 tier, which any deeper rule beats", () => {
+    const p = policyOf(`version: "0.1"
+approval_authorities:
+  - scope: { paths: ["/"] }
+    actors: [human:boss]
+  - scope: { paths: ["hr/"] }
+    actors: [human:hr]
+takedown_authorities:
+  actors: [human:boss]
+`);
+    expect(resolveApprovers(p, "legal/terms", "Document")).toEqual({
+      ok: true,
+      actors: ["human:boss"],
+    });
+    expect(resolveApprovers(p, "hr/handbook", "Document")).toEqual({
+      ok: true,
+      actors: ["human:hr"],
+    });
+  });
+});

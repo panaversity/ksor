@@ -22,6 +22,7 @@ import path from "node:path";
 
 import {
   formatRefusal,
+  isIndividualActor,
   loadRecord,
   parseInstant,
   parsePolicy,
@@ -113,9 +114,19 @@ function parseArgs(args: readonly string[]): Parsed | string {
       if (value === undefined || value.startsWith("-")) return `${arg} needs a value`;
       i += 1;
       if (arg === "--instance") instance = value;
-      else if (arg === "--actor") actor = value;
-      else if (arg === "--approve-by") approveBy = value;
-      else if (arg === "--generated-at") {
+      else if (arg === "--actor" || arg === "--approve-by") {
+        // Decision 21: a governance act NAMES its actor. Guarding only that
+        // the flag was PRESENT let any wrong string through to the Governance
+        // Policy — `--actor ""` (an unset CI variable) wrote a policy
+        // authorising nobody, and `--actor "human:jane, human:john"` rendered
+        // as TWO authorities, granting approval to an identity the operator
+        // never named. Both exited 0. Reproduced live, 2026-08-25.
+        if (!isIndividualActor(value)) {
+          return `${arg} must name ONE person or process — \`human:<id>\` or \`process:<id>\`, no spaces or commas — got "${value}"`;
+        }
+        if (arg === "--actor") actor = value;
+        else approveBy = value;
+      } else if (arg === "--generated-at") {
         if (parseInstant(value) === null) {
           return `--generated-at must be an ISO 8601 instant with an offset (e.g. 2026-08-25T12:00:00Z), got "${value}"`;
         }
@@ -242,6 +253,8 @@ export async function runMigrate(
     model,
   };
   const conceptIds = new Set<string>();
+  /** Reserved-name targets THIS run has already claimed, so two sources cannot share one. */
+  const claimed = new Map<string, string>();
   /** Concept id → path, for every `approved` document this run turns into a `draft`. */
   const demoted = new Map<string, string>();
   /** Every `ksor.superseded_by` this run would write, by the document writing it. */
@@ -272,6 +285,26 @@ export async function runMigrate(
         });
         continue;
       }
+      // BOTH reserved names can carry prose in one directory, and
+      // README-beside-index is an ordinary layout — precisely the population
+      // migrate exists to convert. Asking only whether the target was already
+      // on DISK missed the case where THIS run had just claimed it: both
+      // originals were emptied, both writes went to one path, the second won,
+      // and one document's prose was deleted with exit 0 and nothing printed
+      // (reproduced live, 2026-08-25). Which of two documents governs a
+      // directory is an authoring decision, so migrate refuses it the same way
+      // it refuses to invent a `description`.
+      const claimant = claimed.get(target);
+      if (claimant !== undefined) {
+        refusals.push({
+          slug: "ksor-migrate-underivable",
+          path: rel,
+          why: `\`${rel}\` and \`${claimant}\` both carry prose and both map to \`${target}\` — migrate will not choose which of the two governs this directory`,
+          fix: `merge the two by hand into one of them (or into ${target}) and delete the other, then run \`ksor migrate\` again`,
+        });
+        continue;
+      }
+      claimed.set(target, rel);
     }
     const out = migrateConcept(target, text, generatedAtOf(root, rel, parsed.generatedAt), ctx);
     if (!out.ok) {
@@ -385,7 +418,18 @@ export async function runMigrate(
     );
     return 0;
   }
-  for (const change of changes) {
+  // WRITES FIRST, DELETIONS LAST — the same set either way, but never a moment
+  // where a document's prose exists in neither file. A reserved name is emptied
+  // and its prose lands beside it, so applying in list order put the delete of
+  // `index.md` before the write of `overview.md`: interrupt it there — Ctrl-C,
+  // a full disk, a killed CI step — and the text is gone from a tree that never
+  // received its replacement. Recoverable from git IF the adopter had committed,
+  // which migrate does not check and cannot assume.
+  const ordered = [
+    ...changes.filter((c) => c.after !== null),
+    ...changes.filter((c) => c.after === null),
+  ];
+  for (const change of ordered) {
     const abs = path.join(root, change.path);
     if (change.after === null) {
       rmSync(abs, { force: true });
@@ -636,7 +680,11 @@ function manifestChange(root: string): FileChange | null {
     // `--knowledge` is gone too: the record root beside instance.md supplies
     // it, and the flag now refuses like any other unknown one — so a script
     // left carrying it would fail the adopter's first `ingest` after upgrading.
-    const stripped = value.replace(/\s+--knowledge(?:=|\s+)[^\s"]+/, "");
+    // A quoted value is matched explicitly. `[^\s"]+` alone could not match a
+    // value that STARTS with a quote, so `--knowledge "my knowledge"` — a path
+    // with a space, the commonest reason to quote one — was left in the script
+    // whole, which is the one case this strip exists for.
+    const stripped = value.replace(/\s+--knowledge(?:=|\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/g, "");
     next[key] =
       key === "build"
         ? stripped.replace(/^.*?export-denylist\s*&&\s*/, "ksor build && ")

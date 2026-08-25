@@ -32,16 +32,29 @@ import type { Denial, Ledger } from "../record/ledger.js";
 export interface DenialState {
   readonly stableId: string;
   readonly denial: Denial;
-  /** The revocation entry that lifted it, or null while it is in force. */
-  readonly revokedBy: { readonly id: string; readonly at: string } | null;
+  /**
+   * The revocation entry that lifted it, or null while it is in force.
+   *
+   * `by` is here because the §7 row for a lifted denial must name the person
+   * who LIFTED it. Collecting only `{ id, at }` left the insert with nothing
+   * but the denial's actor to use, so the trail credited the denier with the
+   * revocation and the revoker appeared nowhere — decision 21 inverted rather
+   * than merely unmet (found in review, 2026-08-25).
+   */
+  readonly revokedBy: { readonly id: string; readonly by: string; readonly at: string } | null;
 }
 
 /** The state each denied stable_id ends in after the whole ledger, in first-seen order. */
 export function foldLedger(ledger: Ledger): DenialState[] {
   const live = new Set(inForce(ledger).map((d) => d.id));
-  const revocations = new Map<string, { readonly id: string; readonly at: string }>();
+  const revocations = new Map<
+    string,
+    { readonly id: string; readonly by: string; readonly at: string }
+  >();
   for (const entry of ledger.entries) {
-    if (entry.kind === "revocation") revocations.set(entry.revokes, { id: entry.id, at: entry.at });
+    if (entry.kind === "revocation") {
+      revocations.set(entry.revokes, { id: entry.id, by: entry.by, at: entry.at });
+    }
   }
 
   const byStableId = new Map<string, DenialState>();
@@ -147,7 +160,9 @@ export async function applyLedger(
       [
         instance.tenantId,
         instance.corpusId,
-        d.by,
+        // The actor of THIS act: the revoker when a denial was lifted, the
+        // denier when it was applied. Never the process that ran ingest.
+        revoked ? state.revokedBy!.by : d.by,
         revoked ? "takedown_revoked" : "takedown_applied",
         JSON.stringify({
           stable_id: d.stableId,

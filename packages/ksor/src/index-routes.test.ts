@@ -63,6 +63,18 @@ describe("routes from an index", () => {
     expect(listingOf("", parseIndex("# X\n\n* [Elsewhere](https://example.com)\n"))).toEqual([]);
   });
 
+  it("a href carrying a bare % is the file it names, not a build-killing URIError", () => {
+    expect(listingOf("", parseIndex("# X\n\n* [Fifty off](50%-off.md) - Half price.\n"))).toEqual([
+      {
+        kind: "concept",
+        title: "Fifty off",
+        url: "/docs/50%-off",
+        path: "50%-off.md",
+        description: "Half price.",
+      },
+    ]);
+  });
+
   it("walks the indexes depth-first for the one reading order", () => {
     const indexes = new Map([
       ["", ROOT],

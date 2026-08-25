@@ -8,10 +8,12 @@ import {
   denies,
   entryDigest,
   inForce,
+  ledgerDigests,
   mintLedgerId,
   parseLedger,
   type Denial,
   type Ledger,
+  type LedgerBaseline,
   type LedgerEntry,
 } from "./ledger.js";
 
@@ -146,6 +148,23 @@ describe("inForce", () => {
 });
 
 describe("checkLedgerActors", () => {
+  /** What a build that PASSED recorded — the only evidence the record accepted an entry. */
+  const accepted = (l: Ledger): LedgerBaseline => ({
+    source: "build.lock.json",
+    accepted: true,
+    entries: ledgerDigests(l),
+  });
+  /** What was merely COMMITTED — every version of the file git remembers. */
+  const history = (l: Ledger): LedgerBaseline => ({
+    source: "git history",
+    entries: l.entries.map((e) => ({
+      id: e.id,
+      digest: entryDigest(e),
+      entry: e,
+      where: "abc1234",
+    })),
+  });
+
   it("every entry's `by` — denial, revocation, amendment — must be a takedown authority", () => {
     const l = ledgerOf(DENIAL + REVOCATION + AMENDMENT);
     const r = checkLedgerActors(l, ["human:ciso"]);
@@ -154,37 +173,131 @@ describe("checkLedgerActors", () => {
     expect(r[0]?.why).toMatch(/2026-08-26T10:00:00Z-d4e5f6/);
     expect(checkLedgerActors(l, ["human:ciso", "human:cfo"])).toEqual([]);
   });
+
+  /**
+   * A roster is a list of PEOPLE, and people leave. Judging committed entries
+   * against the present roster meant that removing a departed authority from
+   * `.ksor/governance.yaml` refused every entry they had ever written — the
+   * record stopped building on a personnel change — and the obvious escape,
+   * deleting those entries, is `ksor-ledger-shrank`. The only way out was to go
+   * on naming a departed person as an authority, which is a lie the policy
+   * would then carry forever.
+   */
+  it("does not re-judge an entry a passing build accepted, when its author leaves the roster", () => {
+    const l = ledgerOf(DENIAL + REVOCATION + AMENDMENT);
+    expect(checkLedgerActors(l, ["human:successor"], [accepted(l)])).toEqual([]);
+  });
+
+  /**
+   * The hole this must not open. Git history proves a line was COMMITTED, and
+   * anyone with write access can commit — a pull request that hand-appends an
+   * entry puts it in history before any check runs, and on a `pull_request`
+   * checkout that history includes the pull request's own commits. So history
+   * can never be the evidence that the RECORD accepted an entry; only the lock
+   * a passing build wrote can be, because writing that lock is what the
+   * authority check stands in front of.
+   */
+  it("git history never exempts an entry — a committed line is still a written line", () => {
+    const l = ledgerOf(DENIAL);
+    expect(checkLedgerActors(l, ["human:successor"], [history(l)]).map((x) => x.slug)).toEqual([
+      "ksor-takedown-unauthorised",
+    ]);
+  });
+
+  it("judges the entries an accepted baseline does not record, and only those", () => {
+    const before = ledgerOf(DENIAL);
+    const l = ledgerOf(DENIAL + REVOCATION);
+    const r = checkLedgerActors(l, ["human:ciso"], [accepted(before)]);
+    expect(r.map((x) => x.slug)).toEqual(["ksor-takedown-unauthorised"]);
+    expect(r[0]?.why).toMatch(/human:cfo/);
+  });
+
+  it("judges an entry whose text moved under an accepted id — acceptance is of TEXT, not of an id", () => {
+    const l = ledgerOf(DENIAL);
+    const retargeted = ledgerOf(DENIAL.replace("policies/old-threshold", "policies/open"));
+    expect(
+      checkLedgerActors(retargeted, ["human:successor"], [accepted(l)]).map((x) => x.slug),
+    ).toEqual(["ksor-takedown-unauthorised"]);
+  });
+
+  it("judges every entry when no baseline proves acceptance — the strict rule is the default", () => {
+    const l = ledgerOf(DENIAL);
+    expect(checkLedgerActors(l, ["human:successor"], []).map((x) => x.slug)).toEqual([
+      "ksor-takedown-unauthorised",
+    ]);
+  });
 });
 
 describe("checkLedgerAgainstTree", () => {
   const tree = {
-    conceptIds: new Set(["policies/old-threshold", "hr/leave"]),
+    documentIds: new Set(["policies/old-threshold", "hr/leave"]),
     dirs: new Set(["policies", "hr"]),
   };
 
-  /**
-   * A record-wide legal hold — `knowledge/#section` — is the shape `denies()`
-   * documents as supported ("the root covers everything"), and the tree check
-   * refused it as dangling on a directory it called `/`: the walker only ever
-   * pushes CHILD directories, so the bundle root is never in `dirs`. The two
-   * halves of one seam disagreed and the reachable half was the refusing one.
-   */
-  it("a subtree denial on the bundle root is not dangling — it is the whole record", () => {
-    const root = `- id: 2026-08-25T10:00:00Z-ffffff
+  const ROOT_HOLD = `- id: 2026-08-25T10:00:00Z-ffffff
   stable_id: knowledge/#section
   scope: subtree
   expected: present
   by: human:ciso
   at: 2026-08-25T10:00:00Z
+  reason: legal hold over the whole record
 `;
-    expect(checkLedgerAgainstTree(ledgerOf(root), tree)).toEqual([]);
-    expect(denies(inForce(ledgerOf(root)), "policies/old-threshold")).toBe(true);
+
+  /**
+   * A record-wide legal hold — `knowledge/#section` — is refused, because only
+   * ONE of the two surfaces can carry it out.
+   *
+   * The site can: `denies()` reads the empty prefix as "everything", so the
+   * website goes dark. The database cannot: the subtree walk decision 14
+   * specifies runs by `parent_id` from the node the denylist row NAMES, and no
+   * node has stable_id `knowledge/` — top-level sections are
+   * `knowledge/<section>#section` with `parent_id IS NULL` (measured on a live
+   * 187-document record: zero rows for `knowledge/` and zero for `knowledge`).
+   * So the seed is empty, the recursion never starts, and the door keeps
+   * serving every document. The surfaces do not merely differ, they INVERT:
+   * the visible one goes dark, which reads as confirmation that the hold
+   * worked, while the invisible one answers every agent — decision 19's
+   * forbidden state in its worst direction.
+   *
+   * This supersedes the earlier reading, which took `denies()` resolving the
+   * root as proof the hold was recordable and removed this refusal. Only the
+   * site half ever resolved it.
+   *
+   * Refused HERE and not in `parseEntry`, deliberately: the ledger is
+   * append-only, so the entry cannot be deleted (`ksor-ledger-shrank`), and
+   * the sanctioned exit — `ksor takedown --revoke <id>` — loads the file
+   * through `parseLedger` (`commands.ts:913`). A parse-time refusal would
+   * therefore leave the operator with no way out at all. Refusing on the
+   * in-force set keeps the entry readable, so revoking it works and stops the
+   * refusal.
+   */
+  it("a subtree denial on the record ROOT is refused — the serving half cannot honour it", () => {
+    const r = checkLedgerAgainstTree(ledgerOf(ROOT_HOLD), tree);
+    expect(r.map((x) => x.slug)).toEqual(["ksor-takedown-dangling"]);
+    expect(r[0]?.why).toContain("knowledge/#section");
+    expect(r[0]?.why).toMatch(/parent_id/);
+    expect(r[0]?.fix).toContain("--scope subtree knowledge/<section>");
+    expect(r[0]?.fix).toContain("2026-08-25T10:00:00Z-ffffff");
+  });
+
+  it("revoking the root hold clears the refusal — the exit the fix names actually works", () => {
+    const revoked = `${ROOT_HOLD}- id: 2026-08-26T10:00:00Z-aaabbb
+  revokes: 2026-08-25T10:00:00Z-ffffff
+  by: human:ciso
+  at: 2026-08-26T10:00:00Z
+  reason: replaced by a denial per section
+`;
+    expect(checkLedgerAgainstTree(ledgerOf(revoked), tree)).toEqual([]);
+  });
+
+  it("a subtree denial on a real top-level section is untouched — that is the recorded form", () => {
+    expect(checkLedgerAgainstTree(ledgerOf(SUBTREE), tree)).toEqual([]);
   });
 
   it("an in-force present node entry whose concept is gone is ksor-takedown-dangling", () => {
     const r = checkLedgerAgainstTree(ledgerOf(DENIAL), {
       ...tree,
-      conceptIds: new Set(["hr/leave"]),
+      documentIds: new Set(["hr/leave"]),
     });
     expect(r.map((x) => x.slug)).toEqual(["ksor-takedown-dangling"]);
     expect(r[0]?.fix).toMatch(/--removed/);
@@ -198,7 +311,7 @@ describe("checkLedgerAgainstTree", () => {
       ),
     ).toEqual(["ksor-takedown-dangling"]);
     expect(
-      checkLedgerAgainstTree(ledgerOf(DENIAL + REVOCATION), { ...tree, conceptIds: new Set() }),
+      checkLedgerAgainstTree(ledgerOf(DENIAL + REVOCATION), { ...tree, documentIds: new Set() }),
     ).toEqual([]);
   });
 
@@ -207,7 +320,7 @@ describe("checkLedgerAgainstTree", () => {
       "ksor-takedown-readded",
     ]);
     expect(
-      checkLedgerAgainstTree(ledgerOf(DENIAL + AMENDMENT), { ...tree, conceptIds: new Set() }),
+      checkLedgerAgainstTree(ledgerOf(DENIAL + AMENDMENT), { ...tree, documentIds: new Set() }),
     ).toEqual([]);
   });
 });
@@ -315,6 +428,8 @@ describe("denies — the in-force denials as a predicate over concept ids", () =
     expect(denies([denial("knowledge/a/b", "node")], "a/bc")).toBe(false);
     expect(denies([denial("knowledge/a#section", "subtree")], "a/b/c")).toBe(true);
     expect(denies([denial("knowledge/a#section", "subtree")], "ab/c")).toBe(false);
+    // Refused upstream by `checkLedgerAgainstTree`, so unreachable in a record
+    // that builds; it answers `true` because denying too much is the safe half.
     expect(denies([denial("knowledge/#section", "subtree")], "anything")).toBe(true);
     expect(denies([], "a")).toBe(false);
   });
@@ -428,7 +543,8 @@ describe("denies — the site's denial predicate, on the same in-force set", () 
     expect(denies(inForce(ledgerOf(DENIAL + AMENDMENT)), "policies/old-threshold")).toBe(true);
   });
 
-  it("the root section denies the whole bundle", () => {
+  /** The root form never reaches a published surface — `checkLedgerAgainstTree` refuses it. */
+  it("the root section denies the whole bundle, which is the fail-closed half of a refused entry", () => {
     const root = SUBTREE.replace("knowledge/policies#section", "knowledge/#section");
     expect(denies(inForce(ledgerOf(root)), "anything/at/all")).toBe(true);
   });

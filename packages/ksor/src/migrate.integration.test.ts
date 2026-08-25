@@ -627,6 +627,134 @@ describe("ksor migrate — what it refuses to invent", () => {
   });
 });
 
+/**
+ * `index.md` and `README.md` in ONE directory both map to `overview.md`, and
+ * README-beside-index is an ordinary repository layout — exactly the
+ * population migrate exists to convert.
+ *
+ * The collision guard asked only whether `overview.md` was already on DISK,
+ * never whether this run had already claimed it, so both were emptied, both
+ * writes went to one path, and the second won: one document's prose deleted,
+ * exit 0, nothing printed. Reproduced live before this test was written
+ * (2026-08-25) — the dry run showed `+++ b/knowledge/hr/overview.md` twice
+ * with different bodies, and `--write` left only the second.
+ *
+ * Refusing is the only correct answer: migrate never authors knowledge, and
+ * choosing which of two documents governs a directory is an authoring
+ * decision (record spec §7).
+ */
+/**
+ * Decision 21 again, at the argument seam. `--actor` guarded only against
+ * being ABSENT, so any string that was merely wrong went straight into the
+ * Governance Policy: `--actor ""` — a CI variable that never got set — wrote
+ * `actors: []`, a policy authorising NOBODY, exit 0; and one actor containing
+ * a comma became TWO authorities in the emitted YAML, granting approval
+ * authority to an identity the operator never named. Both reproduced live
+ * (2026-08-25). The validator that rejects them already existed; it was not
+ * applied here.
+ */
+describe("ksor migrate — the actor is validated, not merely present", () => {
+  const record = (): string =>
+    repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      [
+        "knowledge/policy.md",
+        "---\ntitle: Policy\ndescription: One sentence.\nstatus: approved\n---\n\nBody.\n",
+      ],
+    ]);
+
+  it.each([
+    ["an empty actor", "", "authorising nobody"],
+    [
+      "two actors in one string",
+      "human:jane, human:john",
+      "granting authority to a second identity",
+    ],
+    ["a bare handle", "jane", "with no kind"],
+    ["a team, which is not an individual", "team:people-ops", "which names no person"],
+  ])("refuses %s, before writing anything", (_label, value) => {
+    const root = record();
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", value);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("--actor");
+    expect(tree(root), "migrate wrote despite refusing the actor").toEqual(before);
+  });
+
+  it("refuses the same forms on --approve-by", () => {
+    const root = record();
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", "");
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("--approve-by");
+  });
+
+  it("still accepts a well-formed one", () => {
+    const root = record();
+    expect(run(root, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+  });
+});
+
+describe("ksor migrate — two reserved names in one directory", () => {
+  const collision = (): string =>
+    repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      [
+        "knowledge/hr/index.md",
+        "---\ntitle: HR\ndescription: The HR section.\nstatus: approved\n---\n\nThe leave-carryover exception, written down nowhere else.\n",
+      ],
+      [
+        "knowledge/hr/README.md",
+        "---\ntitle: HR readme\ndescription: How the handbook is maintained.\nstatus: approved\n---\n\nSeparate prose that also exists.\n",
+      ],
+    ]);
+
+  it("refuses, names both files, and writes nothing", () => {
+    const root = collision();
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("ksor-migrate-underivable");
+    const said = `${r.stdout}${r.stderr}`;
+    expect(said).toContain("knowledge/hr/README.md");
+    expect(said).toContain("knowledge/hr/index.md");
+    expect(tree(root), "migrate wrote to a record it had refused").toEqual(before);
+  });
+
+  it("writes the replacement BEFORE deleting the original it replaces", () => {
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      [
+        "knowledge/hr/index.md",
+        "---\ntitle: HR\ndescription: The HR section.\nstatus: approved\n---\n\nProse that exists nowhere else.\n",
+      ],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const wrote = r.stdout.indexOf("knowledge/hr/overview.md");
+    const deleted = r.stdout.indexOf("deleted knowledge/hr/index.md");
+    expect(wrote, `stdout:\n${r.stdout}`).toBeGreaterThan(-1);
+    expect(deleted, `stdout:\n${r.stdout}`).toBeGreaterThan(-1);
+    // Interrupted between the two, the prose must already exist somewhere.
+    expect(wrote, "the delete was applied before its replacement was written").toBeLessThan(
+      deleted,
+    );
+  });
+
+  it("does not refuse when the index is a generated one, which carries no prose", () => {
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      ["knowledge/hr/index.md", "# HR\n\n* [HR readme](README.md)\n"],
+      [
+        "knowledge/hr/README.md",
+        "---\ntitle: HR readme\ndescription: How the handbook is maintained.\nstatus: approved\n---\n\nSeparate prose that also exists.\n",
+      ],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(0);
+    expect(body(root, "knowledge/hr/overview.md")).toContain("Separate prose that also exists");
+  });
+});
+
 describe("ksor migrate — the takedown ledger is transcribed once", () => {
   const instance = [
     "instance.md",
@@ -801,6 +929,45 @@ describe("ksor migrate — the adopter's own gate", () => {
     expect(manifest.scripts["build"]).toBe("ksor build && pnpm -C system/site build");
     // Everything else is left exactly as the adopter had it.
     expect(manifest.scripts["dev"]).toBe("pnpm -C system/site dev");
+  });
+
+  /**
+   * A path with a space is quoted, and the strip's `[^\s"]+` could not match a
+   * value that starts with a quote — so the flag survived, silently, in the one
+   * shape a hand-written script is most likely to have. `--knowledge` refuses
+   * like any other unknown flag now, so what survives is not cosmetic: it is
+   * the adopter's first `ingest` after upgrading, failing.
+   */
+  it("strips --knowledge whether the path is bare, `=`-joined or quoted", () => {
+    const root = repo([
+      files[0],
+      files[1],
+      [
+        "package.json",
+        JSON.stringify(
+          {
+            name: "acme",
+            scripts: {
+              bare: "ksor ingest --instance instance.md --knowledge ./knowledge --flip",
+              joined: "ksor ingest --knowledge=./knowledge --flip",
+              quoted: 'ksor ingest --knowledge "my knowledge" --flip',
+              "quoted-joined": 'ksor ingest --knowledge="my knowledge" --flip',
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+      ],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const scripts = (JSON.parse(read(root, "package.json")) as { scripts: Record<string, string> })
+      .scripts;
+    for (const [name, script] of Object.entries(scripts)) {
+      expect(script, `${name} still carries the flag`).not.toContain("--knowledge");
+    }
+    expect(scripts["bare"]).toBe("ksor ingest --instance instance.md --flip");
+    expect(scripts["quoted"]).toBe("ksor ingest --flip");
   });
 
   it("leaves a record that carries neither alone", () => {

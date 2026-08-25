@@ -57,7 +57,7 @@ const PINNED: readonly (readonly [string, string])[] = [
 ];
 
 /** The leaf rules under `lib/` the record module and the site both read, held identical here. */
-const LIB_FILES = ["audience-rule.ts", "lifecycle-rule.ts"] as const;
+const LIB_FILES = ["audience-rule.ts", "lifecycle-rule.ts", "sim-rule.ts"] as const;
 
 /** Leaves the site carries with a drift test of their own, so this file only has to allow them. */
 const LIB_ELSEWHERE = ["order-rule.ts", "attachment-rule.ts"] as const;

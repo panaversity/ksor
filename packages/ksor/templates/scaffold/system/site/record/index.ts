@@ -68,6 +68,7 @@ export {
 } from "./lock";
 export { git, historicLedger, type HistoricLedger } from "./git-ledger";
 export { generateIndexes, parseIndex, humanise, type IndexInput } from "./index-file";
+export { actorKind, isIndividualActor } from "./actor";
 export { checkFootnotes, linkTargets, resolveLink } from "./citations";
 export { checkRecord, type RecordFiles, type CheckOptions, type CheckResult } from "./check";
 export { loadRecord, loadScaffoldStructure, resolveInstanceDir } from "./load";

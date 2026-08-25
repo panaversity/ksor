@@ -19,6 +19,11 @@ import {
   servedSimUrl,
   SIM_SUFFIX,
 } from "../templates/scaffold/system/site/lib/embed-rule.js";
+import {
+  isSim,
+  publicSimPath as kernelPublicSimPath,
+  SIM_SUFFIX as KERNEL_SIM_SUFFIX,
+} from "../../content/src/lib/sim-rule.js";
 
 describe("the rule", () => {
   for (const testCase of EMBED_CASES) {
@@ -158,5 +163,41 @@ describe("a sim carried in the record", () => {
     expect(byName.url).toBe("/sims/loop-engineering/goal-loop.html");
     // The panel says a very different thing for a page the record carries.
     expect(byName.owned).toBe("true");
+  });
+});
+
+/**
+ * What marks a carried page is decided TWICE — by the record's checker, which
+ * admits the file at all, and by this rule, which turns the link into a frame.
+ * If the two ever disagree, one of two silent states follows: a file the
+ * checker admits that no document can frame, or a link the site frames against
+ * a file the record refuses to hold. Neither goes red on its own, so the
+ * copies are pinned here (the kernel's is canonical — `SIM_SUFFIX`'s note in
+ * `embed-rule.ts` records why it is a copy and not an import).
+ */
+describe("the sim suffix is one rule, in both readers", () => {
+  it("the site's marker is the kernel's, exactly", () => {
+    expect(SIM_SUFFIX).toBe(KERNEL_SIM_SUFFIX);
+  });
+
+  it("and both derive the same served path from the same record path", () => {
+    for (const rel of [
+      "goal-loop.sim.html",
+      "loop-engineering/goal-loop.sim.html",
+      "a/b/c/deep.sim.html",
+    ]) {
+      expect(publicSimPath(rel)).toBe(kernelPublicSimPath(rel));
+    }
+  });
+
+  it("every url the rule frames as a carried sim is one the checker admits", () => {
+    const framed = EMBED_CASES.filter(
+      (c) => c.embeds && c.url.endsWith(SIM_SUFFIX) && !c.url.includes(":"),
+    );
+    expect(framed.length, "no carried-sim row left to check").toBeGreaterThan(0);
+    for (const c of framed) {
+      const base = c.url.slice(c.url.lastIndexOf("/") + 1);
+      expect(isSim(base), `the checker refuses ${c.url}, which this rule frames`).toBe(true);
+    }
   });
 });

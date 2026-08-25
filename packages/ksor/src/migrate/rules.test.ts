@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { splitFrontmatter } from "../../../content/src/record/frontmatter.js";
+import { parseConcept } from "../../../content/src/record/profile.js";
+
 import {
   expandTier,
   firstHeading,
@@ -197,6 +200,31 @@ describe("migrateConcept", () => {
     expect(r.refusals[0]!.why).toContain("legacy-purchase-approval");
     expect(r.refusals[0]!.why).toContain("`a`");
     expect(r.refusals[0]!.fix).toMatch(/denylist|takedown/);
+  });
+
+  // The checker refuses a line break in `title` or `description`
+  // (`ksor-one-line-form`) because §8 renders both into one index bullet. A
+  // block or folded scalar is an ordinary way to write a long one in YAML, so
+  // migrate folds it — the same division of labour as an instant, which
+  // migrate widens and the checker refuses. Handing back a tree its own
+  // checker rejects is not a migration.
+  it("folds a block title and a folded description onto one line", () => {
+    const r = run(
+      "title: |\n  Purchase\n  approval\ndescription: >\n  Who may\n  approve.\nstatus: draft\n",
+    );
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    const split = splitFrontmatter(r.outcome.text, "knowledge/a.md");
+    expect(split.ok, JSON.stringify(split)).toBe(true);
+    if (!split.ok) return;
+    const concept = parseConcept("knowledge/a.md", {
+      ...split.frontmatter,
+      ksor: { audience: ["public"] },
+    });
+    expect(concept.ok, JSON.stringify(concept)).toBe(true);
+    if (!concept.ok) return;
+    expect(concept.concept.title).toBe("Purchase approval");
+    expect(concept.concept.description).toBe("Who may approve.");
   });
 
   it("deletes id and name, which only ever restated the path", () => {

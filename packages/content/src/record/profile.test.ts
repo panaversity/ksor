@@ -254,6 +254,18 @@ describe("parseConcept — the §2 concept schema", () => {
     expect(r.concept.frontmatter["x-custom"]).toEqual({ deep: 1 });
   });
 
+  it.each([
+    ["title", "Purchase\napproval"],
+    ["description", "Who may approve a purchase.\n"],
+  ])("ksor-one-line-form: a line break in %s is refused, not rendered", (key, value) => {
+    const r = parseConcept(P, { ...STABLE, [key]: value });
+    expect(r.ok, JSON.stringify(r)).toBe(false);
+    if (r.ok) return;
+    const hit = r.refusals.find((x) => x.slug === "ksor-one-line-form");
+    expect(`${hit?.why}`).toContain(`\`${key}\``);
+    expect(`${hit?.fix}`).toContain(">-");
+  });
+
   it("refusals carry the document's path and are sorted for one print order", () => {
     const r = parseConcept(P, { ...STABLE, status: "nope", sources: [{ id: "a" }] });
     expect(r.ok).toBe(false);

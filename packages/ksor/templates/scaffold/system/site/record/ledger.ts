@@ -2,9 +2,10 @@
  * The takedown ledger, `.ksor/takedowns.yaml` (record spec §5): an
  * append-only list of denials, revocations and amendments, in file order.
  * Only `ksor takedown` writes it, and that is enforced by validation rather
- * than assumed — every entry's actor is checked against the policy's
- * takedown authorities here, so a line hand-appended in a pull request is
- * refused exactly as the verb would refuse it, and every entry's TEXT is
+ * than assumed — an entry the record has not yet accepted has its actor
+ * checked against the policy's takedown authorities here, so a line
+ * hand-appended in a pull request is refused exactly as the verb would refuse
+ * it, and every entry's TEXT is
  * checked against the versions history and the committed lock recorded, so a
  * line hand-EDITED is refused too. An entry is only ever superseded by a
  * revocation or an amendment appended after it.
@@ -198,21 +199,68 @@ export function inForce(ledger: Ledger): readonly Denial[] {
   return [...live.values()];
 }
 
-/** Every entry — denial, revocation, amendment — must be by a takedown authority. */
-export function checkLedgerActors(ledger: Ledger, takedownActors: readonly string[]): Refusal[] {
+/**
+ * Every entry — denial, revocation, amendment — must be by a takedown
+ * authority, checked where the ACT happens: an entry this record has not yet
+ * accepted. History is not re-litigated, and that is the whole of the rule.
+ *
+ * Judging every entry against the PRESENT roster made a personnel change break
+ * the record: remove a departed authority from `.ksor/governance.yaml` and
+ * every entry they had ever written refused, while the obvious remedy —
+ * deleting those entries — is `ksor-ledger-shrank`. The only escape left was to
+ * go on naming a departed person as a takedown authority, which is a lie the
+ * policy would then carry forever. An entry was authorised when it was written;
+ * the ledger is append-only precisely so the past is not rewritten.
+ *
+ * `accepted` is what makes this safe, and only a baseline that says so grants
+ * it. Git history proves a line was COMMITTED, and anyone with write access can
+ * commit — a pull request that hand-appends an entry puts it in history before
+ * any check runs — so exempting on history would have retired the guarantee
+ * this rule exists for (record spec §5: a line hand-appended in a pull request
+ * is refused exactly as the verb would refuse it). The committed lock is
+ * different: it is written by a build that PASSED, and this check is what that
+ * build had to get past. Acceptance is of TEXT, not of an id, so an entry
+ * retargeted under an accepted id is judged again.
+ */
+export function checkLedgerActors(
+  ledger: Ledger,
+  takedownActors: readonly string[],
+  baselines: readonly LedgerBaseline[] = [],
+): Refusal[] {
+  const accepted = acceptedEntries(baselines);
   return ledger.entries
-    .filter((e) => !takedownActors.includes(e.by))
+    .filter((e) => !takedownActors.includes(e.by) && !accepted.has(`${e.id}\t${entryDigest(e)}`))
     .map((e) => ({
       slug: "ksor-takedown-unauthorised",
       path: ".ksor/takedowns.yaml",
-      why: `entry \`${e.id}\` is by \`${e.by}\`, whom \`takedown_authorities\` does not name`,
-      fix: "only an actor the policy names may write the ledger — remove the entry, or add the actor to the policy in a reviewed change",
+      why: `entry \`${e.id}\` is by \`${e.by}\`, whom \`takedown_authorities\` does not name, and no build this record committed has accepted it — so it is judged as an entry being written now`,
+      fix: "only an actor the policy names may write the ledger — revert the appended entry, or name the actor in the policy in a reviewed change (an entry an earlier build accepted is history and is never judged again, so a departed authority's committed entries do not hold the policy hostage)",
     }));
 }
 
+/** `<id>\t<digest>` for every entry a baseline records as accepted; a digest-less one proves no text. */
+function acceptedEntries(baselines: readonly LedgerBaseline[]): Set<string> {
+  const out = new Set<string>();
+  for (const b of baselines) {
+    if (b.accepted !== true) continue;
+    for (const e of b.entries) if (e.digest !== null) out.add(`${e.id}\t${e.digest}`);
+  }
+  return out;
+}
+
 export interface TreeShape {
-  /** Bundle-relative concept ids (path without `knowledge/` and `.md`). */
-  readonly conceptIds: ReadonlySet<string>;
+  /**
+   * Every bundle-relative id the tree holds a DOCUMENT for — one that parsed
+   * into a concept, and one that did not. Not `conceptIds`, which is what this
+   * used to be: a denied document with a frontmatter typo is not a concept, so
+   * an in-force denial on it reported `ksor-takedown-dangling` — "this denial
+   * names a document that does not exist" — about a file still sitting in the
+   * checkout, and its remedy (`--removed`) appends a governance record
+   * asserting a removal that never happened (2026-08-25 review). Presence is a
+   * question about the TREE; whether a document is readable is the parse
+   * refusal's to raise, and it is raised, so nothing is published either way.
+   */
+  readonly documentIds: ReadonlySet<string>;
   /** Bundle-relative directories. */
   readonly dirs: ReadonlySet<string>;
 }
@@ -224,11 +272,28 @@ export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal
     const path = ".ksor/takedowns.yaml";
     if (d.scope === "subtree") {
       const dir = d.stableId.slice("knowledge/".length, -"#section".length);
-      // The bundle root is a directory of the tree that `dirs` never names —
-      // the walker pushes CHILD directories only. `knowledge/#section` is the
-      // record-wide legal hold `denies()` already resolves; refusing it here as
-      // "the subtree `/` no longer exists" made that hold unrecordable.
-      if (dir !== "" && !tree.dirs.has(dir)) {
+      // The record ROOT, `knowledge/#section`. Only ONE surface can carry it
+      // out: `denies()` reads the empty prefix as "everything", so the site
+      // goes dark, while the serving side walks `parent_id` from the node the
+      // denylist row NAMES (decision 14) and there is no node for the root —
+      // top-level sections carry `parent_id IS NULL` — so the seed is empty and
+      // the door serves every document. The surfaces INVERT: the visible one
+      // goes dark, which reads as confirmation, and the invisible one keeps
+      // answering. That is decision 19's forbidden state, so the hold is
+      // refused rather than half-performed. (Refused here and not in
+      // `parseEntry` on purpose: the entry must stay READABLE, because the exit
+      // this names — `--revoke` — loads the ledger through `parseLedger`, and
+      // append-only means the line cannot simply be deleted.)
+      if (dir === "") {
+        refusals.push({
+          slug: "ksor-takedown-dangling",
+          path,
+          why: `entry \`${d.id}\` denies the subtree \`${d.stableId}\` — the record root, which is no node: top-level sections are \`knowledge/<section>#section\` with no parent, so the serving side's \`parent_id\` walk seeds EMPTY and denies nothing, while the site's prefix test denies EVERYTHING. A hold that darkens the website and goes on serving every document to every agent is worse than no hold, because the dark website reads as confirmation`,
+          fix: `deny each top-level section instead — \`ksor takedown --scope subtree knowledge/<section>\`, one per section — and then lift this one with \`ksor takedown --revoke ${d.id}\``,
+        });
+        continue;
+      }
+      if (!tree.dirs.has(dir)) {
         refusals.push({
           slug: "ksor-takedown-dangling",
           path,
@@ -239,7 +304,10 @@ export function checkLedgerAgainstTree(ledger: Ledger, tree: TreeShape): Refusal
       continue;
     }
     const id = d.stableId.slice("knowledge/".length);
-    const present = tree.conceptIds.has(id);
+    // Both directions read the same presence: an unreadable document is here,
+    // so `present` does not dangle — and `removed` is still contradicted by a
+    // file at that path, which is the direction that must never go quiet.
+    const present = tree.documentIds.has(id);
     if (d.expected === "present" && !present) {
       refusals.push({
         slug: "ksor-takedown-dangling",
@@ -276,6 +344,18 @@ export interface LedgerBaselineEntry {
 export interface LedgerBaseline {
   readonly source: string;
   readonly entries: readonly LedgerBaselineEntry[];
+  /**
+   * Does this baseline prove the RECORD ACCEPTED these entries, or only that
+   * their text was committed? The committed lock is written by a build that
+   * passed every check in this file, so it says yes; git history says no,
+   * because committing is not passing (`checkLedgerActors`). Absent means no —
+   * a caller that proves nothing gets the strict rule.
+   *
+   * Append-only (`checkLedgerAppendOnly`) ignores this: for "was this id ever
+   * written" and "is it still the same text", a committed version is exactly
+   * the right evidence, and the one a single commit cannot rewrite.
+   */
+  readonly accepted?: boolean;
 }
 
 /**
@@ -375,10 +455,15 @@ function changedFields(before: LedgerEntry, after: LedgerEntry): string[] {
 /**
  * Does any in-force denial cover the concept `id` (bundle-relative)? A `node`
  * entry names exactly `knowledge/<id>`; a `subtree` entry names
- * `knowledge/<dir>#section` and covers every id beneath `dir/` (the root,
- * `knowledge/#section`, covers everything). Resolved at use, never expanded
- * at write time, for the reason decision 14 records: a subtree denial must
- * also cover a descendant a later change adds.
+ * `knowledge/<dir>#section` and covers every id beneath `dir/`. Resolved at
+ * use, never expanded at write time, for the reason decision 14 records: a
+ * subtree denial must also cover a descendant a later change adds.
+ *
+ * The ROOT, `knowledge/#section`, answers true for everything — but that is a
+ * backstop, not a feature: `checkLedgerAgainstTree` refuses the form, because
+ * the serving side cannot honour it and a hold only the website performs is
+ * worse than none. It stays true here because if the refusal were ever lifted,
+ * denying too much is the recoverable half and denying too little is a leak.
  *
  * `id === dir` is covered too. In a conformant record it cannot arise — a
  * `policies.md` beside a `policies/` is a refused route collision — but a

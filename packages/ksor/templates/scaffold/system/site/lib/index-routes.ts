@@ -65,7 +65,7 @@ export function dirOfRoute(url: string): string | null {
 export function listingOf(dir: string, entries: readonly IndexBullet[]): Listing[] {
   const prefix = dir === "" ? "" : `${dir}/`;
   return entries.flatMap((entry): Listing[] => {
-    const href = decodeURIComponent(entry.href);
+    const href = decodeHref(entry.href);
     if (href.endsWith("/")) {
       const path = `${prefix}${href.slice(0, -1)}`;
       return [
@@ -84,6 +84,26 @@ export function listingOf(dir: string, entries: readonly IndexBullet[]): Listing
       },
     ];
   });
+}
+
+/**
+ * A href is percent-encoded by SOME index writers and not by ours, so it is
+ * decoded before use — and an undecodable one is the href itself, never a
+ * throw. `decodeURIComponent` rejects a bare `%` (`50%-off.md` → URIError),
+ * which took down `next build` with a message naming no file at all (found
+ * live, 2026-08-25); the record now refuses that name outright
+ * (`ksor-name-unportable`), so this is the second half of the same fix rather
+ * than a substitute for it — a bundle from another OKF producer still reaches
+ * here, and it must render the listing it can rather than none.
+ * The record's `resolveLink` guards the identical call for the identical
+ * reason.
+ */
+function decodeHref(href: string): string {
+  try {
+    return decodeURIComponent(href);
+  } catch {
+    return href;
+  }
 }
 
 /**

@@ -8,6 +8,7 @@
  * Each rule keeps the scar that put it there.
  */
 import { ATTACHMENT_SUFFIXES, nearMissOf } from "../lib/attachment-rule.js";
+import { isSim, SIM_SUFFIX } from "../lib/sim-rule.js";
 import type { Refusal } from "./refusal.js";
 
 const KNOWLEDGE = "knowledge/";
@@ -108,6 +109,10 @@ export function checkHygiene(tree: HygieneTree): Refusal[] {
       continue;
     }
     const ext = base.includes(".") ? base.slice(base.lastIndexOf(".")) : "";
+    // A sim is admitted by its SUFFIX, never by its extension: `.html` in
+    // general stays refused, and only `<name>.sim.html` is a page the record
+    // carries (lib/sim-rule.ts).
+    const sim = isSim(base);
     if (base.endsWith(".mdx")) {
       refusals.push({
         slug: "ksor-file-type",
@@ -129,11 +134,22 @@ export function checkHygiene(tree: HygieneTree): Refusal[] {
         why: "a YAML file that is no companion — the record holds concepts, their companions and images; other formats cannot be governed or rendered",
         fix: "name it after its document (`<doc>.flashcards.yaml`, `<doc>.quiz.yaml`, `<doc>.slides.yaml`) or move it out of knowledge/",
       });
-    } else if (bytes !== null && !ASSET_EXTENSIONS.has(ext)) {
+    } else if (bytes !== null && !sim && (ext === ".html" || ext === ".htm")) {
+      // Split out of the refusal below because `.html` is the one extension an
+      // author can get RIGHT and still have refused: a carried page is a real
+      // thing here, and the only thing separating it from a stray export is a
+      // marker nothing else would tell them about.
       refusals.push({
         slug: "ksor-file-type",
         path,
-        why: `unexpected file type \`${ext || base}\` — the record holds markdown and images; other formats cannot be governed or rendered`,
+        why: `a page in the record that nothing can serve — a carried page is named \`<name>${SIM_SUFFIX}\`, and only that shape is published and framed`,
+        fix: `rename it to <name>${SIM_SUFFIX} and link it from its document as [label](<name>${SIM_SUFFIX} "embed"), or move it out of knowledge/`,
+      });
+    } else if (bytes !== null && !sim && !ASSET_EXTENSIONS.has(ext)) {
+      refusals.push({
+        slug: "ksor-file-type",
+        path,
+        why: `unexpected file type \`${ext || base}\` — the record holds markdown, images and carried pages; other formats cannot be governed or rendered`,
         fix: "convert it to markdown (the add-sources skill does this) or move it out of knowledge/",
       });
     } else if (bytes !== null && ext === ".png") {
@@ -167,6 +183,14 @@ function nameProblem(base: string): string | null {
   }
   if (base.startsWith("_")) {
     return `"${base}" is underscore-prefixed — site frameworks treat _files as hidden partials, and the record has no hidden documents`;
+  }
+  // A path is also a URL, and `%` is what starts an escape in one. `50%-off.md`
+  // is a malformed escape that kills the site build with a bare URIError naming
+  // no file, and `50%20off.md` decodes to a DIFFERENT name — so the character
+  // that is supposed to make a name unambiguous in a URL is the one that gives
+  // this document two identities (found live, 2026-08-25).
+  if (base.includes("%")) {
+    return `"${base}" contains a percent sign — the path is the document's URL, where \`%\` opens an escape sequence, so this name means one thing on disk and another (or nothing at all) to anything that reads a route`;
   }
   if (/\(.*\)/.test(base)) {
     return `"${base}" is parenthesized — renderers strip parenthesized segments from routes, giving one document two identities`;

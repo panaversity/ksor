@@ -32,6 +32,36 @@ describe("linkTargets and resolveLink — both OKF §6.1 forms", () => {
     expect(linkTargets(body)).toEqual(["../hr/leave.md", "/policies/x", "sub dir/y.md"]);
   });
 
+  /**
+   * A link whose TEXT is an image is one link with two destinations, and the
+   * one that decides governance is the OUTER one. Reading only the inner
+   * destination let a public document point at a restricted target and escape
+   * `ksor-link-widens`, `ksor-link-dead` and `ksor-link-escapes` at once —
+   * every rule that reads a link, silently, because the checker never saw the
+   * link at all (found in review, 2026-08-25).
+   */
+  it("reads BOTH destinations of an image wrapped in a link, outer one included", () => {
+    expect(linkTargets("[![chart](chart.png)](secret/plan.md)")).toEqual([
+      "chart.png",
+      "secret/plan.md",
+    ]);
+  });
+
+  it("reads a link whose text carries brackets, an image or emphasis", () => {
+    expect(linkTargets("[the [2026] policy](hr/leave.md)")).toEqual(["hr/leave.md"]);
+    expect(linkTargets("[see ![i](a.png) and ![j](b.png)](c.md)")).toEqual([
+      "a.png",
+      "b.png",
+      "c.md",
+    ]);
+    expect(linkTargets("[**bold** text](d.md)")).toEqual(["d.md"]);
+  });
+
+  it("still ignores destinations inside code, and an unclosed bracket names nothing", () => {
+    expect(linkTargets("`[x](nope.md)`")).toEqual([]);
+    expect(linkTargets("[unclosed(a.md)")).toEqual([]);
+  });
+
   it("resolves bundle-absolute against knowledge/ and relative against the source's directory, .md optional", () => {
     expect(resolveLink("policies/x", "/hr/leave.md")).toBe("hr/leave");
     expect(resolveLink("policies/x", "/hr/leave")).toBe("hr/leave");

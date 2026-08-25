@@ -103,6 +103,44 @@ describe("identity — path is the id (decision 26 retires sor_id)", () => {
     expect(section?.governance.audience, "no descendants: visible to nobody").toEqual([]);
   });
 
+  /**
+   * The predicate decision 24 says was breached last time: `x.summary.md` once
+   * ingested as a node of its own because the walk was a bare suffix test. A
+   * sim reaches this file as an ASSET rather than a name, so the same mistake
+   * cannot be made the same way — but it is asserted here anyway, because
+   * "a sim has no stable id and no MCP node" is the governance claim, and the
+   * only place it can be read off is the manifest the kernel ingests.
+   */
+  it("a carried sim creates no node and is never chunked — it is an asset", () => {
+    const check = checkRecord(
+      {
+        files: new Map(
+          Object.entries({
+            "instance.md": INSTANCE,
+            ".ksor/governance.yaml": POLICY,
+            "knowledge/a.md": doc("A"),
+          }),
+        ),
+        dirs: [],
+        assets: new Map([["knowledge/goal-loop.sim.html", new Uint8Array()]]),
+      },
+      { mode: "build" },
+    );
+    expect(check.refusals, "the checker refused a sim it is meant to admit").toEqual([]);
+    expect(
+      check.concepts.map((c) => c.id),
+      "a sim became a concept, which would give it an id of its own",
+    ).toEqual(["a"]);
+
+    const { manifest, sources } = buildManifestFromRecord(check, [], {
+      corpusId: "c",
+      sourceCommit: "dev",
+    });
+    expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["knowledge/a"]);
+    expect(manifest.files.map((f) => f.path)).toEqual(["knowledge/a.md"]);
+    expect([...sources.values()]).not.toContain("knowledge/goal-loop.sim.html");
+  });
+
   it("companions create no node and are never chunked", () => {
     const { manifest } = build({
       "knowledge/a.md": doc("A"),

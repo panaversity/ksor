@@ -63,11 +63,25 @@ export function historicLedger(root: string): HistoricLedger {
 }
 
 /**
- * Every version of the ledger in history, entry by entry. A version that
- * parses contributes each entry's digest, so an entry EDITED in place is
- * caught, not only one deleted; a version that no longer parses still
- * contributes its ids, read permissively — the point there is that an id once
- * written never disappears.
+ * Every id history has ever recorded, each with the text it carried the FIRST
+ * time it was written. A version that parses contributes each entry's digest,
+ * so an entry EDITED in place is caught, not only one deleted; a version that
+ * no longer parses still contributes its ids, read permissively — the point
+ * there is that an id once written never disappears.
+ *
+ * FIRST, not every: keying this by `id\tdigest` kept one baseline entry per
+ * version an id ever had, so a tamper that was COMMITTED and then UNDONE left
+ * two digests for one id, the restored entry matched only one of them, and
+ * `ksor-ledger-amended` fired for good. The record became permanently
+ * unbuildable — by a tamper that had already been put right — and the only
+ * escape was rewriting git history, which is not a remedy a refusal may
+ * demand (found in review, 2026-08-25).
+ *
+ * Taking the OLDEST is what makes the guarantee both enforceable and
+ * escapable. It still refuses a committed tamper (the baseline is what the
+ * entry said when it was written, so committing the edit does not launder
+ * it), and the remedy it names — put the entry back — now actually clears
+ * it. Taking the NEWEST would have done the opposite on both counts.
  */
 function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
   const prefix = (git(root, ["rev-parse", "--show-prefix"]) ?? "").trim();
@@ -79,17 +93,20 @@ function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
     if (text === null) continue;
     const where = sha.slice(0, 7);
     const parsed = parseLedger(text, LEDGER);
+    // `git log` is newest-first, so an OLDER version overwriting a newer one
+    // leaves the oldest — the text the id was written with.
     if (parsed.ok) {
       for (const entry of parsed.ledger.entries) {
-        const digest = entryDigest(entry);
-        seen.set(`${entry.id}\t${digest}`, { id: entry.id, digest, entry, where });
+        seen.set(entry.id, { id: entry.id, digest: entryDigest(entry), entry, where });
       }
       continue;
     }
     for (const m of text.matchAll(/^\s*(?:-\s+)?id:\s*["']?([^\s"']+)/gm)) {
       const id = m[1] ?? "";
-      const key = `${id}\t`;
-      if (!seen.has(key)) seen.set(key, { id, digest: null, where });
+      // Presence only, and never over a digest: a version that stopped
+      // parsing proves the id existed, and proves nothing about its text, so
+      // it must not erase what an older readable version already said.
+      if (!seen.has(id)) seen.set(id, { id, digest: null, where });
     }
   }
   return [...seen.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

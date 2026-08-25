@@ -240,6 +240,16 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     expected: ["ksor-status-unknown knowledge/bad.md"],
   },
   {
+    // A block scalar is how an author actually writes a long one, and it is the
+    // shape that costs the concept its §8 bullet — and with it the index, the
+    // sidebar and the reading order — while its page stays published.
+    name: "ksor-one-line-form",
+    files: base({
+      "knowledge/bad.md": frontmatter(stable.replace("title: T", "title: |\n  T\n  and more")),
+    }),
+    expected: ["ksor-one-line-form knowledge/bad.md"],
+  },
+  {
     name: "ksor-audience-unregistered",
     files: base({ "knowledge/bad.md": frontmatter(stable.replace("[public]", "[board]")) }),
     expected: ["ksor-audience-unregistered knowledge/bad.md"],

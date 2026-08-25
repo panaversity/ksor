@@ -17,7 +17,7 @@ import {
 import path from "node:path";
 
 import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
-import { publicSimPath, SIM_SUFFIX } from "./embed-rule";
+import { publicSimPath, SIM_SUFFIX } from "./sim-rule";
 import { refuse, viewer } from "./audience";
 import { overlaps } from "./audience-rule";
 import { admitsLifecycle, lifecycleBadge } from "./lifecycle-rule";

@@ -73,14 +73,21 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   const policy = policyResult.ok ? policyResult.policy : null;
   if (!policyResult.ok) refusals.push(...policyResult.refusals);
 
-  const title = checkInstance(record.files.get(INSTANCE_PATH) ?? null, refusals);
+  // `null` when instance.md could not be read: the index generator still needs
+  // a heading, and the staleness block still needs to know it is guessing.
+  const instanceTitle = checkInstance(record.files.get(INSTANCE_PATH) ?? null, refusals);
+  const title = instanceTitle ?? "Index";
 
   const assets = record.assets ?? new Map<string, Uint8Array>();
 
   // ── the bundle: concepts, companions, reserved names ───────────────────
   // A document that fails to parse is not a concept, so the indexes generated
-  // below are the indexes of a DIFFERENT tree — see the staleness block.
-  let dropped = false;
+  // below are the indexes of a DIFFERENT tree — see the staleness block. Its
+  // id is kept, because every rule that asks "is this in the tree?" must not
+  // read the absence of a CONCEPT as the absence of a DOCUMENT: the ledger and
+  // the supersession pointer both did, and both fabricated a refusal about a
+  // file still sitting in the checkout (2026-08-25 review).
+  const unreadable = new Set<string>();
   const concepts = new Map<string, Concept>();
   const bodies = new Map<string, string>();
   for (const path of paths) {
@@ -101,13 +108,13 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     const split = splitFrontmatter(text, path);
     if (!split.ok) {
       refusals.push(split.refusal);
-      dropped = true;
+      unreadable.add(conceptIdOf(path));
       continue;
     }
     const parsed = parseConcept(path, split.frontmatter ?? {});
     if (!parsed.ok) {
       refusals.push(...parsed.refusals);
-      dropped = true;
+      unreadable.add(conceptIdOf(path));
       continue;
     }
     concepts.set(parsed.concept.id, parsed.concept);
@@ -192,18 +199,22 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     const body = bodies.get(concept.id) ?? "";
     refusals.push(...checkFootnotes(concept.path, body, concept.sourceIds));
     checkLinks(concept.path, concept.audience, body, concept.id, targets, refusals);
-    checkSupersession(concept, concepts, refusals);
+    checkSupersession(concept, concepts, unreadable, refusals);
     if (policy !== null) checkAgainstPolicy(concept, policy, refusals);
   }
 
-  // Staleness is only answerable when every document parsed. A refused document
-  // is not a concept, so its directory generates a different index or none at
-  // all, and comparing against that produced one extra refusal per affected
-  // directory AND per ancestor — each prescribing "run `ksor build`", which
-  // refuses on the real error and writes nothing, and each saying of a correct
-  // index that it belongs to "a directory that earns none". One bad document,
+  // Staleness is only answerable when the generator's inputs were ALL readable
+  // — every document, and the instance whose title is the root index's heading.
+  // A refused document is not a concept, so its directory generates a different
+  // index or none at all, and comparing against that produced one extra refusal
+  // per affected directory AND per ancestor — each prescribing "run `ksor
+  // build`", which refuses on the real error and writes nothing, and each
+  // saying of a correct index that it belongs to "a directory that earns none".
+  // A refused instance did the same to the root index through the fallback
+  // heading, so a single typo in instance.md printed two errors and sent the
+  // operator at the one they cannot act on (2026-08-25 review). One bad input,
   // one problem; fix it and the next run answers this honestly.
-  if (options.mode === "check" && !dropped) {
+  if (options.mode === "check" && unreadable.size === 0 && instanceTitle !== null) {
     const expected = new Set(indexes.keys());
     const committed = paths.filter((p) => p.startsWith(KNOWLEDGE) && p.endsWith("/index.md"));
     for (const path of new Set([...expected, ...committed])) {
@@ -230,7 +241,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     if (policy !== null) refusals.push(...checkLedgerActors(ledger, policy.takedownActors));
     refusals.push(
       ...checkLedgerAgainstTree(ledger, {
-        conceptIds: new Set(concepts.keys()),
+        documentIds: new Set([...concepts.keys(), ...unreadable]),
         dirs: new Set(dirs),
       }),
     );
@@ -246,8 +257,14 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   };
 }
 
-/** Returns the instance title for the root index; refuses a pre-profile instance (one reader: `record/instance.ts`). */
-function checkInstance(text: string | null, refusals: Refusal[]): string {
+/**
+ * The instance title for the root index, or `null` when the instance could not
+ * be read — a distinction the caller needs, not decoration: the fallback
+ * heading generates a root index nothing in the tree matches, and reporting
+ * THAT as staleness prints a second refusal whose remedy cannot run.
+ * Refuses a pre-profile instance (one reader: `record/instance.ts`).
+ */
+function checkInstance(text: string | null, refusals: Refusal[]): string | null {
   if (text === null) {
     refusals.push({
       slug: "ksor-instance-format",
@@ -255,12 +272,12 @@ function checkInstance(text: string | null, refusals: Refusal[]): string {
       why: "instance.md is missing — it says what this record is authoritative for; without it nothing states the record's scope and the MCP server has no instructions",
       fix: "restore instance.md from git history, or run the intake-interview skill to write it",
     });
-    return "Index";
+    return null;
   }
   const parsed = parseInstanceDocument(text, INSTANCE_PATH);
   if (!parsed.ok) {
     refusals.push(...parsed.refusals);
-    return "Index";
+    return null;
   }
   return parsed.instance.title;
 }
@@ -401,6 +418,7 @@ function nonConceptWidens(
 function checkSupersession(
   concept: Concept,
   concepts: ReadonlyMap<string, Concept>,
+  unreadable: ReadonlySet<string>,
   refusals: Refusal[],
 ): void {
   if (concept.supersededBy === null) return;
@@ -417,6 +435,11 @@ function checkSupersession(
     });
     return;
   }
+  // The successor's document is right there and merely unreadable, so "names
+  // no concept" would be false and its remedy — drop the pointer — throws away
+  // a correct one. Its own parse refusal is the error, and it is already
+  // pushed; the next run judges this pointer against a real successor.
+  if (unreadable.has(concept.supersededBy)) return;
   const target = concepts.get(concept.supersededBy);
   const reason =
     target === undefined

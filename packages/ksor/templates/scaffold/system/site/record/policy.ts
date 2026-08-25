@@ -99,6 +99,63 @@ function checkPolicyKeys(value: unknown, path: string): Refusal[] {
   return refusals;
 }
 
+/**
+ * Why this scope path can never name a concept, or null when it can.
+ *
+ * `paths` holds bundle-relative directory prefixes (KSP-001 §4.2.5), matched
+ * segment-wise against concept ids — and `conceptIdOf` strips both the
+ * `knowledge/` prefix and the `.md`. So the two forms a hand reaches for first
+ * are the two that match NOTHING: `hr/handbook.md`, written as the file is
+ * named, and `knowledge/hr/`, written as the takedown ledger's `stable_id` is.
+ * Neither errored. The tightly scoped rule simply never applied and resolution
+ * fell through to a broader one, which is the failure this whole file exists to
+ * prevent — a rule the policy does not read is a rule that is not in force.
+ * They are refused rather than repaired, because guessing which document an
+ * author meant is the policy choosing an authority for them.
+ */
+function pathProblem(raw: string): { readonly why: string; readonly fix: string } | null {
+  const trimmed = raw.replace(/^\/+/, "").replace(/\/+$/, "");
+  const extension = /\.mdx?$/.exec(trimmed)?.[0];
+  if (extension !== undefined) {
+    return {
+      why: `which matches no concept: a path names a directory or a concept id, and neither carries a file extension — \`knowledge/hr/handbook.md\` is the concept \`hr/handbook\` — so this rule is not in force and resolution falls through to a broader one`,
+      fix: `write \`${trimmed.slice(0, -extension.length)}\` — a path matches the concept of exactly that id as well as everything beneath it, so one document can be scoped without its extension`,
+    };
+  }
+  if (trimmed === "knowledge" || trimmed.startsWith("knowledge/")) {
+    const rest = trimmed.slice("knowledge".length).replace(/^\//, "");
+    return {
+      why: "which matches no concept: scope paths are bundle-relative and start INSIDE `knowledge/`, unlike the takedown ledger's `stable_id`, which spells it out — so this rule is not in force and resolution falls through to a broader one",
+      fix:
+        rest === ""
+          ? "drop the prefix: `/` is the whole record, and so is omitting `paths` entirely"
+          : `drop the prefix: \`${rest}/\``,
+    };
+  }
+  return null;
+}
+
+/** Every `paths` entry of one rule family, in the vocabulary `POLICY_KEYS` uses. */
+function checkScopePaths(
+  rules: readonly { readonly scope?: Scope }[],
+  where: string,
+  path: string,
+  refusals: Refusal[],
+): void {
+  for (const rule of rules) {
+    for (const raw of rule.scope?.paths ?? []) {
+      const problem = pathProblem(raw);
+      if (problem === null) continue;
+      refusals.push({
+        slug: SLUG,
+        path,
+        why: `${where} scopes to \`${raw}\`, ${problem.why}`,
+        fix: problem.fix,
+      });
+    }
+  }
+}
+
 const policySchema = z.object({
   version: z.string().min(1),
   audiences: z
@@ -174,6 +231,10 @@ export function parsePolicy(text: string | null, path: string): PolicyResult {
     };
   }
   const fm = parsed.data;
+  const unmatchable: Refusal[] = [];
+  checkScopePaths(fm.ownership ?? [], "an `ownership` rule", path, unmatchable);
+  checkScopePaths(fm.approval_authorities, "an `approval_authorities` rule", path, unmatchable);
+  if (unmatchable.length > 0) return { ok: false, refusals: unmatchable };
   if (fm.audiences !== undefined && "public" in fm.audiences) {
     return {
       ok: false,
@@ -257,7 +318,13 @@ export function resolveOwner(policy: Policy, id: string, type: string): OwnerRes
   return { ok: true, owner: rules[0]?.owner ?? null };
 }
 
-/** Segment-wise: `finance/` covers `finance/x` and never `financeops/x`. */
+/**
+ * Segment-wise: `finance/` covers `finance/x` and never `financeops/x`. A bare
+ * `/` normalises to the empty prefix, which matches every concept at depth 0 —
+ * the same tier as omitting `paths`, so any deeper rule still beats it. Forms
+ * that could never match are refused at parse time (`pathProblem`), so
+ * everything reaching here can.
+ */
 function pathDepth(id: string, prefixes: readonly string[] | undefined): number | null {
   if (prefixes === undefined) return 0;
   let best: number | null = null;

@@ -223,14 +223,14 @@ export function migrateConcept(
     };
   }
 
-  const title = str(fm["title"]) ?? firstHeading(split.body);
+  const title = oneLine(str(fm["title"]) ?? firstHeading(split.body));
   if (title === null) {
     refuse(
       "no `title:` and no `# ` heading in the body — migrate never authors knowledge, and a title is knowledge",
       "add `title:` to the frontmatter (or a `# ` heading as the first line of the body) and run it again",
     );
   }
-  const description = str(fm["description"]);
+  const description = oneLine(str(fm["description"]));
   if (description === null) {
     refuse(
       "no `description:` — the profile requires one sentence saying what this document is, and migrate will not write it for you",
@@ -612,4 +612,18 @@ function sourcesFrom(raw: unknown): readonly Record<string, string>[] | null {
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+/**
+ * A concept's `title` and `description` on one line, whatever scalar style
+ * they were written in. The checker refuses a line break in either
+ * (`ksor-one-line-form`: §8 renders both into a single index bullet), and a
+ * YAML block or folded scalar is an ordinary way to write a long one — so
+ * migrate folds it rather than handing back a tree its own checker rejects.
+ * The same division of labour as an instant, which migrate widens and the
+ * checker refuses. Collapsing whitespace authors nothing: every word is the
+ * author's, in the author's order.
+ */
+function oneLine(value: string | null): string | null {
+  return value === null ? null : value.replace(/\s+/g, " ").trim();
 }

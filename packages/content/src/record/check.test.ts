@@ -549,4 +549,105 @@ describe("checkRecord — a refused document produces ONE problem, not a cascade
       "ksor-index-stale knowledge/policies/index.md",
     ]);
   });
+
+  /**
+   * The same shape one seam further along, and this one FABRICATES A
+   * GOVERNANCE FACT (2026-08-25 review). The ledger was judged against the
+   * concepts that PARSED, so a frontmatter typo on a denied document reported
+   * `ksor-takedown-dangling` — "this denial names a document that does not
+   * exist" — about a file still sitting in the checkout. Its printed remedy is
+   * the harmful part: acting on it appends a ledger entry asserting a removal
+   * that never happened.
+   */
+  const denial = (id: string, expected: string): string =>
+    `- id: 2026-08-25T10:00:00Z-aaaaaa\n  stable_id: knowledge/${id}\n  scope: node\n  expected: ${expected}\n  by: human:ciso\n  at: 2026-08-25T10:00:00Z\n`;
+
+  it("a denial on a document that failed to parse is not dangling", () => {
+    const dirs = ["knowledge/policies"];
+    const live = { ".ksor/takedowns.yaml": denial("policies/returns", "present") };
+    expect(slugs({ "knowledge/policies/returns.md": good, ...live }, dirs)).toEqual([]);
+    // The control the fix must not weaken: a denial that names nothing still dangles.
+    expect(
+      slugs(
+        {
+          "knowledge/policies/returns.md": good,
+          ".ksor/takedowns.yaml": denial("policies/gone", "present"),
+        },
+        dirs,
+      ),
+    ).toEqual(["ksor-takedown-dangling .ksor/takedowns.yaml"]);
+    expect(slugs({ "knowledge/policies/returns.md": typo, ...live }, dirs)).toEqual([
+      "ksor-ksor-key-unknown knowledge/policies/returns.md",
+    ]);
+  });
+
+  // The other direction of the same question, which must stay REFUSING: a
+  // ledger entry recording the path as removed is contradicted by a file at
+  // that path whether or not the file parses.
+  it("`expected: removed` still refuses a path that is back, unreadable or not", () => {
+    expect(
+      slugs(
+        {
+          "knowledge/policies/returns.md": typo,
+          ".ksor/takedowns.yaml": denial("policies/returns", "removed"),
+        },
+        ["knowledge/policies"],
+      ),
+    ).toEqual([
+      "ksor-takedown-readded .ksor/takedowns.yaml",
+      "ksor-ksor-key-unknown knowledge/policies/returns.md",
+    ]);
+  });
+
+  // `checkSupersession` asked the same question the same wrong way: the
+  // successor "names no concept" when its document is right there and merely
+  // unreadable, and the remedy — drop the pointer — throws away a correct one.
+  it("a successor that failed to parse does not strand the concept pointing at it", () => {
+    const dep = doc(
+      "A",
+      `ksor:\n  audience: [public]\n  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }\n  deprecated: { by: "human:ciso", at: 2026-08-22T09:00:00Z }\n  superseded_by: policies/returns\n`,
+    ).replace("status: stable", "status: deprecated");
+    const dirs = ["knowledge/policies"];
+    expect(slugs({ "knowledge/a.md": dep, "knowledge/policies/returns.md": good }, dirs)).toEqual(
+      [],
+    );
+    // The control: a successor that genuinely is not there still strands.
+    expect(slugs({ "knowledge/a.md": dep }, dirs)).toEqual([
+      "ksor-supersession-strands knowledge/a.md",
+    ]);
+    expect(slugs({ "knowledge/a.md": dep, "knowledge/policies/returns.md": typo }, dirs)).toEqual([
+      "ksor-ksor-key-unknown knowledge/policies/returns.md",
+    ]);
+  });
+
+  /**
+   * The instance is the other input the index generator reads — its title is
+   * the root index's heading — so a typo in `instance.md` made the generated
+   * root index differ from the committed one and printed `ksor-index-stale`
+   * beside `ksor-instance-format`. Two errors, and the second's remedy is
+   * `ksor build`, which refuses on the first and writes nothing.
+   */
+  it("an unreadable instance.md yields one refusal, not a stale index beside it", () => {
+    const generated = indexes({ "knowledge/policies/returns.md": good });
+    const committed = {
+      "knowledge/policies/returns.md": good,
+      "knowledge/index.md": generated.get("knowledge/index.md") ?? "",
+      "knowledge/policies/index.md": generated.get("knowledge/policies/index.md") ?? "",
+    };
+    expect(
+      slugs(
+        { ...committed, "instance.md": INSTANCE.replace("format: 2", "format: 1") },
+        ["knowledge/policies"],
+        "check",
+      ),
+    ).toEqual(["ksor-instance-format instance.md"]);
+    // The other way the instance is unreadable: it is not there at all.
+    const missing: RecordFiles = {
+      files: new Map(Object.entries({ ".ksor/governance.yaml": POLICY, ...committed })),
+      dirs: ["knowledge/policies"],
+    };
+    expect(
+      checkRecord(missing, { mode: "check" }).refusals.map((r) => `${r.slug} ${r.path}`),
+    ).toEqual(["ksor-instance-format instance.md"]);
+  });
 });

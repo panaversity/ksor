@@ -54,8 +54,8 @@ and the anchor a `subtree` takedown names.
 ```yaml
 ---
 type: Policy # required; reserved or custom (§2.1)
-title: Purchase approval # required
-description: Who may approve … # required, one sentence
+title: Purchase approval # required, one line
+description: Who may approve … # required, one sentence, one line
 status: draft # required: draft | stable | deprecated
 order: 2 # KSoR extension, optional
 generated: { by: "claude-code/1.0", at: 2026-08-20T09:00:00Z } # required when stable
@@ -87,7 +87,12 @@ by the starter and by `ksor migrate`, and will never be reserved. `Summary`
 is a companion marker (§1), not a concept type.
 
 **2.2 Required everywhere:** `type`, `title`, `description`, `status`,
-`ksor.audience`. **On reserved types:** `sources`, `ksor.owner`. **When
+`ksor.audience`. `title` and `description` are ONE LINE each
+(`ksor-one-line-form`, a trailing break from a `>` folded scalar included):
+§8 renders both into a single index bullet, so a break there does not render
+badly — it makes the bullet unreadable and drops the concept from the index,
+the sidebar and the reading order while its page stays published and the door
+keeps serving it. **On reserved types:** `sources`, `ksor.owner`. **When
 `stable`:** `generated` (with `at`) and `ksor.approval`, with `generated.at
 <= ksor.approval.at` (R23 — a comparison of two authored instants; whether an
 edit updated `generated.at` is the author's obligation until change-control
@@ -238,7 +243,15 @@ naming the key, the nearest allowed one and the set. There are no extension
 keys here: a stripped key in the root of authority WIDENS it, because
 `scope: { path: [...] }` (one letter) leaves an empty scope, which matches
 every concept and made a drafts-only rule the record's fallback (reproduced
-end to end, 2026-08-25). The policy is ingested — the registry and authority sets
+end to end, 2026-08-25). A `scope`'s `paths` are bundle-relative directory
+prefixes matched segment-wise, and they also match the concept of exactly that
+id; a leading or trailing `/` is trimmed, so a bare `/` is the whole record —
+depth 0, the tier omitting `paths` sits at, which any deeper rule beats. A path
+that can never match is `ksor-policy-invalid` rather than a rule that silently
+does nothing: one carrying a file extension (`hr/handbook.md` — a concept id
+carries none) and one repeating the `knowledge/` prefix (the ledger's
+`stable_id` spells it out; a scope path starts inside). Both fell through to a
+broader rule with nothing red. The policy is ingested — the registry and authority sets
 as `ingestion_runs.policy JSONB`, plus `policy_sha256` — so the door and the
 snapshot token bind to a row, and the served container never needs the file.
 
@@ -257,10 +270,18 @@ removed, by, at, reason }` — `expected` is `present` when the verb saw the
   same change.
 
 Only `ksor takedown` writes it, and that is **enforced by validation, not
-assumed**: every entry's `by` — denial, revocation, amendment — is checked
+assumed**: an entry's `by` — denial, revocation, amendment — is checked
 against `takedown_authorities` by `pnpm check`, `ksor build` and ingest
 (`ksor-takedown-unauthorised`), so a line hand-appended in a pull request is
-refused exactly as the verb would refuse it.
+refused exactly as the verb would refuse it. The check judges the entries this
+record has **not yet accepted**, and the committed `build.lock.json` is the
+only evidence of acceptance — it is written by a build that got past this very
+check, whereas git history proves only that a line was committed, which anyone
+with write access can do. History is therefore never re-litigated. Judging it
+broke the record on a personnel change: removing a departed authority refused
+every entry they had ever written, and the only escape was to go on naming
+them, since deleting the entries is `ksor-ledger-shrank`. Acceptance is of
+TEXT, so an entry retargeted under an accepted id is judged again.
 
 ```
 ksor takedown --actor <actor> [--instance <path>] [--scope node|subtree]
@@ -336,10 +357,30 @@ every shallow checkout would be turned off, and silence would be worse than
 either. The scaffold's `validate.yml` fetches full depth.
 
 **Dangling.** `ksor-takedown-dangling` applies to in-force (unrevoked)
-entries: a `present` `node` entry whose stable_id resolves to no concept,
-and a `subtree` entry whose directory no longer exists — a rename of a
-denied document goes red instead of republishing. A `removed` entry refuses
-when the path **reappears** (`ksor-takedown-readded`).
+entries: a `present` `node` entry whose stable_id resolves to no document in
+the tree, and a `subtree` entry whose directory no longer exists — a rename of
+a denied document goes red instead of republishing. A `removed` entry refuses
+when the path **reappears** (`ksor-takedown-readded`). It also refuses a
+`subtree` entry naming the record ROOT, `knowledge/#section`: only the site can
+carry that out — `denies()` reads the empty prefix as everything, while the
+serving side walks `parent_id` from the node the denylist row names and the
+root is no node, so its seed is empty and the door serves the whole record. A
+hold that darkens the website and answers every agent is worse than none,
+because the dark website reads as confirmation. The refusal names the form that
+works — one `subtree` entry per top-level section — and it is raised on the
+IN-FORCE set rather than at parse time, so the entry stays readable and
+`--revoke`, which loads the file through `parseLedger`, remains the exit.
+
+Presence is asked of the **tree**, not of the concept set: a document that
+fails to parse is not a concept but is still there, and judging it absent made
+a frontmatter typo on a denied document report `ksor-takedown-dangling`, whose
+remedy (`--removed`) appends a governance record asserting a removal that never
+happened. The parse refusal is the error. The same rule governs
+`ksor-supersession-strands`, which is silent about a successor that exists and
+cannot be read, and `ksor-index-stale`, which is silent whenever an input to
+the index generator — any document, or the `instance.md` whose title is the
+root index's heading — could not be read, because its remedy is `ksor build`
+and that refuses on the real error and writes nothing.
 
 ## 6 · The checker
 
@@ -355,7 +396,8 @@ and writes only on success. Refusals, each with a stable slug, why, and the
 fix: `ksor-frontmatter-invalid` (§2.6 — no closing fence, unparsable YAML,
 duplicate key, non-plain tag, second document, non-mapping),
 `ksor-missing-key` (`type`/`title`/`description`/`status`),
-`ksor-status-unknown`, `ksor-audience-missing`, `ksor-audience-unregistered`,
+`ksor-status-unknown`, `ksor-one-line-form` (a line break in `title` or
+`description`, §2.2), `ksor-audience-missing`, `ksor-audience-unregistered`,
 `ksor-stable-ungenerated`, `ksor-stable-unapproved`,
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,
 `ksor-deprecated-unattributed`, `ksor-deprecator-unauthorised`,
@@ -397,11 +439,13 @@ the closed set at any level, a group not written as a block, a non-boolean
 rules the scaffold's hand-written checker carried, ported so nothing it
 refused is accepted silently: `ksor-record-empty` (no concept at all),
 `ksor-symlink`, `ksor-name-unportable` (whitespace, `<>:"|?*`, a trailing dot,
-a Windows device name, uppercase, non-ASCII, a leading underscore,
-parentheses — on files and directories alike), `ksor-name-collides` (two
+a Windows device name, uppercase, non-ASCII, a leading underscore, a percent
+sign, parentheses — on files and directories alike), `ksor-name-collides` (two
 paths one apart in case; a concept `x.md` beside a directory `x/`),
-`ksor-file-type` (`.mdx`, `meta.json`, a YAML that is no companion, anything
-but markdown and `png/jpg/jpeg/gif/svg/webp`), `ksor-asset-corrupt` (a PNG
+`ksor-file-type` (`.mdx`, `meta.json`, a YAML that is no companion, an
+`.html`/`.htm` that is not a `<name>.sim.html` carried page — refused in its
+own words, because it is the one extension an author gets right and still has
+refused — anything but markdown, `png/jpg/jpeg/gif/svg/webp` and `.sim.html`), `ksor-asset-corrupt` (a PNG
 whose signature or chunk CRC fails), `ksor-attachment-near-miss` (`.yml`,
 `.json`, `.markdown` one character off a companion), `ksor-link-dead` (a
 record-internal link that resolves to no concept, companion, asset,

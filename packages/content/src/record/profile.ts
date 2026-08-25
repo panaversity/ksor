@@ -155,6 +155,9 @@ export type ConceptResult =
 
 const FLOOR_KEYS = ["type", "title", "description", "status"] as const;
 
+/** The keys §8 renders into one index bullet, so each is one line (see `parseConcept`). */
+const ONE_LINE_KEYS = ["title", "description"] as const;
+
 /**
  * The profile's own top-level keys. The concept schema stays OPEN (OKF §11: a
  * consumer preserves keys it does not know), so this list is not a closed set
@@ -221,6 +224,26 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
       );
     }
   }
+  // §8 renders `title` and `description` into ONE index bullet, so a line break
+  // inside either does not render badly — it makes the bullet unparseable and
+  // the concept simply LEAVES the index, the sidebar and the reading order,
+  // while keeping its route and staying served by the door (found live,
+  // 2026-08-25). Nothing goes red: the generator and the parser are two halves
+  // of one format and agree on the broken output, so `ksor-index-stale` still
+  // passes. A trailing break is the same defect wearing a YAML scalar style —
+  // `>` folds onto one line and keeps the newline, which empties the
+  // description in the bullet and nowhere else. Refused here, at the one place
+  // both surfaces read, rather than repaired per surface (decision 18).
+  for (const key of ONE_LINE_KEYS) {
+    const value = frontmatter[key];
+    if (typeof value !== "string" || !/[\r\n]/.test(value)) continue;
+    refuse(
+      "ksor-one-line-form",
+      `\`${key}\` contains a line break — it is one line, because the §8 index renders it into a single bullet; a break makes that bullet unreadable and the concept disappears from the index, the sidebar and the reading order while its page stays published`,
+      `write \`${key}\` on one line — for a long one, a folded scalar that strips its trailing break (\`${key}: >-\`) keeps the file readable and stays one line`,
+    );
+  }
+
   const ksor = frontmatter["ksor"];
   const audience =
     typeof ksor === "object" && ksor !== null && !Array.isArray(ksor)

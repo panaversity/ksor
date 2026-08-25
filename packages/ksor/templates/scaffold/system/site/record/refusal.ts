@@ -9,6 +9,7 @@ export const REFUSAL_SLUGS = [
   "ksor-frontmatter-invalid",
   "ksor-missing-key",
   "ksor-status-unknown",
+  "ksor-one-line-form",
   "ksor-audience-missing",
   "ksor-audience-unregistered",
   "ksor-stable-ungenerated",

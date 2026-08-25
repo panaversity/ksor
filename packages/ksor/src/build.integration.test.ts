@@ -341,12 +341,21 @@ describe("ksor build — assets are part of what was checked", () => {
 
 describe("ksor build — a record-wide legal hold", () => {
   /**
-   * `knowledge/#section` is the shape `denies()` documents as covering
-   * everything, and `checkLedgerAgainstTree` refused it as "the subtree `/`,
-   * which no longer exists" — the bundle root is never in the walker's `dirs`.
-   * A legal hold over a whole record was therefore unrecordable.
+   * A hold over the WHOLE record is refused, because only the website could
+   * carry it out. `denies()` reads the empty prefix as "everything", so every
+   * concept went unadmitted and the build exited 0 — while the serving side
+   * walks `parent_id` from the node the denylist row names (decision 14) and
+   * there is no node for the record root, so its seed is empty and the door
+   * goes on serving every document. Walked on a live 187-document record:
+   * `select count(*) from content_nodes where stable_id = 'knowledge/'` is 0.
+   * The website going dark then reads as confirmation that a hold is in place
+   * over a door that never stopped answering — decision 19's forbidden state,
+   * inverted.
+   *
+   * This supersedes the earlier fix, which took the site half resolving the
+   * root as proof the hold was recordable.
    */
-  it("a subtree denial on the bundle root builds, with every concept unadmitted", () => {
+  it("a subtree denial on the bundle root is refused, naming the per-section form", () => {
     const root = repo();
     writeFileSync(
       path.join(root, ".ksor/takedowns.yaml"),
@@ -360,8 +369,11 @@ describe("ksor build — a record-wide legal hold", () => {
 `,
     );
     const r = build(root, "--as-of", AS_OF);
-    expect(r.status, r.stderr).toBe(0);
-    expect(lockOf(root).documents.every((d) => d.admitted.length === 0)).toBe(true);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-takedown-dangling");
+    expect(r.stderr).toContain("knowledge/#section");
+    expect(r.stderr).toContain("--scope subtree knowledge/<section>");
+    expect(r.stderr).toContain("--revoke 2026-08-25T09:00:00Z-eeeeee");
   });
 });
 

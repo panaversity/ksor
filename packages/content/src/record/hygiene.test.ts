@@ -69,6 +69,7 @@ describe("hygiene — names are portable identities", () => {
     ["knowledge/what?.md", "portable"],
     ["knowledge/_hidden.md", "underscore"],
     ["knowledge/a(1).md", "parenthes"],
+    ["knowledge/50%-off.md", "percent"],
   ])("%s is ksor-name-unportable (%s)", (path, word) => {
     const out = checkRecord(record({ ...A, [path]: DOC }), { mode: "build" });
     const hit = out.refusals.find((r) => r.slug === "ksor-name-unportable");
@@ -123,6 +124,36 @@ describe("hygiene — what a file may be", () => {
     expect(slugs(A, { assets: { "knowledge/pic.png": png } })).toContain(
       "ksor-asset-corrupt knowledge/pic.png",
     );
+  });
+
+  // A sim is an ASSET, not an attachment: named freely, many per document, and
+  // linked from the prose the way a figure is. So the rule here is the SUFFIX
+  // and nothing else — there is no parent name to check, because seven sims in
+  // one folder cannot all be named after the one document that frames them.
+  it("a `<name>.sim.html` is admitted; every other .html stays refused", () => {
+    const out = slugs(A, {
+      assets: {
+        "knowledge/goal-loop.sim.html": new Uint8Array(),
+        "knowledge/deep/nested-loop.sim.html": new Uint8Array(),
+        "knowledge/page.html": new Uint8Array(),
+        // A dotfile with no stem is not a sim, exactly as it is not an
+        // attachment — so it falls through to the unexpected-file refusal
+        // rather than being admitted as one.
+        "knowledge/.sim.html": new Uint8Array(),
+      },
+    });
+    expect(out.filter((s) => s.startsWith("ksor-file-type"))).toEqual([
+      "ksor-file-type knowledge/.sim.html",
+      "ksor-file-type knowledge/page.html",
+    ]);
+  });
+
+  it("a bare .html is told the shape a carried page has to take", () => {
+    const r = checkRecord(record(A, { assets: { "knowledge/page.html": new Uint8Array() } }), {
+      mode: "build",
+    });
+    const hit = r.refusals.find((x) => x.path === "knowledge/page.html");
+    expect(`${hit?.why} ${hit?.fix}`).toContain(".sim.html");
   });
 
   it("ksor-attachment-near-miss names the extension the author meant, and nothing else about the file", () => {

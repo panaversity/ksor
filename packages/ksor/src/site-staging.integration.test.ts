@@ -902,3 +902,97 @@ describe("the lock's freshness claim covers the control files", () => {
     expect(walkFiles(fixture.stage)).not.toContain("denied.md");
   });
 });
+
+/**
+ * A SIM is a page the record carries — `<name>.sim.html`, framed click-to-load
+ * at the point in the prose its link sits at (`lib/embed-rule.ts`). It is an
+ * ASSET, not a study attachment: named freely, many per document, and reaching
+ * a reader only through a link in a document that survived every filter.
+ *
+ * Which makes its governance entirely inherited, and worth asserting rather
+ * than assuming — a sim is the one asset that becomes a URL of its own, so a
+ * copy that escapes the filter is not an unreferenced byte in the bundle, it is
+ * a page anyone can open. The four states below are the ones that decide it.
+ */
+describe("a carried sim inherits its document's governance", () => {
+  let work: string;
+  let fixture: Fixture;
+  let publicSims: string;
+
+  /** Put `link` in this document's body, where an author would write it. */
+  const linkFrom = (root: string, rel: string, target: string): void => {
+    const file = path.join(root, "knowledge", rel);
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replace("Body of", `[Play it](${target} "embed")\n\nBody of`),
+    );
+  };
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-site-sims-")));
+    fixture = writeRecord(path.join(work, "record"));
+    publicSims = path.join(fixture.site, "public", "sims");
+    const knowledge = path.join(fixture.root, "knowledge");
+    const sim = (rel: string, marker: string): void =>
+      writeFileSync(path.join(knowledge, rel), `<!doctype html><title>${marker}</title>\n`);
+
+    sim("pubsim.sim.html", "PUBSIMBODY");
+    linkFrom(fixture.root, "public-policy.md", "pubsim.sim.html");
+    sim("secret/plansim.sim.html", "SECRETSIMBODY");
+    linkFrom(fixture.root, "secret/plan.md", "plansim.sim.html");
+    sim("deniedsim.sim.html", "DENIEDSIMBODY");
+    linkFrom(fixture.root, "denied.md", "deniedsim.sim.html");
+    sim("archive/gonesim.sim.html", "ARCHIVESIMBODY");
+    linkFrom(fixture.root, "archive/gone.md", "gonesim.sim.html");
+    // Linked by nothing. The record has never refused an unreferenced asset,
+    // so what has to be true is that it never reaches a url either.
+    sim("orphan.sim.html", "ORPHANSIMBODY");
+    writeLock(fixture.root);
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  it("a public document's sim is staged and published where it can be served", () => {
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).toContain("pubsim.sim.html");
+    // The record path is the identity, and `.sim.html` becomes `.html`.
+    expect(readFileSync(path.join(publicSims, "pubsim.html"), "utf8")).toContain("PUBSIMBODY");
+  });
+
+  it("an internal document's sim reaches no public build, bytes or name", () => {
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).not.toContain("secret/plansim.sim.html");
+    expect(existsSync(path.join(publicSims, "secret", "plansim.html"))).toBe(false);
+    expect(bytesOf(publicSims).toString("utf8")).not.toContain("SECRETSIMBODY");
+  });
+
+  it("and the internal viewer, who may read the document, gets its sim", () => {
+    const r = stage(fixture, { KSOR_AUDIENCE: "public,internal" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).toContain("secret/plansim.sim.html");
+    expect(readFileSync(path.join(publicSims, "secret", "plansim.html"), "utf8")).toContain(
+      "SECRETSIMBODY",
+    );
+  });
+
+  it("a taken-down document's sim is denied with it — node and subtree alike", () => {
+    // Widest possible viewer, so nothing here is explained by the audience
+    // filter: a takedown beats every other consideration, for every viewer.
+    const r = stage(fixture, { KSOR_AUDIENCE: "public,internal" });
+    expect(r.status, r.stderr).toBe(0);
+    const staged = walkFiles(fixture.stage);
+    expect(staged).not.toContain("deniedsim.sim.html");
+    expect(staged).not.toContain("archive/gonesim.sim.html");
+    const published = bytesOf(publicSims).toString("utf8");
+    expect(published, "a denied document's sim was published").not.toContain("DENIEDSIMBODY");
+    expect(published, "a subtree denial's sim was published").not.toContain("ARCHIVESIMBODY");
+  });
+
+  it("a sim no document links is never published, so it is never a url", () => {
+    const r = stage(fixture, { KSOR_AUDIENCE: "public,internal" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).not.toContain("orphan.sim.html");
+    expect(existsSync(path.join(publicSims, "orphan.html"))).toBe(false);
+  });
+});

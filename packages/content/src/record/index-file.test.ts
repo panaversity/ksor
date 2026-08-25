@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { generateIndexes, humanise, type IndexInput } from "./index-file.js";
+import { generateIndexes, humanise, type IndexInput, parseIndex } from "./index-file.js";
+import { parseConcept } from "./profile.js";
 
 const INPUT: IndexInput = {
   title: "Acme",
@@ -116,6 +117,57 @@ describe("generateIndexes — OKF §8 form (record spec §7.4, build spec §1 st
     });
     expect(one.get("index.md")).toContain("* [A [b] (c)](a.md) - d - e\n");
   });
+});
+
+/**
+ * The generator and the parser are two halves of ONE file format, so they agree
+ * with each other on any bytes at all — which is why `ksor-index-stale` stays
+ * green over an index whose bullets nothing can read. What has to hold instead
+ * is that a concept the PROFILE accepts survives its own bullet: one that does
+ * not is dropped from the index, the sidebar and the reading order while it
+ * keeps its route and stays served by the door — one surface silently losing
+ * what another still serves, which is decision 19's failure mode.
+ */
+describe("a concept the profile accepts survives its own index bullet", () => {
+  const CASES = [
+    "Purchase approval",
+    "A [b] (c)",
+    "Dashes - and \u2014 dashes",
+    "\u00dcn\u00efcode, \u2018quotes\u2019 and 30% off",
+    "Multi\nline",
+    "Folded, so it ends in a newline\n",
+  ] as const;
+
+  it.each(CASES.flatMap((v) => [["title", v] as const, ["description", v] as const]))(
+    "%s: %j",
+    (key, value) => {
+      const r = parseConcept("knowledge/a.md", {
+        type: "Document",
+        title: "T",
+        description: "D",
+        status: "draft",
+        ksor: { audience: ["public"] },
+        [key]: value,
+      });
+      if (!r.ok) {
+        expect(
+          r.refusals.map((x) => x.slug),
+          JSON.stringify(r.refusals),
+        ).toContain("ksor-one-line-form");
+        expect(value, "only a line break may cost a concept its bullet").toMatch(/[\r\n]/);
+        return;
+      }
+      const { id, title, description, order } = r.concept;
+      const index = generateIndexes({
+        title: "T",
+        concepts: [{ id, title, description, order }],
+        dirs: [],
+      });
+      expect(parseIndex(index.get("index.md") ?? "")).toEqual([
+        { heading: "T", title, href: "a.md", description },
+      ]);
+    },
+  );
 });
 
 describe("humanise", () => {

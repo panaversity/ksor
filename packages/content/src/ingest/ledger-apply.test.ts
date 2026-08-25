@@ -33,9 +33,24 @@ describe("foldLedger — the state each stable_id ends in", () => {
   });
   it("a revocation lifts it — the row stays, revoked", () => {
     const [s] = fold(D1 + R1);
-    expect(s?.revokedBy).toEqual({ id: "r1", at: "2026-08-25T10:00:00Z" });
+    expect(s?.revokedBy).toEqual({ id: "r1", by: "human:ciso", at: "2026-08-25T10:00:00Z" });
     expect(s?.denial.id).toBe("d1");
   });
+  /**
+   * Decision 21: a governance act NAMES its actor. Alice denies, Bob revokes —
+   * and the §7 row for the revocation was attributed to `d.by`, the DENIAL's
+   * actor, because the fold dropped `by` when it collected the revocation.
+   * So the record said Alice lifted a denial she did not lift, and Bob, who
+   * did, appeared nowhere. A wrong name in the audit trail is worse than the
+   * missing one decision 21 was written about (found in review, 2026-08-25).
+   */
+  it("carries the REVOKER's actor, not the denier's", () => {
+    const byBob = `- id: r9\n  by: human:bob\n  at: 2026-08-25T11:00:00Z\n  revokes: d1\n`;
+    const [s] = fold(D1 + byBob);
+    expect(s?.denial.by).toBe("human:ciso");
+    expect(s?.revokedBy).toEqual({ id: "r9", by: "human:bob", at: "2026-08-25T11:00:00Z" });
+  });
+
   it("a re-denial after a revocation is in force again under the NEW entry", () => {
     const D3 = ENTRY("d3", "  stable_id: knowledge/x\n  scope: node\n  expected: present\n");
     const [s] = fold(D1 + R1 + D3);
