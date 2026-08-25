@@ -26,19 +26,6 @@ Refuse a withdrawal a document attests for itself, and close three record-checke
   is a legal character in one Linux filename and the path separator on Windows,
   where the checkout fails outright.
 
-- **A departed takedown authority no longer holds the record hostage.** The rule
-  that exempts entries an earlier build already accepted existed but was never
-  reached: `checkRecord` called `checkLedgerActors` without its `baselines`
-  argument, so the accepted set was always empty and every entry was judged
-  against the PRESENT roster. Remove a departed authority from
-  `.ksor/governance.yaml` and every entry they ever wrote refused, on
-  `pnpm check`, `ksor build`, `ksor ingest` and the site's stage — while
-  deleting those entries is `ksor-ledger-shrank`, so the only escape was to go
-  on naming a departed person as a live authority. The refusal's own remedy
-  text described the exemption as working. The argument is now passed, and the
-  parameter is REQUIRED, so a caller that forgets it fails to compile instead of
-  quietly getting the strict rule.
-
 - **`index.summary.md` is refused (`ksor-attachment-of-index`).** A generated
   index is not a document — no route, no node, no governance — so nothing can
   attach to it, and the orphan rule could not see the problem because the

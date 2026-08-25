@@ -22,8 +22,10 @@ Governance:
   `outline` with `child_count: 0`, while the site pruned the folder entirely.
   Denial binds inside the admission walk, so both surfaces refuse it. **This
   moves the serving predicate's digest**, so a record with a calibrated
-  `vector_floor` will refuse to boot until `ksor calibrate` is re-run — the
-  candidate set search sees is unchanged, but the tripwire cannot know that.
+  `vector_floor` refuses every `search`, `read` and `outline` with
+  `ksor-uncalibrated` until `ksor calibrate` is re-run. The door still boots,
+  and its report says so; the candidate set search sees is unchanged, but the
+  tripwire cannot know that.
 
 Reading order — the site and the door disagreed three ways, and now share one
 rule asserted row by row: folders interleave with documents instead of

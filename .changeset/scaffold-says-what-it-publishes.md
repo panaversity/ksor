@@ -34,6 +34,9 @@ project `ksor init` hands them.
   form-checked — so the profile documentation says so instead of describing a
   check that does not run.
 
-The upgrade runbook's preview step is now `ksor migrate --actor human:<you>`:
-bare `ksor migrate` exits `1` on a pre-profile record, because it must write
-`.ksor/governance.yaml` and will not guess who is performing that act.
+The upgrade runbook's preview step now names `--actor human:<you>`. Bare
+`ksor migrate` does print the diff — it writes nothing, so it needs nobody's
+name — but the `.ksor/governance.yaml` in that diff carries a `human:<you>`
+placeholder where your handle will go, and passing your own shows the file you
+will actually get. `--write` is the step that refuses without `--actor`,
+because that is the step that performs the act.

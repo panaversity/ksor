@@ -20,7 +20,10 @@ upgrade path below before taking it. In one place, what moves:
   migration named in the refusal.
 - **Two files beside the bundle.** `.ksor/governance.yaml` says who may
   approve and who may take down; `.ksor/takedowns.yaml` is the committed,
-  append-only takedown ledger. Both are tracked, not scratch.
+  append-only takedown ledger, and it appears the first time something is
+  withdrawn — no file is the honest way to say nothing ever has been. Both
+  are tracked, not scratch: `.gitignore` ignores `.ksor/*` and un-ignores
+  these two by name.
 - **`instance.md` is `format: 2`** — `audiences:` and `default_visibility:`
   move into the policy; `title`, `description` and `toolchain:` arrive.
 - **Two new verbs.** `ksor build` (database-free: generate the indexes, check
@@ -64,7 +67,10 @@ before schema 2.5 will not serve until it is re-ingested, because the
 migration can only narrow a ranked tier and half a governance row is not
 something a system of record answers from. And a calibrated
 `retrieval.vector_floor` measured before this release carries no
-`floor_digest`, so the door reports `gate: "uncalibrated"` and abstains until
-`ksor calibrate` re-measures it through the predicate that now applies — a
-threshold carried across a predicate change stays plausible and stops meaning
-what it said.
+`floor_digest`, so the door REFUSES every `search`, `read` and `outline`
+(`ksor-uncalibrated`; the search envelope's `gate` reads `"uncalibrated"`
+rather than `"off"`) until `ksor calibrate` re-measures it through the
+predicate that now applies. It refuses rather than abstains, deliberately: an
+abstention would tell the caller this record does not cover the question, when
+what is true is that the gate cannot be trusted to decide. A threshold carried
+across a predicate change stays plausible and stops meaning what it said.
