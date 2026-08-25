@@ -467,6 +467,49 @@ describe("ksor migrate — what it refuses to invent", () => {
   });
 
   /**
+   * The two files this migration writes into `.ksor/` ARE the record, and
+   * every scaffold ever emitted ignores that directory wholesale — so
+   * `git add -A` staged neither, the migration committed green locally, and
+   * the clone CI built from refused `ksor-policy-missing`. A directory
+   * pattern cannot be negated, so the bare line is replaced.
+   */
+  it("un-ignores the policy and the ledger, and `ksor build` refuses while they are ignored", () => {
+    const files = [
+      instance,
+      ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+      [
+        ".gitignore",
+        "# scratch space for ksor verbs — everything transient lives under one roof\n.ksor/\n\nnode_modules/\n",
+      ],
+    ] as const;
+    const root = repo(files);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const after = read(root, ".gitignore");
+    expect(after).toContain(".ksor/*");
+    expect(after).toContain("!.ksor/governance.yaml");
+    expect(after).toContain("!.ksor/takedowns.yaml");
+    expect(after).not.toContain("everything transient lives under one roof");
+    expect(after).toContain("node_modules/");
+    // The file is really tracked now — the claim is git's, not the text's.
+    expect(
+      spawnSync("git", ["check-ignore", "--", ".ksor/governance.yaml"], { cwd: root }).status,
+    ).toBe(1);
+    expect(run(root, "build").status).toBe(0);
+
+    // And a record whose .gitignore was left alone is refused BY NAME rather
+    // than building green here and failing in a clone. The refusal is about a
+    // file that IS there: an ignored path a record does not have is not its
+    // problem, so a level-0 record that never wanted a ledger still builds.
+    const stale = repo(files);
+    write(stale, ".ksor/governance.yaml", read(root, ".ksor/governance.yaml"));
+    const refused = run(stale, "build");
+    expect(refused.stderr.split("\n")[0]).toBe("error: ksor-governance-ignored");
+    expect(refused.stderr).toContain(".gitignore");
+    expect(refused.stderr).not.toContain("takedowns.yaml —");
+  });
+
+  /**
    * The published runbook is `ksor migrate --write --actor human:<you>` then
    * `ksor build`, and on the commonest pre-profile shape — a withdrawn
    * document pointing at the approved one that replaced it — it ended RED:

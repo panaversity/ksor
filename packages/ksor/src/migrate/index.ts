@@ -348,6 +348,10 @@ export async function runMigrate(
     changes.push({ path: policyPath, before: policyBefore, after: policyAfter });
   }
 
+  // ── .gitignore ─────────────────────────────────────────────────────────
+  const gitignore = gitignoreChange(root);
+  if (gitignore !== null) changes.push(gitignore);
+
   // ── the site's byte-copied rule modules ────────────────────────────────
   if (parsed.writeSite) changes.push(...siteRuleChanges(root, options.templatesDir));
 
@@ -518,6 +522,41 @@ function renderPolicy(input: PolicyInput): string | null {
   ];
   lines.push("takedown_authorities:", `  actors: [${takedown.join(", ")}]`);
   return `${lines.join("\n")}\n`;
+}
+
+/** Every spelling of "ignore the whole `.ksor` directory" a pre-profile scaffold carried. */
+const BARE_KSOR_IGNORE = new Set([".ksor/", ".ksor", "/.ksor/", "/.ksor"]);
+
+const KSOR_IGNORE_BLOCK = [
+  "# ksor's working directory — build output and scratch, never the record.",
+  "# The two governance files inside it ARE the record (the policy and the",
+  "# takedown ledger) and are un-ignored by name: the directory form `.ksor/`",
+  "# cannot be negated, so the glob is `.ksor/*`.",
+  ".ksor/*",
+  "!.ksor/governance.yaml",
+  "!.ksor/takedowns.yaml",
+];
+
+/**
+ * The one adopter-owned file the migration itself invalidates. Every scaffold
+ * ever emitted ignores `.ksor/` WHOLESALE, and this migration writes the
+ * policy and (from the denylist) the ledger into that directory — so `git add
+ * -A` stages neither, the migration commits green locally, and the clone CI
+ * builds from refuses `ksor-policy-missing`. A directory pattern cannot be
+ * negated, so the bare line is replaced rather than appended to, and the stale
+ * comment above it goes with it.
+ */
+function gitignoreChange(root: string): FileChange | null {
+  const abs = path.join(root, ".gitignore");
+  if (!existsSync(abs)) return null;
+  const before = readFileSync(abs, "utf8");
+  const lines = before.split("\n");
+  const at = lines.findIndex((line) => BARE_KSOR_IGNORE.has(line.trim()));
+  if (at === -1) return null;
+  let from = at;
+  while (from > 0 && lines[from - 1]!.trimStart().startsWith("#")) from -= 1;
+  const after = [...lines.slice(0, from), ...KSOR_IGNORE_BLOCK, ...lines.slice(at + 1)].join("\n");
+  return { path: ".gitignore", before, after };
 }
 
 /**

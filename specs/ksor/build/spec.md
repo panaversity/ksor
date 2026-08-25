@@ -26,8 +26,11 @@ nearest ancestor `instance.md` through one resolution helper exported from
 that directory. Needs no database, no provider key, no network. The verb's
 own refusals, outside the record checker's set: `bad-args` (an `--as-of` that
 is not an instant, an unknown flag), `ksor-instance-missing`,
-`ksor-ledger-unverifiable`, `ksor-build-dirty`, `ksor-lock-invalid` (a
-committed lock this ksor cannot parse — delete and rebuild). `--help` prints
+`ksor-ledger-unverifiable`, `ksor-build-dirty`, `ksor-governance-ignored` (a
+`.ksor/governance.yaml` or `.ksor/takedowns.yaml` that is present and
+git-ignored — it is in no commit, so a clone would build without it),
+`ksor-lock-invalid` (a committed lock this ksor cannot parse — delete and
+rebuild). `--help` prints
 the contract and performs nothing.
 
 1. **Indexes, in memory.** One per directory, in OKF §8 form: the heading is
@@ -105,7 +108,10 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   no commit yet or no repository at all. `dirty` is true when an input
   differs from that commit (an untracked input included), and always when
   there is no commit; a dirty lock still stamps, with `dirty` in every
-  stamp, and `--strict` refuses it (`ksor-build-dirty`). Outside a
+  stamp, and `--strict` refuses it (`ksor-build-dirty`) — including the
+  build's OWN output: an index this run would regenerate is uncommitted
+  content, so `--strict` refuses before writing and a loose build stamps
+  `dirty: true`. Outside a
   repository the committed lock is the only ledger baseline; inside one, a
   shallow clone is refused (`ksor-ledger-unverifiable`) unless
   `--allow-unverifiable-ledger` is explicit (record spec §5). A repository
@@ -218,7 +224,9 @@ diffs (decision 4).
    the lock does not change `source_commit`.
 3. A record with a checker refusal: exit `1`, first stderr line is the slug,
    no index and no lock written; a stale index alone is never a refusal
-   here; a dirty input is refused only under `--strict`.
+   here; a dirty input is refused only under `--strict`, and a stale
+   COMMITTED index is one — `--strict` refuses it and a loose build that
+   rewrites it stamps `dirty: true`.
 4. After a `[public]` site build: `llms.txt`, `llms-full.txt`, `/md/index.md`
    and `server.json` carry the lock's stamps; no draft appears in any page,
    sidebar entry, search entry or machine artefact; `out/` contains no byte
