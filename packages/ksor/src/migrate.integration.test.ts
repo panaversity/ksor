@@ -467,6 +467,70 @@ describe("ksor migrate — what it refuses to invent", () => {
   });
 
   /**
+   * The published runbook is `ksor migrate --write --actor human:<you>` then
+   * `ksor build`, and on the commonest pre-profile shape — a withdrawn
+   * document pointing at the approved one that replaced it — it ended RED:
+   * `approved` becomes `draft` without `--approve-by`, and the checker then
+   * strands the pointer. Migrate refuses that up front now, naming the flag.
+   */
+  it("refuses to demote a successor another document points at", () => {
+    const files = [
+      instance,
+      [
+        "knowledge/new.md",
+        "---\ntitle: New\ndescription: The current policy.\nstatus: approved\n---\n\nBody.\n",
+      ],
+      [
+        "knowledge/old.md",
+        "---\ntitle: Old\ndescription: The 2019 policy.\nstatus: superseded\nsuperseded_by: ./new.md\n---\n\nBody.\n",
+      ],
+    ] as const;
+    const root = repo(files);
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-migrate-underivable");
+    expect(r.stderr).toContain("--approve-by");
+    expect(r.stderr).toContain("knowledge/old.md");
+    expect(tree(root)).toEqual(before);
+
+    // The same tree WITH the flag migrates and then builds green — the whole
+    // point of naming it in the refusal.
+    const other = repo(files);
+    const ok = run(other, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(ok.status, ok.stderr).toBe(0);
+    const built = run(other, "build");
+    expect(built.status, built.stderr).toBe(0);
+  });
+
+  /**
+   * The FIRST line of the published upgrade path is bare `ksor migrate` —
+   * "prints the diff, writes nothing". It exited 1 on every pre-profile
+   * record, because a pre-profile record by definition has no policy and the
+   * `--actor` precondition never consulted `--write`. A dry run needs an actor
+   * to APPLY the migration, not to SHOW it.
+   */
+  it("shows the diff without --actor, naming the placeholder it would replace", () => {
+    const root = repo([
+      instance,
+      [
+        "knowledge/a.md",
+        "---\ntitle: A\ndescription: A doc.\nstatus: superseded\nsuperseded_by: ./b.md\n---\n\nBody.\n",
+      ],
+      ["knowledge/b.md", "---\ntitle: B\ndescription: B doc.\nstatus: draft\n---\n\nBody.\n"],
+    ]);
+    const before = tree(root);
+    const r = run(root, "migrate");
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("+++ b/.ksor/governance.yaml");
+    // The placeholder is visible in the diff, not silently filled in, and the
+    // closing line says what to re-run with.
+    expect(r.stdout).toContain("human:<you>");
+    expect(r.stdout).toContain("--actor human:<id>");
+    expect(tree(root)).toEqual(before);
+  });
+
+  /**
    * The three LEGACY_KEYS migrate never handled. `sor_id` is refused because
    * dropping it changes the document's stable_id from the sor_id value to its
    * path, which silently breaks every denylist row and citation keyed on the

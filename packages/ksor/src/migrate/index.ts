@@ -140,6 +140,9 @@ const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 // unreachable in both directions.
 const RESERVED = new Set(["index.md", "README.md"]);
 
+/** Stands in for `--actor` in a dry run, and is never written to a file. */
+const PLACEHOLDER_ACTOR = "human:<you>";
+
 /** A generated index: no governance frontmatter, and every body line a heading or a bullet. */
 function isGeneratedIndex(text: string, path: string): boolean {
   const split = splitFrontmatter(text, path);
@@ -199,7 +202,7 @@ export async function runMigrate(
   const oldFm = instanceSplit.ok ? (instanceSplit.frontmatter ?? {}) : {};
   const policyPath = ".ksor/governance.yaml";
   const hadPolicy = record.files.has(policyPath);
-  if (!hadPolicy && parsed.actor === null) {
+  if (!hadPolicy && parsed.actor === null && parsed.write) {
     return badArgs(
       io,
       "this record has no `.ksor/governance.yaml`, so migrate has to write one — and a policy names\n" +
@@ -207,6 +210,12 @@ export async function runMigrate(
         "migration. A governance act never names an actor the tool guessed (decision 21).",
     );
   }
+  // The dry run writes nothing, so it needs an actor to APPLY the migration,
+  // not to SHOW it — and the documented first step of the upgrade path is the
+  // bare form. The placeholder is only ever substituted when nothing will be
+  // written, so no file can carry it, and it is rendered in the diff rather
+  // than hidden, because "who" is the one thing the owner is being asked for.
+  const actor = parsed.actor ?? (parsed.write ? null : PLACEHOLDER_ACTOR);
 
   const changes: FileChange[] = [];
   const refusals: Refusal[] = [];
@@ -224,12 +233,16 @@ export async function runMigrate(
   const instantNow = new Date().toISOString().replace(/\.\d+Z$/, "Z");
   const ctx = {
     version: options.version,
-    actor: parsed.actor,
+    actor,
     approveBy: parsed.approveBy,
     instant: parsed.generatedAt ?? instantNow,
     model,
   };
   const conceptIds = new Set<string>();
+  /** Concept id → path, for every `approved` document this run turns into a `draft`. */
+  const demoted = new Map<string, string>();
+  /** Every `ksor.superseded_by` this run would write, by the document writing it. */
+  const pointers: { readonly path: string; readonly successor: string }[] = [];
   for (const [rel, text] of [...record.files].sort()) {
     if (!rel.startsWith("knowledge/") || !rel.endsWith(".md")) continue;
     const name = rel.slice(rel.lastIndexOf("/") + 1);
@@ -263,7 +276,12 @@ export async function runMigrate(
       continue;
     }
     for (const a of out.outcome.audiences) registry.add(a);
-    conceptIds.add(target.slice("knowledge/".length).replace(/\.md$/, ""));
+    const conceptId = target.slice("knowledge/".length).replace(/\.md$/, "");
+    conceptIds.add(conceptId);
+    if (out.outcome.demoted) demoted.set(conceptId, target);
+    if (out.outcome.successor !== null) {
+      pointers.push({ path: target, successor: out.outcome.successor });
+    }
     if (target !== rel) {
       // A reserved name is emptied and its prose lands in a concept beside it;
       // `ksor build` regenerates index.md from the tree at the next build.
@@ -272,6 +290,23 @@ export async function runMigrate(
     } else if (out.outcome.changed) {
       changes.push({ path: rel, before: text, after: out.outcome.text });
     }
+  }
+
+  // The commonest pre-profile shape is a withdrawn document pointing at the
+  // approved one that replaced it. Demoting that successor to `draft` — which
+  // is what happens without `--approve-by` — leaves a tree `ksor build` refuses
+  // as `ksor-supersession-strands`, so the published runbook ended RED on it.
+  // Migrate already refuses the neighbouring stray-pointer case up front; this
+  // is the one it creates itself, so it refuses it the same way.
+  for (const pointer of pointers) {
+    const target = demoted.get(pointer.successor);
+    if (target === undefined) continue;
+    refusals.push({
+      slug: "ksor-migrate-underivable",
+      path: target,
+      why: `\`${pointer.path}\` is withdrawn in favour of this document, and without \`--approve-by\` an \`approved\` document becomes a \`draft\` (R25) — the checker then refuses that tree as \`ksor-supersession-strands\`, because a reader sent to a draft successor is stranded`,
+      fix: "re-run with `--approve-by human:<id>` — the person approving these documents — so every `approved` document becomes `stable` and the pointer resolves",
+    });
   }
 
   // ── the takedown ledger ────────────────────────────────────────────────
@@ -303,7 +338,7 @@ export async function runMigrate(
   const policyBefore = record.files.get(policyPath) ?? null;
   const policyAfter = renderPolicy({
     before: policyBefore,
-    actor: parsed.actor,
+    actor,
     approveBy: parsed.approveBy,
     registry: [...registry].sort(),
     takedownActors: [...takedownActors].sort(),
@@ -324,7 +359,12 @@ export async function runMigrate(
   if (!parsed.write) {
     io.out(renderDiff(changes));
     io.out(
-      `\nksor migrate: ${changes.length} file(s) would change. Re-run with --write to apply.\n`,
+      `\nksor migrate: ${changes.length} file(s) would change. Re-run with --write to apply.\n` +
+        (parsed.actor === null
+          ? `The diff names \`${PLACEHOLDER_ACTOR}\` where the person running this migration goes;\n` +
+            "applying it needs --actor human:<id> (a governance act never names an actor the tool\n" +
+            "guessed — decision 21).\n"
+          : ""),
     );
     return 0;
   }

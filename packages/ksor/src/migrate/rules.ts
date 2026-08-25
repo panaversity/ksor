@@ -167,6 +167,10 @@ export interface ConceptOutcome {
   /** Non-`public` identifiers this concept names, for the policy's registry. */
   readonly audiences: readonly string[];
   readonly changed: boolean;
+  /** An `approved` document that became a `draft` for want of `--approve-by` (R25). */
+  readonly demoted: boolean;
+  /** The concept id this document's `ksor.superseded_by` names, when it names one. */
+  readonly successor: string | null;
 }
 
 export type ConceptResult =
@@ -192,7 +196,16 @@ export function migrateConcept(
   // Shape, not validity — a profile document that is separately WRONG is the
   // checker's to refuse, and re-running migrate over it must not move it.
   if (hasProfileShape(fm)) {
-    return { ok: true, outcome: { text, audiences: audiencesOf(fm), changed: false } };
+    return {
+      ok: true,
+      outcome: {
+        text,
+        audiences: audiencesOf(fm),
+        changed: false,
+        demoted: false,
+        successor: successorOf(fm),
+      },
+    };
   }
 
   const doc = split.frontmatter === null ? emptyFrontmatterDoc() : parseFrontmatterDoc(split.block);
@@ -369,6 +382,8 @@ export function migrateConcept(
       text: renderDocument(doc, stripDuplicateHeading(split.body, title!)),
       audiences: audience.filter((a) => a !== "public"),
       changed: true,
+      demoted: oldStatus === "approved" && status === "draft",
+      successor: typeof ksor["superseded_by"] === "string" ? ksor["superseded_by"] : null,
     },
   };
 }
@@ -382,10 +397,21 @@ export function migrateSummary(path: string, text: string): ConceptResult {
     split.frontmatter !== null &&
     Object.keys(split.frontmatter).length === 1 &&
     split.frontmatter["type"] === "Summary";
-  if (already) return { ok: true, outcome: { text, audiences: [], changed: false } };
+  if (already) {
+    return {
+      ok: true,
+      outcome: { text, audiences: [], changed: false, demoted: false, successor: null },
+    };
+  }
   return {
     ok: true,
-    outcome: { text: `---\ntype: Summary\n---\n${body}`, audiences: [], changed: true },
+    outcome: {
+      text: `---\ntype: Summary\n---\n${body}`,
+      audiences: [],
+      changed: true,
+      demoted: false,
+      successor: null,
+    },
   };
 }
 
@@ -547,6 +573,14 @@ function hasProfileShape(fm: Readonly<Record<string, unknown>>): boolean {
   const ksor = fm["ksor"];
   if (typeof ksor !== "object" || ksor === null || Array.isArray(ksor)) return false;
   return Array.isArray((ksor as Record<string, unknown>)["audience"]);
+}
+
+/** A profile-shaped document's `ksor.superseded_by`, or null. */
+function successorOf(fm: Readonly<Record<string, unknown>>): string | null {
+  const ksor = fm["ksor"];
+  if (typeof ksor !== "object" || ksor === null || Array.isArray(ksor)) return null;
+  const successor = (ksor as Record<string, unknown>)["superseded_by"];
+  return typeof successor === "string" ? successor : null;
 }
 
 function audiencesOf(fm: Readonly<Record<string, unknown>>): readonly string[] {
