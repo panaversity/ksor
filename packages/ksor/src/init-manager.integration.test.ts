@@ -115,6 +115,31 @@ describe("ksor init meets the invoking package manager", () => {
     }
   });
 
+  /**
+   * One rule, three shapes, asserted on the EMITTED manifest rather than a
+   * fixture. `ingest` publishes only a tree `ksor build` has checked, so a
+   * `refresh` that does not build dies at step two of the README's own ordered
+   * path (`provision` → `refresh` → `serve`) with `ksor-lock-missing` — walked
+   * live on a real scaffold, 2026-08-25.
+   *
+   * It was fixed in the pnpm template first, and npm and bun stayed broken:
+   * `SCRIPT_BODIES` REPLACES the manager-owned scripts rather than extending
+   * them, so a fix to the template reaches exactly one of the three. That is
+   * the divergence `manager.ts` exists to prevent, and it is why this asserts
+   * every manager instead of the one that was reported.
+   *
+   * The ORDER is the assertion: a build after the ingest would not have helped.
+   */
+  it.each([
+    ["pnpm", AGENTS.pnpm],
+    ["npm", AGENTS.npm],
+    ["bun", AGENTS.bun],
+  ] as const)("%s: the emitted refresh builds before it ingests", (name, agent) => {
+    const { root } = scaffold(agent);
+    const refresh = manifest(root).scripts["refresh"] ?? "";
+    expect(refresh, `${name} refresh: ${refresh}`).toMatch(/ksor build[\s\S]*ingest/);
+  });
+
   it("emits an npm scaffold under npx: workspaces field, script denial, no pnpm anywhere", () => {
     const { root, stdout } = scaffold(AGENTS.npm);
 
