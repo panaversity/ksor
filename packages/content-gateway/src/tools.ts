@@ -28,10 +28,13 @@ import {
   outlineDocuments,
   readDocument,
   search,
+  tightenTrustFloor,
+  TRUST_TIERS,
   type ServiceContext,
+  type TrustTier,
 } from "@panaversity/ksor-content";
 
-export { MAX_OUTLINE_LIMIT, MAX_SEARCH_K, type ServiceContext };
+export { MAX_OUTLINE_LIMIT, MAX_SEARCH_K, TRUST_TIERS, type ServiceContext, type TrustTier };
 
 // ── The floors ──────────────────────────────────────────────────────────────
 // Composed ABOVE by a record's own prose, never replaced. Byte-identical to
@@ -279,12 +282,34 @@ function reply(result: unknown): CallToolResult {
 export interface SearchArgs {
   readonly query: string;
   readonly k: number;
+  /**
+   * The lowest trust tier the caller will accept an answer from.
+   *
+   * OPTIONAL on the handler, not on the wire, and that is the point: the
+   * registration file is adopter-owned code (decision 23), so a record
+   * scaffolded before this parameter existed keeps working — the handler
+   * supplies `unverified`, which is what it always had. The boot inspection
+   * NOTICES the absence and never refuses it.
+   */
+  readonly min_trust_tier?: TrustTier | undefined;
 }
 
 export function searchHandler(ctx: ServiceContext): (args: SearchArgs) => Promise<CallToolResult> {
-  return async ({ query, k }) => {
+  return async ({ query, k, min_trust_tier }) => {
     try {
-      return reply(await search(ctx, query, k));
+      // The floor is decided HERE, in the package, and never in the
+      // registration: an adopter's zod could give the parameter any default it
+      // liked, and a `.default("human-reviewed")` would silently empty their
+      // record while a `.default(...)` the other way would be a loosening the
+      // deployment did not choose. `tightenTrustFloor` is the one rule —
+      // configuration tightens, an argument never loosens — and it is bound
+      // into the ARM predicate through the context, not applied to the hits
+      // afterwards, which ranking would already have let leak.
+      const scoped: ServiceContext = {
+        ...ctx,
+        minTrustTier: tightenTrustFloor(ctx.minTrustTier, min_trust_tier),
+      };
+      return reply(await search(scoped, query, k));
     } catch (error) {
       if (error instanceof Error) {
         // Authored guidance flows to the wire; driver internals were already

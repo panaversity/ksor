@@ -26,6 +26,7 @@ export {
   FLOOR,
   MAX_OUTLINE_LIMIT,
   MAX_SEARCH_K,
+  TRUST_TIERS,
   OUTLINE_OUTPUT,
   READ_ONLY,
   READ_OUTPUT,
@@ -37,4 +38,5 @@ export {
   type ReadArgs,
   type SearchArgs,
   type ServiceContext,
+  type TrustTier,
 } from "./tools.js";

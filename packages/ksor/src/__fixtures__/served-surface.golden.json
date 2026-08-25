@@ -17,6 +17,11 @@
           "minimum": 1,
           "type": "integer"
         },
+        "min_trust_tier": {
+          "description": "Lowest trust tier to answer from (default unverified). This deployment's own floor still applies: it can only be raised here, never lowered.",
+          "enum": ["unverified", "machine-confirmed", "human-reviewed"],
+          "type": "string"
+        },
         "query": {
           "description": "A focused question or phrase to search the record for",
           "maxLength": 2000,

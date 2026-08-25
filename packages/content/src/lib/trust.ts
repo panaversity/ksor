@@ -44,3 +44,60 @@ export function trustGucs(floor: TrustTier | number): Readonly<Record<string, st
 
 /** The floor a caller that names none gets: every tier, `unverified` included. */
 export const NO_TRUST_FLOOR: Readonly<Record<string, string>> = trustGucs(0);
+
+/**
+ * The floor that actually applies when a deployment names one and a caller
+ * names another: the HIGHER of the two, always.
+ *
+ * Configuration may TIGHTEN and never loosen. A door configured for
+ * `human-reviewed` is a deployment decision about what this record is allowed
+ * to answer from; an argument on a tool call is a caller's preference, and a
+ * preference must not be able to widen a deployment's rule — that is the shape
+ * of every access-control bug this repository has already had (decision 18).
+ *
+ * The same expression is also where the DEFAULT lives: a caller who names
+ * nothing is `unverified` (0), which leaves the deployment's floor standing.
+ */
+export function tightenTrustFloor(
+  configured: TrustTier | number | undefined,
+  requested: TrustTier | number | undefined,
+): number {
+  const ordinal = (v: TrustTier | number | undefined): number =>
+    v === undefined ? 0 : typeof v === "number" ? v : tierOrdinal(v);
+  return Math.max(ordinal(configured), ordinal(requested));
+}
+
+export class TrustFloorError extends Error {
+  override readonly name: string = "TrustFloorError";
+  readonly slug = "ksor-trust-floor-unknown" as const;
+  constructor(message: string) {
+    super(`ksor-trust-floor-unknown: ${message}`);
+  }
+}
+
+/**
+ * `KSOR_MIN_TRUST_TIER` — the deployment's own floor. Unset or empty is
+ * `unverified`, which admits every tier; that is the honest default, because
+ * `verified` is never required and a record with no reviews is a legitimate
+ * rung on the ladder.
+ *
+ * A tier this does not recognise REFUSES rather than falling back. Falling back
+ * would serve the record the operator meant to restrict, from a typo, with a
+ * green boot — the shape of failure "honest absence, never silent weakness"
+ * exists to prevent.
+ */
+export function parseTrustFloor(raw: string | undefined | null): TrustTier {
+  const value = (raw ?? "").trim();
+  if (value === "") return "unverified";
+  const tier = TRUST_TIERS.find((t) => t === value);
+  if (tier === undefined) {
+    throw new TrustFloorError(
+      `KSOR_MIN_TRUST_TIER is ${JSON.stringify(value)}, which is not a trust tier\n` +
+        "  why: the floor decides which half of the record this door may answer from, so an " +
+        'unrecognised value cannot be read as "no floor" — that would serve everything the ' +
+        "operator meant to hold back\n" +
+        `  fix: use one of ${TRUST_TIERS.join(", ")}, or unset it for ${TRUST_TIERS[0]}`,
+    );
+  }
+  return tier;
+}
