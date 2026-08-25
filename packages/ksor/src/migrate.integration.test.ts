@@ -682,6 +682,37 @@ describe("ksor migrate --write-site", () => {
     expect(read(root, "system/site/lib/audience-rule.ts")).toBe(canonical);
   });
 
+  /**
+   * `--write-site` offered `*-rule.ts` and nothing else, so every other
+   * adopter-owned site file this release changed — the copied record modules,
+   * `source.config.ts`, the staging library — stayed at the pre-profile
+   * version and a correctly migrated record could not be built at all.
+   */
+  it("offers the WHOLE site, stamped the way init stamps it", () => {
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+      ["system/site/lib/audience-rule.ts", "// an old copy\n"],
+      ["system/site/source.config.ts", "// an old config\n"],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--write-site");
+    expect(r.status, r.stderr).toBe(0);
+    const template = path.join(repoRoot, "packages/ksor/templates/scaffold/system/site");
+    for (const rel of [
+      "source.config.ts",
+      "record/check.ts",
+      "record/profile.ts",
+      "lib/source.ts",
+    ]) {
+      expect(read(root, `system/site/${rel}`), rel).toBe(
+        readFileSync(path.join(template, rel), "utf8"),
+      );
+    }
+    // The stamped file is stamped, not shipped with its placeholder.
+    const version = read(root, "system/site/lib/rules-version.ts");
+    expect(version).not.toContain("KSOR-STAMP-VERSION");
+  });
+
   // An update, never a creation: a record with no site of its own does not
   // want one conjured into it by a migration.
   it("offers nothing to a record that has no site", () => {
@@ -692,6 +723,92 @@ describe("ksor migrate --write-site", () => {
     const r = run(root, "migrate", "--write", "--actor", ACTOR, "--write-site");
     expect(r.status, r.stderr).toBe(0);
     expect(existsSync(path.join(root, "system"))).toBe(false);
+  });
+});
+
+/**
+ * The two adopter-owned files the migration itself breaks, and which no flag
+ * gates: the emitted checker (its own skill says a ksor upgrade replaces it,
+ * and nothing did, so a migrated record was refused by the adopter's `check`
+ * script and by their shipped CI with fixes that undo the migration) and the
+ * root `build` script, which called a `ksor takedown` flag this release
+ * removed and died on `error: bad-args`.
+ */
+describe("ksor migrate — the adopter's own gate", () => {
+  const files = [
+    ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+    ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+    [".agents/skills/format-checker/check.mjs", "// the pre-profile checker\n"],
+    [".claude/skills/format-checker/check.mjs", "// the pre-profile checker\n"],
+    ["AGENTS.md", "# Acme\n\nThe contract.\n"],
+    ["CLAUDE.md", "@AGENTS.md\n"],
+    [
+      "package.json",
+      JSON.stringify(
+        {
+          name: "acme",
+          scripts: {
+            dev: "pnpm -C system/site dev",
+            build: "pnpm export-denylist && pnpm -C system/site build",
+            "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
+            check: "node .agents/skills/format-checker/check.mjs",
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    ],
+  ] as const;
+
+  it("rewrites both copies of the emitted checker, with no flag", () => {
+    const root = repo(files);
+    const shown = run(root, "migrate", "--actor", ACTOR);
+    expect(shown.status, shown.stderr).toBe(0);
+    // A 1,400-line bundle is summarised, not diffed line by line.
+    expect(shown.stdout).toContain("@@ generated @@");
+
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const canonical = readFileSync(
+      path.join(
+        repoRoot,
+        "packages/ksor/templates/scaffold/.agents/skills/format-checker/check.mjs",
+      ),
+      "utf8",
+    );
+    for (const tree of [".agents", ".claude"]) {
+      expect(read(root, `${tree}/skills/format-checker/check.mjs`), tree).toBe(canonical);
+    }
+    // And the record it just wrote passes that checker — the whole point.
+    // (`ksor build` writes the indexes the checker refuses to author.)
+    expect(run(root, "build").status).toBe(0);
+    const check = spawnSync(
+      process.execPath,
+      [path.join(root, ".agents/skills/format-checker/check.mjs")],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(check.status, check.stderr).toBe(0);
+  });
+
+  it("drops the export-denylist script and the build step that called it", () => {
+    const root = repo(files);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const manifest = JSON.parse(read(root, "package.json")) as {
+      scripts: Record<string, string>;
+    };
+    expect(manifest.scripts["export-denylist"]).toBeUndefined();
+    expect(manifest.scripts["build"]).toBe("ksor build && pnpm -C system/site build");
+    // Everything else is left exactly as the adopter had it.
+    expect(manifest.scripts["dev"]).toBe("pnpm -C system/site dev");
+  });
+
+  it("leaves a record that carries neither alone", () => {
+    const root = repo([files[0], files[1]]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(path.join(root, ".agents"))).toBe(false);
+    expect(existsSync(path.join(root, "package.json"))).toBe(false);
   });
 });
 
