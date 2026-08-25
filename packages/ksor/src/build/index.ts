@@ -247,11 +247,9 @@ export function runBuild(
   });
 
   // Write only what changed, so a no-op build leaves git quiet.
-  const written = pendingIndexes;
   for (const rel of pendingIndexes) {
     writeFileSync(path.join(root, rel), result.indexes.get(rel)!);
   }
-  const removed = staleIndexes;
   for (const rel of staleIndexes) unlinkSync(path.join(root, rel));
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 
@@ -259,7 +257,7 @@ export function runBuild(
   io.out(
     `ksor build: ${lock.documents.length} document(s), ${admitted} admitted to a machine surface at ${lock.as_of}` +
       `${lock.dirty ? " (dirty)" : ""}\n` +
-      `${written.map((w) => `  wrote ${w}\n`).join("")}${removed.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
+      `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,
   );
   return 0;
