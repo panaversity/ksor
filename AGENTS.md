@@ -698,6 +698,22 @@ gateway` package, serve-by-spawn) is superseded._
     or the build; both were caught by comparing against what the door actually
     serves. Reversed only by an owner decision recorded here.
 
+    _Revision 2026-08-25: the two measurements above are SUPERSEDED, and are
+    kept with their date because the ratio is the point. The OKF-native door
+    grew two governance surfaces the 2026-08-23 figures predate: every search
+    hit and every `read` reply now carries the record's stored `governance`
+    block, and `search` takes a `min_trust_tier` parameter. Measured exactly,
+    from the served `tools/list` capture rather than an estimate: the three
+    definitions are **16,214 chars ≈ 4,054 tokens, always resident** (was
+    ~2,990), of which `search` alone is 7,602 and `read` 5,276; a search hit
+    carries ~262 chars more than it did, so a `k=10` call is correspondingly
+    dearer. The per-call figure is NOT re-measured here — the live 81-document
+    book it was taken against does not exist in this tree, and an estimate
+    dressed as a measurement is what this entry exists to prevent. The costs
+    are recorded, not argued away, which is what the decision asks: the
+    resident surface is the price of governance an agent can read, and `k` is
+    still the lever (`packages/ksor/docs/tool-surface.md`)._
+
 24. **Study attachments are part of their parent, and the collection is where
     that is enforced** (2026-08-23, porting the predecessor's summaries and
     flashcards under decision 6). A document may carry `<doc>.summary.md` and
