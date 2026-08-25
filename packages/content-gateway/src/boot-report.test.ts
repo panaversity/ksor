@@ -19,6 +19,7 @@ describe("the boot report reads as one aligned block", () => {
       ["auth", "DISABLED"],
       ["abstain", "OFF"],
       ["serving", "http://127.0.0.1:8080/mcp"],
+      ["trust", "unverified"],
     ];
     const columns = new Set(cases.map(([label, value]) => bootLine(label, value).indexOf(value)));
     expect([...columns]).toHaveLength(1);
@@ -29,6 +30,13 @@ describe("the boot report reads as one aligned block", () => {
       // leaves a gap, or the block stops being scannable.
       expect(line.indexOf(value), line).toBeGreaterThan(2 + label.length);
     }
+  });
+
+  it("still separates a label longer than the column from its value", () => {
+    // `padEnd` returns an over-long label unchanged, which printed
+    // `trust floorunverified` — one unreadable word — and every alignment
+    // assertion above stayed green, because none of them used a long label.
+    expect(bootLine("trust floor", "unverified")).toBe("  trust floor unverified");
   });
 
   it("names the record in the header, so a multi-instance host is legible", () => {

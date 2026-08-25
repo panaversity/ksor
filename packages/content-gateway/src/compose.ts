@@ -246,7 +246,7 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // viewer list is: a misspelled tier that fell back to `unverified` would
   // serve the record the operator meant to restrict and look healthy doing it.
   const minTrustTier = parseTrustFloor(process.env["KSOR_MIN_TRUST_TIER"]);
-  console.error(bootLine("trust floor", minTrustTier));
+  console.error(bootLine("trust", minTrustTier));
 
   // Prewarm is OPT-IN (KSOR_CONTENT_POOL_MIN, default 0). `min` alone cannot
   // do this — pg-pool never opens connections eagerly — so the dial is honoured
