@@ -114,7 +114,7 @@ document, not before it.
 ## 4 · Verify it
 
 ```sh
-pnpm check     # refuses an orphan or an attachment carrying frontmatter
+pnpm check     # refuses an orphan, or frontmatter that is not exactly `type: Summary`
 pnpm dev       # open the page — a Summary tab appears beside Document
 ```
 

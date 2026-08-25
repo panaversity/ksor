@@ -5,11 +5,11 @@ here; every coding agent reads this file first.
 
 ## The two worlds
 
-| Path          | What it is                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                                                                                                                                                                             |
-| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                                                                                                                                                                               |
-| `instance.md` | what this SoR is authoritative for; its prose IS the agent surface's system prompt (`ksor serve` wires the body into the MCP server's instructions). Its `name:` is the machine identity (llms.txt, citations) and its body `# H1` is the DISPLAY TITLE every page leads with — both read when the server or build STARTS, so restart `pnpm dev` after changing either (found live 2026-08-18) |
+| Path          | What it is                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `knowledge/`  | **the record** — governed markdown, the owner's world, the product                                                                                                                                                                                                                                                                                                                                                     |
+| `system/`     | **the system** — all code that serves the record                                                                                                                                                                                                                                                                                                                                                                       |
+| `instance.md` | what this SoR is authoritative for; its prose IS the agent surface's system prompt (`ksor serve` wires the body into the MCP server's instructions). Its `name:` is the machine identity (llms.txt, citations) and its `title:` is the DISPLAY TITLE every page leads with — both are frontmatter keys, both read when the server or build STARTS, so restart `pnpm dev` after changing either (found live 2026-08-18) |
 
 The record survives the system: `knowledge/` must stay readable and complete
 even if `system/` is deleted. Dependency flows one way — the system reads the
@@ -321,26 +321,39 @@ ordinary zod. It is yours, and it is **deletable**: without it the door serves
 the same defaults.
 
 Edit it because an agent pays for this surface out of its context window, twice.
-Measured on an 81-document record:
+The definitions depend only on the code, so they are exact for every record
+(re-measured 2026-08-25 from the served `tools/list`); the per-call figures are
+the 2026-08-23 measurement against a live 81-document record, plus the
+governance block every hit now carries:
 
 |                                  |                                |
 | -------------------------------- | ------------------------------ |
-| all three tool definitions       | ~2,990 tokens, always resident |
-| one `search` at `k=10` (default) | ~3,541 tokens per call         |
-| one `search` at `k=5`            | ~2,002 tokens per call         |
+| all three tool definitions       | ~4,054 tokens, always resident |
+| one `search` at `k=10` (default) | ~4,196 tokens per call         |
+| one `search` at `k=5`            | ~2,330 tokens per call         |
 
 Three edits pay for themselves:
 
 - **Delete a tool nothing calls.** Removing `outline` and `read` gives back
-  ~1,643 tokens for the whole session.
+  ~2,152 tokens for the whole session.
 - **Say what this record covers**, above `FLOOR.search`. It is how an agent with
   several records attached picks yours; name the subject AND the boundary.
 - **Set `k`** in the input schema — it is the lever on reply size.
 
 ```ts
 description: `Leave, benefits, conduct. Not product docs.\n\n${FLOOR.search}`,
-inputSchema: z.object({ query: z.string(), k: z.number().int().default(5) }),
+inputSchema: z.object({
+  query: z.string(),
+  k: z.number().int().default(5),
+  min_trust_tier: z.enum(TRUST_TIERS).optional(),
+}),
 ```
+
+Keep `min_trust_tier`. Dropping it does not weaken the record — the handler
+still applies `unverified` and this deployment's own floor — but it takes away
+the only way a caller can ask to be answered ONLY from what a human reviewed,
+and the door says so at boot with a notice naming the tool and the line to
+paste, rather than failing quietly.
 
 You can add your own tools with `registerTool` too — but be clear-eyed: ksor
 makes no provenance claim about a tool it did not hand you a handler for.
@@ -358,26 +371,39 @@ surface at boot and refuses to start if a guarantee is gone:
 
 ## Withdrawing a document — `ksor takedown`
 
-A takedown is the one governance act that must reach EVERY surface at once.
-It needs the database (the denial is a row, not a file), so it belongs to the
-served rung.
+A takedown is the one governance act that must reach EVERY surface at once. It
+is written to the committed ledger `.ksor/takedowns.yaml` FIRST and to the
+database denylist second, in one act — so a record with no database can
+withdraw a document, and the site reads the withdrawal from the repository
+rather than from anything exported.
 
 ```sh
-pnpm exec ksor takedown --instance instance.md <stable-id> --reason "legal request 2026-08"
-pnpm exec ksor takedown --instance instance.md <stable-id> --reason "..." --subtree
+pnpm exec ksor takedown --instance instance.md --actor human:you <stable-id> --reason "legal request 2026-08"
+pnpm exec ksor takedown --instance instance.md --actor human:you <stable-id> --reason "..." --scope subtree
 pnpm exec ksor takedown --instance instance.md --list      # what is currently denied
 pnpm exec ksor takedown --instance instance.md --ledger    # who denied what, when
-pnpm exec ksor takedown --instance instance.md --revoke <stable-id>
+pnpm exec ksor takedown --instance instance.md --actor human:you --revoke <entry-id> --reason "..."
 ```
 
-The stable id is what a search result reports as `provenance.stable_id` — for
-most documents that is `knowledge/<path-without-.md>`. `--subtree` withdraws a
-section and everything beneath it, including documents added later.
-`--actor NAME` names who performed the act in the ledger, and a denial or a
-revocation is REFUSED without it. There is no default: a name taken from the
+The stable id is what a search result reports as `provenance.stable_id`, and it
+is `knowledge/<path-without-.md>` — always, since path is identity.
+`--scope subtree` withdraws a section and everything beneath it, including
+documents added later. `--revoke` takes the id of a LEDGER ENTRY, which
+`--ledger` lists, not a stable id: the ledger is append-only, so a lift is a new
+entry rather than a deleted line. `--removed <entry-id>` records that a denied
+document was deleted, and `--apply` writes the rows for entries that reached
+the database late.
+
+`--actor` names who performed the act, and a denial, a revocation or an
+amendment is REFUSED without it. There is no default: a name taken from the
 environment reads like a person and is whatever the shell happened to be
 (`runner` under CI, `root` in a container), which is worse than no name at all
-in the one row that exists to record who did this. Read-only modes
+in the one row that exists to record who did this. It must be a well-formed
+actor (`human:<handle>` or `process:<id>` — a bare name is refused) and
+`takedown_authorities` in `.ksor/governance.yaml` must name it. The same check
+runs over every entry in the ledger at `pnpm check`, `ksor build` and ingest, so
+a line appended by hand in a pull request is refused exactly as the verb would
+refuse it. Read-only modes
 (`--list`, `--ledger`) need nothing.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
@@ -605,9 +631,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   from at random and offers another round; a smaller one is simply asked in
   full.
 
-  **`pnpm check` and `pnpm build` both refuse a quiz a reader could pass
-  without reading**, and this is worth knowing before you write one, because
-  it is easy to trip by accident:
+  **`pnpm build` refuses a quiz a reader could pass without reading** (the
+  audit runs in the site build, not in `pnpm check`), and this is worth knowing
+  before you write one, because it is easy to trip by accident:
 
   | Refusal                    | Means                                                 |
   | -------------------------- | ----------------------------------------------------- |
@@ -743,7 +769,7 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 
 You own `system/site/` outright — these are the seams, cheapest first:
 
-- **Display title** — `instance.md`'s body `# H1` (the intake interview
+- **Display title** — `instance.md`'s `title:` key (the intake interview
   writes it). Headline, navbar, and browser title follow on restart.
 - **Accent color** — the one brand pair in `system/site/app/global.css`
   (`--primary` and `--primary-foreground`, light and dark); every accented

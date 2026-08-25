@@ -24,8 +24,8 @@ The rules that make it _governed_ rather than merely stored:
 - Frontmatter is the KSoR Profile of OKF. Always: `type: Document`, `title`,
   `description` (one sentence), `status: draft`, and `ksor.audience` (a
   list). Reach for a reserved `type` — `Policy`, `Procedure`, `Control`,
-  `Standard`, `Definition`, `Decision Record`, `Example` — when the
-  knowledge really is one; those additionally require `sources` and
+  `Standard`, `Definition`, `Decision Record`, `Example`,
+  `Attested Computation` — when the knowledge really is one; those additionally require `sources` and
   `ksor.owner`, which is the point of them.
 
   ```yaml

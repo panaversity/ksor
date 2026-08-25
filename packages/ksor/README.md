@@ -23,11 +23,13 @@ search and `llms.txt`, adopter CI, a dependency-free format checker
 operate it. Everything emitted is yours (the templates are MIT-0), the
 scaffold is deterministic and offline, and every refusal explains itself.
 
-> **`0.x` status:** `init` works, and `serve` runs the MCP server over a built
-> record (with `ingest`/`schema`/`calibrate`/`gc` — the climbed rung, needing
-> Postgres and a provider key). Only `dev` and `build` are designed, not
-> implemented — each prints an honest notice and exits `2` (inside a scaffolded
-> project, `pnpm dev` / `pnpm build` cover local work).
+> **`0.x` status:** `init` works, `build` checks the record and writes its
+> lock, `migrate` rewrites a pre-profile record into the profile, and `serve`
+> runs the MCP server over a built record (with `ingest`/`schema`/`calibrate`/
+> `gc` — the climbed rung, needing Postgres and a provider key). Only `dev` is
+> designed, not implemented — it prints an honest notice and exits `2` (inside
+> a scaffolded project, `pnpm dev` covers local work), as does
+> `build --bundles`.
 > [`docs/status.md`](https://github.com/panaversity/ksor/blob/main/docs/status.md)
 > and the released version number are authoritative for the exact released
 > functionality.
@@ -69,8 +71,10 @@ covers the opening and trails off leaves a reader believing they have the whole
 document.
 
 An attachment is **part of its document**: no URL, no sidebar row, no
-`llms.txt` line, and no id an agent can cite. It takes its `visibility:` and
-any takedown from its parent, so restricting the document restricts them all.
+`llms.txt` line, and no id an agent can cite. It takes its audience and any
+takedown from its parent, so restricting the document restricts them all. A
+`<doc>.summary.md` carries exactly `type: Summary` and nothing else — a marker,
+never governance of its own.
 A quiz whose answers are guessable is refused by the build, and because ingest
 creates no node for an attachment, a quiz's answer key can never reach the
 agent surface at all.

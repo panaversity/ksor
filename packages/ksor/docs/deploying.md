@@ -280,12 +280,20 @@ nothing.
 
 ### "Some documents are restricted, most are not"
 
-**Build per audience.** `KSOR_AUDIENCE=<tier> pnpm build` stages only what that
-tier may see, so restricted documents are **never written into the artifact** —
-enforcement by absence, which is the only kind a static host can honour. Publish
-the public artifact openly and the wider one behind the gate above.
+**Build per audience.** `KSOR_AUDIENCE=public,internal pnpm build` stages only
+what that viewer may see, so the concepts it may not are **never written into
+the artifact** — enforcement by absence, which is the only kind a static host
+can honour. Publish the public artifact openly and the wider one behind the
+gate above.
 
-Plain `pnpm build` is always the public tier, so the safe thing is the default.
+The value is a comma list of registered audiences and it must include `public`
+— a bare `KSOR_AUDIENCE=internal` is refused (`ksor-viewer-omits-public`),
+because every reader of a restricted build is also a reader of the open one and
+a build for the restricted audience alone would silently drop every public
+concept. A concept is staged when its `ksor.audience` list overlaps the
+viewer's; there is no ordering between audiences to be narrower or wider than.
+
+Plain `pnpm build` is `[public]`, so the safe thing is the default.
 
 ### "Different readers see different documents, decided per request"
 
@@ -426,8 +434,8 @@ connections** — the pool minimum is 0 and an unused connection closes after 10
 first request after a suspend both wakes the database and retries the connect
 rather than failing.
 
-Measured against a live deployment on Vercel, Neon behind it, an 81-document
-record of 6,963 chunks:
+Measured 2026-08-23 against a live deployment on Vercel, Neon behind it, an
+81-document record of 6,963 chunks, and not re-measured since:
 
 |                                        |           |
 | -------------------------------------- | --------- |

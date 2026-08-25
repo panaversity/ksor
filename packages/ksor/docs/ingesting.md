@@ -20,12 +20,12 @@ Ingest reads your markdown, sends each new chunk to an embedding provider, and
 writes the result to Postgres. So four things must be true, and none of them is
 created for you.
 
-|                      | what                                                                                                          | how                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **The corpus**       | `knowledge/` at your repo root — CommonMark `.md`, one document per file, `title` and `status` in frontmatter | `pnpm check` validates it and explains any violation                                           |
-| **The database**     | Postgres with **pgvector** — `CREATE EXTENSION vector;`                                                       | any managed host; the DDL below needs a role that can create tables                            |
-| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                   | [aistudio.google.com](https://aistudio.google.com/apikey); the free tier covers a first corpus |
-| **The DSN**          | `KSOR_DB_URL`, named by `instance.md`'s `database.dsn_env`                                                    | uncomment the `database:` block in `instance.md` first                                         |
+|                      | what                                                                                                                                                                              | how                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **The corpus**       | `knowledge/` at your repo root — CommonMark `.md`, one document per file, in the KSoR Profile of OKF: `type`, `title`, `description`, `status` and `ksor.audience` in frontmatter | `pnpm check` validates it and explains any violation; `ksor build` must have written a current `build.lock.json` before ingest will run |
+| **The database**     | Postgres with **pgvector** — `CREATE EXTENSION vector;`                                                                                                                           | any managed host; the DDL below needs a role that can create tables                                                                     |
+| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                                                                                       | [aistudio.google.com](https://aistudio.google.com/apikey); the free tier covers a first corpus                                          |
+| **The DSN**          | `KSOR_DB_URL`, named by `instance.md`'s `database.dsn_env`                                                                                                                        | uncomment the `database:` block in `instance.md` first                                                                                  |
 
 Both variables go in `.env` beside `instance.md` — `ksor` reads it automatically,
 and `.env` is gitignored. Every command below is run **from your repository
@@ -106,17 +106,19 @@ An empty `nodes` array means nothing was published — the ingest did not run, o
 ran without `--flip`. Then search for a phrase you know is in the record and
 check the hits carry `provenance.stable_id` and `generation`.
 
-**`provenance.stable_id` is also how you name a document to `takedown`.** For
-most documents it is `knowledge/<path-without-.md>`; a search result is the
-reliable way to read one off rather than guessing.
+**`provenance.stable_id` is also how you name a document to `takedown`.** It is
+`knowledge/<path-without-.md>` — always, since path is identity and nothing
+overrides it — and a search result is still the reliable way to read one off
+rather than typing it from memory.
 
 ## Where ingest runs — not on the host
 
 Ingest is a long job. It embeds every new chunk through the provider, and that
 is bounded by the provider's throughput rather than by anything ksor does.
 
-**Measured:** an 81-document book — 6,963 chunks — took **about 50 minutes**
-against a remote Postgres on a first, cold ingest with nothing to carry forward.
+**Measured 2026-08-23:** an 81-document book — 6,963 chunks — took **about 50
+minutes** against a remote Postgres on a first, cold ingest with nothing to
+carry forward. Not re-measured since.
 
 Compare that with the request timeouts of the platforms people reach for first:
 a serverless function caps out in the region of 300–800 seconds depending on
@@ -148,7 +150,8 @@ If your provider offers both a **pooled** and a **direct** endpoint (Neon's
 `-pooler` host, or port 6432), use whichever it gives you. ksor detects which and
 says so at boot, but the line is informational — it classifies, it never
 transforms, and the hazard it descends from cannot arise here. The 6,963-chunk
-ingest measured above ran through a pooled endpoint without incident. Reach for
+ingest measured above (2026-08-23) ran through a pooled endpoint without
+incident. Reach for
 the direct endpoint only if you actually hit pooler connection limits.
 
 ## Turning the abstention gate on
@@ -186,17 +189,32 @@ correctly stays uncalibrated.
 
 ## Withdrawing a document
 
-A takedown is a row, not a file, so it reaches the door immediately:
+A takedown is a committed ledger entry FIRST and a database row second, written
+in one act — so it reaches the door immediately and the site at its next build,
+and a record with no database can still withdraw a document:
 
 ```sh
 pnpm exec ksor takedown --instance instance.md <stable-id> \
-  --reason "legal request 2026-08" --actor "j.smith"
+  --reason "legal request 2026-08" --actor human:j.smith
 ```
 
 `--actor` is required, and there is no default. A name taken from the
 environment reads like a person and is whatever the shell happened to be
 (`runner` under CI, `root` in a container) — worse than no name at all in the
 one row that exists to record who did this.
+
+Two things the actor must satisfy, both refused before any database is touched.
+It must be a well-formed actor — `human:<handle>` or `process:<id>`, never a
+bare name (`ksor-actor-form`) and never a `team:` (a team cannot perform an
+act). And `takedown_authorities` in `.ksor/governance.yaml` must name it
+(`ksor-takedown-unauthorised`); the same check runs over every entry in the
+ledger at `pnpm check`, `ksor build` and ingest, so a line appended by hand in a
+pull request is refused exactly as the verb would refuse it.
+
+Lifting a takedown is `--revoke <entry-id>` — the id of the LEDGER ENTRY, which
+`ksor takedown --ledger` lists, not the stable id. The ledger is append-only: a
+revocation is a new entry, never a deleted line, and a build whose ledger shrank
+against its own git history is refused.
 
 **The site stops at its next build.** It reads the committed ledger
 (`.ksor/takedowns.yaml`), so after a takedown, merge the entry, rebuild and
