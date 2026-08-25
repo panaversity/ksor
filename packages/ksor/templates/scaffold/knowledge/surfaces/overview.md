@@ -3,7 +3,7 @@ type: Document
 title: Surfaces
 description: One source, published through several synchronized projections.
 status: draft
-order: 0
+order: 4
 generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ksor:
   audience: [public]

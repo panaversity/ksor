@@ -27,9 +27,9 @@ import { createHash } from "node:crypto";
 
 import {
   compareSiblings,
+  folderOrder,
   orderValue,
   tieKey,
-  UNORDERED,
   type Sibling,
 } from "../../lib/order-rule.js";
 import type { CheckResult } from "../../record/check.js";
@@ -90,6 +90,12 @@ export function buildManifestFromRecord(
     for (let cur = dir; cur !== ""; cur = parentOf(cur)) dirSet.add(cur);
   }
 
+  // The shape `folderOrder` folds over, built once: directory → the orders of
+  // the concepts sitting directly in it.
+  const ordersByDir: (readonly [string, readonly number[]])[] = [...conceptsByDir].map(
+    ([d, cs]) => [d, cs.map((c) => orderValue(c.order))] as const,
+  );
+
   const audiencesBeneath = (dir: string): (readonly string[])[] =>
     check.concepts.filter((c) => c.id.startsWith(`${dir}/`)).map((c) => c.audience);
 
@@ -106,13 +112,15 @@ export function buildManifestFromRecord(
     }
     for (const d of dirSet) {
       if (parentOf(d) !== dir) continue;
-      const own = conceptsByDir.get(d) ?? [];
-      const min = own.reduce((m, c) => Math.min(m, orderValue(c.order)), UNORDERED);
       entries.push({
         kind: "dir",
         name: baseOf(d),
         concept: null,
-        order: min,
+        // Descendants included — `folderOrder` is the ONE answer, shared with
+        // the index generator the site reads its reading order from. Folding
+        // over the directory's own concepts only made a folder whose ordered
+        // documents live one level deeper unordered here and first there.
+        order: folderOrder(ordersByDir, d),
         tie: tieKey(baseOf(d)),
       });
     }

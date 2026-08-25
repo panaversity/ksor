@@ -18,25 +18,30 @@ const INPUT: IndexInput = {
   dirs: ["surfaces", "surfaces/agents", "policies", "zed", "zed/deep", "empty"],
 };
 
-/** The golden: OKF §8 form, concept bullets by order then title, then folder bullets by lowest order then name. */
+/**
+ * The golden: OKF §8 form, ONE bullet list — concepts and folders interleaved
+ * by `order:`, ties broken on the name the way `ORDER_CASES` says (decision
+ * 18). A folder takes the lowest order among the concepts anywhere BENEATH it,
+ * so `surfaces/` sorts at 1 through `for-people.md` and `zed/` is unordered.
+ */
 const ROOT = `---
 okf_version: "0.2"
 ---
 
 # Acme
 
-* [What is a KSoR](what-is-a-ksor.md) - One sentence.
-* [Governance ladder](governance-ladder.md) - Rungs.
 * [Surfaces](surfaces/)
+* [What is a KSoR](what-is-a-ksor.md) - One sentence.
 * [Policies](policies/)
+* [Governance ladder](governance-ladder.md) - Rungs.
 * [Zed](zed/)
 `;
 
 const SURFACES = `# Surfaces
 
 * [The human surface](for-people.md) - Pages.
-* [Surfaces](overview.md) - The projections.
 * [The agent surface](for-agents.md) - MCP.
+* [Surfaces](overview.md) - The projections.
 * [Agents](agents/)
 `;
 
@@ -72,6 +77,31 @@ describe("generateIndexes — OKF §8 form (record spec §7.4, build spec §1 st
     const root = out.get("index.md") ?? "";
     expect(root.indexOf("(surfaces/)")).toBeLessThan(root.indexOf("(policies/)"));
     expect(root.indexOf("(policies/)")).toBeLessThan(root.indexOf("(zed/)"));
+  });
+
+  it("a folder INTERLEAVES with the documents beside it — one reading order, not files-then-folders", () => {
+    const root = out.get("index.md") ?? "";
+    // surfaces/ is order 1 and what-is-a-ksor.md is order 1: they tie, and the
+    // name breaks it — so the folder lands between two root documents rather
+    // than behind both of them.
+    expect(root.indexOf("(surfaces/)")).toBeLessThan(root.indexOf("(what-is-a-ksor.md)"));
+    expect(root.indexOf("(what-is-a-ksor.md)")).toBeLessThan(root.indexOf("(policies/)"));
+    expect(root.indexOf("(policies/)")).toBeLessThan(root.indexOf("(governance-ladder.md)"));
+  });
+
+  it("a folder's key counts concepts anywhere BENEATH it, not only its own", () => {
+    // `alpha/` holds no concept itself; its ordered document is one level down.
+    // Folding over its own concepts made it unordered here and first in the
+    // MCP outline — the two surfaces listing opposite documents first.
+    const nested = generateIndexes({
+      title: "T",
+      concepts: [
+        { id: "alpha/deep/a", title: "A", description: "d.", order: 1 },
+        { id: "beta/b", title: "B", description: "d.", order: 2 },
+      ],
+      dirs: ["alpha", "alpha/deep", "beta"],
+    });
+    expect(nested.get("index.md")).toContain("* [Alpha](alpha/)\n* [Beta](beta/)\n");
   });
 
   it("the same input twice yields byte-identical output", () => {

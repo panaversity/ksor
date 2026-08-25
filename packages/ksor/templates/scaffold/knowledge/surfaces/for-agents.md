@@ -3,7 +3,7 @@ type: Document
 title: The agent surface
 description: MCP for retrieval with citations, and machine-readable files beside it.
 status: draft
-order: 2
+order: 6
 generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ksor:
   audience: [public]

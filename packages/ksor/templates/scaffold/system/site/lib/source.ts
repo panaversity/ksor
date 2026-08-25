@@ -63,8 +63,8 @@ function stagedIndexes(): Map<string, IndexEntry[]> {
 }
 
 /**
- * Reading order is ONE rule — the index generator's (build spec §1: concepts
- * by `order:` then title, then folders by their first concept) — and every
+ * Reading order is ONE rule — the index generator's (build spec §1: one bullet
+ * list, concepts and folders together, by `order:` then name) — and every
  * surface takes it from the regenerated indexes rather than restating it. A
  * route the indexes never listed sorts last, by url.
  */

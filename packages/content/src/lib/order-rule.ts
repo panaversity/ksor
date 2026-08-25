@@ -36,6 +36,21 @@
  *   - case. The kernel lowercased the tie key and the site did not, so
  *     `apple.md` and `Banana.md` came out in opposite orders.
  *
+ * Two more, found in the OKF-native review and fixed the same way:
+ *
+ *   - folders. The index generator emitted every concept bullet and THEN every
+ *     folder bullet, so a folder could never sort between two documents, while
+ *     the tree adapter sorted concepts and directories in one list. The site
+ *     takes its whole reading order from the generated indexes, so an agent
+ *     asking `outline` "what do I read first" and a reader on the site were
+ *     told different documents. The ratified row has always said they
+ *     interleave.
+ *   - the folder's own key. The generator folded over every concept BENEATH a
+ *     directory; the adapter folded over the directory's OWN concepts only, so
+ *     a folder whose ordered documents live one level deeper was unordered on
+ *     one surface and first on the other. {@link folderOrder} is now the one
+ *     answer both call.
+ *
  * No imports: a leaf, so it is testable in isolation and safe to copy.
  */
 
@@ -104,4 +119,26 @@ export function codePointCompare(a: string, b: string): number {
 export function compareSiblings(a: Sibling, b: Sibling): number {
   if (a.order !== b.order) return a.order < b.order ? -1 : 1;
   return codePointCompare(a.tie, b.tie);
+}
+
+/**
+ * A directory's sort key: the lowest order among the concepts anywhere BENEATH
+ * it, descendants included — a folder sorts where its first concept does.
+ *
+ * Descendants and not just the directory's own concepts, because a folder whose
+ * documents live one level deeper (`alpha/deep/a.md`) still has a first thing to
+ * read, and calling it unordered files the whole folder behind every ordered
+ * sibling. `ordersByDir` maps a bundle-relative directory to the orders of the
+ * concepts sitting DIRECTLY in it, which is the shape both callers already hold.
+ */
+export function folderOrder(
+  ordersByDir: Iterable<readonly [string, readonly number[]]>,
+  dir: string,
+): number {
+  let min = UNORDERED;
+  for (const [d, orders] of ordersByDir) {
+    if (d !== dir && !d.startsWith(`${dir}/`)) continue;
+    for (const o of orders) if (o < min) min = o;
+  }
+  return min;
 }

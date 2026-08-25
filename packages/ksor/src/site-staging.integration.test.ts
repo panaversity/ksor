@@ -405,8 +405,9 @@ describe("staging on the profile (build spec §3)", () => {
     }
 
     // The regenerated root index, in OKF §8 form, from the STAGED tree — never
-    // the committed one (there is none). Concepts by order then title; the
-    // folder after them; the internal-only folder gets no bullet.
+    // the committed one (there is none). ONE bullet list: concepts and folders
+    // by `order:` then name, so `guides/` lands BETWEEN two documents rather
+    // than behind all of them; the internal-only folder gets no bullet.
     const root = readFileSync(path.join(fixture.stage, "index.md"), "utf8");
     expect(root).toBe(
       `---
@@ -415,12 +416,12 @@ okf_version: "0.2"
 
 # Acme Handbook
 
+* [Guides](guides/)
 * [Public policy PUBTITLE1](public-policy.md) - PUBDESC1 in one line
 * [Future FUTURETITLE](future.md) - FUTUREDESC
 * [Old policy OLDTITLE](old-policy.md) - OLDDESC replaced
 * [Revoked REVOKEDTITLE](revoked.md) - REVOKEDDESC
 * [Stale STALETITLE](stale.md) - STALEDESC
-* [Guides](guides/)
 `,
     );
     expect(readFileSync(path.join(fixture.stage, "guides", "index.md"), "utf8")).toBe(
