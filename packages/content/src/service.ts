@@ -35,6 +35,7 @@ import {
 import { logRead } from "./lib/rlog.js";
 import {
   documentChunks,
+  documentFrontmatter,
   findDocument,
   MAX_OUTLINE_LIMIT,
   outline as outlineQuery,
@@ -670,6 +671,16 @@ export interface ReadResult {
   /** Chunks concatenated — byte-exact reconstruction (the invariant's serve side). */
   readonly text: string;
   readonly sections: string[];
+  /**
+   * The document's frontmatter block, byte-exact as its author wrote it —
+   * comments and keys no ksor reader knows included (OKF §11) — or null when
+   * the file carried none.
+   *
+   * The bytes, never a re-serialisation of the parsed columns: a record whose
+   * `read` handed back a re-rendered block would be handing an agent a
+   * document it does not contain, under the name of the system of record.
+   */
+  readonly frontmatter: string | null;
   readonly provenance: SearchHit["provenance"];
   readonly window_from?: string;
   readonly window_to?: string;
@@ -782,7 +793,7 @@ export async function readDocument(
   }
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
 
-  const { node, chunks } = await runRead(
+  const { node, chunks, frontmatter } = await runRead(
     ctx.pool,
     inst.tenantId,
     async (client) => {
@@ -790,7 +801,13 @@ export async function readDocument(
       // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
       // against active would find nothing (oracle rule, carried).
       const pinnedScope = { ...scope, pinnedGeneration: found.generation };
-      return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
+      return {
+        node: found,
+        chunks: await documentChunks(client, pinnedScope, found.nodeId),
+        // In the SAME transaction as the chunks, so the frontmatter an agent
+        // reads is the frontmatter of the bytes it was handed.
+        frontmatter: await documentFrontmatter(client, pinnedScope, found.nodeId),
+      };
     },
     servingScope(ctx),
   );
@@ -866,6 +883,7 @@ export async function readDocument(
     title: node.title,
     text,
     sections,
+    frontmatter,
     provenance: {
       corpus_id: inst.corpusId,
       stable_id: node.stableId,

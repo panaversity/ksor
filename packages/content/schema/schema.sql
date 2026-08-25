@@ -140,6 +140,12 @@ CREATE TABLE sources (
     embedding_model TEXT NOT NULL,
     chunk_policy    TEXT NOT NULL,
     source_commit   TEXT,
+    -- 2.5: the file's frontmatter block, byte-exact as the author wrote it —
+    -- comments and unknown keys included (OKF §11). `read` serves it back
+    -- verbatim; a re-serialisation from the parsed columns would be a
+    -- DIFFERENT document wearing the record's name. NULL for a source with no
+    -- frontmatter, and for a pre-2.5 carried row.
+    frontmatter     TEXT,
     seeded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, generation, source_id),

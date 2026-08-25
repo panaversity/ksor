@@ -140,8 +140,9 @@ function refuse(path: string, why: string, fix: string): Split {
  * fences, unparsed — or null when it has none or an unclosed one.
  *
  * The markdown twin serves this INTACT rather than a re-serialisation of the
- * parsed object: the profile preserves unknown keys (record spec §2.6), and
- * anything this codebase re-emits can only carry the keys it thought of. It
+ * parsed object, and so does the door's `read` tool: the profile preserves
+ * unknown keys (record spec §2.6), and anything this codebase re-emits can
+ * only carry the keys it thought of. It
  * reads the block `splitFrontmatter` already found, so there is exactly one
  * walk deciding where a fence ends — a second one that disagreed would
  * publish a different document from the one the checker read.

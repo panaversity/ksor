@@ -135,6 +135,28 @@ JOIN sources s ON s.source_id = c.source_id AND s.tenant_id = c.tenant_id
 WHERE c.tenant_id = $1 AND s.node_id = $4 AND s.modality = 'prose'
 ORDER BY c.source_id, c.ordinal`;
 
+/**
+ * The document's frontmatter, byte-exact as its author wrote it.
+ *
+ * Its own statement rather than a column on DOCUMENT_CHUNKS_SQL: that query
+ * returns one row per chunk, and a document with a hundred chunks would carry
+ * a hundred copies of the same block across the driver for one use.
+ *
+ * `ORDER BY source_id LIMIT 1` because a node's frontmatter is its FILE's, and
+ * the plain-tree adapter gives a concept exactly one prose source. If a future
+ * adapter gives a node several, this returns the first deterministically
+ * rather than picking one at random — and that is the point at which "which
+ * file's frontmatter" becomes a question worth answering properly.
+ */
+export const DOCUMENT_FRONTMATTER_SQL: string = `
+WITH ${GEN}
+SELECT s.frontmatter
+FROM sources s
+JOIN g ON s.generation = g.gen
+WHERE s.tenant_id = $1 AND s.node_id = $4 AND s.modality = 'prose'
+ORDER BY s.source_id
+LIMIT 1`;
+
 export const UNIT_TREE_SQL: string = `
 WITH ${GEN}
 SELECT DISTINCT ON (hp) hp, first_ordinal FROM (
@@ -398,6 +420,20 @@ export async function documentChunks(
     headingPath: String(row[1]),
     content: String(row[2]),
   }));
+}
+
+/** The document's frontmatter block, or null when the file carried none. */
+export async function documentFrontmatter(
+  client: pg.PoolClient,
+  scope: ReadScope,
+  nodeId: string,
+): Promise<string | null> {
+  const result = await arrayQuery(client, {
+    text: DOCUMENT_FRONTMATTER_SQL,
+    values: [scope.tenantId, scope.corpusId, scope.pinnedGeneration, nodeId],
+  });
+  const value = result.rows[0]?.[0];
+  return value === undefined || value === null ? null : String(value);
 }
 
 /**
