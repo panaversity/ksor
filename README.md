@@ -727,7 +727,7 @@ off until you measure a floor with `ksor calibrate` and paste it into
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
-KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, `.ksor/governance.yaml` and the takedown ledger beside them. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
+KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, and `.ksor/governance.yaml` beside them. The takedown ledger `.ksor/takedowns.yaml` is not emitted: the first `ksor takedown` writes it, because an empty ledger would assert an act nobody performed. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
 
 ```text
 my-ksor/
@@ -1596,9 +1596,19 @@ changes nothing until `--write`, and refuses by name rather than invent a title,
 a description or the actor behind a takedown.
 
 ```bash
-ksor migrate
-ksor migrate --write --actor human:you
+ksor migrate --actor human:you   # prints the diff, writes nothing
+ksor migrate --write --actor human:you --approve-by human:you
 ```
+
+`--approve-by` is not optional decoration. Without it every `approved`
+document becomes a `draft`, and a draft reaches no machine surface: the
+following `ksor build` reports `0 admitted to a machine surface` and the
+record's `llms.txt`, `/md/` twins and MCP door publish nothing until a human
+approves. Where one document supersedes another, `ksor build` refuses outright
+with `ksor-supersession-strands` — the successor migrate just demoted is a
+draft, and a reader sent to it would be stranded. Pass it when you are the
+person `.ksor/governance.yaml` authorises to approve; otherwise plan to
+approve the record document by document before it publishes again.
 
 ### `ksor serve` — implemented (the climbed rung)
 

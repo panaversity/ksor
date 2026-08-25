@@ -6,7 +6,7 @@ updated: 2026-08-25.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.39** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.40** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -21,7 +21,9 @@ tarball under `docs/`.
 stated the KSoR architecture in the package README; 0.0.38 added the
 `make-summary` skill, put the breadcrumb on every page and moved the teaching
 aid after a document's introduction; 0.0.39 stopped a malformed
-`KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal.
+`KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal; 0.0.40 made
+a document's page more readable — an overflowing code block can be unwrapped,
+table rows alternate, and a callout carries a rule down its left edge.
 
 **Everything under the next heading is UNRELEASED** — it is the
 `okf-native-spec` branch, and no adopter has any of it yet.
@@ -69,7 +71,12 @@ templates), read-only, refusing a stale index; a conformance fixture is judged
 identically by it and by `checkRecord`. **The starter is in the profile**:
 `instance.md` format 2, `.ksor/governance.yaml`, five `type: Document` drafts,
 generated indexes, `surfaces/overview.md`; every manager's `build` script is
-`ksor build` then the site build, `export-denylist` gone.
+`ksor build` then the site build, `export-denylist` gone. Because all five are
+drafts, a fresh record's first build publishes NO document on any surface
+(`0 admitted to a machine surface`, an empty `## Documents` in `llms.txt`, no
+document route) until a human approves one — decision 27's day-one cost, said
+in the emitted README, AGENTS.md and the intake-interview skill so an adopter
+does not read it as a broken build.
 
 **`ksor migrate` runs** (research/okf-native.md §1.8): `--write`,
 `--instance`, `--actor`, `--approve-by`, `--attribute`, `--generated-at`,
@@ -294,7 +301,9 @@ tool definitions cost ~2,990 always-resident tokens and one default `search`
 call ~3,541 — an agent pays for a record's tool surface out of its context
 window, so the record's owner decides what it says. Re-measured 2026-08-25
 after the trust floor and the per-hit governance landed: the definitions are
-**16,214 chars / ~4,054 tokens** (exact, they depend on the code alone);
+**16,214 chars / ~4,054 tokens** as transmitted — exact, they depend on the
+code alone — which is `search` 7,602 + `outline` 3,332 + `read` 5,276 =
+**16,210**, plus the four characters the `tools` array itself carries;
 the per-call figures were NOT re-measured against that record, and
 `packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
 measurement plus the governance block's exactly-measured 262 chars a hit. The
@@ -850,8 +859,13 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   ARE implemented and released — the bundled kernel provides them from the one
   `ksor` binary. `serve` runs the MCP server in-process (reads
   `./instance.md`; exits `3` with a remedy when it is missing). `ksor build`
-  and `ksor migrate` are implemented on the unreleased branch and exit `2` in
-  the published package.
+  and `ksor migrate` are both implemented on the unreleased branch, and the
+  published package answers them DIFFERENTLY: `ksor build` reports "designed
+  but not implemented" and exits `2`, while `migrate` is not in the published
+  vocabulary at all, so it is refused with exit `1` under the stable
+  `error: unknown-verb` slug. The two codes are a contract (product
+  principle 4) — `2` says designed and coming, `1` says this is not a ksor
+  verb — so they are worth stating apart rather than together.
 - `ksor build --bundles` — parses, prints the honest notice, exits `2`. It is
   phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
   its contract: one OKF bundle per registered audience under

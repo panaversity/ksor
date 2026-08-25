@@ -10,10 +10,14 @@ metadata:
 `pnpm check` runs `check.mjs` — a self-contained Node program that needs no
 install. It is **generated** by ksor from the same rule set `ksor build` and
 `ksor ingest` run, so the three can never disagree about what a well-formed
-record is; do not edit it. `ksor migrate` rewrites it — in this tree and in
-its `.claude` twin — whenever ksor's rules move, and it is offered in that
-diff like every other file the migration touches. It is read-only: it
-reports, and never rewrites a file.
+record is. Do not edit it: `ksor init` writes it and `ksor migrate` rewrites
+both copies of it when you upgrade the tool, so an edit is overwritten rather
+than kept. It is read-only in the other direction too — it reports, and never
+rewrites a file.
+
+If its refusals contradict this document, the checker is older than the record:
+upgrade `@panaversity/ksor` and re-run `ksor migrate`, and never "fix" the
+record by undoing what the migration wrote.
 
 What it holds the record to (the full contract is ksor's record spec):
 

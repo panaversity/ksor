@@ -388,9 +388,11 @@ pnpm exec ksor takedown --instance instance.md --actor human:you --revoke <entry
 The stable id is what a search result reports as `provenance.stable_id`, and it
 is `knowledge/<path-without-.md>` — always, since path is identity.
 `--scope subtree` withdraws a section and everything beneath it, including
-documents added later. `--revoke` takes the id of a LEDGER ENTRY, which
-`--ledger` lists, not a stable id: the ledger is append-only, so a lift is a new
-entry rather than a deleted line. `--removed <entry-id>` records that a denied
+documents added later. `--revoke` takes the id of a LEDGER ENTRY, not a stable
+id: the ledger is append-only, so a lift is a new entry rather than a deleted
+line. The id is printed by the denial that created it, listed by `--ledger`,
+and written in `.ksor/takedowns.yaml` — three ways to the same string, none of
+which needs a database. `--removed <entry-id>` records that a denied
 document was deleted, and `--apply` writes the rows for entries that reached
 the database late.
 
@@ -403,8 +405,11 @@ actor (`human:<handle>` or `process:<id>` — a bare name is refused) and
 `takedown_authorities` in `.ksor/governance.yaml` must name it. The same check
 runs over every entry in the ledger at `pnpm check`, `ksor build` and ingest, so
 a line appended by hand in a pull request is refused exactly as the verb would
-refuse it. Read-only modes
-(`--list`, `--ledger`) need nothing.
+refuse it. The read-only modes
+(`--list`, `--ledger`) need no actor — nobody is performing an act by looking.
+They do not need a database either: on a record that declares none they read
+the committed `.ksor/takedowns.yaml`, which is the whole record of the act
+anyway.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
 build** — the site reads the committed ledger (`.ksor/takedowns.yaml`), not
@@ -428,6 +433,20 @@ viewer; `KSOR_AUDIENCE=public,<audience> pnpm build` — a comma list, always
 including `public` — builds for a wider viewer, and that build belongs
 behind that audience's own access control, never on a public host.
 Details in README → Deploying.
+
+**A build publishes nothing until a human approves.** The five starter
+documents ship `status: draft`, and §2.5 admits a draft to NO surface of a
+build — not the page, not the sidebar, not the search index, not `llms.txt`.
+So the first `pnpm build` of a fresh record emits a site with zero document
+pages and an empty `## Documents` section, reports `0 admitted to a machine
+surface`, and is working correctly. `pnpm dev` shows the drafts, which is what
+the preview is for. Never approve on the owner's behalf to make a build look
+fuller: approving is `status: stable` plus a `ksor.approval: { by, at }` naming
+an actor `.ksor/governance.yaml` authorises, and it is the owner's act. Ask
+them, then write down what they said (`.agents/skills/intake-interview/`).
+`KSOR_DRAFTS=show pnpm build` publishes drafts to the HUMAN surface only, marks
+the build `noindex` and records itself in `build.lock.json` — a review link,
+never a way to ship.
 
 ### The MCP door is a container
 
@@ -488,9 +507,13 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   as GFM footnotes `[^id]`), `verified` (`[{ by, at }]` — sets the trust
   tier: none → unverified, machine actors → machine-confirmed, any `human:`
   → human-reviewed), `stale_after`, `ksor.effective_from`. Actors are
-  `human:<id>`, `process:<id>` or `<producer>/<version>`; `team:<id>` only in
-  `ksor.owner`. Every timestamp is an ISO 8601 instant with an offset
-  (`2026-08-25T09:00:00Z`) — never a bare date. Unknown keys are preserved, unless
+  `human:<id>`, `process:<id>` or `<producer>/<version>` in `verified`,
+  `generated`, `ksor.approval` and `ksor.deprecated` — anything else there is
+  refused. `ksor.owner` is not checked for its shape: write an actor or
+  `team:<id>` by convention, but it is free text, so a bare word passes and can
+  then never be the `ksor.deprecated.by` that deprecates the document. Every
+  timestamp is an ISO 8601 instant with an offset (`2026-08-25T09:00:00Z`) —
+  never a bare date. Unknown keys are preserved, unless
   the name is one edit from a profile key — `stale_afer:` is refused rather
   than kept, because a preserved near miss is the key it meant, failing open.
   The `ksor:` block's own key set is closed. The pre-profile keys
@@ -530,10 +553,11 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   it is the bytes an agent is served, and editing them to match a page setting
   would make it lie. Remove the panel if you need the front page silent too. The supersession notice is the one thing it does not hide: a reader
   handed a replaced document with no word of its successor has been misled.
-- **`status` is shown only when it is a caveat.** `draft` and `deprecated`
-  appear as a small label; `stable` shows nothing, because a reader already
-  assumes a document in the record is current — so the label stays rare
-  enough to be noticed on the pages where it matters.
+- **`status` is shown only when it is a caveat.** `deprecated` appears as a
+  small label; `stable` shows nothing, because a reader already assumes a
+  document in the record is current — so the label stays rare enough to be
+  noticed on the pages where it matters. `draft` carries the same label, but
+  only under `pnpm dev`: a BUILT site has no draft page to label it on.
 - `ksor.audience` lists who may read a document; a viewer holds a list that
   always includes `public`, and the document is visible when the two overlap.
   Every identifier but `public` must be registered in
@@ -760,8 +784,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
 - `.agents/skills/add-sources/` — turn source material (documents, pages,
   notes) into governed knowledge.
 - `.agents/skills/make-slides/` — generate a presentation from one document
-- `.agents/skills/make-summary/` — write a document's summary and attach it
   and attach it, so it renders on that document's page.
+- `.agents/skills/make-summary/` — write a document's summary and attach it,
+  so it renders as a second tab on that document's page.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.
 

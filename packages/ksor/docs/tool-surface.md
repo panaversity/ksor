@@ -20,11 +20,20 @@ session; every answer spends more.
 default registration (~4 chars/token). These depend only on the code, so the
 numbers are exact for every record:
 
-|                            | chars  | ~tokens |                     |
-| -------------------------- | ------ | ------- | ------------------- |
-| all three tool definitions | 16,214 | 4,054   | **always resident** |
-| `search` alone             | 7,602  | 1,901   | always resident     |
-| `outline` + `read`         | 8,608  | 2,152   | always resident     |
+|                                | chars  | ~tokens |                     |
+| ------------------------------ | ------ | ------- | ------------------- |
+| all three, as transmitted      | 16,214 | 4,054   | **always resident** |
+| `search` alone                 | 7,602  | 1,901   | always resident     |
+| `outline` alone                | 3,332  | 833     | always resident     |
+| `read` alone                   | 5,276  | 1,319   | always resident     |
+| `outline` + `read`, if deleted | 8,608  | 2,152   | the saving below    |
+
+**Two measurements, so read the first row apart from the rest.** Each tool's
+row is the JSON of that tool's own object; the first row is the JSON of the
+whole `tools` array, which carries four characters no tool's row does — its
+two brackets and the two separators between three tools. So the three tools
+sum to **16,210** and the array is **16,214**. Deleting a tool saves that
+tool's own row, not a share of the total.
 
 They grew: `search` was 5,383 chars before the trust floor and the governance
 each hit now carries, and `read` 3,396 before it carried the same governance

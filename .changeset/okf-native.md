@@ -33,8 +33,8 @@ adopters depend on. In one place, what moves:
 
 ```sh
 pnpm add -D @panaversity/ksor@latest
-ksor migrate                      # prints the diff, writes nothing
-ksor migrate --write --actor human:<you>
+ksor migrate --actor human:<you>  # prints the diff, writes nothing
+ksor migrate --write --actor human:<you> --approve-by human:<you>
 ksor build
 # a served record, after committing the migration:
 ksor schema --instance instance.md --apply   # 2.4 -> 2.5
@@ -46,6 +46,17 @@ cannot derive is refused by name rather than filled in, and an `approved`
 document becomes a `draft` unless `--approve-by` names the human doing the
 approving. Both are the same rule — a governance act names the actor who
 performed it, and the tool does not guess one.
+
+**That is why `--approve-by` is in the block above, and what happens without
+it.** Every `approved` document becomes a `draft`, and a draft reaches no
+machine surface at all: the next `ksor build` reports `0 admitted to a machine
+surface`, and `llms.txt`, the `/md/` twins and the MCP door publish nothing
+until a human approves. Where one document supersedes another it does not even
+get that far — `ksor build` refuses with `ksor-supersession-strands`, because
+the successor migrate just demoted is a draft and a reader sent to it would be
+stranded. Pass `--approve-by human:<you>` when you are the person
+`.ksor/governance.yaml` authorises to approve; otherwise expect to approve the
+record document by document before it publishes again.
 
 **Two things will refuse until you act, deliberately.** A generation ingested
 before schema 2.5 will not serve until it is re-ingested, because the
