@@ -372,12 +372,12 @@ function nonConceptWidens(
   const asset = targets.assets.has(id);
   const dirOfId = id.slice(0, Math.max(id.lastIndexOf("/"), 0));
   const named = targets.directories.has(id);
-  const indexOf = id.endsWith("/index") ? id.slice(0, -"/index".length) : null;
-  const start = named ? id : (indexOf ?? dirOfId);
+  const indexDir = id.endsWith("/index") ? id.slice(0, -"/index".length) : null;
+  const start = named ? id : (indexDir ?? dirOfId);
   const what = named
     ? `the directory \`${id}/\``
-    : indexOf !== null
-      ? `the generated index of \`${indexOf}/\``
+    : indexDir !== null
+      ? `the generated index of \`${indexDir}/\``
       : asset
         ? `the asset \`${id}\``
         : `the file \`${id}\``;
@@ -391,7 +391,7 @@ function nonConceptWidens(
     refusals.push({
       slug: "ksor-link-widens",
       path,
-      why: `links to ${what}, which lives under \`${dir}/\` — a directory holding ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts ${carries} in a build that excludes everything else in it`,
+      why: `links to ${what} — \`${dir}/\` holds ${inside.length} concept${inside.length === 1 ? "" : "s"} and not one this document's readers (audience [${audience.join(", ")}]) may read, so publishing it puts ${carries} in a build that excludes everything else in it`,
       fix: `move it beside this document (or into a directory its readers may enter), or widen something under \`${dir}/\``,
     });
     return;
