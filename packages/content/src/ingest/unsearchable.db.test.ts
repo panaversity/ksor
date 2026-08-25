@@ -33,16 +33,20 @@ import type pg from "pg";
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_unsearchable";
 
-/** Navigation: a page of links, which no search should ever return. */
+/**
+ * Navigation: a page of links, which no search should ever return. Every link
+ * names a document this record actually holds — the checker refuses a dead
+ * internal link by name (`ksor-link-dead`), and a fixture that cannot be
+ * ingested proves nothing about what ingest reports.
+ */
 const NAV = profileDoc({
   title: "Handbook",
   body: `
 # Handbook
 
 - [Probation](probation.md)
-- [Notice periods](notice-periods.md)
-- [Expense limits](expense-limits.md)
-- [Travel](travel.md)
+- [Expense claims](expenses.md)
+- [The record](index.md)
 `,
 });
 
