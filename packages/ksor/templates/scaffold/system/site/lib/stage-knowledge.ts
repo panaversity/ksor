@@ -1,10 +1,16 @@
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
   lstatSync,
   readdirSync,
   rmSync,
+  // `statSync` is here for ONE caller, `publishSims`, and only because it walks
+  // the STAGE — a tree this file wrote, which holds no symlink for stat to
+  // follow. Everything that touches the RECORD uses `lstatSync` for the reason
+  // recorded at `assetTarget`, and that rule is unchanged.
+  statSync,
   watch,
   writeFileSync,
 } from "node:fs";

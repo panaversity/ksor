@@ -1,5 +1,5 @@
 ---
-"@panaversity/ksor": minor
+"@panaversity/ksor": patch
 ---
 
 **The record is an OKF bundle now.** `knowledge/` is Markdown in the KSoR
