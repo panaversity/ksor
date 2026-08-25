@@ -1,13 +1,26 @@
 #!/usr/bin/env node
-// Corpus integrity checks — the product's own guarantees applied to the
-// markdown this repo carries. Like the guard, every failure states what is
-// wrong, why the rule exists, and how to fix it.
+// PRODUCT-DOCS integrity checks — identity, lifecycle and internal links for
+// the markdown shipped inside the npm package. Like the guard, every failure
+// states what is wrong, why the rule exists, and how to fix it.
+//
+// It does NOT check a governed record. It used to, and it carried a second
+// implementation of the record's rules to do it — `owner`/`provenance`
+// required, a `draft | review | approved | superseded` status set — which the
+// KSoR Profile retired. That rule set survived behind a `--corpus <dir>` flag
+// after the repo's own record stopped being checked with it, so running the
+// flag against this repository's OWN migrated record told the author that
+// `status: stable` was invalid and that two retired keys were mandatory. This
+// release exists to end two implementations of one decision; that was a second
+// one wired to a CLI flag, and it is deleted rather than left loaded.
+//
+// The record checker is the one rule set for a record: `ksor build` and the
+// emitted `check.mjs` run it, and this repository's fixture corpus is checked
+// through the real verb in packages/ksor/src/migrate.integration.test.ts.
 //
 // Usage:
-//   node scripts/check-corpus.mjs                 # check the repo's corpus roots
-//   node scripts/check-corpus.mjs --corpus <dir>  # check one knowledge corpus (used by tests)
+//   node scripts/check-corpus.mjs   # check the product docs shipped in the package
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,15 +28,14 @@ import { parseFrontmatter } from "./lib/frontmatter.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// Frontmatter requirements per corpus profile.
-// "knowledge": governed corpus documents — provenance is mandatory because an
-// answer that cannot be traced to a source is not governed knowledge.
-// "docs": product documentation — needs identity and lifecycle, not provenance.
-const PROFILES = {
-  knowledge: { required: ["title", "status", "owner", "provenance"] },
-  docs: { required: ["title", "status"] },
-};
-const STATUS_VALUES = new Set(["draft", "review", "approved", "superseded"]);
+/** Product documentation needs identity (title) and lifecycle (status). */
+const REQUIRED_KEYS = ["title", "status"];
+/**
+ * The PRODUCT DOCS' lifecycle, which is not the record's. A record's statuses
+ * are `draft | stable | deprecated` and are the record checker's to enforce;
+ * these describe a page of the manual on its way to being written.
+ */
+const DOC_STATUS_VALUES = new Set(["draft", "review", "approved", "superseded"]);
 // Identity derives from the file path (AGENTS.md product principle 3): an
 // authored id/name that disagrees with the path gives one document two
 // identities, so these keys are rejected outright.
@@ -43,25 +55,23 @@ function walkMarkdown(dir) {
   });
 }
 
-function checkFrontmatter(file, rel, profile) {
+function checkFrontmatter(file, rel) {
   const fm = parseFrontmatter(readFileSync(file, "utf8"));
   if (fm === null) {
     problem(
       rel,
       "no frontmatter block",
       "corpus documents carry their identity and lifecycle in frontmatter; without it the document is ungoverned",
-      `start the file with ---\\ntitle: ...\\nstatus: draft\\n--- (required keys: ${PROFILES[profile].required.join(", ")})`,
+      `start the file with ---\\ntitle: ...\\nstatus: draft\\n--- (required keys: ${REQUIRED_KEYS.join(", ")})`,
     );
     return;
   }
-  const missing = PROFILES[profile].required.filter((k) => !(k in fm));
+  const missing = REQUIRED_KEYS.filter((k) => !(k in fm));
   if (missing.length > 0) {
     problem(
       rel,
       `missing frontmatter key(s): ${missing.join(", ")}`,
-      profile === "knowledge"
-        ? "governed knowledge must name its owner and its sources — an untraceable answer is not governed"
-        : "documents need identity (title) and lifecycle (status) to be reviewable",
+      "documents need identity (title) and lifecycle (status) to be reviewable",
       `add the missing key(s) to the frontmatter`,
     );
   }
@@ -80,12 +90,12 @@ function checkFrontmatter(file, rel, profile) {
         rel,
         "status key has no value",
         "an empty lifecycle state cannot be queried or gated on",
-        `set status to one of ${[...STATUS_VALUES].join(" | ")}`,
+        `set status to one of ${[...DOC_STATUS_VALUES].join(" | ")}`,
       );
-    } else if (!STATUS_VALUES.has(status)) {
+    } else if (!DOC_STATUS_VALUES.has(status)) {
       problem(
         rel,
-        `status "${status}" is not one of ${[...STATUS_VALUES].join(" | ")}`,
+        `status "${status}" is not one of ${[...DOC_STATUS_VALUES].join(" | ")}`,
         "the governance lifecycle is a closed set; free-form states cannot be queried or gated on",
         "pick the closest lifecycle state",
       );
@@ -115,48 +125,28 @@ function checkRelativeLinks(file, rel) {
   }
 }
 
-function checkKnowledgeCorpus(corpusRoot, label) {
-  if (!existsSync(path.join(corpusRoot, "instance.md"))) {
-    problem(
-      `${label}/instance.md`,
-      "missing instance.md",
-      "instance.md declares the identity and purpose of a KSoR instance; a corpus without one is anonymous",
-      "create instance.md describing what this corpus is authoritative for",
-    );
-  }
-  const knowledgeDir = path.join(corpusRoot, "knowledge");
-  if (existsSync(knowledgeDir)) {
-    for (const file of walkMarkdown(knowledgeDir)) {
-      const rel = path.join(label, path.relative(corpusRoot, file));
-      checkFrontmatter(file, rel, "knowledge");
-      checkRelativeLinks(file, rel);
-    }
-  }
+// Silence would be the wrong answer to `--corpus`: an operator who runs the
+// flag they were told about deserves to be told where the rules went.
+const args = process.argv.slice(2);
+if (args.length > 0) {
+  console.error(
+    `check-corpus: unknown argument ${JSON.stringify(args[0])}\n` +
+      "    why: this script checks the product docs shipped in the npm package and takes no arguments.\n" +
+      "         `--corpus <dir>` checked a governed record with the PRE-PROFILE rule set — `owner` and\n" +
+      "         `provenance` required, a draft|review|approved|superseded status set — which the KSoR\n" +
+      "         Profile retired; it is gone rather than left loaded and contradicting the record spec.\n" +
+      "    fix: check a record with `ksor build`, or with the emitted\n" +
+      "         .agents/skills/format-checker/check.mjs — one rule set, run by every surface",
+  );
+  process.exit(1);
 }
 
-const corpusFlag = process.argv.indexOf("--corpus");
-if (corpusFlag !== -1) {
-  const dir = process.argv[corpusFlag + 1];
-  if (!dir || !existsSync(dir) || !statSync(dir).isDirectory()) {
-    console.error("check-corpus: --corpus requires an existing directory");
-    process.exit(1);
-  }
-  checkKnowledgeCorpus(path.resolve(dir), path.basename(dir));
-} else {
-  // workbench/example-corpus is NOT checked here any more: it is a KSoR Profile
-  // record now (record spec), and the rules above are the pre-profile ones —
-  // `title/status/owner/provenance`, a status set that no longer exists. The
-  // record checker judges it instead, through the real verb, in
-  // `packages/ksor/src/migrate.integration.test.ts` ("the repository's own
-  // fixture corpus is a migrated record"). `--corpus <dir>` still applies these
-  // rules on demand, for a corpus that has not been migrated yet.
-  const productDocs = path.join(repoRoot, "packages", "ksor", "docs");
-  if (existsSync(productDocs)) {
-    for (const file of walkMarkdown(productDocs)) {
-      const rel = path.relative(repoRoot, file);
-      checkFrontmatter(file, rel, "docs");
-      checkRelativeLinks(file, rel);
-    }
+const productDocs = path.join(repoRoot, "packages", "ksor", "docs");
+if (existsSync(productDocs)) {
+  for (const file of walkMarkdown(productDocs)) {
+    const rel = path.relative(repoRoot, file);
+    checkFrontmatter(file, rel);
+    checkRelativeLinks(file, rel);
   }
 }
 
