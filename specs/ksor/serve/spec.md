@@ -93,10 +93,23 @@ public caller would re-serve that generation to an internal one, and back — th
 one route where a value the CALLER holds could widen or narrow what they are
 shown. Proved from the door with two servers differing only in `KSOR_AUDIENCE`.
 
-**Visibility.** Serve reads the staged tier of the audience it is built
-for — the same seam and five guarantees as the site shells
-(`specs/ksor/visibility/spec.md`). Nothing outside the tier is on disk for
-any tool to return.
+**Visibility.** _Corrected 2026-08-25 (AGENTS.md decision 27): this clause
+described an architecture serve has never had, and named a model that no longer
+exists. It read "serve reads the staged tier of the audience it is built for …
+nothing outside the tier is on disk". Serve reads POSTGRES; there is no staged
+directory on the door at all, and there is no tier — a concept holds an
+audience LIST and a viewer holds one, and the concept is admitted when they
+overlap._
+
+Serve's viewer list is parsed from `KSOR_AUDIENCE` at boot and validated
+against the registry the ACTIVE generation was ingested with, so a door cannot
+be configured for an audience the published record does not know. Admission is
+one predicate set — audience overlap, lifecycle and trust floor beside the
+denial seam — composed into the SQL of both search arms, `read`, `outline` and
+the calibration sampler, so nothing outside the viewer is RETURNABLE rather
+than merely absent from disk. The rule is the record spec (§2.4, §2.5) and it
+is the same rule the site stages by; `AUDIENCE_CASES` and `LIFECYCLE_CASES`
+assert both halves against each other.
 
 **Errors are documentation.** Refusals exit 1 with a remedied message;
 environment failures exit 3. The kernel is BUNDLED into the one published
@@ -120,8 +133,11 @@ operations `ksor ingest`/`schema`/`calibrate`/`gc` are the same binary.
    test; no code path yields prose without citations.
 4. A public bind with no auth configuration refuses to boot, slugged; the
    deliberate opt-out flag boots and says what it did.
-5. A serve built for audience X returns zero traces of any narrower tier
-   (canary method, positive controls).
+5. A serve configured for a viewer list returns zero traces of any concept
+   whose audience list does not overlap it — through search, read, outline,
+   citations, counts and positions (canary method, positive controls).
+   _Corrected 2026-08-25: this read "any narrower tier", which cannot be
+   evaluated now that audiences are unordered identifiers._
 
 ## Status against acceptance (2026-08-19 — the draft's honest ledger)
 
@@ -133,9 +149,11 @@ probes; oracle-fixture parity for chunking, calibration math, windowing,
 manifest; and the calibrate CLI's synthesized door (`calibrateCommand` builds
 the text generator and passes it into `runCalibration` — corrected 2026-08-20:
 this spec listed it as unwired after the code landed; the code wins). Not yet
-wired: the visibility-staged tier as serve's source (clause above is contract,
-not behavior), behavioural evals as a CI gate, and the `.mcp.json` scaffold
-rung.
+wired: behavioural evals as a CI gate, and the `.mcp.json` scaffold rung.
+_Corrected 2026-08-25: this list also carried "the visibility-staged tier as
+serve's source". That is retired rather than pending — the audience decision IS
+wired and enforced in the serving predicate, and it will never be wired as a
+staged tier, which is not the architecture._
 The "declared-but-uncalibrated refuses" invariant is now REPRESENTABLE and
 enforced (`retrieval.vector_floor: uncalibrated` refuses every serve —
 resolved 2026-08-19), so the grammar is no longer a two-state gap. It also

@@ -6,6 +6,20 @@ claim: the site is the human surface of a governed record, and a reader who cann
 
 # Study attachments — summaries and flashcard decks
 
+> **Corrected in part, 2026-08-25 (AGENTS.md decision 27).** The guarantee is
+> unchanged — an attachment is part of its parent and has no identity of its
+> own — and three clauses that state it are now wrong in their details. `C12`:
+> there is no audience TIER and no `default_visibility`; an attachment
+> inherits its parent's `ksor.audience` LIST, matched by overlap. `C13`: a
+> `<doc>.summary.md` must now CARRY frontmatter, exactly `type: Summary`, and
+> anything else — absence included — is what `ksor-attachment-frontmatter`
+> refuses; the class refusal became a one-key allow-list because the bundle
+> needs a marker to tell a companion from a concept, and an allow-list of one
+> re-opens nothing. `C14`: there is no `sor_id` override to honour — `sor_id`
+> is retired and path is identity. The three leaks `C13` was written to close
+> are closed twice over now: `visibility`, `owner` and `provenance` are refused
+> record-wide as `ksor-legacy-key`. Each is corrected in place below.
+
 A document in `knowledge/` may carry two **attachments**, named after it:
 
 | File                    | What it is                            |
@@ -68,18 +82,26 @@ Each is separately observable on the built output:
 
 ### 1.3 Governance inheritance
 
-- `C12` An attachment's audience tier is its **parent's**, never its own and
-  never `default_visibility`. A restricted parent's attachments are absent
-  from a wider build.
-- `C13` An attachment declaring **any frontmatter** is refused
-  (`ksor-attachment-frontmatter`). Broader than "refuse `visibility:`", and
-  deliberately: one rule closes `visibility:` widening, `sor_id:` takedown
-  escape, and `status:`/`owner:`/`provenance:` claiming governance a thing with
-  no id cannot carry — where a per-key allowlist would re-open the argument for
-  every future key.
-- `C14` Takedown denial is evaluated on the **parent's** stable id (honouring
-  a parent `sor_id:` override) and on the attachment's own record path for the
-  subtree arm. A denied parent takes its attachments with it.
+- `C12` An attachment's audience is its **parent's** `ksor.audience` list,
+  never its own — matched against the viewer's list by overlap, and the
+  widening rule evaluates a companion's body with the parent's list. A
+  restricted parent's attachments are absent from a build that does not overlap
+  it. _(2026-08-25: was "audience tier … never `default_visibility`"; there is
+  no tier and no default.)_
+- `C13` A `<doc>.summary.md` whose frontmatter is anything but exactly
+  `type: Summary` is refused (`ksor-attachment-frontmatter`) — absence of
+  frontmatter included, since the marker is what tells a companion from a
+  concept. The `.yaml` kinds declare nothing at all. _(2026-08-25: this read
+  "an attachment declaring **any** frontmatter is refused". The reasoning was
+  that one class rule closes `visibility:` widening, `sor_id:` takedown escape
+  and claimed governance in one stroke, where a per-key allowlist re-opens the
+  argument for every future key. An allow-list of ONE does not: it admits the
+  marker and nothing else, and the three leaks it was guarding are now refused
+  record-wide as `ksor-legacy-key` besides.)_
+- `C14` Takedown denial is evaluated on the **parent's** stable id, which is
+  its path, and on the attachment's own record path for the subtree arm. A
+  denied parent takes its attachments with it. _(2026-08-25: was "honouring a
+  parent `sor_id:` override"; `sor_id` is retired.)_
 - `C15` `site.governance: false` does **not** hide attachments. A summary is
   content, not governance furniture.
 
@@ -163,14 +185,14 @@ CardSchedule` — no React, no storage, no ambient clock.
 
 ## 2 · Where each rule lives
 
-| Rule                             | Home                                                  |
-| -------------------------------- | ----------------------------------------------------- |
-| what an attachment _is_          | `lib/attachment-rule.ts` — ONE canonical file, copied |
-| refusal with a remedy            | `check.mjs` (both skill copies)                       |
-| tier + denial inheritance        | `lib/stage-knowledge.ts` `planStage`                  |
-| not-a-document, on every surface | `source.config.ts` — the `files` globs                |
-| not an MCP node                  | `packages/content/.../plain-tree.ts` `isDoc`          |
-| scheduling                       | `lib/srs.ts` — pure                                   |
+| Rule                             | Home                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| what an attachment _is_          | `lib/attachment-rule.ts` — ONE canonical file, copied                    |
+| refusal with a remedy            | `check.mjs` (both skill copies)                                          |
+| audience + denial inheritance    | `lib/stage-knowledge.ts` `planStage` (denials from the committed ledger) |
+| not-a-document, on every surface | `source.config.ts` — the `files` globs                                   |
+| not an MCP node                  | `packages/content/.../plain-tree.ts` `isDoc`                             |
+| scheduling                       | `lib/srs.ts` — pure                                                      |
 
 The attachment rule is duplicated between the kernel (`isDoc`) and the site
 (`check.mjs`, staging, the globs), which is the precise shape decision 18
@@ -226,7 +248,7 @@ naming neither the file's purpose nor the rule.
   card's back is in the page bytes whatever the reveal state (verified: card
   text greps out of the built `index.html`). Flip is a reading affordance, not
   a secrecy boundary, and nothing here should be read as one — a fact a reader
-  may not see belongs behind `visibility:`, not behind a button.
+  may not see belongs behind `ksor.audience`, not behind a button.
 
 ## 6 · Known asymmetries, stated rather than hidden
 

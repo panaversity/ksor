@@ -12,10 +12,14 @@ A document in `knowledge/` may carry a fifth **attachment**, named after it:
 | ------------------- | -------------------------------------- |
 | `<doc>.slides.yaml` | a presentation that teaches `<doc>.md` |
 
-Everything the study-attachments spec says holds unchanged: no route, no
-sidebar entry, no `llms.txt` line, no markdown twin, no search entry, no stable
-id, no MCP node, no frontmatter of its own, and its parent's governance
-entirely.
+Everything the study-attachments spec says holds: no route, no sidebar entry,
+no `llms.txt` line, no markdown twin, no search entry, no stable id, no MCP
+node, no frontmatter of its own, and its parent's governance entirely.
+_Corrected 2026-08-25: "unchanged" was the wrong word to delegate with. The
+companion frontmatter rule reversed for ONE kind on 2026-08-25 — a
+`<doc>.summary.md` must now carry exactly `type: Summary` — and that spec's
+`C12`/`C13`/`C14` are corrected there. For a `.slides.yaml` the no-frontmatter
+clause is unaffected: a YAML companion declares nothing._
 
 Ported from the predecessor's **Teaching Aid** — a `## 📚 Teaching Aid`
 heading, a `:::tip` with a share link, and a raw `<div>`/`<iframe>` to Google
@@ -43,8 +47,16 @@ exists to settle, and admitting it here would undercut the whole claim.
 
 ## 2 · Placement, and why it is not with the other aids
 
-The deck renders at the **top** of the document's page, before the prose —
-alone among the attachments. The summary is a second reading of the document,
+The deck renders **after the document's introduction** — everything before its
+first `##` section — and before that heading; in a document with no sections it
+follows the prose. Alone among the attachments, it is above the body rather
+than after it. _Corrected 2026-08-25: this read "at the top of the document's
+page, before the prose", which is where it shipped and where it no longer is
+(released in 0.0.38). Between the governance row and the first word, a deck
+reads as page furniture rather than as part of the document, and on a long
+lesson it put fourteen slides in front of the paragraph that says what the
+lesson is. The placement comes from the headings the author already wrote — no
+marker, no frontmatter key._ The summary is a second reading of the document,
 and the flashcards and quiz are what a reader does _after_ reading; a deck is
 the SHAPE of the thing, and five minutes of slides gives the detail somewhere
 to land. The predecessor puts its own near the top for the same reason, and
@@ -111,8 +123,9 @@ RISES rather than sinking — a darker stage measured L 4.4 against the page's
 
 ## 6 · Acceptance
 
-1. An owned deck renders at the top of its document's page and nowhere else in
-   the export; **every slide** is in the shipped HTML.
+1. An owned deck renders after its document's introduction, immediately before
+   the first `##` section, and nowhere else in the export; **every slide** is
+   in the shipped HTML.
 2. An owned deck ships **no `<iframe>`** and contacts nobody.
 3. A linked deck ships no frame until a reader clicks; the link out is always
    present.
@@ -120,9 +133,13 @@ RISES rather than sinking — a darker stage measured L 4.4 against the page's
    with and without the deck.
 5. `ksor ingest` creates no node; no `stable_id` resolves to one.
 6. A restricted parent's deck appears in 0 files of a public build, against a
-   positive control at its own tier.
+   positive control built for a viewer list that overlaps the parent's
+   audience.
 7. `ksor-slides-two-sources`, `ksor-slides-empty` and `ksor-slides-insecure`
-   refuse in `pnpm check` and in `pnpm build`.
+   refuse in `pnpm build`. _Corrected 2026-08-25: was "in `pnpm check` and in
+   `pnpm build`". The deck's shape is validated in `system/site/lib/slides.ts`
+   at site-build time; none of the three slugs is in the record checker's set,
+   so `pnpm check` accepts a deck declaring both sources._
 8. Share urls become embed urls for the named providers; an unknown host
    renders as a link rather than an empty frame.
 

@@ -16,7 +16,19 @@ evidence: panaversity/ksor#29
 > §3 are the contract**; what survives here unchanged is the _reasoning_ — why
 > the governance a document carries must be visible on the surface that serves
 > it, and why `site.governance` decides the pages and never the agent files.
-> The key-by-key tables below name pre-profile keys and are read as history.
+>
+> **Everything below the reasoning is history**, not only the key-by-key
+> tables — the "observable contract" section names the same retired keys in
+> prose, and its acceptance clauses describe fixtures the checker now refuses
+> to build (`status: approved`, `status: superseded`). Read in order, the
+> mapping is: `owner` → `ksor.owner`; `provenance` → `sources[]`, each entry
+> naming a `resource`; `effective` → `ksor.effective_from`; `superseded_by` →
+> `ksor.superseded_by` beside `status: deprecated`; and `ALLOWED_KEYS` →
+> nothing, because a concept's own top level is OPEN now (record spec §2.7).
+> One subsection inverts completely rather than moving: "`effective` is a
+> date, or it is quoted text", which instructs an author to write a bare
+> `YYYY-MM-DD` — the one shape `ksor-instant-form` refuses. Every timestamp
+> is an ISO 8601 instant with an explicit offset.
 
 The record carries a governance vocabulary on every document and `pnpm check`
 enforces it. The site parses four of those keys and renders none of them.
@@ -151,7 +163,15 @@ timezone or on YAML's rollover behaviour cannot be allowed through.
   document's governance as frontmatter — the record's own grammar. Measured
   before and after on shipped bytes: `research/site-design.md` F1. The per-page
   markdown artifact stays out of scope (F2), and the parenthetical about it
-  becomes true the day `ksor build` emits one._
+  becomes true the day `ksor build` emits one._ _Revision 2026-08-25 (decision
+  27): that day arrived. The twin exists at `/md/`, and it serves the concept's
+  own frontmatter intact — nested `ksor:` and all — under the derived
+  `trust_tier` and the build's `build_id`, `source_commit` and `ksor_version`,
+  so an OKF consumer parses the profile's grammar rather than this shell's
+  summary of it. The caveat markers this clause added to `llms.txt` are
+  retired with it: a deprecated, not-yet-effective or stale concept is now
+  ABSENT from the machine surfaces entirely (record spec §2.5), which is the
+  profile's answer to the same defect._
 
 ## Where it binds: the Fumadocs reference shell
 
@@ -211,9 +231,16 @@ Red first, in this order:
 
 - **Per-document visibility / audience tier** — interacts with the visibility
   staging sweeps and gets its own decision.
-- **Generations and `build.lock.json`** — a generation is a serve-side and
+- ~~**Generations and `build.lock.json`** — a generation is a serve-side and
   `ksor build` concept; a static site build has no access to one. The
-  citation pin stays unrendered until `ksor build` emits the record.
+  citation pin stays unrendered until `ksor build` emits the record.~~
+  _Revision 2026-08-25 (decision 27, code wins): half reversed. The static
+  site build now REQUIRES `build.lock.json` — it refuses `ksor-lock-missing` /
+  `ksor-lock-stale` outside development — and stamps the lock's `build_id`,
+  `source_commit` and `ksor_version` into `llms.txt`, `llms-full.txt`, every
+  twin and `server.json`. What stays true is the distinction: `build_id` is
+  not a `generation`, and the generation a citation pins remains the kernel's
+  counter, which a static build still has no access to._
 - **Governed directives** (`:::quiz` and friends) — no grammar ratified
   (panaversity/ksor#35).
 - **The typography / layout / identity pass** — the other half of

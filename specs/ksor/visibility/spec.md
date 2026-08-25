@@ -21,6 +21,22 @@ evidence: research/visibility.md · panaversity/ksor#10
 > clause is `research/okf-native.md` §2.2. Also superseded: "on both shells" —
 > the second shell was retired by decision 9's 2026-08-24 revision — and
 > "absent `audiences:`, nothing changes": staging is unconditional now.
+>
+> Three more clauses below are superseded and were not covered by the first
+> pass of this banner, so they are named here rather than left to be inferred.
+> **The status vocabulary**: "a document can be `status: approved`" — the
+> statuses are `draft | stable | deprecated`, and `approved` is refused
+> (`ksor-status-unknown`). The orthogonality the sentence was making is
+> unchanged and is now stronger, because audience and lifecycle are separate
+> columns and separate seams. **Checker rules 1–5**: there is no closed
+> top-level key set any more (unknown keys are PRESERVED, record spec §2.7);
+> `visibility` and `default_visibility` do not exist; and `audiences:` in
+> `instance.md` is refused with the hint to move it to the policy
+> (`ksor-instance-format`). **Rule 7**: top-level `superseded_by` is itself
+> refused; the rule now applies to `ksor.superseded_by` and fires as
+> `ksor-supersession-strands`, which also covers a successor that does not
+> exist, is not `stable`, or sits on a concept that is not `deprecated`.
+> Rules 6 and 7's REASONING is untouched and is why the widening rule exists.
 
 Who may read a document is the most consequential fact about it, and until
 now it was the one fact outside governance — answered by whoever configures
