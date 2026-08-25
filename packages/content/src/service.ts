@@ -939,7 +939,15 @@ export async function readDocument(
               : "windowed — continue with from_heading set to this response's next (it carries its own scope; do not also resend heading)",
         }
       : {}),
-    ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
+    // Both untrusted channels, not just the prose. The frontmatter is a second
+    // one — the profile is loose (record/profile.ts), so any key an author
+    // invents rides out with the document — and an advisory computed over
+    // `text` alone flagged a directive in the body while staying silent on the
+    // identical sentence one line above it, in the block a RAG consumer reads
+    // in the same payload (review finding).
+    ...(instructionLike(text) || instructionLike(frontmatter ?? "")
+      ? { content_advisory: CONTENT_ADVISORY }
+      : {}),
     // Always stated: "pinned" when the caller's token was honoured, "unpinned"
     // when they sent none, and the refresh reason when one was sent and could
     // not be used.
