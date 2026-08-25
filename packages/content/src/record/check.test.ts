@@ -500,7 +500,7 @@ describe("checkRecord — every link target is judged, not only a concept", () =
 describe("checkRecord — a refused document produces ONE problem, not a cascade", () => {
   const good = doc("Returns", PUBLIC);
   const typo = good.replace("ksor:", "ksor:\n  effective-from: 2026-01-01T00:00:00Z");
-  const indexes = (files: Record<string, string>): Map<string, string> =>
+  const indexes = (files: Record<string, string>): ReadonlyMap<string, string> =>
     checkRecord(record(files, ["knowledge/policies"]), { mode: "build" }).indexes;
 
   it("the green record checks clean, indexes and all", () => {
