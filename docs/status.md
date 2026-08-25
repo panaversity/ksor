@@ -6,7 +6,7 @@ updated: 2026-08-25.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.39** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.40** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
@@ -21,7 +21,9 @@ tarball under `docs/`.
 stated the KSoR architecture in the package README; 0.0.38 added the
 `make-summary` skill, put the breadcrumb on every page and moved the teaching
 aid after a document's introduction; 0.0.39 stopped a malformed
-`KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal.
+`KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal; 0.0.40 made
+a document's page more readable — an overflowing code block can be unwrapped,
+table rows alternate, and a callout carries a rule down its left edge.
 
 **Everything under the next heading is UNRELEASED** — it is the
 `okf-native-spec` branch, and no adopter has any of it yet.

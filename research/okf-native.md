@@ -721,9 +721,11 @@ else, so an `.mdx` never reaches migrate; the record checker refuses one under
 hand. The parenthetical is already corrected in §1.8.
 
 **And one the plan predicted correctly and is worth naming because it is a
-cost, not a win.** The tool surface grew: the three definitions measured
-16,214 chars ≈ 4,054 tokens on 2026-08-25, against ~2,990 tokens measured
-2026-08-23 before the trust floor and the per-hit governance block. That is
+cost, not a win.** The tool surface grew: the served `tools` array measured
+16,214 chars ≈ 4,054 tokens on 2026-08-25 — the three definitions' own JSON
+sums to 16,210 of that, the array adding two brackets and two separators —
+against ~2,990 tokens measured 2026-08-23 before the trust floor and the
+per-hit governance block. That is
 the price of an agent being able to tell a reviewed document from an
 unreviewed one, charged once per session, and it is recorded in decision 23's
 revision rather than argued away.

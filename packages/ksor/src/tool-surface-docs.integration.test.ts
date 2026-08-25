@@ -70,6 +70,11 @@ describe("the documented tool-definition sizes", () => {
       "specs/ksor/gateway/spec.md",
       "docs/status.md",
       "AGENTS.md",
+      // Two more that quote the figure in prose rather than in a table. They
+      // were the last places the array measure was still attributed to "the
+      // three definitions", which is the misreading the whole exercise is about.
+      "research/okf-native.md",
+      ".changeset/okf-door-on-the-profile.md",
     ];
     for (const rel of documents) {
       const text = readFileSync(path.join(ROOT, rel), "utf8");
