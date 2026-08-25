@@ -372,6 +372,30 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     }
   });
 
+  it("REFUSES a floor it cannot recognise instead of serving the whole record", async () => {
+    // The registration is adopter-owned code (decision 23): a `z.string()`
+    // where TRUST_TIERS was meant boots clean and the boot inspection cannot
+    // see it, because it checks that the parameter EXISTS. So the value has to
+    // be refused where it is used. It used to resolve to -1, `Math.max` reduced
+    // it to the deployment's floor, and on a door configured with none the
+    // unverified document came back under ok:true — the argument path doing the
+    // opposite of what the environment path refuses.
+    for (const floor of ["bogus", -5] as unknown as TrustTier[]) {
+      const reply = await searchHandler(doorAt(undefined))({
+        query: QUERY,
+        k: 10,
+        min_trust_tier: floor,
+      });
+      const text = reply.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+      expect(reply.isError, `${JSON.stringify(floor)} → ${text}`).toBe(true);
+      expect(text).toContain("ksor-trust-floor-unknown");
+      // The refusal is the WHOLE answer: no envelope, so nothing the caller
+      // could mistake for hits that cleared a floor.
+      expect(reply.structuredContent).toBeUndefined();
+      expect(text, "no passage may ride out on a refusal").not.toContain("Compensation");
+    }
+  });
+
   it("configuration TIGHTENS and never loosens — a lower request gets the deployment's floor", async () => {
     // The half that is easy to get backwards: `Math.max`, not "the argument wins".
     expect(
