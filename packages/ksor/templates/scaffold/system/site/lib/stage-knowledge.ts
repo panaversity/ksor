@@ -630,13 +630,14 @@ function watchRecord(recordDir: string, stageDir: string): void {
  * or carries a takedown, and most records declare neither, so a sim hung off
  * it published for the rare record and silently vanished for the common one
  * (found live 2026-08-24: nothing reached `public/` on the level-0 path).
- * Reading the SOURCE dir inherits the filtering when there is any, and works
- * when there is none. What it does NOT inherit at level 0 is the staging
- * plan's rule that only a REFERENCED asset ships: a record with no audiences
- * and no takedowns publishes every document anyway, so an unreferenced sim
- * ships its bytes there. Said rather than fixed, because the moment either
- * governance exists the staged dir is what this walks and the rule applies.
+ *
+ * That fast path is gone (decision 27: no record is safe to serve raw once
+ * drafts and lifecycle decide what publishes), so this now always walks the
+ * STAGED directory — which means it inherits the audience filter AND the
+ * staging plan's rule that only a REFERENCED asset ships. The level-0 caveat
+ * this comment used to carry no longer has a case that reaches it.
  */
+const PUBLIC_SIM_DIR = "./public/sims";
 
 function publishSims(sourceDir: string): void {
   const target = path.resolve(process.cwd(), PUBLIC_SIM_DIR);
