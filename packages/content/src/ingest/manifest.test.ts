@@ -232,6 +232,44 @@ describe("governance is part of the manifest's fingerprint", () => {
     expect(JSON.stringify(manifestToJson(parsed)), "the emitter is a fixed point").toBe(once);
   });
 
+  /**
+   * `sources: []` used to survive a round trip as `null`: the emitter omitted an
+   * empty list and the parser read an absent key as null, so
+   * `parseManifest(manifestToJson(m))` was not `m`. Two consequences, and the
+   * second is the one that matters — the manifest's sha256 fills
+   * `instance_bundle_sha256`, the provenance digest of a generation, and it
+   * could not tell `sources: []` from no `sources:` at all. That is the same
+   * class of blind spot as the governance-less manifest this file already
+   * guards against (review 2026-08-25).
+   *
+   * Closed at the CONSTRUCTOR rather than in the emitter, because that is the
+   * one gate every node passes through — both adapters, `parseManifest`, and a
+   * hand-built fixture. An empty list of sources and no list of sources make
+   * the same claim (none), so the constructor makes them the same VALUE, the
+   * way `governanceOf` already normalises `verified`.
+   */
+  it("an empty sources / verified list is the same value as no list, all the way through", () => {
+    const empty = manifestNode({
+      stable_id: "knowledge/x",
+      slug: "x",
+      title: "X",
+      kind: "document",
+      governance: { ...NO_GOVERNANCE, sources: [], verified: [] },
+    });
+    expect(empty.governance.sources, "normalised at the constructor").toBeNull();
+    expect(empty.governance.verified).toBeNull();
+
+    const m = withGovernance({ ...NO_GOVERNANCE, sources: [], verified: [] });
+    expect(
+      JSON.stringify(manifestToJson(m)),
+      "and so it hashes identically to a node that declared neither",
+    ).toBe(JSON.stringify(manifestToJson(withGovernance(NO_GOVERNANCE))));
+    expect(
+      parseManifest(JSON.stringify(manifestToJson(m))).nodes[0]!.governance,
+      "the round trip is now lossless — it is a fixed point, not a one-way trim",
+    ).toEqual(m.nodes[0]!.governance);
+  });
+
   it("REFUSES a malformed governance block rather than dropping it", () => {
     // Dropping an `audience` would serve the document to nobody — or, under an
     // older reading, to everyone.

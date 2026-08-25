@@ -345,3 +345,94 @@ describe("parseConcept — the keys the build derives are not the author's to cl
     });
   }
 });
+
+/**
+ * The floor loop refuses a floor key that is ABSENT. `alreadyRefused` claimed
+ * every floor key had already been refused in the author's own words — for any
+ * value, present or not — so a floor key that was PRESENT but wrong-typed
+ * pushed nothing, had its schema issue swallowed as the duplicate of a refusal
+ * nobody made, and returned `ok: false` with an EMPTY refusal list. `check.ts`
+ * spreads that empty list, adds the id to `unreadable` and drops the document:
+ * no page, no MCP node, no lock entry, no refusal printed, exit 0. A governed
+ * document leaves the record in silence, and the way in is a title that lost
+ * its quotes (found in review, 2026-08-25).
+ */
+describe("parseConcept — a floor key that is present but empty or not text", () => {
+  const show = (v: unknown): string => (typeof v === "number" ? String(v) : JSON.stringify(v));
+
+  it.each([
+    ["title", 42],
+    ["description", ""],
+    ["type", ""],
+    ["status", 5],
+    ["title", " "],
+    ["title", null],
+    ["description", ["one", "two"]],
+    ["type", true],
+  ])("refuses `%s: %s`, names the key, and never drops the document in silence", (key, value) => {
+    const r = parseConcept(P, { ...STABLE, [key]: value });
+    expect(r.ok, `accepted ${key}: ${show(value)}`).toBe(false);
+    if (r.ok) return;
+    expect(
+      r.refusals.length,
+      `${key}: ${show(value)} refused with NOTHING to print`,
+    ).toBeGreaterThan(0);
+    expect(
+      r.refusals.some((x) => x.why.includes(`\`${key}\``)),
+      `no refusal names \`${key}\`: ${JSON.stringify(r.refusals)}`,
+    ).toBe(true);
+  });
+
+  /**
+   * The invariant rather than one of its holes: `ok: false` with nothing to
+   * print is a bug in the parser, not a state a document can be in — every
+   * caller turns it into a dropped document and a clean exit.
+   */
+  it("never fails without saying why, for any single-key mutation of a valid concept", () => {
+    const hostile = [0, -1, "", " ", null, true, [], {}, 42, Number.NaN, Number.POSITIVE_INFINITY];
+    const silent: string[] = [];
+    for (const value of hostile) {
+      for (const key of [...Object.keys(STABLE), "x_extension"]) {
+        const r = parseConcept(P, { ...STABLE, [key]: value });
+        if (!r.ok && r.refusals.length === 0) silent.push(`${key}: ${show(value)}`);
+      }
+      for (const key of Object.keys(STABLE.ksor)) {
+        const r = parseConcept(P, { ...STABLE, ksor: { ...STABLE.ksor, [key]: value } });
+        if (!r.ok && r.refusals.length === 0) silent.push(`ksor.${key}: ${show(value)}`);
+      }
+    }
+    expect(silent).toEqual([]);
+  });
+});
+
+/**
+ * YAML's core schema resolves `.inf`, `-.inf`, `.nan` — and an exponent that
+ * overflows, `1e400` — to real JavaScript numbers, so `order:` can carry a
+ * value that is not a position. zod 4 refuses a non-finite number, which is
+ * why nothing has ever sorted wrong; what it SAYS is "Invalid input: expected
+ * number, received number", which tells an author nothing at all about the
+ * file they have to fix (product principle 4).
+ */
+describe("parseConcept — `order` is a position, and the refusal has to say so", () => {
+  it.each([
+    ["`.inf`", Number.POSITIVE_INFINITY],
+    ["`-.inf`", Number.NEGATIVE_INFINITY],
+    ["`.nan`", Number.NaN],
+  ])("refuses a non-finite order written as %s, in the author's words", (_yaml, value) => {
+    const r = parseConcept(P, { ...STABLE, order: value });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    const refusal = r.refusals.find((x) => x.why.includes("`order`"));
+    expect(refusal, JSON.stringify(r.refusals)).toBeDefined();
+    expect(`${refusal?.why}`).not.toContain("expected number, received number");
+    expect(`${refusal?.why}`.toLowerCase()).toContain("finite");
+    expect(`${refusal?.fix}`).toContain("order");
+  });
+
+  it("keeps ordinary orders, negative and fractional ones included", () => {
+    for (const order of [0, -3, 2.5, Number.MAX_SAFE_INTEGER]) {
+      const r = parseConcept(P, { ...STABLE, order });
+      expect(r.ok, `${order}: ${JSON.stringify(r)}`).toBe(true);
+    }
+  });
+});

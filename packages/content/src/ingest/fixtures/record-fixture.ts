@@ -12,7 +12,13 @@ import { dirname, join } from "node:path";
 import type { ContentInstance } from "../../instance.js";
 import { checkRecord } from "../../record/check.js";
 import { loadRecord } from "../../record/load.js";
-import { conceptHashes } from "../lock-gate.js";
+import {
+  assetHashes,
+  companionHashes,
+  conceptHashes,
+  indexHashes,
+  sha256OfDocument,
+} from "../lock-gate.js";
 
 export const APPROVER = "human:cfo";
 export const TAKEDOWN_ACTOR = "human:ciso";
@@ -128,14 +134,22 @@ export function writeIndexesAndLock(root: string, buildId: string = "sha256:fixt
 
 export function writeLock(root: string, buildId: string = "sha256:fixture"): void {
   const record = loadRecord(root);
-  const documents = [...conceptHashes(record)]
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([path, sha256]) => ({ path, sha256 }));
+  const list = (m: Map<string, string>): { path: string; sha256: string }[] =>
+    [...m].sort(([a], [b]) => (a < b ? -1 : 1)).map(([path, sha256]) => ({ path, sha256 }));
+  // Every digest the ingest gate reads, because the gate reads every digest
+  // `ksor build` records — a fixture that emitted a narrower lock would make
+  // the widest half of that check untestable through this helper.
   const lock = {
     format: 1,
     build_id: buildId,
     as_of: "2026-08-25T12:00:00Z",
-    documents,
+    instance_sha256: sha256OfDocument(record.files.get("instance.md") ?? ""),
+    policy_sha256: sha256OfDocument(record.files.get(".ksor/governance.yaml") ?? ""),
+    ledger_sha256: sha256OfDocument(record.files.get(".ksor/takedowns.yaml") ?? ""),
+    documents: list(conceptHashes(record)),
+    companions: list(companionHashes(record)),
+    assets: list(assetHashes(record)),
+    indexes: list(indexHashes(record)),
   };
   writeFileSync(join(root, "build.lock.json"), `${JSON.stringify(lock, null, 2)}\n`);
 }

@@ -76,15 +76,48 @@ export function widenToInstant(value: string): string | null {
   return null;
 }
 
+/**
+ * Every line of `body` that is not inside a fenced code block, blanked rather
+ * than dropped so paragraph boundaries survive.
+ *
+ * ONE walk, because two subtly different ones is how the bug arrived: this file
+ * already tracked fences for `firstHeading` and did not for `firstSentence`.
+ * The record module's `stripCode` (`record/citations.ts`) answers a DIFFERENT
+ * question and cannot be reused here — it also removes inline code SPANS, so
+ * "Run `pnpm dev` to start." would come back as "Run  to start.", and migrate
+ * would be publishing a sentence the author never wrote as the record's
+ * `description:`. Its fence grammar is CommonMark's, and so is this one: a
+ * block opens on `` ``` ``/`~~~` indented at most three spaces and closes only
+ * on a fence of the same character at least as long.
+ */
+function outsideFences(body: string): string[] {
+  const out: string[] = [];
+  let fence: { readonly char: string; readonly length: number } | null = null;
+  for (const line of body.split("\n")) {
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (fence === null) {
+      if (open?.[1] !== undefined) {
+        fence = { char: open[1][0] ?? "`", length: open[1].length };
+        out.push("");
+        continue;
+      }
+      out.push(line);
+      continue;
+    }
+    const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+    if (close?.[1] !== undefined && close[1][0] === fence.char && close[1].length >= fence.length) {
+      fence = null;
+    }
+    out.push("");
+  }
+  return out;
+}
+
 /** The first ATX H1, or null. Fenced code is skipped — a `# ` inside a shell block is not a heading. */
 export function firstHeading(body: string): string | null {
-  let fenced = false;
-  for (const line of body.split("\n")) {
-    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
-    else if (!fenced) {
-      const m = /^#\s+(.+?)\s*$/.exec(line);
-      if (m !== null) return m[1] ?? null;
-    }
+  for (const line of outsideFences(body)) {
+    const m = /^#\s+(.+?)\s*$/.exec(line);
+    if (m !== null) return m[1] ?? null;
   }
   return null;
 }
@@ -94,9 +127,16 @@ export function firstHeading(body: string): string | null {
  * own "scope" sentence, which is where the instance's `description:` comes
  * from. Cutting at `. ` is mechanical and occasionally cuts at an
  * abbreviation; the owner reads the diff before it is written.
+ *
+ * A fenced block is not prose. It read as one until 2026-08-25 — its lines are
+ * ordinary paragraphs to a blank-line split — so a record whose body opened
+ * with a quickstart published a line of shell as the sentence saying what the
+ * record IS, into `llms.txt` and the MCP discovery document both.
  */
 export function firstSentence(body: string): string | null {
-  for (const block of body.split(/\n\s*\n/)) {
+  for (const block of outsideFences(body)
+    .join("\n")
+    .split(/\n\s*\n/)) {
     const text = block.trim();
     if (text === "" || text.startsWith("#") || /^[*\-+>|]/.test(text)) continue;
     const one = text.replace(/\s+/g, " ");
@@ -113,7 +153,9 @@ export function firstSentence(body: string): string | null {
  */
 export function stripLeadingHeading(body: string): string {
   const lines = body.split("\n");
-  const at = lines.findIndex((l) => /^#\s+/.test(l));
+  // The SAME fence walk `firstHeading` uses, so the heading found and the
+  // heading stripped can never be two different lines.
+  const at = outsideFences(body).findIndex((l) => /^#\s+/.test(l));
   if (at === -1) return body;
   const before = lines.slice(0, at).join("\n").trim();
   if (before !== "") return body;
@@ -388,25 +430,47 @@ export function migrateConcept(
   };
 }
 
-/** A summary companion carries exactly `type: Summary` — nothing else may govern from there. */
+/**
+ * A summary companion carries exactly `type: Summary` — nothing else may govern
+ * from there (decision 24: an attachment inherits its parent's audience, status
+ * and takedown ENTIRELY, and any other key claims governance a non-node cannot
+ * carry).
+ *
+ * ADDING the marker to a bare companion authors nothing: the file's kind is
+ * already declared by its name. REPLACING a block the author wrote is a
+ * different act, and this used to do it — `visibility: internal` on a summary
+ * was deleted, exit 0, nothing printed. Decision 24 refuses that as a CLASS
+ * rather than allow-listing keys, and so does the record checker
+ * (`ksor-attachment-frontmatter`); migrate was quietly converting that refusal
+ * into a silent rewrite of an author's governance.
+ */
 export function migrateSummary(path: string, text: string): ConceptResult {
   const split = splitFrontmatter(text, path);
-  const body = split.ok ? split.body : text.replace(/^---[\s\S]*?\n---\n/, "");
-  const already =
-    split.ok &&
-    split.frontmatter !== null &&
-    Object.keys(split.frontmatter).length === 1 &&
-    split.frontmatter["type"] === "Summary";
-  if (already) {
+  if (!split.ok) return { ok: false, refusals: [split.refusal] };
+  const keys = split.frontmatter === null ? [] : Object.keys(split.frontmatter);
+  if (keys.length === 1 && split.frontmatter?.["type"] === "Summary") {
     return {
       ok: true,
       outcome: { text, audiences: [], changed: false, demoted: false, successor: null },
     };
   }
+  if (keys.length > 0) {
+    return {
+      ok: false,
+      refusals: [
+        {
+          slug: "ksor-attachment-frontmatter",
+          path,
+          why: `a summary's frontmatter is exactly \`type: Summary\` — it inherits its parent's audience, status and takedown, and any other key claims governance a non-node cannot carry (found: ${keys.join(", ")}). Migrate will not delete a key an author wrote to make the file legal`,
+          fix: `delete ${keys.filter((k) => k !== "type").join(", ")} from ${path} — the parent document is where those belong — leaving \`type: Summary\` or no frontmatter at all, then run \`ksor migrate\` again`,
+        },
+      ],
+    };
+  }
   return {
     ok: true,
     outcome: {
-      text: `---\ntype: Summary\n---\n${body}`,
+      text: `---\ntype: Summary\n---\n${split.body}`,
       audiences: [],
       changed: true,
       demoted: false,
@@ -514,13 +578,32 @@ export function migrateInstance(text: string, ctx: InstanceContext): InstanceRes
   const identity = instanceNameOf(fm, ctx.directory);
   const name = identity.ok ? identity.name : null;
   if (!identity.ok) refuse(identity.why, identity.fix);
-  const title = str(fm["title"]) ?? firstHeading(split.body);
+  // In a format-1 record the H1 IS the display title (the scaffold's own prose
+  // said so); in a format-2 one `title:` is. Stripping the H1 unconditionally
+  // AND preferring `title:` meant a record carrying both, saying two different
+  // things, lost one of them and silently promoted the other to the name every
+  // page, `llms.txt` and the MCP discovery document leads with. Which is the
+  // title is an authoring decision, so migrate refuses it the same way it
+  // refuses to invent a `description` — it does not author knowledge, and
+  // deleting a heading an author wrote is that rule read the other way.
+  const declared = str(fm["title"]);
+  const heading = firstHeading(split.body);
+  const same = (t: string): string => t.replace(/\s+/g, " ").trim().toLowerCase();
+  if (declared !== null && heading !== null && same(declared) !== same(heading)) {
+    refuse(
+      `\`title: ${declared}\` and the body's heading \`# ${heading}\` are two different display titles, and migrating keeps one — under \`format: 1\` the heading was the title this record published, under \`format: 2\` it is \`title:\``,
+      `decide which one names this record: delete \`title:\` to keep \`${heading}\`, or delete the \`# \` heading to keep \`${declared}\` — then run \`ksor migrate\` again`,
+    );
+  }
+  const title = declared ?? heading;
   if (title === null) {
     refuse(
       "no `title:` and no `# ` heading in the body — the display title every page leads with",
       "add a `# ` heading to instance.md (or `title:` to its frontmatter) and run it again",
     );
   }
+  // Only reached when the heading BECAME the title or merely repeated it; the
+  // case where it says something else is refused above.
   const bodyWithoutHeading = stripLeadingHeading(split.body);
   const description = str(fm["description"]) ?? firstSentence(bodyWithoutHeading);
   if (description === null) {

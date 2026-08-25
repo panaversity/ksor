@@ -182,8 +182,15 @@ export function conceptIdOf(path: string): string {
 
 export function parseConcept(path: string, frontmatter: Record<string, unknown>): ConceptResult {
   const refusals: Refusal[] = [];
-  const refuse = (slug: RefusalSlug, why: string, fix: string): void => {
+  // The dotted paths the rules below have already refused in the AUTHOR's own
+  // words, so the schema pass does not print the same defect a second time in
+  // zod's. A record of what was pushed, never an assumption that something
+  // was: assuming it is what made a wrong-typed floor key vanish in silence
+  // (see `suppressed`).
+  const named = new Set<string>();
+  const refuse = (slug: RefusalSlug, why: string, fix: string, ...at: string[]): void => {
     refusals.push({ slug, path, why, fix });
+    for (const key of at) named.add(key);
   };
 
   for (const key of LEGACY_KEYS) {
@@ -221,8 +228,40 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
         "ksor-missing-key",
         `\`${key}\` is required on every concept`,
         `add \`${key}:\` to the frontmatter`,
+        key,
+      );
+      continue;
+    }
+    // A floor key that is PRESENT but carries no text is absent for every
+    // purpose it serves — `title: 42` renders no title, `description: ""`
+    // writes an empty §8 bullet, `status: 5` names no lifecycle — and YAML
+    // makes it one character wide: quotes lost off a numeric title, a key
+    // typed with nothing after it. It reaches this loop as a key that exists,
+    // so the branch above says nothing about it, and until it was named here
+    // the schema pass below swallowed it as a duplicate of a refusal nobody
+    // had made (found in review, 2026-08-25).
+    const value = frontmatter[key];
+    if (typeof value !== "string" || value.trim() === "") {
+      refuse(
+        "ksor-missing-key",
+        `\`${key}\` is present but carries no text — it is ${shapeOf(value)}, and a floor key with nothing readable in it governs nothing`,
+        `write \`${key}\` as a non-empty line of text; quote it where YAML would otherwise read it as a number, a date or a boolean (\`${key}: "2026"\`)`,
+        key,
       );
     }
+  }
+  // YAML's core schema resolves `.inf`, `-.inf`, `.nan` — and an exponent that
+  // overflows, `1e400` — to real numbers, so `order:` can hold a value that is
+  // not a position. zod refuses a non-finite number already; what it says is
+  // "expected number, received number", which names no file and no remedy.
+  const order = frontmatter["order"];
+  if (typeof order === "number" && !Number.isFinite(order)) {
+    refuse(
+      "ksor-frontmatter-invalid",
+      `\`order\` is ${Number.isNaN(order) ? "not a number" : `${order > 0 ? "" : "negative "}infinity`} — an order is a finite number, because it is a position among siblings; YAML reads \`.inf\`, \`-.inf\`, \`.nan\` and an overflowing \`1e400\` as real numbers, and the two surfaces would not agree where to file one (the index generator would sort \`-.inf\` first, the door's \`orderValue\` sorts every non-finite value last — decision 18)`,
+      "give `order` a finite number, or remove it — a concept that declares no `order` sorts after every concept that does",
+      "order",
+    );
   }
   // §8 renders `title` and `description` into ONE index bullet, so a line break
   // inside either does not render badly — it makes the bullet unparseable and
@@ -254,6 +293,8 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
       "ksor-audience-missing",
       "`ksor.audience` is required and is a non-empty list — omission is refused, never defaulted (record spec §2.4)",
       "add `ksor:\\n  audience: [public]`, or the registered audiences who may read this",
+      "ksor",
+      "ksor.audience",
     );
   }
   if (typeof ksor === "object" && ksor !== null && !Array.isArray(ksor)) {
@@ -275,6 +316,7 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
       "ksor-status-unknown",
       `\`status: ${frontmatter["status"]}\` is not one of ${STATUSES.join(" | ")}`,
       "`draft` while it is being written, `stable` once approved, `deprecated` with its successor",
+      "status",
     );
   }
 
@@ -303,8 +345,8 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
           `\`${at}\` is required — a URL, a bundle path, or a scope descriptor (OKF §5.1)`,
           "name where the source lives; a scope descriptor is allowed until a URL exists",
         );
-      } else if (alreadyRefused(at, refusals)) {
-        // The floor, status and audience refusals above are the author-facing form of the same issue.
+      } else if (suppressed(at, named)) {
+        // The floor, status, order and audience refusals above are the author-facing form of the same issue.
       } else {
         refuse(
           "ksor-frontmatter-invalid",
@@ -313,7 +355,7 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
         );
       }
     }
-    return { ok: false, refusals: sortRefusals(refusals) };
+    return refused(path, refusals);
   }
 
   const fm = parsed.data;
@@ -362,18 +404,44 @@ export function parseConcept(path: string, frontmatter: Record<string, unknown>)
       "record the deprecation by the owner or a takedown authority, usually with `ksor.superseded_by`",
     );
   }
-  if (refusals.length > 0) return { ok: false, refusals: sortRefusals(refusals) };
+  if (refusals.length > 0) return refused(path, refusals);
 
   return { ok: true, concept: toConcept(path, fm, frontmatter, reserved, generatedAt) };
 }
 
-function alreadyRefused(at: string, refusals: readonly Refusal[]): boolean {
-  if ((FLOOR_KEYS as readonly string[]).includes(at)) return true;
-  if (at === "status") return refusals.some((r) => r.slug === "ksor-status-unknown");
-  if (at === "ksor" || at === "ksor.audience" || at.startsWith("ksor.audience.")) {
-    return refusals.some((r) => r.slug === "ksor-audience-missing");
+/**
+ * Every exit that says `ok: false`. A refusal-free failure is not a state a
+ * document can be in: `check.ts` spreads the list, marks the concept unreadable
+ * and moves on, so an empty one drops a governed document — no page, no MCP
+ * node, no lock entry — and the build still exits 0. The fallback has to say
+ * something an author can act on even though the fault is ours, and it is here
+ * so that a rule added above cannot reopen the hole `suppressed` closed.
+ */
+function refused(path: string, refusals: Refusal[]): ConceptResult {
+  if (refusals.length === 0) {
+    refusals.push({
+      slug: "ksor-frontmatter-invalid",
+      path,
+      why: "this frontmatter is not a concept the profile can read, and the rule that rejected it did not say which key was at fault — the fault is ksor's, not the document's",
+      fix: "check the frontmatter against the profile (record spec §2), and report the file that produced this — a refusal with nothing to print is a bug",
+    });
   }
-  return false;
+  return { ok: false, refusals: sortRefusals(refusals) };
+}
+
+/** Was `at` already refused in the author's own words? Never a guess — see `named`. */
+function suppressed(at: string, named: ReadonlySet<string>): boolean {
+  // A refusal naming `ksor.audience` covers every issue raised inside the list.
+  return named.has(at) || (at.startsWith("ksor.audience.") && named.has("ksor.audience"));
+}
+
+/** What an unusable floor value IS, in an author's words rather than `typeof`'s. */
+function shapeOf(value: unknown): string {
+  if (value === null || value === undefined) return "empty";
+  if (typeof value === "string") return "blank";
+  if (Array.isArray(value)) return "a list";
+  if (typeof value === "object") return "a mapping";
+  return `a ${typeof value}`;
 }
 
 function toConcept(

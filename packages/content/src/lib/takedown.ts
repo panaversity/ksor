@@ -7,11 +7,28 @@
  *   thing stays down wherever it is filed and in whatever generation; immune
  *   to reorganization; the denied set is a frozen, auditable list.
  * - `subtree`: the listed node AND every descendant are denied, resolved HERE
- *   at serving time by a recursive `parent_id` walk — NOT a stable_id prefix
- *   match (a frontmatter `sor_id` override decouples stable_id from the path,
- *   so a prefix leaks), and NOT a write-time expansion (the denylist has no
- *   generation column by design, so a descendant added by a FUTURE re-ingest
- *   must be covered too).
+ *   at serving time by a recursive `parent_id` walk, and NOT by a write-time
+ *   expansion — the denylist has no generation column by design, so a
+ *   descendant added by a FUTURE re-ingest must be covered too.
+ *
+ * THE WALK AND THE SITE'S PREFIX TEST RESOLVE THE SAME SET, and it is worth
+ * saying why, because they are written in different languages and decision 18
+ * is about exactly that. A subtree entry names `knowledge/<dir>#section`; the
+ * adapter makes every directory that node and parents its contents to it
+ * (`ingest/adapters/plain-tree.ts`), and since decision 26 retired `sor_id` the
+ * stable_id IS the path — so "every descendant by parent_id" and the site's
+ * `id.startsWith(`${dir}/`)` (`record/ledger.ts`) enumerate the same documents.
+ * The comment here used to justify the walk by the `sor_id` override, which no
+ * longer exists; the walk stays because it is the shape that survives a
+ * re-ingest, not because ids and paths can disagree (review 2026-08-25).
+ *
+ * Two cases where the two sides WOULD diverge are closed upstream rather than
+ * here, and `checkLedgerAgainstTree` is where to look: the record root
+ * (`knowledge/#section`) — no node has it, so this seed is empty while the
+ * site's empty prefix matches everything — is REFUSED as an entry; and a
+ * concept `knowledge/<dir>` beside a directory `<dir>/`, which the site's
+ * `id === dir` arm covers and this seed does not, is a route collision the
+ * record checker refuses.
  *
  * A row is IN FORCE while `revoked_at IS NULL` (schema 2.5, record spec §5).
  * The row is the state and `.ksor/takedowns.yaml` is the history, so a

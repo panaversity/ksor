@@ -75,8 +75,9 @@ The rules that make it _governed_ rather than merely stored:
 - **Do not fill gaps from general knowledge.** If the source doesn't cover
   something, the record doesn't either — that boundary is the product.
 - A document replacing an older one: mark the old one `status: deprecated`
-  with `ksor.deprecated: { by, at }` (the owner or a takedown authority the
-  policy names — ask, never guess) and `ksor.superseded_by:` naming the
+  with `ksor.deprecated: { by, at }` (a takedown authority the policy names, or
+  the owner an `ownership:` rule resolves — never the document's own
+  `ksor.owner`; ask, never guess) and `ksor.superseded_by:` naming the
   successor by id (`policies/refunds-v2`, no `./` and no `.md`) — never
   delete it. The successor must exist, be `stable`, and be readable by every
   reader of the deprecated one.

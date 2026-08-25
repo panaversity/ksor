@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "build_id": "sha256:a4eab34f7ede672a80031e375ce562ff0a7cc0455b953de439f82c15b48c451c",
-  "ksor_version": "0.0.39",
+  "build_id": "sha256:22f7f519588e143f3a35e76edb9d0cdddf6cc601c99d152b2f009082af49f030",
+  "ksor_version": "0.0.40",
   "okf": {
     "version": "0.2",
     "commit": "ad30107c31c06aec8a7d5636e0d1058118604e6f",
@@ -9,7 +9,7 @@
   },
   "source_commit": "bc320baf308397717a6105ba3626cc6eb5dcdc4b",
   "dirty": false,
-  "as_of": "2026-08-25T00:38:00.650Z",
+  "as_of": "2026-08-25T10:38:28.357Z",
   "drafts": "hidden",
   "instance_sha256": "04952385a9e0d0350673a13053b815d429d74890528db8910877de566bae231b",
   "policy_sha256": "41b63d4d203785563e4d821c4f30b11e06f13740ddd4f9a4e84e1ad83a60a3a5",
@@ -45,5 +45,15 @@
     }
   ],
   "companions": [],
-  "assets": []
+  "assets": [],
+  "indexes": [
+    {
+      "path": "index.md",
+      "sha256": "052d14e7fe7fdd6c6b78d3bfd3db1540dd0bf81adc78dfe2f42426be08c167a2"
+    },
+    {
+      "path": "policies/index.md",
+      "sha256": "6ac8420d116fac886f1d5bd6fd7a516fe9358dd29961f5635045a8a4603ca33f"
+    }
+  ]
 }

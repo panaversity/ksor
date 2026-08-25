@@ -18,6 +18,11 @@ import { parseInstant } from "../record/instant";
  * whose document hashes match the tree — because a projection of a tree
  * nothing checked is a projection nothing governs. `pnpm dev` is the review
  * surface and needs none (decision 7); its artefacts say so.
+ *
+ * Freshness is asked in two halves, `readLock` then `assertLockCoversTree`,
+ * with the record's own checker between them: everything answerable about the
+ * lock alone comes first, and the file-by-file comparison comes after the tree
+ * has been shown to be a record at all.
  */
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "a sha256 hex digest");
@@ -83,19 +88,20 @@ export function sha256Of(file: string): string {
 }
 
 /**
- * The lock, or null in development. Refuses `ksor-lock-missing` when absent
- * and `ksor-lock-stale` when unreadable or when any hash disagrees with the
- * tree given in `files` (bundle-relative path → absolute file), naming the
- * first document that differs.
+ * The lock itself: present, readable, and describing THIS instance's
+ * governance and this build's switches. Refuses `ksor-lock-missing` when
+ * absent, `ksor-lock-stale` when unreadable or when a control file has changed
+ * since it was written, and `ksor-site-outdated` when it was written by a
+ * newer ksor than the rule modules this site carries.
+ *
+ * Everything here is answerable WITHOUT looking at the record's tree, which is
+ * why it is separate from `assertLockCoversTree`: the caller checks the record
+ * in between, so a tree that is not a legal record is refused by the rule it
+ * breaks instead of by a freshness claim it was never eligible for.
  */
 export function readLock(
   root: string,
-  files: {
-    readonly documents: ReadonlyMap<string, string>;
-    readonly companions: ReadonlyMap<string, string>;
-    readonly assets: ReadonlyMap<string, string>;
-    readonly control: ControlTexts;
-  },
+  control: ControlTexts,
   options: { readonly draftsRequested: boolean },
 ): BuildLock {
   const file = path.join(root, LOCK_FILE);
@@ -122,13 +128,16 @@ export function readLock(
       "run `ksor build` again; if the lock was written by a newer ksor, upgrade the site with `ksor migrate --write-site`",
     );
   }
-  // The control files first: a stale DOCUMENT is a document nothing checked,
-  // and a stale LEDGER or POLICY is a takedown that was lifted or an authority
-  // that was rewritten — the second is worse, so it is named first.
+  // The control files before anything else about this record, the record's own
+  // rules included: a stale LEDGER or POLICY is a takedown that was lifted or
+  // an authority that was rewritten, and the lock's `ledger_entries` are the
+  // baseline the checker is then handed for `ksor-ledger-amended` — so a ledger
+  // the lock never saw is refused HERE, before anything is judged against it.
+  // The file-by-file comparison is `assertLockCoversTree`, after the checker.
   for (const [file, want, have] of [
-    ["instance.md", lock.data.instance_sha256, sha256Text(files.control.instance)],
-    [".ksor/governance.yaml", lock.data.policy_sha256, sha256Text(files.control.policy)],
-    [".ksor/takedowns.yaml", lock.data.ledger_sha256, sha256Text(files.control.ledger ?? "")],
+    ["instance.md", lock.data.instance_sha256, sha256Text(control.instance)],
+    [".ksor/governance.yaml", lock.data.policy_sha256, sha256Text(control.policy)],
+    [".ksor/takedowns.yaml", lock.data.ledger_sha256, sha256Text(control.ledger ?? "")],
   ] as const) {
     if (want === have) continue;
     refuse(
@@ -136,15 +145,6 @@ export function readLock(
       `${file} changed since ${LOCK_FILE} was written`,
       "the lock's build_id is a hash over the record AND the three files that govern it, so a projection under a control file the lock never saw publishes what nothing checked — a denial lifted by deleting a line would otherwise leave the lock valid",
       "run `ksor build` again and commit the lock with the change; lift a denial with `ksor takedown --revoke <id>`, never by editing the ledger",
-    );
-  }
-  const stale = firstStale(lock.data, files);
-  if (stale !== null) {
-    refuse(
-      "ksor-lock-stale",
-      `${LOCK_FILE} does not match the tree: ${stale}`,
-      "the lock records the exact record `ksor build` checked; a document that changed since was never checked, so this build would publish what nothing governs",
-      "run `ksor build` again and commit the lock with the change",
     );
   }
   // Both directions. The reverse — a `drafts: shown` lock and no KSOR_DRAFTS —
@@ -172,6 +172,41 @@ export function readLock(
     );
   }
   return lock.data;
+}
+
+/**
+ * Does the lock describe THIS tree, file by file? Refuses `ksor-lock-stale`
+ * naming the first path that disagrees.
+ *
+ * Run AFTER the record's own checker, not before it, because this comparison
+ * cannot tell a document that changed from a file the record may not hold at
+ * all — and it answers both the same way. An `.mdx` dropped into `knowledge/`
+ * is refused by name (`ksor-file-type`: the bundle is CommonMark), so no
+ * `ksor build` can ever have listed it here; reporting it as "asset notes.mdx
+ * is in the tree and not in the lock" told the operator to re-run the build
+ * that refuses the file, and named neither the rule nor the fix (found in
+ * review, 2026-08-25). The record is judged by its own rules first; the lock's
+ * claim about the tree is asked once the tree is a record.
+ *
+ * Nothing is staged in between, so the ordering costs a refused build one
+ * checker pass and can never publish anything.
+ */
+export function assertLockCoversTree(
+  lock: BuildLock,
+  files: {
+    readonly documents: ReadonlyMap<string, string>;
+    readonly companions: ReadonlyMap<string, string>;
+    readonly assets: ReadonlyMap<string, string>;
+  },
+): void {
+  const stale = firstStale(lock, files);
+  if (stale === null) return;
+  refuse(
+    "ksor-lock-stale",
+    `${LOCK_FILE} does not match the tree: ${stale}`,
+    "the lock records the exact record `ksor build` checked; a document that changed since was never checked, so this build would publish what nothing governs",
+    "run `ksor build` again and commit the lock with the change",
+  );
 }
 
 /** The first path whose presence or hash disagrees between lock and tree, described; null when none. */

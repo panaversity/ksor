@@ -279,8 +279,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   });
 
   it("keyword-only degrade path serves without a vector", async () => {
-    const hits = await runRead(pool, TENANT, (c) =>
-      keywordSearch(c, scope, "onboarding checklist", 10),
+    const hits = await runRead(
+      pool,
+      TENANT,
+      (c) => keywordSearch(c, scope, "onboarding checklist", 10),
+      WHOLE_RECORD_SCOPE,
     );
     expect(hits[0]?.slug, JSON.stringify(hits)).toBe("yak");
   });

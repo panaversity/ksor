@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { verbs } from "./index.js";
+
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (rel: string): string => readFileSync(path.join(repoRoot, rel), "utf8");
 
@@ -361,35 +363,84 @@ describe("the actor convention is documented as far as it is enforced", () => {
  * when it must write one — so the preview step exited 1 on every record the
  * runbook is for, before anything downstream could be reached.
  *
- * `--actor` on the dry run is true in both worlds: it works today, and it stays
- * correct if the preview is ever allowed to run without one. The premise is
- * read from the precondition itself.
+ * `--actor` on the preview line is right in BOTH worlds, which is why the
+ * assertion below is unconditional. When the refusal covers the dry run, the
+ * flag is what makes the step run at all. When it does not — which is where
+ * migrate stands today, the guard having gained `&& parsed.write` — the
+ * preview still SUBSTITUTES a placeholder actor into the policy it renders in
+ * the diff, so a runbook that omits the flag shows the owner a diff naming
+ * somebody who does not exist and leaves them to notice.
+ *
+ * Nothing here is gated on reading the precondition, and that is deliberate:
+ * the premise used to be a bare regex over migrate's SOURCE TEXT, every
+ * assertion early-returned when it missed, and the only thing guarding it was
+ * `expect(typeof … ).toBe("boolean")` — an assertion that cannot fail. Renaming
+ * one local (`hadPolicy`) disarmed the whole block silently; and the regex was
+ * already reporting a precondition the code had outgrown. The premise is still
+ * read, because a change to it changes what a reader must be told, but it is
+ * PINNED in a test of its own and it THROWS rather than reporting `false` when
+ * it cannot find what it came for.
  */
 describe("the migrate preview step runs on the records the runbook is for", () => {
-  const previewNeedsActor = (): boolean =>
-    /!hadPolicy && parsed\.actor === null/.test(read("packages/ksor/src/migrate/index.ts"));
+  /**
+   * True when migrate refuses a DRY RUN that names no actor — i.e. when the
+   * flag is a precondition of the preview rather than a courtesy.
+   *
+   * Throws when the guard cannot be found at all, because "the rule moved" and
+   * "the rule does not apply" are different answers and a bare `.test()`
+   * returns the second for both.
+   */
+  const previewNeedsActor = (): boolean => {
+    const src = read("packages/ksor/src/migrate/index.ts");
+    const guard = /\n\s*if \(([^)]*parsed\.actor === null[^)]*)\) \{\s*\n\s*return badArgs\(/.exec(
+      src,
+    );
+    if (guard === null) {
+      throw new Error(
+        "migrate/index.ts: no `parsed.actor === null` guard returning badArgs — the " +
+          "precondition this block reads has moved, and its absence is not evidence that " +
+          "the preview runs without --actor",
+      );
+    }
+    // `parsed.write` among the operands scopes the refusal to the writing run.
+    return !/parsed\.write/.test(guard[1] as string);
+  };
 
-  it("reads the precondition out of migrate", () => {
-    expect(typeof previewNeedsActor()).toBe("boolean");
+  it("the preview does NOT need --actor today, and this is where that is pinned", () => {
+    expect(
+      previewNeedsActor(),
+      "migrate now refuses a dry run with no --actor. That is a stricter contract than the one " +
+        "recorded here: say so in this block's comment, and check that every runbook's preview " +
+        "line carries the flag (they do — the assertion below is unconditional).",
+    ).toBe(false);
   });
 
+  /**
+   * A fenced block naming EVERY verb the binary has is the CLI's vocabulary
+   * listing — a list of words, not instructions to run in order. That is the
+   * only block a `ksor migrate` line may sit in unflagged, and it is exempted
+   * by what it IS rather than by what it lacks: the previous filter kept only
+   * blocks containing `--`, so a single-line `ksor migrate` fence — the exact
+   * defect this block exists for — was dropped before it could be judged.
+   */
+  const isVerbVocabulary = (block: string): boolean =>
+    verbs.every((verb) => new RegExp(`^\\s*ksor ${verb}\\b`, "m").test(block));
+
   it.each([".changeset/okf-native.md", "README.md", "research/okf-native.md"])(
-    "%s — the preview line carries --actor",
+    "%s — every runnable `ksor migrate` line carries --actor",
     (file) => {
-      if (!previewNeedsActor()) return;
       const bare = fencedBlocks(read(file))
-        // A RUNBOOK block: at least one line carries a flag, so its lines are
-        // commands to run in order. The README also prints a bare vocabulary
-        // listing of every verb, which is a list of words, not instructions.
-        .filter((block) => block.includes("--"))
+        .filter((block) => !isVerbVocabulary(block))
         .flatMap((block) => block.split("\n"))
         .filter((line) => /^\s*ksor migrate\b/.test(line))
         .filter((line) => !line.includes("--actor"));
       expect(
         bare,
-        `${file}: \`ksor migrate\` without \`--actor\` exits 1 with \`error: bad-args\` on a ` +
-          `pre-profile record — it has no .ksor/governance.yaml, so migrate must write one and ` +
-          `refuses to guess who is performing the act. The preview step needs the flag too.`,
+        `${file}: a copy-pasteable \`ksor migrate\` without \`--actor\`. On a pre-profile ` +
+          `record there is no .ksor/governance.yaml, so migrate has to write one — and it will ` +
+          `not guess who is performing the act (decision 21). Without the flag the write run ` +
+          `exits 1 with \`error: bad-args\`, and the preview renders a policy naming a ` +
+          `placeholder. Show the flag in the block, not only in the prose.`,
       ).toEqual([]);
     },
   );

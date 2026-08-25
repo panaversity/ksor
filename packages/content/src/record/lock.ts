@@ -64,6 +64,7 @@ const lockSchema = z
     ),
     companions: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
     assets: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
+    indexes: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
   })
   .strict();
 
@@ -103,6 +104,15 @@ export interface Lock {
    * where a record's substance actually is — outside "what was checked".
    */
   readonly assets: readonly { readonly path: string; readonly sha256: string }[];
+  /**
+   * The §8 indexes this build GENERATED, by bytes — the only files in
+   * `knowledge/` the build writes rather than reads, and the surface an
+   * external reader parses to find anything at all. They belonged to no other
+   * section (the checker skips `index.md`, `companions` is the attachment
+   * kinds, `assets` is the non-markdown), so the record of what was published
+   * stopped short of the file that lists what was published.
+   */
+  readonly indexes: readonly { readonly path: string; readonly sha256: string }[];
 }
 
 export type LockResult =
@@ -141,6 +151,7 @@ export interface BuildIdInputs {
   }[];
   readonly companions: readonly { readonly path: string; readonly sha256: string }[];
   readonly assets: readonly { readonly path: string; readonly sha256: string }[];
+  readonly indexes: readonly { readonly path: string; readonly sha256: string }[];
   readonly instance_sha256: string;
   readonly policy_sha256: string;
   readonly ledger_sha256: string;
@@ -159,6 +170,14 @@ export function buildIdOf(inputs: BuildIdInputs): string {
       .sort((a, b) => compare(a[0] ?? "", b[0] ?? "")),
     assets: [...inputs.assets]
       .map((a) => [a.path, a.sha256])
+      .sort((a, b) => compare(a[0] ?? "", b[0] ?? "")),
+    // The index bytes are a pure function of inputs already hashed here, so
+    // including them cannot change an id twice — it states directly what the
+    // rest of this object only implies, and a generator whose output moved
+    // without its inputs moving goes red rather than publishing quietly under
+    // an id that says nothing changed.
+    indexes: [...inputs.indexes]
+      .map((i) => [i.path, i.sha256])
       .sort((a, b) => compare(a[0] ?? "", b[0] ?? "")),
     instance_sha256: inputs.instance_sha256,
     policy_sha256: inputs.policy_sha256,
@@ -223,6 +242,8 @@ export interface LockInput {
   readonly companions: readonly { readonly path: string; readonly text: string }[];
   /** Bundle-relative path → raw bytes, for every non-markdown file of the record. */
   readonly assets: readonly { readonly path: string; readonly bytes: Uint8Array }[];
+  /** Bundle-relative path → the §8 index text this build generated (`index.md`, `policies/index.md`). */
+  readonly indexes: readonly { readonly path: string; readonly text: string }[];
   readonly denials: readonly Denial[];
 }
 
@@ -243,6 +264,9 @@ export function composeLock(input: LockInput): Lock {
   const assets = [...input.assets]
     .sort((a, b) => compare(a.path, b.path))
     .map((a) => ({ path: a.path, sha256: sha256Hex(a.bytes) }));
+  const indexes = [...input.indexes]
+    .sort((a, b) => compare(a.path, b.path))
+    .map((i) => ({ path: i.path, sha256: sha256Hex(i.text) }));
   const instance_sha256 = sha256Hex(input.instanceText);
   const policy_sha256 = sha256Hex(input.policyText);
   const ledger_sha256 = sha256Hex(input.ledgerText ?? "");
@@ -252,6 +276,7 @@ export function composeLock(input: LockInput): Lock {
       documents,
       companions,
       assets,
+      indexes,
       instance_sha256,
       policy_sha256,
       ledger_sha256,
@@ -272,6 +297,7 @@ export function composeLock(input: LockInput): Lock {
     documents,
     companions,
     assets,
+    indexes,
   };
 }
 

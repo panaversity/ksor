@@ -4,6 +4,7 @@
  * the same function judges a checkout, a staged projection and a test
  * fixture identically; `load.ts` is the one place the filesystem is touched.
  */
+import { ATTACHMENT_SUFFIXES, attachmentKindOf, parentDocumentOf } from "../lib/attachment-rule.js";
 import { mayReach } from "../lib/audience-rule.js";
 import { checkFootnotes, linkTargets, resolveLink } from "./citations.js";
 import { splitFrontmatter } from "./frontmatter.js";
@@ -54,7 +55,6 @@ const KNOWLEDGE = "knowledge/";
 const POLICY_PATH = ".ksor/governance.yaml";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const INSTANCE_PATH = "instance.md";
-const COMPANION = /\.(summary\.md|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
 /** What a link may resolve to besides a concept: companions, assets, directories, indexes, the root. */
 interface LinkTargets {
   readonly concepts: ReadonlyMap<string, Concept>;
@@ -102,7 +102,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
       });
       continue;
     }
-    if (name === "index.md" || COMPANION.test(name) || !name.endsWith(".md")) continue;
+    if (name === "index.md" || attachmentKindOf(name) !== null || !name.endsWith(".md")) continue;
     // `.mdx` and every other stray are the hygiene rules' to name.
     const text = record.files.get(path) ?? "";
     const split = splitFrontmatter(text, path);
@@ -152,8 +152,19 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   };
 
   for (const path of paths) {
-    if (!path.startsWith(KNOWLEDGE) || !COMPANION.test(path)) continue;
-    const parentId = conceptIdOf(path.replace(COMPANION, ""));
+    if (!path.startsWith(KNOWLEDGE)) continue;
+    const base = path.slice(path.lastIndexOf("/") + 1);
+    // The canonical rule (`lib/attachment-rule.ts`), never a copy of it. The
+    // regex that used to sit here was a THIRD hand-written list and had already
+    // drifted — `.summary.mdx` was in the canonical one and not in it, so an
+    // `.mdx` summary got no orphan check, no `type: Summary` check and none of
+    // its parent's governance. `hygiene.ts` happens to refuse every `.mdx`, but
+    // the mask was in another module from the drift, which is the arrangement
+    // decision 18 exists to end.
+    const kind = attachmentKindOf(base);
+    if (kind === null) continue;
+    const dir = path.slice(0, path.lastIndexOf("/") + 1);
+    const parentId = conceptIdOf(`${dir}${parentDocumentOf(base)!}`);
     if (!concepts.has(parentId) && !record.files.has(`${KNOWLEDGE}${parentId}.md`)) {
       refusals.push({
         slug: "ksor-attachment-orphan",
@@ -162,7 +173,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
         fix: "restore the parent document, or delete the attachment",
       });
     }
-    if (!path.endsWith(".summary.md")) continue;
+    if (kind !== "summary") continue;
     const split = splitFrontmatter(record.files.get(path) ?? "", path);
     if (!split.ok) {
       refusals.push(split.refusal);
@@ -330,8 +341,20 @@ function checkLinks(
   }
 }
 
-/** A companion's id → its parent concept's, in both shapes `resolveLink` produces. */
-const COMPANION_TARGET = /\.(summary|flashcards\.yaml|quiz\.yaml|slides\.yaml)$/;
+/**
+ * A companion's id → its parent concept's, in both shapes `resolveLink`
+ * produces: it strips a trailing `.md` and nothing else (`citations.ts`), so
+ * `x.summary.md` arrives as `x.summary` and `x.flashcards.yaml` arrives whole.
+ *
+ * DERIVED from the canonical suffix list for the same reason the companion pass
+ * above is — this was the FOURTH hand-written copy of "what is a companion" and
+ * it carried the same `.summary.mdx` gap.
+ */
+const COMPANION_TARGET = new RegExp(
+  `(${[...new Set(ATTACHMENT_SUFFIXES.map((e) => e.suffix.replace(/\.md$/, "")))]
+    .map((s) => s.replace(/\./g, "\\."))
+    .join("|")})$`,
+);
 
 /**
  * Every link target that is NOT a concept, judged by the same audience rule a
@@ -486,14 +509,31 @@ function checkAgainstPolicy(concept: Concept, policy: Policy, refusals: Refusal[
       refusals.push(resolved.refusal);
       return;
     }
-    const owner = resolved.owner ?? concept.owner;
     const by = concept.deprecated.by;
-    if (by !== owner && !policy.takedownActors.includes(by)) {
+    // The owner is whoever the POLICY resolves, and ONLY that. It used to fall
+    // back to `concept.owner` when no `ownership` rule matched — but
+    // `ksor.owner` is free text the DOCUMENT writes about itself (the profile
+    // does not even form-check it), so `ksor.owner: human:mallory` beside
+    // `ksor.deprecated.by: human:mallory` withdrew a document on nobody's
+    // authority but its own, in any record whose policy declares no
+    // `ownership:` at all — which is the default shape `ksor migrate` emits.
+    // Withdrawal is a governance act; an act a document attests for itself is
+    // not one. This is the same rule `resolveApprovers` has always enforced by
+    // REFUSING when no rule matches, and decision 21's — a slot that records
+    // WHO is never filled from ambient state, the document included.
+    if (by !== resolved.owner && !policy.takedownActors.includes(by)) {
+      const authorities = policy.takedownActors.join(", ");
       refusals.push({
         slug: "ksor-deprecator-unauthorised",
         path: concept.path,
-        why: `\`ksor.deprecated.by: ${by}\` is neither the owner (${owner ?? "none resolved"}) nor a takedown authority`,
-        fix: "record the deprecation by the owner or a takedown authority (R23)",
+        why:
+          resolved.owner === null
+            ? `\`ksor.deprecated.by: ${by}\` is not a takedown authority (${authorities}), and no \`ownership\` rule in \`${POLICY_PATH}\` binds this concept — so the record names no owner who could withdraw it. \`ksor.owner\` is not that owner: it is a string this document writes about itself`
+            : `\`ksor.deprecated.by: ${by}\` is neither the owner the policy resolves (${resolved.owner}) nor a takedown authority (${authorities})`,
+        fix:
+          resolved.owner === null
+            ? `record the deprecation by a takedown authority, or add an \`ownership:\` rule to \`${POLICY_PATH}\` naming who owns this path (R23)`
+            : "record the deprecation by the owner or a takedown authority (R23)",
       });
     }
   }

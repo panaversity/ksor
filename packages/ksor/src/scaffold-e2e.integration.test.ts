@@ -1357,8 +1357,20 @@ ${body}
     // DEPRECATION NOTICE survives it: that is a correctness warning, not
     // decoration, and a reader handed a replaced document with no word of its
     // successor has been misled.
+    //
+    // …and so do the two DATE states, for the same reason and by the same
+    // rule. They are the ones record spec §2.5 says a reader cannot infer from
+    // the status alone, the sidebar row / folder card / search result for these
+    // same documents carry them whatever this key says, and the MCP door
+    // refuses both outright — so the page swallowing them made one record speak
+    // with two voices about one document (2026-08-25 review).
     const instanceMd = path.join(project, "instance.md");
     const original = readFileSync(instanceMd, "utf8");
+    const scratch = ["plain-future", "plain-stale"];
+    // The generated index lists every concept, so adding one makes the
+    // COMMITTED index stale until a build regenerates it. Kept, and put back.
+    const indexMd = path.join(project, "knowledge", "index.md");
+    const indexBefore = readFileSync(indexMd, "utf8");
     try {
       writeFileSync(instanceMd, original.replace(/^---\n/, "---\nsite:\n  governance: false\n"));
       // The key is in the instance's closed set, so the emitted checker takes
@@ -1369,6 +1381,30 @@ ${body}
         { cwd: project, encoding: "utf8" },
       );
       expect(checkOff.status, `${checkOff.stdout}${checkOff.stderr}`).toBe(0);
+
+      // Two documents the calendar keeps off the machine surfaces, added after
+      // the checker ran because a new concept makes the committed index stale
+      // until `ksor build` regenerates it — which the rebuild below does.
+      write(
+        "plain-future",
+        concept({
+          title: "Plain not yet effective",
+          description: "The record has not brought this into force yet.",
+          order: 30,
+          ksor: "  effective_from: 2030-01-01T00:00:00Z\n",
+          body: "PLAINFUTUREBODY.",
+        }),
+      );
+      write(
+        "plain-stale",
+        concept({
+          title: "Plain past review",
+          description: "Nobody has reviewed this since 2019.",
+          order: 31,
+          extra: "stale_after: 2020-01-01T00:00:00Z\n",
+          body: "PLAINSTALEBODY.",
+        }),
+      );
       const rebuilt = buildScaffold(project);
       expect(rebuilt.status, `${rebuilt.stdout}${rebuilt.stderr}`.slice(-2000)).toBe(0);
 
@@ -1395,8 +1431,32 @@ ${body}
       // the very defect this test exists to catch, on purpose.
       expect(built(path.join("md", "refund-policy-v5.md"))).toContain("owner: team:finance");
       expect(built("llms-full.txt")).toContain("trust_tier: human-reviewed");
+
+      // The caveat, in the ARTICLE — `visible` starts at <article>, so the
+      // sidebar's copy of the same badge cannot satisfy this. §2.5's own words,
+      // with the ellipsis filled in, exactly as the governed build prints them.
+      const future = visible("docs/plain-future");
+      expect(future, "a document not yet in force opened as a current one").toContain(
+        "effective from 2030-01-01",
+      );
+      const stale = visible("docs/plain-stale");
+      expect(stale, "a document past its review date said nothing about it").toContain(
+        "past its review date",
+      );
+      // …and the strip itself is still off on both: this restores a caveat, not
+      // the attribution the key exists to hide.
+      for (const [route, text] of [
+        ["plain-future", future],
+        ["plain-stale", stale],
+      ] as const) {
+        expect(text, `${route} published a trust tier`).not.toContain("unverified");
+        expect(text, `${route} published its approver`).not.toContain("human:kim");
+      }
     } finally {
       writeFileSync(instanceMd, original);
+      for (const name of scratch)
+        rmSync(path.join(project, "knowledge", `${name}.md`), { force: true });
+      writeFileSync(indexMd, indexBefore);
     }
   }, 420_000);
 

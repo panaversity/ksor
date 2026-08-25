@@ -9,6 +9,12 @@
  * `ledger_entries`, and the two agree with each other about a denial that is
  * gone. Only history remembers.
  *
+ * The baseline may be INCOMPLETE only if it SAYS so: every version history
+ * holds is read, or `entries` comes back null and the caller reports that it
+ * could not verify. A version silently skipped would contribute neither
+ * digests nor ids while the answer still read "verified"
+ * (`git-ledger.integration.test.ts`).
+ *
  * This lives in the record module because THREE surfaces need the same answer —
  * `ksor build`, the emitted checker, and the site's stage (decision 19: a
  * surface that refuses must refuse on both surfaces). Plain `git log` / `git
@@ -34,9 +40,19 @@ export interface HistoricLedger {
   readonly unreadable: "shallow" | "unreadable" | null;
 }
 
+/**
+ * `spawnSync` defaults to a 1 MB stdout buffer, and past it the child is KILLED
+ * — `status` comes back null, so the query reads as a failure. A ledger with a
+ * few thousand entries, or one entry carrying a long reason, clears 1 MB
+ * easily, and the version was then dropped from the baseline while the caller
+ * was still told history had been verified. The ceiling stays finite on
+ * purpose: past it this returns null, which is a state the caller SAYS.
+ */
+const MAX_BUFFER = 64 * 1024 * 1024;
+
 /** One git query, read-only. Null on any non-zero exit, including no git at all. */
 export function git(root: string, args: readonly string[]): string | null {
-  const r = spawnSync("git", [...args], { cwd: root, encoding: "utf8" });
+  const r = spawnSync("git", [...args], { cwd: root, encoding: "utf8", maxBuffer: MAX_BUFFER });
   return r.status === 0 ? r.stdout : null;
 }
 
@@ -85,16 +101,41 @@ export function historicLedger(root: string): HistoricLedger {
  */
 function historicEntries(root: string): readonly LedgerBaselineEntry[] | null {
   const prefix = (git(root, ["rev-parse", "--show-prefix"]) ?? "").trim();
-  const commits = git(root, ["log", "--format=%H", "--", LEDGER]);
+  const file = `${prefix}${LEDGER}`;
+  // `--full-history` because `git log -- <path>` SIMPLIFIES by default: a merge
+  // TREESAME to a parent is followed through that parent alone, so a branch
+  // whose net effect on the ledger was nil is pruned whole — a denial added and
+  // withdrawn inside one pull request never entered the baseline, and
+  // `ksor-ledger-shrank` could not fire for it. That is precisely the deletion
+  // the committed lock cannot catch either, since the lock travels in the same
+  // pull request; if history does not remember it, nothing does.
+  //
+  // `--topo-order` because the walk below lets an OLDER version overwrite a
+  // newer one, and across branches the default ordering is by commit DATE,
+  // which need not follow ancestry. Topological order does, so "oldest" means
+  // the ancestor rather than whichever machine's clock was behind.
+  const commits = git(root, ["log", "--full-history", "--topo-order", "--format=%H", "--", file]);
   if (commits === null) return null;
   const seen = new Map<string, LedgerBaselineEntry>();
   for (const sha of commits.split("\n").filter((s) => s !== "")) {
-    const text = git(root, ["show", `${sha}:${prefix}${LEDGER}`]);
-    if (text === null) continue;
+    const text = git(root, ["show", `${sha}:${file}`]);
+    if (text === null) {
+      // `git show` failing means one of two things, and they used to be one
+      // silent `continue`: the commit DELETED the ledger (expected — it has no
+      // version to contribute), or the bytes could not be read (a killed query,
+      // a missing object). `ls-tree` separates them — it exits 0 either way and
+      // prints nothing when the path is absent — so an unreadable version stops
+      // being counted as a verified empty one. Asked only on failure, so the
+      // ordinary walk still costs one git call per commit.
+      const listed = git(root, ["ls-tree", "--full-tree", "--name-only", sha, "--", file]);
+      if (listed !== null && listed.trim() === "") continue;
+      return null;
+    }
     const where = sha.slice(0, 7);
     const parsed = parseLedger(text, LEDGER);
-    // `git log` is newest-first, so an OLDER version overwriting a newer one
-    // leaves the oldest — the text the id was written with.
+    // The walk is newest-first in topological order, so an OLDER version
+    // overwriting a newer one leaves the oldest — the text the id was written
+    // with.
     if (parsed.ok) {
       for (const entry of parsed.ledger.entries) {
         seen.set(entry.id, { id: entry.id, digest: entryDigest(entry), entry, where });

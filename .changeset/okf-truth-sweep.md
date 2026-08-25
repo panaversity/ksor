@@ -32,4 +32,11 @@ ones an adopter would have acted on:
   `.ksor/takedowns.yaml` or `build.lock.json`, which are committed record
   files an adopter has to understand.
 
+`ingesting.md` also gains the remedy for a stale lock, which it never carried:
+`ksor ingest` refuses `ksor-lock-stale` / `ksor-lock-missing`, the fix is always
+`ksor build` and never an edit to the lock, and freshness covers seven sets —
+the instance, the policy, the ledger, the concepts, the companions, the assets
+and the generated indexes — so a refusal can name a file an adopter does not
+think of as content.
+
 No behaviour changed.

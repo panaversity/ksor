@@ -12,6 +12,16 @@ describe("overlaps — record spec §2.4, one row of AUDIENCE_CASES at a time", 
   const concepts = AUDIENCE_CASES.filter((c) => c.section === undefined);
 
   it("the table has section rows, and they are decided elsewhere", () => {
+    // BOTH halves, because the split is what makes this suite's coverage
+    // conditional: `toBeLessThan` alone proves only that section rows EXIST, so
+    // a table that became all-section would register zero `it`s below and this
+    // file would pass having asserted nothing about `overlaps` at all. The
+    // non-emptiness was asserted only in the `KSOR_DB_URL`-gated tier, which is
+    // the tier that does not run on an ordinary `pnpm test:unit`.
+    expect(
+      concepts.length,
+      "AUDIENCE_CASES holds no concept row — `overlaps` is unasserted here",
+    ).toBeGreaterThan(0);
     expect(concepts.length).toBeLessThan(AUDIENCE_CASES.length);
   });
 

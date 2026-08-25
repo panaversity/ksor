@@ -10,6 +10,7 @@ import {
   badgeTone,
   dayOf,
   isCalendarDate,
+  plainBadge,
   sourceHref,
   statusLabel,
   statusTone,
@@ -138,6 +139,35 @@ export function BadgeChip({
   effectiveFrom?: string | null;
 }): ReactElement {
   return <Chip text={badgeText(badge, effectiveFrom) ?? ""} tone={badgeTone(badge)} />;
+}
+
+/**
+ * The lifecycle caveat ALONE, for a page with no governance strip under its
+ * title — a record whose `site.governance` is off.
+ *
+ * That key turns off attribution, not caveats: the deprecation notice has
+ * always survived it, and the sidebar row, the folder card and the search
+ * result for this same document carry their badge whatever it says. The rule
+ * for which states reach here is `plainBadge`, beside the vocabulary itself.
+ *
+ * Typed like the strip's own values (mono, 13px), because a badge is the
+ * record speaking about a document and that is the voice it speaks in
+ * everywhere else.
+ */
+export function LifecycleCaveat({
+  badge,
+  effectiveFrom = null,
+}: {
+  badge: LifecycleBadge | null;
+  effectiveFrom?: string | null;
+}): ReactElement | null {
+  const caveat = plainBadge(badge);
+  if (caveat === null) return null;
+  return (
+    <div className="mb-7 font-mono text-[0.8125rem] font-medium text-fd-foreground">
+      <BadgeChip badge={caveat} effectiveFrom={effectiveFrom} />
+    </div>
+  );
 }
 
 /**

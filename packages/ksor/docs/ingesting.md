@@ -55,6 +55,24 @@ serves immediately; the website is a static build and only changes when you
 rebuild and redeploy it. Ingest alone leaves the human surface showing the old
 content, which reads as a half-failed ingest and is not one.
 
+## When ingest says the lock is stale
+
+`ksor ingest` refuses a record whose `build.lock.json` does not match the tree
+(`ksor-lock-stale`), or that has none at all (`ksor-lock-missing`). **The fix is
+always `ksor build` in that directory — never an edit to the lock.** The lock is
+what says which bytes were checked; editing it to agree with the tree asserts a
+check that never ran, which is the one thing it exists to prevent.
+
+Freshness covers **seven** sets, not just your documents: `instance.md`,
+`.ksor/governance.yaml`, `.ksor/takedowns.yaml`, the concepts, the companions,
+the assets, and the generated `index.md` files. So a refusal can name a file you
+would not think of as content — the policy, the takedown ledger, a diagram you
+replaced, or an index you have never opened. That breadth is deliberate: a
+freshness claim that cannot see the ledger is not a freshness claim. The
+website's lock was fixed for exactly this once already, after deleting a
+denial's four lines republished the document with the committed lock still
+validating; ingest had the same hole, found by review before anyone hit it.
+
 ## What a generation is
 
 Each ingest builds a **fresh generation** — invisible until activated — and

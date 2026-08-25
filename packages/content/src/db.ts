@@ -28,7 +28,6 @@ import {
   type Gucs,
 } from "@panaversity/ksor-postgres";
 import { envFloat, envInt } from "./env.js";
-import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
 
 export const TENANT_GUC = "app.tenant_id";
 export const RUNTIME_ROLE = "sor_content_runtime";
@@ -127,9 +126,30 @@ function gucsFor(tenantId: string, role: string, statementTimeoutMs: number | nu
 }
 
 /**
- * The read path. `extraGucs` exists so the search path folds the two HNSW
- * GUCs into the same one-statement bind (a plain filtered HNSW walk
- * silently under-returns without them).
+ * The read path. `extraGucs` carries the caller's SCOPE — the audience list and
+ * the trust floor — and the two HNSW GUCs the search path folds into the same
+ * one-statement bind (a plain filtered HNSW walk silently under-returns
+ * without them).
+ *
+ * NOTHING about the audience is bound here. A read that names no viewer leaves
+ * `app.viewer` unset, and the serving predicate is false for every row: an
+ * unbound GUC overlaps nothing, so an unscoped read is served NOTHING.
+ *
+ * This function used to bind the whole-record sentinel by default, so that
+ * "the whole record" would be a value a caller states rather than an accident
+ * of an unbound GUC — and it produced the opposite: the accident WAS the
+ * default, every unscoped read got every audience, and the SQL backstop could
+ * never fire because the viewer was never unbound. The only thing standing
+ * between a forgotten narrowing and serving every tier was a grep over
+ * service.ts. A default of "every audience" underneath a governance predicate
+ * is a loaded gun in a codebase whose posture is to refuse rather than default,
+ * so it is gone (review 2026-08-25). Callers entitled to the whole record —
+ * calibration, ingest-side verification, tests — pass WHOLE_RECORD_SCOPE, and
+ * now genuinely say it.
+ *
+ * A caller that reads no content at all (the governance gate, the policy row,
+ * the takedown ledger) binds nothing and needs nothing: those statements name
+ * their own tables and carry no audience predicate to satisfy.
  */
 export async function runRead<T>(
   pool: pg.Pool,
@@ -142,13 +162,6 @@ export async function runRead<T>(
       pool,
       {
         ...gucsFor(tenantId, RUNTIME_ROLE, READ_STATEMENT_TIMEOUT_MS),
-        // The audience scope is ALWAYS bound. The SQL predicate denies when it
-        // is unset — deliberately, so a statement can never serve every tier
-        // because nobody stated one — and this makes "the whole record" the
-        // explicit default for a caller that does not narrow it, rather than
-        // an accident of an unbound GUC. The serving door overrides it below
-        // with the caller's actual tier (review of PR #43).
-        ...WHOLE_RECORD_SCOPE,
         ...extraGucs,
       },
       op,

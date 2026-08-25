@@ -91,11 +91,15 @@ assert an act nobody performed):
 
 **Record purity** (enforced by the emitted checker and by `ksor build`, which
 run the same rule set): `knowledge/` holds CommonMark `.md` — plus GFM
-footnotes, the one extension — assets, and companions
-(`<doc>.summary.md`, `<doc>.{flashcards,quiz,slides}.yaml`) only; no `.mdx`,
-no `meta.json`, no framework files; filenames are Windows-safe with no
-case-insensitive or `foo.md`/`foo/index.md` collisions and no parenthesized
-directories; asset links never escape `knowledge/`.
+footnotes, the one extension — assets, companions
+(`<doc>.summary.md`, `<doc>.{flashcards,quiz,slides}.yaml`) and sims
+(`<name>.sim.html`, an interactive page the record CARRIES: an asset of its
+document, governed by POSITION through the concept that links it, never a
+study attachment) only; no `.mdx`, no `meta.json`, no framework files, and no
+other `.html` — the suffix is what separates a page the record means to serve
+from a stray export; filenames are Windows-safe with no case-insensitive or
+`foo.md`/`foo/index.md` collisions and no parenthesized directories; asset
+links never escape `knowledge/`.
 
 _Corrected 2026-08-25 (decision 27). The frontmatter paragraph this replaces
 was wrong in three ways at once, which is why it is rewritten rather than

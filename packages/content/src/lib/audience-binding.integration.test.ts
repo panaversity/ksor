@@ -8,12 +8,16 @@ import { describe, expect, it } from "vitest";
  * Every serving path in service.ts must bind the caller's audience scope — a
  * SHAPE check, deliberately, and not the guarantee itself.
  *
- * `runRead` binds the whole-record scope by default, which keeps library and
- * test callers working — and means a SERVING path that forgets to narrow would
- * silently serve every tier. The SQL backstop cannot catch that, because the
- * default IS bound. So the presence of a binding on every call is asserted here,
- * on the source, where the omission would happen — and this file runs without a
- * database, so a newly added unscoped read fails fast and locally.
+ * `runRead` no longer binds an audience of its own, so a serving path that
+ * forgets to narrow is now caught TWICE: by the SQL, where an unbound
+ * `app.viewer` overlaps nothing and the read returns no rows, and by this file,
+ * which names the call site. The second is still worth having — "the door
+ * answered nothing" is a confusing way to learn that a `runRead` lost its
+ * scope, and this file runs without a database, so it fails fast and locally
+ * and points at the line.
+ *
+ * It used to be the ONLY check, because the default binding meant the SQL
+ * backstop could never fire (review 2026-08-25, db.ts).
  *
  * What it is NOT: the behavioural guarantee. That lives in
  * `governance-chain.db.test.ts`, which ingests real markdown, serves it through

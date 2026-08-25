@@ -19,6 +19,7 @@ import { recordLink } from "@/lib/record-link";
 import {
   DeprecatedNotice,
   GovernanceMeta,
+  LifecycleCaveat,
   Provenance,
   type Successor,
 } from "@/components/governance";
@@ -170,7 +171,13 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
             // document as a whole.
             minutes={summary === null ? minutes : undefined}
           />
-        ) : null}
+        ) : (
+          // …and with the strip off, the CAVEAT still shows. `site.governance`
+          // hides attribution, not the record's word on whether this document
+          // is in force — which the sidebar, the folder listing and the search
+          // result all keep saying about this same page (`plainBadge`).
+          <LifecycleCaveat badge={badge} effectiveFrom={governance.effectiveFrom} />
+        )}
         {/* grow-0, against the shell's own `flex-1`: short documents end where
           their text ends rather than pushing Sources to the bottom of the
           screen (measured, 2026-08-21). */}

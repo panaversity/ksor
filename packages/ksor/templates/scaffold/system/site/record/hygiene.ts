@@ -174,6 +174,15 @@ function nameProblem(base: string): string | null {
   if (/[<>:"|?*]/.test(base) || /[. ]$/.test(base) || WINDOWS_RESERVED.test(base)) {
     return `"${base}" is not a portable name — the path is the document's identity and its URL on every platform, and Windows rejects these characters, trailing dots and reserved device names outright`;
   }
+  // A backslash is one character of a filename on Linux and the path SEPARATOR
+  // on Windows, so this is not a name that renders badly there — it is a name
+  // that cannot be checked out at all, and it takes the whole working tree
+  // down with it, not just this document. Split from the class above because
+  // the reason is different: those characters are rejected, this one is
+  // reinterpreted.
+  if (base.includes("\\")) {
+    return `"${base}" contains a backslash — it is a legal character in one Linux filename and the path separator on Windows, so a checkout there does not merely rename this document, it fails`;
+  }
   if (/[A-Z]/.test(base)) {
     return `"${base}" has uppercase — paths are identities; case-only differences collide on case-insensitive filesystems`;
   }
@@ -183,6 +192,19 @@ function nameProblem(base: string): string | null {
   }
   if (base.startsWith("_")) {
     return `"${base}" is underscore-prefixed — site frameworks treat _files as hidden partials, and the record has no hidden documents`;
+  }
+  // The same rule as `_`, for the prefix that actually means hidden — and the
+  // one that was missing. VERIFIED: `knowledge/.secret.md` passed the whole
+  // checker with ZERO refusals and became a full concept with id `.secret`, so
+  // ingest gave it a node and the door served it. The site would not have had a
+  // route for it — its docs collection globs `**/*.md`, and picomatch 4.0.5
+  // does not match that against a dot-prefixed name (verified directly; that
+  // fumadocs' own walk passes no `dot: true` was NOT verified here). The rule
+  // does not rest on that half: the record has no hidden documents, which is
+  // what the `_` clause above says and what `.` means everywhere a directory is
+  // read. `..md` is the same rule reaching the degenerate name.
+  if (base.startsWith(".")) {
+    return `"${base}" is dot-prefixed, which is hidden on every platform that reads a directory — the record has no hidden documents, and one that is invisible to the site's file walk while the MCP door serves it publishes to a machine what it withholds from a person`;
   }
   // A path is also a URL, and `%` is what starts an escape in one. `50%-off.md`
   // is a malformed escape that kills the site build with a bare URIError naming

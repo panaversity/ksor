@@ -16,33 +16,6 @@
  * this file is the shared implementation of the TypeScript half.
  */
 
-export interface AudienceModel {
-  /** Least- to most-restricted, `public` first. */
-  readonly audiences: readonly string[];
-  /** The tier of a document that declares no `visibility:`. */
-  readonly defaultVisibility: string;
-}
-
-/**
- * May a build FOR `audience` publish a document of this `visibility`?
- *
- * `model === null` is a record that declares no audience model: nothing to
- * filter, everything publishes — the level-0 shape.
- */
-export function decideVisible(
-  model: AudienceModel | null,
-  audience: string,
-  visibility: string | null,
-): boolean {
-  if (model === null) return true;
-  const value = visibility === null || visibility === "" ? model.defaultVisibility : visibility;
-  const rank = model.audiences.indexOf(value);
-  // An undeclared visibility is refused, never published: a value no build
-  // understands is a typo, and a typo reads as a restriction.
-  if (rank === -1) return false;
-  return rank <= model.audiences.indexOf(audience);
-}
-
 /**
  * The overlap rule (record spec §2.4): a concept holds a LIST of audience
  * identifiers, a viewer holds a list that always includes `public`, and the

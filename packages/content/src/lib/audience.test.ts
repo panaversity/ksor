@@ -64,3 +64,57 @@ describe("the predicate and its GUC", () => {
     expect(WHOLE_RECORD_SCOPE).toEqual({ "app.viewer": "*" });
   });
 });
+
+/**
+ * The separator's invariant, ENFORCED rather than merely documented (review
+ * 2026-08-25). `audienceGucs` joins the viewer list with U+001F and the SQL
+ * splits on it, so an identifier containing that byte does not travel as one
+ * identifier — it arrives as two, and the viewer silently holds an audience
+ * nobody granted. `*` is the same class: it is the whole-record sentinel the
+ * predicate compares against, so an identifier spelled `*` is a value that
+ * means "everything" to the reader of the GUC.
+ *
+ * Enforced where the identifiers ENTER the encoding, not only at the door's
+ * validateViewer, because a later caller that builds GUCs another way must not
+ * be able to route around it.
+ */
+describe("an audience identifier may not carry the separator, or be the sentinel", () => {
+  const SEP = "\u001f";
+  it("audienceGucs REFUSES an identifier containing the separator", () => {
+    try {
+      audienceGucs(["public", `intern${SEP}board`]);
+      expect.unreachable();
+    } catch (e) {
+      expect((e as AudienceError).slug).toBe("ksor-audience-identifier-invalid");
+      expect((e as Error).message, "names the byte in a form a human can search for").toMatch(
+        /U\+001F/,
+      );
+    }
+  });
+  it("audienceGucs REFUSES the whole-record sentinel as an identifier", () => {
+    try {
+      audienceGucs(["public", "*"]);
+      expect.unreachable();
+    } catch (e) {
+      expect((e as AudienceError).slug).toBe("ksor-audience-identifier-invalid");
+    }
+  });
+  it("validateViewer refuses the same values at BOOT, by THIS slug", () => {
+    // Not `ksor-viewer-unregistered`, which these would also trip: the registry
+    // is the wrong thing to blame, and registering the identifier would not
+    // make it work. The encoding is what refuses.
+    for (const bad of [`a${SEP}b`, "*"]) {
+      try {
+        validateViewer(["internal", bad], ["public", bad]);
+        expect.unreachable();
+      } catch (e) {
+        expect((e as AudienceError).slug, `for ${JSON.stringify(bad)}`).toBe(
+          "ksor-audience-identifier-invalid",
+        );
+      }
+    }
+  });
+  it("leaves ordinary identifiers alone", () => {
+    expect(audienceGucs(["public", "internal"])["app.viewer"]).toBe(`public${SEP}internal`);
+  });
+});

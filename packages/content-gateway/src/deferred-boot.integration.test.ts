@@ -15,16 +15,25 @@
  *      a readiness probe governs ROUTING, not access. Anything that reaches the
  *      port ignores it.
  *
- * So the gate belongs on the request path. This asserts the source, because the
- * behaviour is a property of where the check sits: the live walk is recorded in
- * the comments beside it, and the acceptance suite drives the real door.
+ * So the gate belongs on the request path. Most of this file asserts the
+ * SOURCE, because the behaviour is a property of where each check sits — and
+ * that is exactly how a fourth hole got in: a database read was added just
+ * BELOW the deferred block, where nothing was looking. Two things were added
+ * for it. The pool reads are ENROLLED, so a new one fails by name. And the last
+ * test drives `compose` against a store that is genuinely not there, because
+ * "the door comes up" is a claim about a running process, not about a slice of
+ * text — the boot it was reading passed every source assertion here while
+ * exiting 3.
  */
 
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
+
+import { compose } from "./compose.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const HTTP = readFileSync(path.join(here, "http.ts"), "utf8");
@@ -73,12 +82,6 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     expect(checks).toContain("assertGovernanceServable(pool, instance)");
   });
 
-  it("a refusal is never deferred — only an unreachable store is", () => {
-    expect(COMPOSE).toContain(
-      "if (error instanceof SchemaVersionError || error instanceof GovernanceGateError) throw error;",
-    );
-  });
-
   it("shares ONE in-flight attempt, so a burst cannot multiply boot checks", () => {
     // The door awaits verifyBoot on every request until it passes. Memoizing
     // only the settled result meant a burst against a waking database started
@@ -98,5 +101,133 @@ describe("deferred boot checks gate the door, not just the probe", () => {
     // A second call site is how the two drifted apart the first time.
     const calls = COMPOSE.split("assertGovernanceServable(").length - 1;
     expect(calls, "one call, inside bootChecks (plus the import)").toBe(1);
+  });
+
+  it("a refusal is never deferred — the whole class, not two names", () => {
+    // AudienceError and TextSearchConfigMismatch are decided by rows the store
+    // ANSWERED with: deferring them printed "content store unreachable
+    // (AudienceError)" about a database that had just replied, and left the
+    // door retrying forever a check no retry can change.
+    const guard = COMPOSE.slice(COMPOSE.indexOf("await withPgRetry(bootChecks"));
+    const beforeDeferral = guard.slice(0, guard.indexOf("boot checks DEFERRED:"));
+    for (const refusal of [
+      "SchemaVersionError",
+      "GovernanceGateError",
+      "AudienceError",
+      "TextSearchConfigMismatch",
+    ]) {
+      expect(beforeDeferral, `${refusal} must be re-thrown, not deferred`).toContain(refusal);
+    }
+  });
+
+  /**
+   * EVERY database read in compose.ts is enrolled here with the reason it
+   * survives a cold start. Nothing structural stopped a new one being added
+   * after the deferred block — and one was (`servingPolicy`), which printed
+   * "DEFERRED … NOT READY" and then exited 3 two statements later.
+   *
+   * Enrolled rather than positional, the way import graphs are (coding
+   * principle 7): a new read fails this test by NAME and its author has to say
+   * which of the three shapes it is.
+   */
+  it("every read that touches the pool is enrolled, and the deferred ones are inside the set", () => {
+    const POOL_READS: Readonly<Record<string, "deferred" | "caught" | "opt-in">> = {
+      assertSchemaCompatible: "deferred",
+      storedTextSearchConfig: "deferred",
+      assertGovernanceServable: "deferred",
+      servingPolicy: "deferred",
+      // Its own try/catch: an unreachable store is a warning that rides /health.
+      checkEmbeddingSpace: "caught",
+      // Never throws — Promise.allSettled, logs what it could not open.
+      prewarmPool: "opt-in",
+    };
+    const found = [...COMPOSE.matchAll(/(\w+)\(\s*pool\b/g)].map((m) => m[1]!);
+    const unenrolled = [...new Set(found)].filter((name) => !(name in POOL_READS));
+    expect(
+      unenrolled,
+      `unenrolled database read(s) in compose.ts: ${unenrolled.join(", ")} — a read outside the ` +
+        "deferred set exits the process on a cold start, after boot has already announced " +
+        "DEFERRED. Put it in bootChecks, or catch it, then enrol it here",
+    ).toEqual([]);
+    const checks = COMPOSE.slice(
+      COMPOSE.indexOf("const bootChecks"),
+      COMPOSE.indexOf("let verifyBoot"),
+    );
+    for (const [name, shape] of Object.entries(POOL_READS)) {
+      if (shape === "deferred")
+        expect(checks, `${name} is enrolled deferred`).toContain(`${name}(`);
+    }
+  });
+});
+
+/**
+ * The fixture record. `provider: fake` needs no API key, so the only thing this
+ * boot cannot reach is the database — which is the whole point.
+ */
+const INSTANCE = `---
+format: 2
+name: deferred-boot-fixture
+title: Deferred Boot Fixture
+description: Drives compose against a store that cannot be reached.
+database:
+  dsn_env: KSOR_DEFERRED_TEST_DSN
+embedding:
+  provider: fake
+---
+
+Answer only from this fixture.
+`;
+
+/** Port 1 on loopback: nothing listens, so every connect is an instant ECONNREFUSED. */
+const UNREACHABLE = "postgres://ksor:ksor@127.0.0.1:1/ksor";
+
+describe("a cold start against an unreachable store comes up NOT READY — it does not exit", () => {
+  it("resolves with the checks deferred, and serves at most `public` until they pass", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "ksor-deferred-boot-"));
+    const instancePath = path.join(dir, "instance.md");
+    writeFileSync(instancePath, INSTANCE);
+    const saved = { ...process.env };
+    const said: string[] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]): void => {
+      said.push(args.map((a) => String(a)).join(" "));
+    };
+    try {
+      process.env["KSOR_DEFERRED_TEST_DSN"] = UNREACHABLE;
+      // The operator asked for the RESTRICTED half. Validating that ask needs a
+      // row from the database, which is exactly what is unreachable here.
+      process.env["KSOR_AUDIENCE"] = "public,internal";
+      // One attempt, no backoff: ECONNREFUSED is instant, and the shipped
+      // default is five attempts with a linear 1s step — 10s of sleeping per
+      // check, for a failure this test already knows the shape of.
+      process.env["KSOR_READ_RETRY_ATTEMPTS"] = "1";
+      process.env["KSOR_READ_RETRY_BACKOFF_S"] = "0";
+
+      const composition = await compose(instancePath, "0.0.0-test");
+      try {
+        // The whole finding: boot PRINTED "DEFERRED … NOT READY" and then threw
+        // two statements later on an unguarded `servingPolicy` read, so `main()`
+        // exited 3 and the deploy crash-looped — against exactly the suspended
+        // serverless Postgres decision 17 targets.
+        expect(
+          composition.verifyBoot,
+          "an unverified instance must gate its requests",
+        ).not.toBeNull();
+        expect(said.join("\n")).toContain("boot checks DEFERRED");
+        // Fail closed on the way there: nothing has validated `internal` against
+        // the ingested policy's registry, so the door holds the one list that is
+        // legal for every record.
+        expect(composition.ctx.viewer, "unvalidated must never mean wide").toEqual(["public"]);
+        // …and the ask is remembered, so the boot report can state what this
+        // door will serve once the store answers.
+        expect(composition.requestedViewer).toEqual(["public", "internal"]);
+      } finally {
+        await composition.pool.end();
+      }
+    } finally {
+      console.error = realError;
+      for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+      Object.assign(process.env, saved);
+    }
   });
 });

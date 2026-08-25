@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 
 import type { Refusal } from "@panaversity/ksor-content/record";
 
+import { ACTOR_FORM, isWritableActor } from "./actor.js";
 import type { DbDenial } from "./denials.js";
 
 export interface LedgerDenial {
@@ -36,20 +37,39 @@ export function ledgerIdFor(stableId: string, at: string): string {
 }
 
 /**
- * A denied `<dir>/index` or `<dir>/README` names a document that is about to
- * stop existing, because migrate moves its prose into `overview.md` beside it
- * (§1.8). A node denial follows the prose; a subtree denial was never about
- * that file at all — it named the container, which is the `#section` anchor.
+ * What this run did with each reserved name it walked, keyed by the file's
+ * stable_id (`knowledge/<dir>/index`). `moved` — its prose became
+ * `overview.md`; `kept` — migrate left the file exactly where it is, which is
+ * what it does with a GENERATED index (`isGeneratedIndex`). A reserved name
+ * absent from the map is absent from the record.
  */
-export function repoint(stableId: string, scope: "node" | "subtree"): string {
+export type ReservedFate = ReadonlyMap<string, "moved" | "kept">;
+
+/**
+ * A denied `<dir>/index` or `<dir>/README` MAY name a document that is about to
+ * stop existing, because migrate moves its prose into `overview.md` beside it
+ * (§1.8) — but only when it actually did. It moves nothing when the index is a
+ * generated one, and nothing when the file is not in the record at all, and
+ * repointing in either case aimed a live denial at a path that would never
+ * exist: `expected: removed` then made the checker agree, so the withdrawn
+ * document was republished with exit 0 and nothing printed. So the rewrite
+ * follows the PROSE, and the case migrate cannot derive is refused by
+ * `toLedgerEntries` rather than guessed (critical rule 1).
+ *
+ * A subtree denial was never about that file at all — it named the container,
+ * which is the `#section` anchor, and that is true whatever became of the file.
+ */
+export function repoint(stableId: string, scope: "node" | "subtree", fate: ReservedFate): string {
   const m = /^(.*)\/(index|README)$/.exec(stableId);
   if (m === null) return stableId;
-  return scope === "subtree" ? `${m[1]}#section` : `${m[1]}/overview`;
+  if (scope === "subtree") return `${m[1]}#section`;
+  return fate.get(stableId) === "moved" ? `${m[1]}/overview` : stableId;
 }
 
 export function toLedgerEntries(
   rows: readonly DbDenial[],
   attributions: ReadonlyMap<string, string>,
+  fate: ReservedFate,
 ): LedgerOutcome {
   const entries: LedgerDenial[] = [];
   const refusals: Refusal[] = [];
@@ -65,7 +85,34 @@ export function toLedgerEntries(
       });
       continue;
     }
-    const stableId = repoint(row.stableId, row.scope);
+    // `retrieval_log.actor` is free text the database hands back, and
+    // `--attribute` is free text the operator hands over; neither passes the
+    // argument guard. Both are written into the ledger AND into the policy's
+    // `takedown_authorities`, so an id carrying a YAML indicator changes the
+    // structure of a governance file rather than a value in it.
+    if (!isWritableActor(by)) {
+      refusals.push({
+        slug: "ksor-migrate-underivable",
+        path: ".ksor/takedowns.yaml",
+        why: `the denial of \`${row.stableId}\` is attributed to "${by.slice(0, 80)}"${by.length > 80 ? " …" : ""}, which is not a governance identity migrate can record — ${ACTOR_FORM}`,
+        fix: `pass --attribute ${row.stableId}=human:<id> naming the person who denied it, and correct the row it came from`,
+      });
+      continue;
+    }
+    const stableId = repoint(row.stableId, row.scope, fate);
+    // The reserved name is still in the record, so the denial cannot follow
+    // prose that did not move — and it cannot stay pointed at a generated index
+    // either, which under the profile carries no knowledge and is not a concept.
+    // Which document it now covers is a governance decision (decision 14).
+    if (fate.get(row.stableId) === "kept" && row.scope === "node") {
+      refusals.push({
+        slug: "ksor-migrate-underivable",
+        path: ".ksor/takedowns.yaml",
+        why: `\`${row.stableId}\` is denied, and migrate left that file where it is because it is a GENERATED index carrying no prose — so there is no migrated concept for the denial to follow, and repointing it at \`${stableId.replace(/\/(index|README)$/, "/overview")}\` would deny a document this record does not have`,
+        fix: `re-deny what it meant after the migration: \`ksor takedown <the concept>\`, or \`ksor takedown --subtree ${row.stableId.replace(/\/(index|README)$/, "")}\` for the whole section`,
+      });
+      continue;
+    }
     // `parseLedger` refuses a `subtree` entry that does not name a container's
     // `#section` anchor, so transcribing one verbatim would write a ledger
     // migrate's own checker cannot load — and a subtree denial narrowed to a

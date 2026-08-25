@@ -125,9 +125,46 @@ function indent(text: string): string {
     .join("\n");
 }
 
+/**
+ * The key that says which ACT an entry is, and the closed key set that act
+ * reads — the policy's discipline (`POLICY_KEYS`) applied to the ledger, and
+ * for the same reason.
+ *
+ * Dispatching on the first key that was PRESENT and letting zod strip the rest
+ * read an entry carrying both `stable_id` and `revokes` as a denial and dropped
+ * the revocation: the entry it named stayed in force, and no surface said so.
+ * An entry is one act, so two act keys is a refusal rather than a precedence
+ * rule — the ledger cannot guess which of the two the operator meant, and
+ * guessing is what let the other one vanish. An unknown key is the same
+ * silence one step out: a `scope:` on a revocation is a constraint its author
+ * believes is in force and no reader ever applies.
+ */
+const ENTRY_KINDS = [
+  {
+    act: "stable_id",
+    kind: "denial",
+    keys: ["id", "by", "at", "reason", "stable_id", "scope", "expected"],
+  },
+  { act: "revokes", kind: "revocation", keys: ["id", "by", "at", "reason", "revokes"] },
+  { act: "amends", kind: "amendment", keys: ["id", "by", "at", "reason", "amends", "expected"] },
+] as const;
+
 function parseEntry(item: unknown): LedgerEntry | string {
   if (typeof item !== "object" || item === null || Array.isArray(item)) return "not a mapping";
   const keys = item as Record<string, unknown>;
+  const declared = ENTRY_KINDS.filter((entry) => entry.act in keys);
+  if (declared.length > 1) {
+    const acts = declared.map((entry) => entry.act).join("` and `");
+    const kinds = declared.map((entry) => entry.kind).join(" and a ");
+    return `declares \`${acts}\`, so it is both a ${kinds} — an entry is exactly one act, and reading it as one of the two drops the other silently`;
+  }
+  const only = declared[0];
+  if (only !== undefined) {
+    const unknown = Object.keys(keys).filter((key) => !only.keys.some((k) => k === key));
+    if (unknown.length > 0) {
+      return `declares an unknown key: \`${unknown.join("`, `")}\` — a ${only.kind} reads \`${only.keys.join("`, `")}\`, and a key it does not read is a constraint that is not in force`;
+    }
+  }
   if ("stable_id" in keys) {
     const r = denial.safeParse(item);
     if (!r.success) return issueText(r.error);

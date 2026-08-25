@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { ATTACHMENT_SUFFIXES } from "../lib/attachment-rule.js";
 import { checkRecord, type RecordFiles } from "./check.js";
 
 const POLICY = `version: "0.1"
@@ -79,14 +80,57 @@ describe("checkRecord — one rule set (record spec §6)", () => {
     ).toEqual(["ksor-approver-unauthorised knowledge/a.md"]);
   });
 
-  it("ksor-deprecator-unauthorised: the deprecator is the owner or a takedown authority", () => {
-    const dep = (by: string): string =>
-      `ksor:\n  audience: [public]\n  owner: human:kim\n  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }\n  deprecated: { by: "${by}", at: 2026-08-22T09:00:00Z }\n`;
-    const base = (by: string): string =>
-      doc("A", dep(by)).replace("status: stable", "status: deprecated");
-    expect(slugs({ "knowledge/a.md": base("human:kim") })).toEqual([]);
+  /**
+   * Withdrawing a document is a governance act, so the authority to perform it
+   * comes from the POLICY. `ksor.owner` is a string the document writes about
+   * itself — free text the profile does not even form-check — so accepting it
+   * as the owner let any concept attest its own withdrawal: `ksor.owner:
+   * human:mallory` plus `ksor.deprecated.by: human:mallory` passed in a record
+   * whose policy names no `ownership` rule at all.
+   *
+   * That was asymmetric with approval and nothing recorded the asymmetry —
+   * `resolveApprovers` REFUSES when no rule matches, so an approval can never
+   * be self-attested — and it is decision 21's rule ("a column that records WHO
+   * must never be populated from ambient state") with the document supplying
+   * the ambient state.
+   */
+  it("ksor-deprecator-unauthorised: the owner is the POLICY's, never the document's", () => {
+    const dep = (by: string, owner = "human:kim"): string =>
+      `ksor:\n  audience: [public]\n  owner: ${owner}\n  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }\n  deprecated: { by: "${by}", at: 2026-08-22T09:00:00Z }\n`;
+    const base = (by: string, owner?: string): string =>
+      doc("A", dep(by, owner)).replace("status: stable", "status: deprecated");
+
+    // No `ownership:` rule in POLICY, so the record resolves no owner for this
+    // concept — and a self-declared one is not a substitute.
+    expect(slugs({ "knowledge/a.md": base("human:kim") })).toEqual([
+      "ksor-deprecator-unauthorised knowledge/a.md",
+    ]);
+    expect(slugs({ "knowledge/a.md": base("human:mallory", "human:mallory") })).toEqual([
+      "ksor-deprecator-unauthorised knowledge/a.md",
+    ]);
+    // A takedown authority always may; a third party never may.
     expect(slugs({ "knowledge/a.md": base("human:ciso") })).toEqual([]);
     expect(slugs({ "knowledge/a.md": base("human:cfo") })).toEqual([
+      "ksor-deprecator-unauthorised knowledge/a.md",
+    ]);
+    // And with an ownership rule, the owner it resolves may — whatever the
+    // document says about itself.
+    const owned = POLICY.replace(
+      "approval_authorities:",
+      "ownership:\n  - owner: human:kim\napproval_authorities:",
+    );
+    const withPolicy = (files: Record<string, string>): string[] =>
+      checkRecord(
+        {
+          files: new Map(
+            Object.entries({ "instance.md": INSTANCE, ".ksor/governance.yaml": owned, ...files }),
+          ),
+          dirs: [],
+        },
+        { mode: "build" },
+      ).refusals.map((r) => `${r.slug} ${r.path}`);
+    expect(withPolicy({ "knowledge/a.md": base("human:kim", "human:mallory") })).toEqual([]);
+    expect(withPolicy({ "knowledge/a.md": base("human:mallory", "human:mallory") })).toEqual([
       "ksor-deprecator-unauthorised knowledge/a.md",
     ]);
   });
@@ -147,6 +191,56 @@ describe("checkRecord — one rule set (record spec §6)", () => {
       "ksor-attachment-orphan knowledge/b.quiz.yaml",
       "ksor-attachment-orphan knowledge/b.summary.md",
     ]);
+  });
+
+  /**
+   * "What is a companion" is ONE rule (`lib/attachment-rule.ts`, canonical, with
+   * four readers). `check.ts` kept a hand-written regex of its own and it had
+   * already drifted — `.summary.mdx` was in the canonical list and not in the
+   * copy — so the checker did not see an `.mdx` summary as an attachment at
+   * all: no orphan check, no `type: Summary` check, its parent's governance not
+   * inherited. That was masked by `hygiene.ts` refusing every `.mdx` under a
+   * different slug, in a different module, which is the arrangement decision 18
+   * exists to end. Derived from `ATTACHMENT_SUFFIXES` rather than from
+   * `ATTACHMENT_CASES`, which carries no `.summary.mdx` row and so could not
+   * have caught this.
+   */
+  it.each(ATTACHMENT_SUFFIXES)(
+    "a $suffix file is a companion of its document, not a concept",
+    ({ suffix }) => {
+      const name = `returns${suffix}`;
+      // No `returns.md` in the tree, so recognition is OBSERVABLE: recognised
+      // means `ksor-attachment-orphan` naming the parent it wants.
+      const body = /\.mdx?$/.test(suffix) ? "---\ntype: Summary\n---\n" : "x: 1\n";
+      const out = checkRecord(
+        record({ "knowledge/a.md": doc("A", PUBLIC), [`knowledge/${name}`]: body }),
+        { mode: "build" },
+      );
+      const orphan = out.refusals.find((r) => r.slug === "ksor-attachment-orphan");
+      expect(orphan?.path, `knowledge/${name} was not recognised as an attachment`).toBe(
+        `knowledge/${name}`,
+      );
+      expect(`${orphan?.why}`).toContain("returns.md");
+      // And it is never ALSO read as a concept of its own.
+      expect(out.concepts.map((c) => c.id)).toEqual(["a"]);
+    },
+  );
+
+  it("a dotfile with no stem is no companion — it falls through to the honest refusal", () => {
+    // `attachmentKindOf(".summary.md")` is null by the canonical rule (it has no
+    // parent to attach to), where the regex matched it and invented a parent
+    // called `..md`. It is a dot-prefixed document instead, which hygiene names.
+    const out = checkRecord(
+      record({
+        "knowledge/a.md": doc("A", PUBLIC),
+        "knowledge/.summary.md": "---\ntype: Summary\n---\n",
+      }),
+      { mode: "build" },
+    );
+    expect(out.refusals.map((r) => r.slug)).not.toContain("ksor-attachment-orphan");
+    expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toContain(
+      "ksor-name-unportable knowledge/.summary.md",
+    );
   });
 
   it("ksor-footnote-unkeyed reaches the checker through the concept's declared sources", () => {

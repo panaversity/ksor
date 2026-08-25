@@ -22,6 +22,7 @@ import {
   dayOf,
   governanceVisible,
   isCalendarDate,
+  plainBadge,
   predecessorsOf,
   readGovernance,
   resolveSuccessorUrl,
@@ -291,6 +292,34 @@ describe("the badge vocabulary — the §2.5 words, everywhere", () => {
     expect(badgeAddsToStatus(null, "stable")).toBe(false);
     // A document whose status the record did not declare still gets the badge.
     expect(badgeAddsToStatus("draft", null)).toBe(true);
+  });
+});
+
+/**
+ * `site.governance: false` turns the pages plain. It has always kept the
+ * DEPRECATION notice — "a correctness warning, not decoration" — and it kept
+ * the badge on the sidebar, the folder listings and the search dialog too,
+ * because none of those consult the key. The PAGE was the one surface that
+ * dropped it, so a `stable` document with `ksor.effective_from: 2027-01-01`
+ * carried an "effective from" chip in three places and opened as a current,
+ * in-force policy in the fourth — while the MCP door refused it outright
+ * (record spec §2.5). One record, one voice (2026-08-25 review).
+ */
+describe("plainBadge — the caveat a plain page still draws", () => {
+  it("keeps every state that says the record is not standing behind this today", () => {
+    expect(plainBadge("effective-from")).toBe("effective-from");
+    expect(plainBadge("stale")).toBe("stale");
+    expect(plainBadge("draft")).toBe("draft");
+  });
+
+  it("drops deprecated, which the notice above the title already says out loud", () => {
+    // The same rule `badgeAddsToStatus` applies when the status chip is the
+    // thing already saying it: one state, said once.
+    expect(plainBadge("deprecated")).toBeNull();
+  });
+
+  it("says nothing about a document every surface admits", () => {
+    expect(plainBadge(null)).toBeNull();
   });
 });
 

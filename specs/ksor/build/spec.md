@@ -106,7 +106,8 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
     }
   ],
   "companions": [{ "path": "what-is-a-ksor.summary.md", "sha256": "…" }],
-  "assets": [{ "path": "policies/diagram.png", "sha256": "…" }]
+  "assets": [{ "path": "policies/diagram.png", "sha256": "…" }],
+  "indexes": [{ "path": "index.md", "sha256": "…" }]
 }
 ```
 
@@ -138,8 +139,15 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   the site serves with no refusal anywhere, so "a projection only publishes what
   was checked" stopped at the markdown, on records where the substance is often
   in the diagram.
+- `indexes[]` is every §8 `index.md` this build GENERATED, by the bytes it
+  wrote — the only files under `knowledge/` the build authors rather than
+  reads, and the surface an external reader parses to find anything at all.
+  They belonged to no other section (`documents[]` is the concepts, and the
+  checker skips `index.md`; `companions[]` is the attachment kinds;
+  `assets[]` is the non-markdown), so the record of what was published stopped
+  short of the file that lists what was published.
 - `build_id` = sha256 over everything a projection reads: the sorted
-  `documents[]`, `companions[]` and `assets[]` `(path, sha256)` pairs, `instance_sha256`,
+  `documents[]`, `companions[]`, `assets[]` and `indexes[]` `(path, sha256)` pairs, `instance_sha256`,
   `policy_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each
   document's `admitted` list — the canonical viewers whose machine artefacts
   contain it at `as_of` (stable, effective, unexpired, not denied, audience
@@ -163,8 +171,10 @@ Two identities, never confused in prose: `build_id` is what R14 stamps and
 what connects every projection of one publication (KSP-001's "Generation",
 renamed "Publication" in draft 10); `generation` remains the kernel's
 monotonic counter that a citation pins. `ksor ingest` runs the record
-checker, refuses `ksor-lock-missing` / `ksor-lock-stale` (document hashes
-disagree with the tree), and records `build_id` on the run it publishes;
+checker, refuses `ksor-lock-missing` / `ksor-lock-stale` (ANY digest the lock
+records disagrees with the tree — the four file lists and the instance, policy
+and ledger digests, not the documents alone), and records `build_id` on the run
+it publishes;
 the door evaluates lifecycle at request time.
 
 ## 3 · What the site does with it

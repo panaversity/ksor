@@ -136,6 +136,38 @@ describe("a link between concepts resolves to a route", () => {
     ]);
   });
 
+  /**
+   * A browser strips leading C0 controls and spaces before it parses a URL
+   * (WHATWG URL §4.4), so the scheme test has to run on the value the browser
+   * will see. It ran on the raw one, which read `\tjavascript:…` as a record
+   * link — and the third case below shows what that misreading is worth: a
+   * mangled path that happens to resolve was REWRITTEN into a route of this
+   * build.
+   *
+   * Defence in depth, not a live hole: `record/citations.ts` classifies the
+   * raw markdown with the same regex, so a link written this way is a record
+   * link there too, resolves to nothing, and `ksor-link-dead` refuses the build
+   * before the page exists (reviewer's own trace, 2026-08-25).
+   */
+  it("sees a scheme hidden behind leading whitespace or control characters", () => {
+    const from = "purchase-approval";
+    expect(
+      hrefs([
+        [from, "\tjavascript:alert(1)"],
+        [from, "\u0000javascript:alert(1)"],
+        // The same miss, made visible: `..` pops the mangled first segment and
+        // what is left resolves to a real concept of this build.
+        [from, "\tjavascript:alert(1)/../policies/travel"],
+        [from, " https://example.com/x.md"],
+      ]),
+    ).toEqual([
+      "\tjavascript:alert(1)",
+      "\u0000javascript:alert(1)",
+      "\tjavascript:alert(1)/../policies/travel",
+      " https://example.com/x.md",
+    ]);
+  });
+
   it("leaves a concept this build did not stage as the author wrote it", () => {
     // The per-viewer build is a SUBSET: a link to a concept this viewer may not
     // see must not become a link to a page that does not exist.

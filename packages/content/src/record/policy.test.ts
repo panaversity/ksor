@@ -388,3 +388,104 @@ takedown_authorities:
     });
   });
 });
+
+/**
+ * The same failure as the misspelled key, reached through the VALUE. A scope
+ * whose `paths` or `types` is the EMPTY LIST binds the rule to nothing:
+ * `pathDepth` loops zero times and returns null, so `mostSpecific` skips the
+ * rule entirely, and `types: []` fails every `includes` for the same effect.
+ * An empty list reads as "everywhere" and means "nowhere".
+ *
+ * On `approval_authorities` that fails safe — no rule matches, so the concept
+ * is refused. On `ownership` it does not: `resolveOwner` returns `null`, which
+ * is the same answer as "no ownership rule binds this concept", and the
+ * checker then falls back to the document's SELF-DECLARED `owner:` for
+ * deprecation authority. The rule the author wrote to hold that authority
+ * simply is not in force, and nothing says so (2026-08-25 review).
+ *
+ * `scope: {}` is refused with them: it is the state the one-letter typo
+ * produced — a scope that constrains nothing scores depth 0 and becomes the
+ * record-wide fallback — and it is the one route to it that a closed key set
+ * cannot catch.
+ */
+describe("parsePolicy — a scope that constrains nothing is refused, never silently dropped", () => {
+  it("refuses an empty `paths` on an approval rule, naming the list and the fallback form", () => {
+    const r = parsePolicy(
+      `version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+  - scope: { paths: [] }
+    actors: [human:hr]
+takedown_authorities:
+  actors: [human:boss]
+`,
+      P,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals.map((x) => x.slug)).toEqual(["ksor-policy-invalid"]);
+    expect(r.refusals[0]?.why).toContain("paths");
+    expect(r.refusals[0]?.fix).toContain("scope");
+  });
+
+  it("refuses an empty `types` the same way", () => {
+    expect(
+      slugsOf(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+  - scope: { paths: ["hr/"], types: [] }
+    actors: [human:hr]
+takedown_authorities:
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("refuses an ownership rule that cannot match, where the fallback is the document's own claim", () => {
+    expect(
+      slugsOf(`${LEVEL0}ownership:
+  - scope: { paths: [] }
+    owner: team:hr
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+    expect(
+      slugsOf(`${LEVEL0}ownership:
+  - scope: { types: [] }
+    owner: team:hr
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("refuses `scope: {}` — the record-wide fallback is written by omitting `scope`", () => {
+    expect(
+      slugsOf(`version: "0.1"
+approval_authorities:
+  - scope: {}
+    actors: [human:boss]
+takedown_authorities:
+  actors: [human:boss]
+`),
+    ).toEqual(["ksor-policy-invalid"]);
+  });
+
+  it("takes a scope that names one of the two, which is the ordinary form", () => {
+    const p = policyOf(`version: "0.1"
+approval_authorities:
+  - actors: [human:boss]
+  - scope: { paths: ["hr/"] }
+    actors: [human:hr]
+  - scope: { types: [Control] }
+    actors: [human:ciso]
+takedown_authorities:
+  actors: [human:boss]
+`);
+    expect(resolveApprovers(p, "hr/handbook", "Document")).toEqual({
+      ok: true,
+      actors: ["human:hr"],
+    });
+    expect(resolveApprovers(p, "ops/sox", "Control")).toEqual({
+      ok: true,
+      actors: ["human:ciso"],
+    });
+  });
+});

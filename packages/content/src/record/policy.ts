@@ -135,14 +135,64 @@ function pathProblem(raw: string): { readonly why: string; readonly fix: string 
   return null;
 }
 
-/** Every `paths` entry of one rule family, in the vocabulary `POLICY_KEYS` uses. */
-function checkScopePaths(
+/**
+ * Why this scope binds the rule to nothing, or null when it binds it to
+ * something.
+ *
+ * The empty LIST is `pathProblem`'s failure reached through the value instead
+ * of the key: `paths: []` makes `pathDepth` loop zero times and return null,
+ * so `mostSpecific` skips the rule entirely, and `types: []` fails every
+ * `includes` for the same effect. An empty list reads as "everywhere" and
+ * means "nowhere" — on `approval_authorities` that refuses the concept and
+ * fails safe, but on `ownership` it resolves to the same `null` as "no rule
+ * binds this", and deprecation authority then falls back to the document's own
+ * self-declared `owner:` (2026-08-25 review).
+ *
+ * The empty MAPPING is the opposite direction and the same silence: `scope: {}`
+ * scores depth 0 and matches EVERY concept, which is the state the one-letter
+ * `path:` typo produced before the key set was closed. It is the one route to
+ * that widening a closed key set cannot catch, so it is refused here — the
+ * record-wide fallback is written by omitting `scope`, and a rule that names a
+ * scope is saying it is not the fallback.
+ */
+function emptyScopeProblem(scope: Scope | undefined): {
+  readonly why: string;
+  readonly fix: string;
+} | null {
+  if (scope === undefined) return null;
+  for (const [key, list] of [
+    ["paths", scope.paths],
+    ["types", scope.types],
+  ] as const) {
+    if (list !== undefined && list.length === 0) {
+      return {
+        why: `declares an empty \`${key}\` list, which matches no concept — an empty list is not "everywhere", it is "nowhere", so this rule is not in force at all`,
+        fix: `list the ${key === "paths" ? "directory prefixes" : "types"} the rule covers, or omit \`scope:\` entirely to make it the record-wide fallback`,
+      };
+    }
+  }
+  if (scope.paths === undefined && scope.types === undefined) {
+    return {
+      why: "declares a `scope` that constrains nothing, so it matches EVERY concept at the widest tier — a rule that names a scope is saying it is not the record-wide fallback",
+      fix: "add `paths:` or `types:`, or drop the `scope:` key so the rule reads as the deliberate fallback it would otherwise silently become",
+    };
+  }
+  return null;
+}
+
+/** Every scope of one rule family, in the vocabulary `POLICY_KEYS` uses. */
+function checkScopes(
   rules: readonly { readonly scope?: Scope }[],
   where: string,
   path: string,
   refusals: Refusal[],
 ): void {
   for (const rule of rules) {
+    const empty = emptyScopeProblem(rule.scope);
+    if (empty !== null) {
+      refusals.push({ slug: SLUG, path, why: `${where} ${empty.why}`, fix: empty.fix });
+      continue;
+    }
     for (const raw of rule.scope?.paths ?? []) {
       const problem = pathProblem(raw);
       if (problem === null) continue;
@@ -232,8 +282,8 @@ export function parsePolicy(text: string | null, path: string): PolicyResult {
   }
   const fm = parsed.data;
   const unmatchable: Refusal[] = [];
-  checkScopePaths(fm.ownership ?? [], "an `ownership` rule", path, unmatchable);
-  checkScopePaths(fm.approval_authorities, "an `approval_authorities` rule", path, unmatchable);
+  checkScopes(fm.ownership ?? [], "an `ownership` rule", path, unmatchable);
+  checkScopes(fm.approval_authorities, "an `approval_authorities` rule", path, unmatchable);
   if (unmatchable.length > 0) return { ok: false, refusals: unmatchable };
   if (fm.audiences !== undefined && "public" in fm.audiences) {
     return {
@@ -322,8 +372,9 @@ export function resolveOwner(policy: Policy, id: string, type: string): OwnerRes
  * Segment-wise: `finance/` covers `finance/x` and never `financeops/x`. A bare
  * `/` normalises to the empty prefix, which matches every concept at depth 0 —
  * the same tier as omitting `paths`, so any deeper rule still beats it. Forms
- * that could never match are refused at parse time (`pathProblem`), so
- * everything reaching here can.
+ * that could never match are refused at parse time (`pathProblem`), and so is
+ * the empty list (`emptyScopeProblem`), so `null` here means one thing only:
+ * this rule's prefixes do not cover this concept.
  */
 function pathDepth(id: string, prefixes: readonly string[] | undefined): number | null {
   if (prefixes === undefined) return 0;

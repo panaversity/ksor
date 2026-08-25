@@ -47,7 +47,7 @@ import {
 import { manifestToJson, sourceId, topological, type Manifest } from "./manifest.js";
 import { contentHash } from "./markdown.js";
 import { buildManifestFromRecord } from "./adapters/plain-tree.js";
-import { applyLedger, unmergedLines } from "./ledger-apply.js";
+import { applyLedger, unledgeredRefusal, unmergedLines } from "./ledger-apply.js";
 import { checkLock, formatRefusals, LOCK_PATH, type IngestRefusal } from "./lock-gate.js";
 import { checkRecord } from "../record/check.js";
 import { splitFrontmatter } from "../record/frontmatter.js";
@@ -487,6 +487,7 @@ async function activeGenerationOf(
 async function sameCorpus(
   c: pg.PoolClient,
   tenantId: string,
+  corpusId: string,
   a: number,
   b: number,
 ): Promise<boolean> {
@@ -499,7 +500,7 @@ async function sameCorpus(
               n.effective_from, n.stale_after, n.trust_tier
          FROM sources s JOIN content_nodes n
            ON n.tenant_id = s.tenant_id AND n.generation = s.generation AND n.node_id = s.node_id
-        WHERE s.tenant_id = $1 AND s.generation IN ($2, $3)
+        WHERE s.tenant_id = $1 AND n.corpus_id = $4 AND s.generation IN ($2, $3)
      )
      SELECT (SELECT count(*) FROM pair WHERE generation = $2) =
             (SELECT count(*) FROM pair WHERE generation = $3)
@@ -528,7 +529,7 @@ async function sameCorpus(
                                 AND y.stale_after IS NOT DISTINCT FROM x.stale_after
                                 AND y.trust_tier IS NOT DISTINCT FROM x.trust_tier)
             ) AS same`,
-    [tenantId, a, b],
+    [tenantId, a, b, corpusId],
   );
   return r.rows[0]?.same === true;
 }
@@ -542,14 +543,16 @@ async function sameCorpus(
 async function sameGovernance(
   c: pg.PoolClient,
   tenantId: string,
+  corpusId: string,
   generation: number,
   policySha256: string,
   ledgerIds: readonly string[],
 ): Promise<boolean> {
   const r = await c.query(
     `SELECT policy_sha256, ledger_ids FROM ingestion_runs
-      WHERE tenant_id = $1 AND generation = $2 ORDER BY run_id DESC LIMIT 1`,
-    [tenantId, generation],
+      WHERE tenant_id = $1 AND corpus_id = $3 AND generation = $2
+      ORDER BY run_id DESC LIMIT 1`,
+    [tenantId, generation, corpusId],
   );
   const row = r.rows[0] as
     | { policy_sha256: string | null; ledger_ids: string[] | null }
@@ -567,14 +570,15 @@ async function sameGovernance(
 async function sameCommit(
   c: pg.PoolClient,
   tenantId: string,
+  corpusId: string,
   generation: number,
   sourceCommit: string | undefined,
 ): Promise<boolean> {
   const r = await c.query(
     `SELECT source_commit FROM ingestion_runs
-      WHERE tenant_id = $1 AND generation = $2
+      WHERE tenant_id = $1 AND corpus_id = $3 AND generation = $2
       ORDER BY run_id DESC LIMIT 1`,
-    [tenantId, generation],
+    [tenantId, generation, corpusId],
   );
   if (r.rows.length === 0) return false;
   const stored: unknown = r.rows[0]?.source_commit ?? null;
@@ -696,8 +700,30 @@ export async function buildGeneration(
   const knowledgeDir = join(root, "knowledge");
   const files = new Map([...sources].map(([path, rel]) => [path, join(root, rel)]));
 
-  // ---- the ledger: its own transaction, BEFORE the build, so a takedown
-  // reaches the row even when the corpus itself turns out unchanged.
+  // ---- the ledger: its own transaction, BEFORE the build.
+  //
+  // TWO reasons, and the second is why it stays here after being questioned in
+  // review (2026-08-25, finding 38).
+  //
+  // 1. An unchanged corpus rolls the STRUCTURE transaction back (UnchangedCorpus
+  //    below), so a ledger folded inside it would be rolled back with it — and
+  //    "the documents did not change" must never mean "the takedown did not
+  //    land".
+  // 2. The asymmetry is the safe one. Committing first means that if the build
+  //    then fails, a DENIAL is already in force while the old generation goes on
+  //    serving — denied more than published, which is the direction a system of
+  //    record errs in (critical rule 1). Applying the ledger AFTER a successful
+  //    build inverts exactly that: a failed build would leave a committed,
+  //    reviewed, merged legal takedown unapplied and the document still served.
+  //
+  // The residual, named so it is not rediscovered as new: a REVOCATION commits
+  // the same way, so a failed build leaves the document served again out of the
+  // OLD generation. That is what `.ksor/takedowns.yaml` says should happen — the
+  // file is the state and it is already merged — but if the revoker also EDITED
+  // the document in the same change, the old text is what is served until a
+  // build succeeds. The window is bounded by a loud failure rather than a quiet
+  // one, and the alternative trades it for the unapplied-denial case above,
+  // which is not a trade this product may make.
   const applied = await runIngest(pool, tenant, async (c) => {
     const last = await c.query(
       `SELECT generation, ledger_ids FROM ingestion_runs
@@ -723,6 +749,15 @@ export async function buildGeneration(
   if (applied.changed > 0)
     log(`ledger: ${applied.changed} denial row(s) applied from .ksor/takedowns.yaml`);
   for (const line of unmergedLines(applied.unmerged)) (options.onReport ?? log)(line);
+  // A denial the repository does not account for is a state `ksor serve` will
+  // not boot on, so this generation could never be served. Refusing HERE —
+  // before allocateRun, before a single embedding — is the same outcome the
+  // governance gate reaches at the end of this command, arrived at while the
+  // operator can still act on it and without leaving a generation behind
+  // (review 2026-08-25: the migration creates this state, and nothing between
+  // the migration and the crash-looping container said so).
+  if (applied.unledgered.length > 0)
+    throw new RecordRefused([unledgeredRefusal(applied.unledgered)]);
 
   // ---- allocate + structure + carry: ONE transaction (atomic per generation)
   let structure;
@@ -758,12 +793,21 @@ export async function buildGeneration(
       // identical bytes is still a new build fact — "every build records the
       // exact corpus that produced it" — so it earns a generation; a plain
       // restart, which names no commit, does not.
+      // Every one of the three is scoped to the CORPUS as well as the tenant.
+      // A generation number is allocated per (tenant, corpus), so two records
+      // under one tenant both hold a generation 5, and `ORDER BY run_id DESC
+      // LIMIT 1` over tenant+generation alone would answer these questions from
+      // whichever of them was ingested last. Latent today — `instance.md`'s
+      // `name:` is tenant_id and corpus_id both, so the CLI cannot reach the
+      // state — but the schema is multi-corpus by design and a skip decided
+      // from another record's run is the one wrong answer here that publishes
+      // nothing at all (review 2026-08-25).
       const active = await activeGenerationOf(c, tenant, instance.corpusId);
       if (
         active !== null &&
-        (await sameCommit(c, tenant, active, options.sourceCommit)) &&
-        (await sameGovernance(c, tenant, active, policySha256, ledger.ids)) &&
-        (await sameCorpus(c, tenant, active, alloc.generation))
+        (await sameCommit(c, tenant, instance.corpusId, active, options.sourceCommit)) &&
+        (await sameGovernance(c, tenant, instance.corpusId, active, policySha256, ledger.ids)) &&
+        (await sameCorpus(c, tenant, instance.corpusId, active, alloc.generation))
       ) {
         throw new UnchangedCorpus(active);
       }

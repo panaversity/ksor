@@ -343,6 +343,28 @@ export function badgeAddsToStatus(badge: LifecycleBadge | null, status: string |
   return badge !== null && badge !== status;
 }
 
+/**
+ * The badge a PLAIN page still draws — the page of a record whose
+ * `site.governance` is off.
+ *
+ * That key turns off ATTRIBUTION: who owns this document, who approved it, who
+ * verified it, where it came from. A badge is not attribution. It is the record
+ * saying this document is not one the machine surfaces will serve today, which
+ * is the same class of thing as the deprecation notice the key already exempts
+ * ("a correctness warning, not decoration") — and the sidebar, the folder
+ * listings and the search dialog draw it whatever the key says. Gating it on
+ * the page alone put an "effective from 2027-01-01" chip on a document in three
+ * places and opened it as a current, in-force policy in the fourth, while the
+ * MCP door refused it outright (record spec §2.5). One record, one voice.
+ *
+ * `deprecated` is the one state dropped, because a plain page still carries the
+ * DeprecatedNotice above its title: the same rule `badgeAddsToStatus` applies
+ * when the status chip is the thing already saying it.
+ */
+export function plainBadge(badge: LifecycleBadge | null): LifecycleBadge | null {
+  return badge === "deprecated" ? null : badge;
+}
+
 /** The three lifecycle states (record spec §2.2), and nothing else — a word the record does not define is not a status. */
 const STATUSES: readonly string[] = ["draft", "stable", "deprecated"];
 

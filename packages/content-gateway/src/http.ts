@@ -113,6 +113,16 @@ export function resolveSecurity(bind: { host: string; port: number }): Security 
     `http://localhost:${bind.port}`,
     `http://[::1]:${bind.port}`,
   ]);
+  // A non-loopback bind is not Host- or Origin-gated by default: it is
+  // bearer-gated instead, and DNS rebinding is an attack on a LOCAL server a
+  // browser can reach but the network cannot.
+  //
+  // Except under KSOR_AUTH=disabled-public, where there is no bearer and this
+  // door has neither gate. That is the posture's own meaning rather than a hole
+  // in it — a door serving the record to anyone who can reach the port is not
+  // made safer by refusing some of their Host headers — but it is why the auth
+  // boot line has to state what that reaches, which is what `authPosture` now
+  // does with the viewer list.
   if (explicit === null) {
     return {
       hosts: loopback ? loopbackHosts : null,
@@ -178,7 +188,8 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
     );
   }
   const security = resolveSecurity(bind);
-  const { ctx, instance, pool, spaceSkipReason, version, verifyBoot } = composition;
+  const { ctx, instance, pool, spaceSkipReason, requestedViewer, version, verifyBoot } =
+    composition;
 
   // Fail-soft env (envInt), never Number(env ?? default): a set-but-empty
   // var (routine with `gcloud --set-env-vars`) or a typo must fall back, not
@@ -283,9 +294,15 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
   );
 
   // /health discloses corpus internals AND the calibrated floor VALUE — the
-  // measured gate constant an attacker would tune probes against. On a PUBLIC
-  // bind it therefore requires the bearer, same as /mcp; /live (below) stays
-  // open for the load balancer (review 2026-08-19).
+  // measured gate constant an attacker would tune probes against. Wherever
+  // there is a bearer to require it therefore requires one, same as /mcp;
+  // /live (below) stays open for the load balancer (review 2026-08-19).
+  //
+  // Under KSOR_AUTH=disabled-public there is no bearer to require and this is
+  // open, like every other route on that door — which is what the posture
+  // means and what the auth boot line now states in full. Said explicitly
+  // because the comment used to read "on a PUBLIC bind", which an
+  // unauthenticated public bind is, and is not the condition below.
   app.get("/health", async (c) => {
     if (auth.mode === "public") {
       const token = /^Bearer\s+(.+)$/i.exec(c.req.header("authorization") ?? "")?.[1];
@@ -586,6 +603,12 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         auth.mode,
         bind.host,
         auth.mode === "disabled" && auth.publicAllowed && !loopback,
+        // The ASK, not `ctx.viewer`: a cold start holds the fail-closed
+        // `[public]` until the boot checks pass, and a warning that quietly
+        // downgraded itself because the database happened to be asleep is the
+        // opposite of what this line is for. The ask is never an understatement
+        // — an unvalidated door serves nothing at all.
+        requestedViewer,
       ),
     ),
   );

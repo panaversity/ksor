@@ -551,8 +551,12 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   knowing: the home page shows the agent surface VERBATIM in its panel, so the
   keys stay visible there even with this off. That panel's whole claim is that
   it is the bytes an agent is served, and editing them to match a page setting
-  would make it lie. Remove the panel if you need the front page silent too. The supersession notice is the one thing it does not hide: a reader
-  handed a replaced document with no word of its successor has been misled.
+  would make it lie. Remove the panel if you need the front page silent too.
+  What it does not hide is a CAVEAT: the supersession notice stays, and so does
+  the chip on a document the record has not brought into force yet or has not
+  reviewed since its `stale_after` — a reader handed one of those with no word
+  of it has been misled, and the sidebar, the listings and the search results
+  say it whatever this key is set to.
 - **`status` is shown only when it is a caveat.** `deprecated` appears as a
   small label; `stable` shows nothing, because a reader already assumes a
   document in the record is current — so the label stays rare enough to be
@@ -572,7 +576,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   document and can clone, the answer is a second repository.**
 
 - A replaced document is marked `status: deprecated` with
-  `ksor.deprecated: { by, at }` (the owner or a takedown authority) and
+  `ksor.deprecated: { by, at }` (a takedown authority, or the owner an
+  `ownership:` rule in `.ksor/governance.yaml` resolves — `ksor.owner` on the
+  document is not that owner, and this record's policy declares no rule yet) and
   `ksor.superseded_by:` naming its successor by id (`policies/refunds-v2`) —
   deprecated documents are never deleted. The successor must exist, be
   `stable`, and be readable by every reader of this document, or the pointer

@@ -28,6 +28,7 @@ import type pg from "pg";
 import type { ContentInstance } from "../instance.js";
 import { inForce } from "../record/ledger.js";
 import type { Denial, Ledger } from "../record/ledger.js";
+import type { IngestRefusal } from "./lock-gate.js";
 
 export interface DenialState {
   readonly stableId: string;
@@ -81,6 +82,38 @@ export interface LedgerApplyReport {
   readonly changed: number;
   /** Rows whose `ledger_id` the ledger does not contain — the verb wrote them, the pull request never merged. */
   readonly unmerged: readonly { readonly stableId: string; readonly ledgerId: string }[];
+  /**
+   * Rows that STILL carry no ledger entry after the fold — written before
+   * `.ksor/takedowns.yaml` existed (the 2.4 -> 2.5 migration cannot invent one)
+   * or by hand.
+   *
+   * Measured AFTER the upsert, not before: the fold attaches an entry to a
+   * pre-existing row by stable_id, so a row the ledger does name is no longer
+   * unledgered by the time this is read. The caller refuses on it, and refusing
+   * HERE is the point — `assertGovernanceServable` was already going to refuse
+   * this state at the end of the same command, after a whole generation had
+   * been built and embedded, and the operator had been told nothing at the one
+   * moment the ledger was in front of the tool.
+   */
+  readonly unledgered: readonly string[];
+}
+
+/** The `ksor-takedown-unledgered` refusal: the rows, the reason, and the remedy that resolves it. */
+export function unledgeredRefusal(stableIds: readonly string[]): IngestRefusal {
+  const named = stableIds.slice(0, 5).join(", ");
+  const more = stableIds.length - Math.min(5, stableIds.length);
+  return {
+    slug: "ksor-takedown-unledgered",
+    path: ".ksor/takedowns.yaml",
+    why:
+      `${stableIds.length} denial row(s) carry no ledger entry: ${named}${more > 0 ? `, and ${more} more` : ""} — ` +
+      ".ksor/takedowns.yaml is the record of who withdrew what, and a row nothing in the repository " +
+      "accounts for cannot be reviewed, revoked or reproduced. `ksor serve` refuses to boot on it, so " +
+      "publishing this generation would leave a record no surface can serve",
+    fix:
+      "run `ksor migrate --write` to record every existing row in the ledger, commit it, and ingest " +
+      "again — the fold attaches each entry to its row by stable_id",
+  };
 }
 
 /** The `ksor-takedown-unmerged` report: named id, two fixes, one line each. */
@@ -176,5 +209,14 @@ export async function applyLedger(
       ],
     );
   }
-  return { changed, unmerged };
+  // AFTER the fold: what the ledger still does not account for.
+  const unledgered = (
+    await client.query<{ stable_id: string }>(
+      "SELECT stable_id FROM takedown_denylist WHERE tenant_id = $1 AND corpus_id = $2" +
+        " AND ledger_id IS NULL ORDER BY stable_id",
+      [instance.tenantId, instance.corpusId],
+    )
+  ).rows.map((r) => r.stable_id);
+
+  return { changed, unmerged, unledgered };
 }

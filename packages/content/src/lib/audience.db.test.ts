@@ -198,6 +198,35 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
     }
   });
 
+  /**
+   * `runRead` used to bind the whole-record sentinel by DEFAULT, so a read that
+   * named no viewer was served EVERY tier. The stated reason was that "the
+   * whole record" should be something a caller says rather than an accident of
+   * an unbound GUC — and binding it by default achieved the exact opposite: the
+   * accident became the default, and the SQL backstop that denies an unbound
+   * viewer could never fire, because the viewer was never unbound. A serving
+   * path that forgot to narrow was therefore caught by nothing but a grep over
+   * `service.ts` (audience-binding.integration.test.ts).
+   *
+   * A default of "every audience" underneath a governance predicate is a loaded
+   * gun in a codebase whose posture is to refuse rather than default (review
+   * 2026-08-25). It is gone: the sentinel is now only ever a value a caller
+   * states, and a read that states none is served nothing.
+   */
+  it("a read that names NO viewer is served nothing — the SQL backstop, now reachable", async () => {
+    const unscoped = await runRead(pool, TENANT, async (c) =>
+      (await keywordSearch(c, scope, "widgets", 20)).map((h) => h.slug),
+    );
+    expect(
+      unscoped,
+      "an unbound app.viewer overlaps nothing, so the predicate is false for every row",
+    ).toEqual([]);
+    expect(
+      await readAs("whole", "open-notice"),
+      "and the sentinel still admits everything when a caller STATES it",
+    ).toBe("open-notice");
+  });
+
   it("the audience GUCs are transaction-scoped — they never leak to the next borrower", async () => {
     // Read the GUC on the RAW connection, not through `runRead`.
     //

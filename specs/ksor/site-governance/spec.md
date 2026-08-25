@@ -113,6 +113,16 @@ hides the supersession notice: that is a correctness warning, not decoration,
 and a reader handed a replaced document with no word of its successor has been
 misled whatever the site's preferences are.
 
+It never hides the **lifecycle badge** either, and for the same reason: the
+chip that says a document is a draft, is not in force yet, or is past its
+review date (record spec §2.5) is a caveat, not an attribution. The sidebar
+row, the folder listing and the search result for that same document carry it
+whatever this key says, and the MCP door declines the document outright — so
+the page staying silent had one record speaking with two voices about one
+document, and the reader who opened it got the only surface that said nothing
+(2026-08-25 review). `deprecated` is the one state the page does not repeat as
+a chip, because the notice above the title is already saying it.
+
 It also never reaches the **agent** files. `llms.txt` and `llms-full.txt` carry
 the governance whatever this key says: it is a decision about what the published
 PAGES show, and the record keeps every key for the agent surface and the audit

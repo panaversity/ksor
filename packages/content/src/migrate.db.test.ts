@@ -11,7 +11,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   compareSchemaVersion,
@@ -21,6 +22,10 @@ import {
   runMigrations,
 } from "./migrate.js";
 import { applySchema, schemaVersion } from "./schema.js";
+import { assertGovernanceServable } from "./governance-gate.js";
+import { runRead } from "./db.js";
+import { AUDIENCE_ALLOWED, audienceGucs } from "./lib/audience.js";
+import type { ContentInstance } from "./instance.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
@@ -83,13 +88,19 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
       "ALTER TABLE takedown_denylist DROP COLUMN ledger_id, DROP COLUMN actor, DROP COLUMN applied_at, DROP COLUMN revoked_ledger_id, DROP COLUMN revoked_at",
     );
     // …and back past 2.3 and 2.4 too, or those steps run against a database
-    // that ALREADY has what they add. Every migration file is idempotent
-    // (`ADD COLUMN IF NOT EXISTS`, `DROP POLICY IF EXISTS`, role guards), so
-    // they succeeded while doing NOTHING — and `applied.length > 0` could not
-    // tell one step from three. Replacing the whole 2.3 -> 2.4 file with
-    // `SELECT 1;` left the db tier green four runs in a row, which is exactly
-    // the "a missing step silently skips a schema change" failure decision 16
-    // names (round-8 review of #43).
+    // that ALREADY has what they add. Each of the ADDITIVE steps is written so
+    // that doing so is harmless (`ADD COLUMN IF NOT EXISTS`, `DROP POLICY IF
+    // EXISTS`, role guards), so they succeeded while doing NOTHING — and
+    // `applied.length > 0` could not tell one step from three. Replacing the
+    // whole 2.3 -> 2.4 file with `SELECT 1;` left the db tier green four runs
+    // in a row, which is exactly the "a missing step silently skips a schema
+    // change" failure decision 16 names (round-8 review of #43).
+    //
+    // Do NOT read that as "every migration file is idempotent", which is what
+    // this comment used to say and is no longer true: 2.4 -> 2.5 MAPS a column
+    // and then drops it, so its own UPDATE cannot run twice (see "the version
+    // guard, not the file, is what stops a second application" below). What the
+    // rewind needs is only that the steps it walks past do no harm here.
     await pool.query("ALTER TABLE ingestion_runs DROP COLUMN IF EXISTS schema_version");
     await pool.query("DROP POLICY IF EXISTS takedown_write ON takedown_denylist");
     await pool.query("DROP POLICY IF EXISTS tenant_read ON retrieval_log");
@@ -287,11 +298,103 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
     expect(log.rows.map((x: { actor: string }) => x.actor)).toEqual(["auditor"]);
   });
 
-  it("is idempotent — a second run at the current version does nothing", async () => {
+  it("a second run at the current version plans nothing", async () => {
     const required = schemaVersion();
     const again = await runMigrations(pool, required, required);
     expect(again.applied).toEqual([]);
     expect(await version()).toBe(required);
+  });
+
+  /**
+   * The contract decision 16 actually names, pinned (review 2026-08-25).
+   *
+   * Two files used to document a reliance on every migration FILE being
+   * idempotent. It is not, and cannot be: 2.4 -> 2.5 reads `visibility` to fill
+   * `audience` and then DROPS `visibility`, so its own UPDATE refuses on a
+   * second run (`42703 column "visibility" does not exist`, asserted below).
+   * Making a mapping step idempotent would mean wrapping every data statement
+   * in an existence check — turning a readable SQL file into a DO-block
+   * program — and it would buy the wrong thing anyway: an operator who runs an
+   * already-applied step by hand should hear about it, not get a silent no-op
+   * that leaves `schema_meta` untouched.
+   *
+   * What prevents a second application is the VERSION GUARD: `runMigrations`
+   * re-reads `schema_meta` inside the advisory lock and returns "skipped"
+   * unless the database is exactly at the step's `from`. This drives that guard
+   * directly — a plan computed from a stale `current`, against a database that
+   * has already passed the step, which is precisely the concurrent-runner race
+   * the re-read was added for.
+   */
+  it("the version guard, not the file, is what stops a second application", async () => {
+    const required = schemaVersion();
+    expect(await version(), "the database has already passed 2.4 -> 2.5").toBe(required);
+
+    // A plan that DOES contain the step: `current` is stale, as it is for the
+    // loser of a race between two `ksor schema --apply` runs.
+    const again = await runMigrations(pool, "2.4", required);
+    expect(
+      again.applied,
+      "the step was planned and then skipped by the in-lock re-read — not re-applied",
+    ).toEqual([]);
+    expect(await version()).toBe(required);
+  });
+
+  it("and the guard is load-bearing: the step's own SQL refuses a second run", async () => {
+    // Applied RAW, with no guard in front of it, so the assertion is about the
+    // FILE. If this ever stops throwing, the file became idempotent and the
+    // comments above (and in migrate.ts) are the thing to correct.
+    const sql = readFileSync(join(migrationsDir(), "2.4-2.5__okf-profile.sql"), "utf8");
+    await expect(
+      pool.query(sql),
+      "2.4 -> 2.5 maps `visibility` into `audience` and then drops it",
+    ).rejects.toThrow(/visibility/);
+  });
+
+  /**
+   * The migration header claims that until a re-ingest widens the audience
+   * lists, "a pre-2.5 generation refuses to serve (GOVERNANCE_SINCE), so no
+   * viewer is answered from a half-mapped row" — and nothing exercised that
+   * against an actually-migrated database. `governance-gate.db.test.ts` proves
+   * the gate with a hand-seeded run row; this proves the STATE a real migration
+   * leaves behind reaches it (review 2026-08-25, finding 37).
+   */
+  it("the migrated record REFUSES to serve — the header's claim, on the real artifact", async () => {
+    const instance = { tenantId: TENANT, corpusId: TENANT } as ContentInstance;
+    await expect(assertGovernanceServable(pool, instance)).rejects.toThrow(
+      /generation 7 was built against schema .*older than 2\.5/s,
+    );
+  });
+
+  /**
+   * …and the mapping itself, read by the predicate that decides who is served
+   * rather than by a SELECT of the column. `visibility: internal` became
+   * `audience: {internal}`, and that is what "this row is internal" MEANS on
+   * the serving side.
+   */
+  it("the mapped audience drives the SERVING predicate, not just the column", async () => {
+    const visibleTo = async (viewer: readonly string[]): Promise<string[]> =>
+      runRead(
+        pool,
+        TENANT,
+        async (c) =>
+          (
+            await c.query(
+              `SELECT n.stable_id FROM content_nodes n WHERE n.tenant_id = $1 AND ${AUDIENCE_ALLOWED} ORDER BY n.stable_id`,
+              [TENANT],
+            )
+          ).rows.map((r: { stable_id: string }) => r.stable_id),
+        audienceGucs(viewer),
+      );
+
+    expect(await visibleTo(["public"])).toEqual(["knowledge/in-review"]);
+    expect(await visibleTo(["public", "internal"])).toEqual([
+      "knowledge/approved-internal",
+      "knowledge/in-review",
+    ]);
+    // The rows that declared nothing stay invisible to everyone: the migration
+    // maps what was declared and invents nothing (`audience` NULL overlaps no list).
+    expect(await visibleTo(["public", "internal"])).not.toContain("knowledge/superseded");
+    expect(await visibleTo(["public", "internal"])).not.toContain("knowledge/pre-existing");
   });
 
   it("the SHIPPED chain reaches the version schema.sql declares, from every step in it", () => {

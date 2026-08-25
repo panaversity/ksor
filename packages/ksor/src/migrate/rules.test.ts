@@ -79,6 +79,35 @@ describe("the small derivations", () => {
     expect(firstSentence("# H\n")).toBeNull();
   });
 
+  /**
+   * `description:` seeds llms.txt and the MCP discovery document. A record
+   * whose body opens with a quickstart published a line of shell as the
+   * sentence saying what it is — the block's lines are ordinary paragraphs to
+   * a blank-line split, and nothing tracked the fence.
+   */
+  it("skips a fenced block, whichever fence and however it is indented", () => {
+    expect(firstSentence("# H\n\n```sh\npnpm i. Then run.\n```\n\nReal prose. More.\n")).toBe(
+      "Real prose.",
+    );
+    expect(firstSentence("# H\n\n~~~\npnpm i. Then run.\n~~~\n\nReal prose.\n")).toBe(
+      "Real prose.",
+    );
+    // A longer opening fence is closed only by one at least as long (CommonMark).
+    expect(firstSentence("````\n```\nstill code. Yes.\n````\n\nReal prose.\n")).toBe("Real prose.");
+    // A fence that is never closed leaves no prose at all — better than
+    // publishing the code inside it.
+    expect(firstSentence("```\ncode. Only.\n")).toBeNull();
+  });
+
+  // The sentence must be the AUTHOR'S, verbatim: inline code is prose here, and
+  // stripping it (as `stripCode` does, for a different question) would author a
+  // description no one wrote.
+  it("keeps inline code spans, which are part of the sentence", () => {
+    expect(firstSentence("Run `pnpm dev` to start. Then open it.\n")).toBe(
+      "Run `pnpm dev` to start.",
+    );
+  });
+
   it("strips a body heading only when it repeats the title", () => {
     expect(stripDuplicateHeading("\n# About A\n\nBody.\n", "About  a")).toBe("\nBody.\n");
     expect(stripDuplicateHeading("\n# Something else\n\nBody.\n", "About A")).toBe(
@@ -87,9 +116,14 @@ describe("the small derivations", () => {
     expect(stripDuplicateHeading("\nBody.\n", "About A")).toBe("\nBody.\n");
   });
 
-  it("strips only a LEADING heading", () => {
+  it("strips only a LEADING heading, and never one inside a fence", () => {
     expect(stripLeadingHeading("# H\n\nbody\n")).toBe("body\n");
     expect(stripLeadingHeading("intro\n\n# H\n")).toBe("intro\n\n# H\n");
+    // The same walk `firstHeading` uses, so the heading found and the heading
+    // stripped can never be two different lines.
+    expect(stripLeadingHeading("```\n# not a heading\n```\n\nbody\n")).toBe(
+      "```\n# not a heading\n```\n\nbody\n",
+    );
   });
 
   it("reads the ordered model off a pre-profile instance", () => {
@@ -283,9 +317,24 @@ describe("migrateSummary", () => {
     expect(kept.ok && kept.outcome.changed).toBe(false);
   });
 
-  it("replaces frontmatter that claimed governance a companion cannot carry", () => {
+  /**
+   * Decision 24: an attachment declaring frontmatter is refused as a CLASS,
+   * because a summary inherits its parent's audience, status and takedown
+   * entirely and any other key claims governance a non-node cannot carry.
+   * Replacing the block treated those keys as STALE — it deleted an author's
+   * `visibility:` and turned the checker's refusal into a silent rewrite.
+   */
+  it("refuses frontmatter that claimed governance a companion cannot carry", () => {
     const r = migrateSummary("knowledge/a.summary.md", "---\nvisibility: public\n---\n\nShort.\n");
-    expect(r.ok && r.outcome.text).toBe("---\ntype: Summary\n---\n\nShort.\n");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals[0]!.slug).toBe("ksor-attachment-frontmatter");
+    expect(r.refusals[0]!.why).toContain("visibility");
+  });
+
+  it("refuses a summary whose frontmatter cannot be read at all", () => {
+    const r = migrateSummary("knowledge/a.summary.md", "---\n: :\n---\n\nShort.\n");
+    expect(r.ok).toBe(false);
   });
 });
 
@@ -314,6 +363,38 @@ describe("migrateInstance", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  /**
+   * In a format-1 record the H1 IS the display title (the scaffold's own prose
+   * said so); in a format-2 one `title:` is. Migrate stripped the H1
+   * unconditionally and preferred `title:`, so a record carrying both, saying
+   * two different things, lost one and silently promoted the other to the name
+   * every page, llms.txt and the discovery document leads with. Which is the
+   * title is an authoring decision, and migrate does not author knowledge —
+   * nor delete it, which is the same rule read the other way.
+   */
+  it("refuses an H1 that disagrees with a declared title, naming both", () => {
+    const r = migrateInstance(
+      "---\nformat: 1\nname: acme\ntitle: The Handbook\n---\n\n# Acme HR\n\nWhat Acme knows.\n",
+      { directory: "acme" },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.refusals[0]!.slug).toBe("ksor-migrate-underivable");
+    expect(r.refusals[0]!.why).toContain("The Handbook");
+    expect(r.refusals[0]!.why).toContain("Acme HR");
+  });
+
+  it("strips one that merely repeats it, whitespace and case aside", () => {
+    const r = migrateInstance(
+      "---\nformat: 1\nname: acme\ntitle: Acme  HR\n---\n\n# acme hr\n\nWhat Acme knows.\n",
+      { directory: "acme" },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.outcome.text).toContain("title: Acme  HR");
+    expect(r.outcome.text).not.toContain("# acme hr");
   });
 
   it("derives `name` from the directory when the instance declared none", () => {

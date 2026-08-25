@@ -11,7 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -20,7 +20,9 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -74,6 +76,18 @@ Body of ${title}.
 
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/**
+ * A second 1x1 PNG — valid, and different bytes. The staleness assertion below
+ * needs an asset that CHANGED and is otherwise unimpeachable: the record's own
+ * checker runs before the lock's file-by-file comparison, so garbage bytes are
+ * refused as `ksor-asset-corrupt` (the better diagnosis, and not the one that
+ * test is about) and never reach it.
+ */
+const PNG_EDITED = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
   "base64",
 );
 
@@ -333,6 +347,15 @@ interface Staged {
   };
 }
 
+/**
+ * A whole evaluation of this fixture stages in milliseconds, so anything near
+ * this is a child that will never return — and `spawnSync` waits forever by
+ * default, which is how one hung evaluation became a silent 15-minute CI
+ * timeout with no file named (Integration tests, 2026-08-25). A named failure
+ * is worth more than a job that dies with nothing to read.
+ */
+const EVALUATION_TIMEOUT_MS = 60_000;
+
 function stage(fixture: Fixture, env: Record<string, string> = {}): Staged {
   const clean = { ...process.env };
   delete clean["NODE_ENV"];
@@ -342,10 +365,17 @@ function stage(fixture: Fixture, env: Record<string, string> = {}): Staged {
     cwd: fixture.site,
     encoding: "utf8",
     env: { ...clean, NODE_ENV: "production", ...env },
+    timeout: EVALUATION_TIMEOUT_MS,
   });
+  // A killed child reports `null` and carries the reason in `error`; without
+  // this the assertion downstream says only "expected null to be 0".
+  const timedOut =
+    result.status === null
+      ? `\nthe evaluation did not exit within ${EVALUATION_TIMEOUT_MS}ms and was killed (${String(result.error ?? result.signal ?? "no reason given")})`
+      : "";
   const line = (result.stdout ?? "").trim().split("\n").pop() ?? "";
   const parsed = result.status === 0 ? JSON.parse(line) : { dir: "", manifest: { pages: {} } };
-  return { status: result.status, stderr: result.stderr ?? "", ...parsed };
+  return { status: result.status, stderr: `${result.stderr ?? ""}${timedOut}`, ...parsed };
 }
 
 function walkFiles(dir: string, prefix = ""): string[] {
@@ -618,6 +648,92 @@ okf_version: "0.2"
     expect(existsSync(alt.stage), "a refused build left a stage").toBe(false);
   });
 
+  /**
+   * Errors are documentation (product principle 4). The lock's freshness claim
+   * is a statement ABOUT a record, so asking whether it still holds for a tree
+   * that is not a legal record answers the wrong question — and answers it in a
+   * way the operator cannot act on: `.mdx` under `knowledge/` is refused BY
+   * NAME (`ksor-file-type`, the bundle is CommonMark), so no `ksor build` can
+   * ever have put it in the lock, and "the lock does not match the tree, run
+   * ksor build again" names neither the rule nor the fix.
+   */
+  it("an .mdx in the record is diagnosed as ksor-file-type, not as a stale lock", () => {
+    // The lock first, then the file — an adopter adds one after their last
+    // `ksor build`, which is the only way this state exists at all.
+    writeLock(fixture.root);
+    const file = path.join(fixture.root, "knowledge", "notes.mdx");
+    writeFileSync(file, "# Notes\n\n<Callout>Not CommonMark.</Callout>\n");
+    const r = stage(fixture);
+    rmSync(file);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-file-type: knowledge\/notes\.mdx/);
+    expect(r.stderr).toContain("CommonMark");
+    expect(
+      r.stderr,
+      "the operator was told to re-run the build that refuses this file",
+    ).not.toContain("ksor-lock-stale");
+    expect(existsSync(fixture.stage), "a refused build left a stage").toBe(false);
+  });
+
+  /**
+   * The record watcher runs in development only, and it may never be the reason
+   * a process refuses to exit — `spawnSync` waits for the child, so a watcher
+   * that holds the event loop open is a build that never ends.
+   *
+   * This passes on macOS whatever the code does, because a recursive watch is
+   * NATIVE there and `unref()` works. On Linux — every container, every CI
+   * runner — Node substitutes a JS implementation whose `unref()` is a no-op,
+   * so only `persistent: false` keeps this promise. Green here, and the thing
+   * that goes red there: one CI job died at its 15-minute timeout on exactly
+   * this (2026-08-25), with no file named.
+   */
+  it("a development evaluation exits on its own, watcher and all", () => {
+    const before = Date.now();
+    const r = stage(fixture, { NODE_ENV: "development" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(
+      Date.now() - before,
+      "the evaluation took long enough to suggest the watcher held the process open",
+    ).toBeLessThan(EVALUATION_TIMEOUT_MS / 2);
+  });
+
+  /**
+   * A companion is staged with its parent or not at all — that is the whole of
+   * decision 24's "it inherits its parent's tier and its parent's takedown",
+   * obtained by POSITION rather than by a second rule.
+   *
+   * The asset probe was a second position. It resolves a link against the
+   * FILESYSTEM, where a denied document's deck is an ordinary file, and the
+   * link rules cannot stop it: they judge a companion by its parent's AUDIENCE
+   * (`nonConceptWidens`), and a takedown is not an audience — so a public
+   * document linking a taken-down document's deck admitted the deck, past a
+   * ledger that had withdrawn it.
+   */
+  it("a taken-down document's companion is not staged by linking it from a published one", () => {
+    const knowledge = path.join(fixture.root, "knowledge");
+    const doc = path.join(knowledge, "public-policy.md");
+    const before = readFileSync(doc, "utf8");
+    writeFileSync(
+      path.join(knowledge, "denied.flashcards.yaml"),
+      "cards:\n  - front: DENIEDCARDFRONT\n    back: DENIEDCARDBACK\n",
+    );
+    writeFileSync(doc, before.replace("Body of", "[Cards](./denied.flashcards.yaml)\n\nBody of"));
+    writeLock(fixture.root);
+    const r = stage(fixture);
+    writeFileSync(doc, before);
+    rmSync(path.join(knowledge, "denied.flashcards.yaml"));
+    writeLock(fixture.root);
+
+    // The build is legal — the link widens nothing — so this is not a refusal;
+    // it is what the stage may hold.
+    expect(r.status, r.stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).not.toContain("denied.flashcards.yaml");
+    expect(
+      bytesOf(fixture.stage).toString("latin1"),
+      "a denied document's deck reached the stage through a link in a published one",
+    ).not.toContain("DENIEDCARD");
+  });
+
   it("development needs no lock: drafts admitted and marked, stamps null and unstamped", () => {
     rmSync(path.join(fixture.root, "build.lock.json"));
     const r = stage(fixture, { NODE_ENV: "development" });
@@ -887,12 +1003,30 @@ describe("the lock's freshness claim covers the control files", () => {
   it("an asset whose bytes changed since the lock refuses, naming it", () => {
     const file = path.join(fixture.root, "knowledge", "guides", "diagram.png");
     const before = readFileSync(file);
-    writeFileSync(file, Buffer.from("TAMPERED-ASSET-BYTES"));
+    writeFileSync(file, PNG_EDITED);
     const r = stage(fixture);
     writeFileSync(file, before);
     expect(r.status, r.stderr).not.toBe(0);
     expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
     expect(r.stderr).toContain("guides/diagram.png");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  /**
+   * The other half of the same ordering: bytes that are not a PNG at all are a
+   * RECORD problem, and the record is judged by its own rules before the lock's
+   * file-by-file claim is asked (see `assertLockCoversTree`). This one used to
+   * be reported as a stale lock, whose fix — re-run `ksor build` — leads to
+   * this refusal anyway, one step later and under the wrong name.
+   */
+  it("bytes that are not an image are refused as ksor-asset-corrupt, not as a stale lock", () => {
+    const file = path.join(fixture.root, "knowledge", "guides", "diagram.png");
+    const before = readFileSync(file);
+    writeFileSync(file, Buffer.from("TAMPERED-ASSET-BYTES"));
+    const r = stage(fixture);
+    writeFileSync(file, before);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-asset-corrupt: knowledge\/guides\/diagram\.png/);
     expect(existsSync(fixture.stage)).toBe(false);
   });
 
@@ -1027,5 +1161,173 @@ describe("a carried sim inherits its document's governance", () => {
     expect(r.status, r.stderr).toBe(0);
     expect(walkFiles(fixture.stage)).not.toContain("orphan.sim.html");
     expect(existsSync(path.join(publicSims, "orphan.html"))).toBe(false);
+  });
+});
+
+/**
+ * The stage is a deterministic function of the record, the ledger and the
+ * lock, so the SECOND evaluation of one build must find the stage it wants
+ * already there and touch nothing (`stageHolds`). That check is not a saving:
+ * a wipe-and-refill has a window in which the stage is not the record, and an
+ * evaluation that has already returned is reading it — the shape that shorted
+ * 27 of 48 measured runs and PUBLISHED the result.
+ *
+ * `stageHolds` compares a COUNT before it compares bytes, so one path emitted
+ * twice makes it answer false forever: the plan holds n+1 entries, the disk
+ * holds n, and every evaluation wipes and refills a stage that was already
+ * correct. The count is invisible from outside the module; what it decides is
+ * not, and that is what these assert.
+ */
+describe("the stage holds when nothing changed", () => {
+  let work: string;
+  let fixture: Fixture;
+
+  /** Identity and last write of every staged file — what a rewrite moves. */
+  const stamps = (dir: string): Record<string, string> =>
+    Object.fromEntries(
+      walkFiles(dir).map((rel) => {
+        const s = statSync(path.join(dir, rel));
+        return [rel, `ino ${s.ino} · mtime ${s.mtimeMs}`] as const;
+      }),
+    );
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-stage-holds-")));
+    fixture = writeRecord(path.join(work, "record"));
+    // A deck named after its document, linked from the document the way an
+    // author would link it. Legal in the record — the checker resolves the
+    // target to its parent concept and admits it — and staged by POSITION,
+    // because its parent survived every filter. Probing the filesystem for
+    // link targets then found it a SECOND time, as an asset.
+    writeFileSync(
+      path.join(fixture.root, "knowledge", "public-policy.flashcards.yaml"),
+      "cards:\n  - front: What is the record?\n    back: The governed markdown.\n",
+    );
+    const doc = path.join(fixture.root, "knowledge", "public-policy.md");
+    writeFileSync(
+      doc,
+      readFileSync(doc, "utf8").replace(
+        "Body of",
+        "[Cards](./public-policy.flashcards.yaml)\n\nBody of",
+      ),
+    );
+    writeLock(fixture.root);
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  it("a companion the document links is staged once, and the second evaluation rewrites nothing", () => {
+    const first = stage(fixture);
+    expect(first.status, first.stderr).toBe(0);
+    expect(walkFiles(fixture.stage).filter((f) => f.endsWith(".flashcards.yaml"))).toEqual([
+      "public-policy.flashcards.yaml",
+    ]);
+
+    const before = stamps(fixture.stage);
+    const second = stage(fixture);
+    expect(second.status, second.stderr).toBe(0);
+    expect(
+      stamps(fixture.stage),
+      "the stage was wiped and refilled though the record, the ledger and the lock all stood still",
+    ).toEqual(before);
+  });
+
+  it("…and an edit still rewrites it, so the observation above can move", () => {
+    const first = stage(fixture);
+    expect(first.status, first.stderr).toBe(0);
+    const before = stamps(fixture.stage);
+
+    const doc = path.join(fixture.root, "knowledge", "public-policy.md");
+    const original = readFileSync(doc, "utf8");
+    writeFileSync(doc, original.replace("Body of", "EDITEDBODY\n\nBody of"));
+    writeLock(fixture.root);
+    const second = stage(fixture);
+    writeFileSync(doc, original);
+    writeLock(fixture.root);
+    expect(second.status, second.stderr).toBe(0);
+    expect(stamps(fixture.stage)).not.toEqual(before);
+  });
+});
+
+/**
+ * A build tool may not hang on a lock file, and this one did — twice, live:
+ * `pnpm dev` repeating "waiting on .staged-knowledge.lock" on every request
+ * with no build running, until the file was deleted by hand.
+ *
+ * The mechanism is not exotic. A holder killed mid-stage (Ctrl-C on `pnpm dev`,
+ * a cancelled CI job, an OOM) never runs the `finally` that removes its lock,
+ * so a lock outliving its holder is ordinary — and the waiter breaks one only
+ * when the recorded pid is GONE. A pid that has since been recycled reads as
+ * alive, and on Linux a recycled pid owned by another user reads as alive
+ * through EPERM as well, so the waiter polls forever.
+ *
+ * Breaking the lock on a timeout is NOT the fix: `fillStage` removes the stage
+ * and refills it IN PLACE, so a lock broken under a live holder hands the next
+ * reader a half-written record — the 27-of-48 partial stage this file already
+ * carries scar tissue for. So it refuses, and the refusal carries the evidence.
+ */
+describe("the stage lock refuses rather than waiting forever", () => {
+  let work: string;
+  let fixture: Fixture;
+  let lockFile: string;
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-stage-lock-")));
+    fixture = writeRecord(path.join(work, "record"));
+    lockFile = `${fixture.stage}.lock`;
+    writeLock(fixture.root);
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  /** A lock held by a process that is certainly alive, taken `agoMs` ago. */
+  const holdLock = (pid: number, agoMs: number): void => {
+    writeFileSync(lockFile, String(pid));
+    const when = new Date(Date.now() - agoMs);
+    utimesSync(lockFile, when, when);
+  };
+
+  it("a lock held past the give-up point refuses ksor-stage-locked with its evidence", () => {
+    // THIS test runner's pid: alive beyond argument, so `lockIsAbandoned`
+    // cannot break the lock — which is exactly the state that used to spin.
+    holdLock(process.pid, 10 * 60_000);
+    const r = stage(fixture);
+    rmSync(lockFile, { force: true });
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-stage-locked/);
+    // The three things an operator needs: which file, which pid, and what the
+    // tool actually knows about that pid — never a guess dressed as a fact.
+    expect(r.stderr).toContain(".staged-knowledge.lock");
+    expect(r.stderr).toContain(String(process.pid));
+    expect(r.stderr).toMatch(/alive/);
+    expect(r.stderr).toContain("delete");
+    // A refusal may not leave a stage behind, like every other refusal here.
+    expect(existsSync(fixture.stage), "a refused build left a stage").toBe(false);
+  });
+
+  it("a lock with no pid in it is broken, not waited on", () => {
+    // The one write that can be interrupted: `wx` creates the file and records
+    // the pid in one call, so a blank lock is a holder that died inside it.
+    holdLock(NaN, 0);
+    writeFileSync(lockFile, "");
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(lockFile), "the broken lock was not released").toBe(false);
+  });
+
+  it("…and a lock a live holder took a moment ago is still waited on, then honoured", async () => {
+    // The case the lock exists FOR. Held for a beat by a live process, then
+    // released: the waiter must sit through it and go on to stage, not refuse.
+    holdLock(process.pid, 0);
+    const child = spawn(process.execPath, ["stage.mjs"], {
+      cwd: fixture.site,
+      env: { ...process.env, NODE_ENV: "production" },
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    const exited = new Promise<number | null>((resolve) => child.on("exit", resolve));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(existsSync(lockFile), "the waiter broke a lock a live holder still held").toBe(true);
+    rmSync(lockFile, { force: true });
+    expect(await exited, stderr).toBe(0);
+    expect(walkFiles(fixture.stage)).toContain("public-policy.md");
   });
 });

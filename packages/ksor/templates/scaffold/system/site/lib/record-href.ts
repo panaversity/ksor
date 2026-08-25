@@ -40,12 +40,25 @@ export function recordHref(
   sourceId: string,
   routes: ReadonlyMap<string, string>,
 ): string | undefined {
+  if (href === undefined) return href;
+  // Classified on the value a BROWSER sees. Parsing a URL strips leading C0
+  // controls and spaces (WHATWG URL §4.4), so `\tjavascript:…` is a scheme to
+  // everything that follows the link and was not one to this test. An href
+  // carrying a scheme was therefore read as a record link — and one whose
+  // mangled path happened to resolve (`\tjavascript:x/../policies/travel`) was
+  // rewritten into a route of this build.
+  //
+  // Defence in depth rather than a live hole: the same regex runs in
+  // `record/citations.ts`, over the raw markdown, so a link written this way is
+  // classified as a record link there too, resolves to nothing, and the build
+  // refuses it `ksor-link-dead` before the page exists. This makes the guard
+  // mean what it says on the value it is guarding.
+  // eslint-disable-next-line no-control-regex -- the control range is the point
+  const probe = href.replace(/^[\u0000-\u0020]+/, "");
   // A same-page anchor, a protocol-relative url, and anything carrying a
   // scheme (`https:`, `mailto:`) are not record links and are never touched.
-  if (href === undefined || href === "" || href.startsWith("#") || href.startsWith("//")) {
-    return href;
-  }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return href;
+  if (probe === "" || probe.startsWith("#") || probe.startsWith("//")) return href;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(probe)) return href;
   const id = resolveLink(sourceId, href);
   if (id === null) return href;
   const url = routes.get(id);

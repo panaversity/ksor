@@ -19,6 +19,7 @@ import { currentActor, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 import {
   assertGovernanceServable,
   assertSchemaCompatible,
+  AudienceError,
   GovernanceGateError,
   storedTextSearchConfig,
   TextSearchConfigMismatch,
@@ -55,11 +56,19 @@ export interface Composition {
   readonly pool: pg.Pool;
   /** null when checked-clean; a reason string when skipped (rides /health). */
   readonly spaceSkipReason: string | null;
+  /**
+   * The viewer list the operator ASKED this door to serve (`KSOR_AUDIENCE`),
+   * before validation. `ctx.viewer` is what it actually serves — the two differ
+   * only while the boot checks are deferred, and the boot report needs the ask:
+   * an unauthenticated public bind has to state the restricted tiers it is
+   * about to hand out, not the fail-closed placeholder it holds meanwhile.
+   */
+  readonly requestedViewer: readonly string[];
   readonly version: string;
   /**
-   * Re-runs EVERY fail-closed boot check — schema compatibility and the
-   * governance gate — or resolves immediately once they have passed. `null`
-   * when boot already verified them.
+   * Re-runs EVERY fail-closed boot check — schema compatibility, the
+   * governance gate, and the viewer list this door may serve — or resolves
+   * immediately once they have passed. `null` when boot already verified them.
    *
    * These are the only fail-closed checks that the database is new enough and
    * that its governance can be honoured, and at boot they can only be WARNINGS
@@ -133,6 +142,18 @@ export async function compose(instancePath: string, version: string): Promise<Co
   }
   const pool = contentPool(dsn);
 
+  // The viewer list the operator asked for, from env alone — no database, so
+  // the ask survives a store that never answers.
+  // Trimmed, as the site trims it: a mounted secret with a trailing newline
+  // otherwise refuses at boot naming a tier that looks identical to a declared
+  // one (round-2 review of #43).
+  const requestedViewer = parseViewer(process.env["KSOR_AUDIENCE"]);
+  // …and what this door serves until that ask has been VALIDATED against the
+  // policy: `public`, the one list legal for every record. Widened only inside
+  // the boot checks below, so a door that has not reached the policy row cannot
+  // serve the restricted half of the record.
+  let viewer: readonly string[] = ["public"];
+
   // EVERY fail-closed boot check, in one place, so that deferring them defers
   // ALL of them and retrying retries ALL of them.
   //
@@ -155,6 +176,25 @@ export async function compose(instancePath: string, version: string): Promise<Co
       throw new TextSearchConfigMismatch(instance.textSearchConfig, stored);
     }
     await assertGovernanceServable(pool, instance);
+    // Which half of the record this door serves — a BOOT CHECK, because it is
+    // decided by a ROW: the viewer is a LIST (record spec §2.4) validated
+    // against the registry the ACTIVE generation was ingested with, and the
+    // policy lives on the run row, not in a file the container carries. A
+    // record with no generation yet has no registry, so only `[public]` can be
+    // served — which is what `[]` validates.
+    //
+    // It sat just BELOW the deferred block instead, an unguarded `runRead`. So
+    // a cold start against a suspended serverless Postgres — decision 17's
+    // exact target — printed "boot checks DEFERRED … NOT READY" and then threw
+    // two statements later, exiting 3 and crash-looping the deploy. The line
+    // was falsified by the same boot that printed it.
+    //
+    // An unknown or un-narrowable tier is still a REFUSAL and still surfaces
+    // HERE rather than one request at a time (round-1 review of #43); it is
+    // re-thrown from the catch below with the other refusals.
+    const policy = await servingPolicy(pool, instance);
+    viewer = validateViewer(policy?.registry ?? [], requestedViewer);
+    console.error(bootLine("audience", viewer.join(",")));
   };
 
   let verifyBoot: (() => Promise<void>) | null = null;
@@ -166,10 +206,33 @@ export async function compose(instancePath: string, version: string): Promise<Co
   } catch (error) {
     // A refusal is a refusal whenever it is discovered — never deferred into a
     // "maybe later" that lets the door open in the meantime.
-    if (error instanceof SchemaVersionError || error instanceof GovernanceGateError) throw error;
+    //
+    // Every class here is decided by a row the store ANSWERED with, so none of
+    // them can be the cold start this branch exists for. Deferring one printed
+    // "content store unreachable (TextSearchConfigMismatch)" about a database
+    // that had just replied, and left the door retrying forever a verdict no
+    // retry can change.
+    if (
+      error instanceof SchemaVersionError ||
+      error instanceof GovernanceGateError ||
+      error instanceof AudienceError ||
+      error instanceof TextSearchConfigMismatch
+    ) {
+      throw error;
+    }
     console.error(
       `boot checks DEFERRED: content store unreachable (${error instanceof Error ? error.name : "Error"}) — ` +
         "this instance reports NOT READY until schema AND governance both verify",
+    );
+    // Say what that means for the audience, rather than printing no line at
+    // all: the ask is known, and what is served until the checks pass is
+    // nothing.
+    console.error(
+      bootLine(
+        "audience",
+        `not resolved — requested ${requestedViewer.join(",")}; this door refuses every ` +
+          "request until the boot checks pass",
+      ),
     );
     // Memoize the IN-FLIGHT attempt, not only the settled result.
     //
@@ -226,25 +289,12 @@ export async function compose(instancePath: string, version: string): Promise<Co
     console.error(`embedding-space check skipped: ${spaceSkipReason}`);
   }
 
-  // Which half of the record this door serves — validated HERE, at boot. An
-  // unknown or un-narrowable tier used to surface per REQUEST, so a
-  // misconfigured deployment looked healthy and failed one caller at a time
-  // (round-1 review of #43).
-  // Trimmed, as the site trims it: a mounted secret with a trailing newline
-  // otherwise refuses at boot naming a tier that looks identical to a declared
-  // one (round-2 review of #43).
-  // The viewer is a LIST (record spec §2.4), validated against the registry the
-  // ACTIVE generation was ingested with — the policy lives on the run row, not
-  // in a file the container carries. A record with no generation yet has no
-  // registry: only `[public]` can be served, which is what `[]` validates.
-  const policy = await servingPolicy(pool, instance);
-  const viewer = validateViewer(policy?.registry ?? [], parseViewer(process.env["KSOR_AUDIENCE"]));
-  console.error(bootLine("audience", viewer.join(",")));
-
   // The deployment's own trust floor — the half of "configuration tightens" a
-  // caller cannot reach. Validated HERE, at boot, for the same reason the
-  // viewer list is: a misspelled tier that fell back to `unverified` would
-  // serve the record the operator meant to restrict and look healthy doing it.
+  // caller cannot reach. Validated HERE rather than per request, for the same
+  // reason the viewer list is validated in the boot checks: a misspelled tier
+  // that fell back to `unverified` would serve the record the operator meant to
+  // restrict and look healthy doing it. It stays out of the deferred set
+  // because it reads ENV, not a row — there is nothing here to be unreachable.
   const minTrustTier = parseTrustFloor(process.env["KSOR_MIN_TRUST_TIER"]);
   console.error(bootLine("trust", minTrustTier));
 
@@ -274,7 +324,16 @@ export async function compose(instancePath: string, version: string): Promise<Co
     // asking must not hand out the restricted half (before schema 2.2 it handed
     // out ALL of it, because ingest dropped `visibility:` and the door had
     // nothing to filter on — review 2026-08-20).
-    viewer,
+    //
+    // A GETTER, not a value. Validation happens inside the boot checks, which a
+    // cold start defers, and the serving statements read this per call
+    // (`servingScope`) — copied by value it would freeze at the fail-closed
+    // `[public]` for the whole life of a door that later recovered, which is a
+    // SILENT narrowing where the point of the fail-closed value is that nothing
+    // is served through it at all.
+    get viewer(): readonly string[] {
+      return viewer;
+    },
     // A caller may raise this per call (`min_trust_tier`); `tightenTrustFloor`
     // is what makes sure they can never lower it.
     minTrustTier,
@@ -291,5 +350,14 @@ export async function compose(instancePath: string, version: string): Promise<Co
   // touches nothing. Costs no database round trip.
   await verifyGatewaySurface(buildServer(ctx, version, registration));
 
-  return { ctx, instance, pool, spaceSkipReason, version, verifyBoot, registration };
+  return {
+    ctx,
+    instance,
+    pool,
+    spaceSkipReason,
+    requestedViewer,
+    version,
+    verifyBoot,
+    registration,
+  };
 }

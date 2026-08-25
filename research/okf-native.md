@@ -134,7 +134,8 @@ A purchase above 10,000 needs a director's signature. [^fin-2024]
 document with no `generated`, no approval, an approval by an actor the policy
 does not authorise, or a `generated.at` after `approval.at` (R23); a
 `deprecated` document with no `ksor.deprecated` or one by an actor who is
-neither its owner nor a takedown authority; a reserved type with no `sources`
+neither the owner the POLICY resolves (never the document's own `ksor.owner`)
+nor a takedown authority; a reserved type with no `sources`
 or no `ksor.owner`; a source with no `resource`; a footnote reference or
 definition whose label matches no `sources[].id`; `team:` as a verifier,
 generator, approver or deprecator; an authored `index.md`, `log.md` or

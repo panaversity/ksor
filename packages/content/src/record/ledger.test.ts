@@ -130,6 +130,67 @@ describe("parseLedger — record spec §5", () => {
   });
 });
 
+/**
+ * An entry is one governance ACT. `parseEntry` dispatched on which key was
+ * PRESENT and let zod strip the rest, so an entry carrying both `stable_id` and
+ * `revokes` was read as a denial and its revocation was dropped — the entry it
+ * named stayed in force, with nothing red anywhere. The ledger's own doctrine
+ * is the policy's: a key the reader does not read is a rule that is not in
+ * force, and silence about that is the failure mode (2026-08-25 review).
+ */
+describe("parseLedger — an entry that means two things is refused, never read as one of them", () => {
+  /** The refusal text, or what the reader took instead, so a failure prints it. */
+  function readAs(text: string): string {
+    const r = parseLedger(text, P);
+    if (!r.ok) return r.refusals.map((x) => x.why).join("; ");
+    return `TAKEN: ${JSON.stringify(r.ledger.entries)}`;
+  }
+
+  it("refuses a denial that also revokes, instead of dropping the revocation", () => {
+    const both = DENIAL.replace(
+      "  scope: node\n",
+      "  scope: node\n  revokes: 2026-08-24T10:00:00Z-000000\n",
+    );
+    expect(readAs(both)).toMatch(/`stable_id`.*`revokes`|`revokes`.*`stable_id`/);
+    expect(slugsOf(both)).toEqual(["ksor-ledger-invalid"]);
+  });
+
+  it("refuses a revocation that also amends, and a denial that also amends", () => {
+    expect(
+      slugsOf(REVOCATION.replace("  by:", "  amends: 2026-08-24T10:00:00Z-000000\n  by:")),
+    ).toEqual(["ksor-ledger-invalid"]);
+    expect(
+      slugsOf(DENIAL.replace("  by:", "  amends: 2026-08-24T10:00:00Z-000000\n  by:")),
+    ).toEqual(["ksor-ledger-invalid"]);
+  });
+
+  /**
+   * The same rule one step out: a key the entry's kind does not read is a
+   * constraint the author believes is in force and the reader never applies.
+   * `scope:` on a revocation reads as though the revocation were scoped.
+   */
+  it("refuses a key the entry's kind does not read", () => {
+    expect(readAs(DENIAL + REVOCATION.replace("  by:", "  scope: subtree\n  by:"))).toMatch(
+      /unknown key/,
+    );
+    expect(slugsOf(DENIAL.replace("  scope: node", "  scop: node"))).toEqual([
+      "ksor-ledger-invalid",
+    ]);
+    expect(
+      slugsOf(DENIAL + AMENDMENT.replace("  by:", "  stable_ids: knowledge/x\n  by:")),
+    ).toEqual(["ksor-ledger-invalid"]);
+  });
+
+  it("takes every key each kind really reads — the verb's own output stays green", () => {
+    const l = ledgerOf(DENIAL + REVOCATION + AMENDMENT + SUBTREE);
+    expect(l.entries.map((e) => e.kind)).toEqual(["denial", "revocation", "amendment", "denial"]);
+    // `reason` is optional on all three.
+    expect(
+      ledgerOf(DENIAL.replace("  reason: superseded figure\n", "")).entries[0]?.reason,
+    ).toBeNull();
+  });
+});
+
 describe("inForce", () => {
   it("a denial is in force until revoked; an amendment marks it removed; a re-denial denies again", () => {
     const again = DENIAL.replace("a1b2c3", "ffffff").replace(

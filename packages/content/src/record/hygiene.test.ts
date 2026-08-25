@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { checkRecord, type RecordFiles } from "./check.js";
+import { ATTACHMENT_NEAR_MISSES } from "../lib/attachment-rule.js";
 import { checkScaffoldStructure, firstBrokenPngChunk, PNG_SIGNATURE } from "./hygiene.js";
 
 const POLICY = `version: "0.1"
@@ -70,11 +71,49 @@ describe("hygiene — names are portable identities", () => {
     ["knowledge/_hidden.md", "underscore"],
     ["knowledge/a(1).md", "parenthes"],
     ["knowledge/50%-off.md", "percent"],
+    ["knowledge/.secret.md", "hidden"],
+    ["knowledge/..md", "hidden"],
+    ["knowledge/a\\b.md", "backslash"],
   ])("%s is ksor-name-unportable (%s)", (path, word) => {
     const out = checkRecord(record({ ...A, [path]: DOC }), { mode: "build" });
     const hit = out.refusals.find((r) => r.slug === "ksor-name-unportable");
     expect(hit?.path).toBe(path);
     expect(`${hit?.why}`).toMatch(new RegExp(word, "i"));
+  });
+
+  /**
+   * The two consequences the rule is FOR, asserted as consequences rather than
+   * as names — the refusal above is what stops them, and a message match alone
+   * would not say what it stopped.
+   */
+  it("a dot-prefixed document is not a concept the door can serve while the site hides it", () => {
+    const out = checkRecord(record({ ...A, "knowledge/.secret.md": DOC }), { mode: "build" });
+    // Refused, so it never reaches ingest as `knowledge/.secret`. The site's
+    // docs collection globs `**/*.md`, and picomatch 4.0.5 does not match that
+    // against `.secret.md` (verified directly; fumadocs' own walk was not run
+    // here). A document one surface serves and the other has no route for is
+    // decision 19 inverted, and the `_`-prefix rule beside this one in
+    // hygiene.ts exists for exactly that — it just never covered `.`.
+    expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toContain(
+      "ksor-name-unportable knowledge/.secret.md",
+    );
+    // The refusal is what stops it, not the parse: `checkRecord` deliberately
+    // keeps the concepts it managed to read beside the refusals (so a rule
+    // asking "is this in the tree?" is not misled by a parse failure), and
+    // `ingest/build.ts` throws `RecordRefused` on any refusal at all — before
+    // `buildManifestFromRecord` can give `.secret` a node. Verified before the
+    // rule landed: this record produced ZERO refusals and `out.concepts` was
+    // `[".secret", "a"]`.
+    expect(out.concepts.map((c) => c.id)).toContain(".secret");
+  });
+
+  it("a backslash is refused because the file cannot be checked out on Windows at all", () => {
+    // Legal in one POSIX filename, a path SEPARATOR on Windows: `git checkout`
+    // fails on the whole tree, which is the failure the portable-name rule
+    // directly above it in hygiene.ts is written for.
+    const out = checkRecord(record({ ...A, "knowledge/a\\b.md": DOC }), { mode: "build" });
+    const hit = out.refusals.find((r) => r.slug === "ksor-name-unportable");
+    expect(`${hit?.why}`).toMatch(/backslash/i);
   });
 
   it("a directory name is held to the same rule, trailing dots included", () => {
@@ -162,6 +201,33 @@ describe("hygiene — what a file may be", () => {
     const r = checkRecord(record({ ...A, "knowledge/a.quiz.yml": "q: 1\n" }), { mode: "build" });
     expect(r.refusals[0]?.fix).toContain("a.quiz.yaml");
   });
+
+  /**
+   * "and nothing else about the file" is the load-bearing half, and it was
+   * carried only by a `continue` nothing asserted. `load.ts` reads `.md` and
+   * `.yaml` as text and everything else as an ASSET, so every near-miss
+   * extension arrives with BYTES — and the file-type ladder below the near-miss
+   * check classifies an unknown asset extension. Reached, it says "convert it
+   * to markdown or move it out of knowledge/" about a file whose real remedy is
+   * one letter, which is the reverse of a helpful second opinion.
+   *
+   * Asserted per near-miss, through the shape the loader actually delivers, so
+   * a new near-miss entry (or a new asset extension) cannot quietly start
+   * producing two refusals with contradictory fixes for one cause.
+   */
+  it.each(ATTACHMENT_NEAR_MISSES)(
+    "a $suffix file gets ONE refusal, whose fix is the rename",
+    ({ suffix, want }) => {
+      const path = `knowledge/a${suffix}`;
+      const out = checkRecord(record(A, { assets: { [path]: new Uint8Array([120]) } }), {
+        mode: "build",
+      });
+      expect(out.refusals.map((r) => `${r.slug} ${r.path}`)).toEqual([
+        `ksor-attachment-near-miss ${path}`,
+      ]);
+      expect(out.refusals[0]?.fix).toBe(`rename it to a${want}`);
+    },
+  );
 });
 
 describe("hygiene — links resolve inside the record", () => {

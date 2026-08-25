@@ -21,7 +21,7 @@ import { publicSimPath, SIM_SUFFIX } from "./sim-rule";
 import { refuse, viewer } from "./audience";
 import { overlaps } from "./audience-rule";
 import { admitsLifecycle, lifecycleBadge } from "./lifecycle-rule";
-import { readLock } from "./lock";
+import { assertLockCoversTree, readLock } from "./lock";
 import { appDescription, appName, appTitle, projectRoot } from "./shared";
 import {
   STAGE_DIR,
@@ -85,6 +85,17 @@ function refuseRecord(refusals: readonly Refusal[]): never {
  * document's directory. `.md`/`.mdx` never ride in as assets — both render as
  * pages, and a restricted `plan.mdx` staged that way once published untiered
  * (review finding, 2026-08-18).
+ *
+ * Neither does a COMPANION, for the same reason one level down. A companion is
+ * staged with its parent or not at all — that is how it inherits its parent's
+ * audience, lifecycle and takedown (decision 24) — and this function probes the
+ * FILESYSTEM, which knows nothing about any of them. So a document linking
+ * `./x.flashcards.yaml` reached the deck by a second path: harmless when `x`
+ * was published too (the same bytes, staged twice, which is what made
+ * `stageHolds` answer false forever), and a governance escape when it was not —
+ * a link to a TAKEN-DOWN document's deck staged the deck, because the link
+ * rules judge a companion by its parent's AUDIENCE and the ledger is not an
+ * audience. Both reproduced, 2026-08-25.
  */
 function assetTarget(recordDir: string, documentRel: string, target: string): string | null {
   const clean = target.split("#")[0] ?? "";
@@ -93,6 +104,7 @@ function assetTarget(recordDir: string, documentRel: string, target: string): st
     : path.resolve(recordDir, path.dirname(documentRel), clean);
   if (!resolved.startsWith(recordDir + path.sep)) return null;
   if (/\.mdx?$/i.test(resolved)) return null;
+  if (COMPANION.test(path.basename(resolved))) return null;
   try {
     // lstat, never stat: `statSync` FOLLOWS a symlink, and `readFileSync` below
     // follows it too, so `knowledge/guides/leak.png -> /etc/secret` published
@@ -145,35 +157,40 @@ function planStage(recordDir: string, development: boolean): StagePlan {
   }
 
   const draftsRequested = process.env.KSOR_DRAFTS === "show";
-  // The lock is read BEFORE the checker runs, because the checker needs one of
-  // the two `ksor-ledger-amended` baselines out of it: the lock records each
-  // ledger entry's DIGEST, which is the only thing that can see an entry
-  // retargeted in place (same id, same actor, a different `stable_id`).
+  // Three questions, in the order that makes each one answerable.
+  //
+  // FIRST the lock itself: is there one, can it be read, does it still describe
+  // this instance's governance and this build's switches? It is read before the
+  // checker because the checker needs one of the two `ksor-ledger-amended`
+  // baselines out of it — the lock records each ledger entry's DIGEST, which is
+  // the only thing that can see an entry retargeted in place (same id, same
+  // actor, a different `stable_id`) — and `readLock` has already refused a
+  // ledger the lock never saw, so the baseline is one the lock stands behind.
   const lock = development
     ? null
     : readLock(
         projectRoot,
         {
-          documents,
-          companions,
-          assets: assetFiles,
-          control: {
-            instance: record.files.get("instance.md") ?? "",
-            policy: record.files.get(POLICY_PATH) ?? "",
-            ledger: record.files.get(LEDGER_PATH) ?? null,
-          },
+          instance: record.files.get("instance.md") ?? "",
+          policy: record.files.get(POLICY_PATH) ?? "",
+          ledger: record.files.get(LEDGER_PATH) ?? null,
         },
         { draftsRequested },
       );
 
-  // ONE rule set: the same checker `ksor build` and `ksor ingest` run, over
-  // the same in-memory tree. Staging never depends on the checker having run
-  // elsewhere — a red record refuses HERE, by its slug, before any byte moves.
+  // THEN the record, by its own rules — ONE rule set: the same checker
+  // `ksor build` and `ksor ingest` run, over the same in-memory tree. Staging
+  // never depends on the checker having run elsewhere — a red record refuses
+  // HERE, by its slug, before any byte moves.
   const checked = checkRecord(record, {
     mode: "build",
     ledgerBaselines: lock === null ? [] : ledgerBaselines(lock.ledger_entries),
   });
   if (checked.refusals.length > 0 || checked.policy === null) refuseRecord(checked.refusals);
+  // LAST, whether the lock describes this tree file by file. A tree that is not
+  // a legal record is not eligible for that question: it was refused above by
+  // the rule it actually breaks (see `assertLockCoversTree`).
+  if (lock !== null) assertLockCoversTree(lock, { documents, companions, assets: assetFiles });
   const policy = checked.policy;
   // Lifecycle is evaluated at the lock's `as_of` for a build (staleness leaves
   // the open web on the next build; a scheduled rebuild is the operator's
@@ -209,12 +226,19 @@ function planStage(recordDir: string, development: boolean): StagePlan {
   if (!ledger.ok) refuseRecord(ledger.refusals);
   const denials = inForce(ledger.ledger);
 
-  const entries: StageEntry[] = [];
+  // Keyed by the staged path, so ONE entry exists per file the stage holds
+  // however many rules asked for it. `stageHolds` compares the plan's LENGTH
+  // to the file count before it compares any bytes, so a path emitted twice
+  // made it answer false forever — and that is not a lost optimisation, it is
+  // the freshness check that stands between a build and the half-written stage
+  // `withStageLock` records (27 of 48 runs, published short and silent). A rel
+  // determines its own bytes, so collapsing by it can never pick a side.
+  const entries = new Map<string, StageEntry>();
   const assets = new Set<string>();
   const pages: Record<string, StagePage> = {};
   const admitted: { id: string; title: string; description: string; order: number | null }[] = [];
   const copy = (rel: string, from: string): void => {
-    entries.push({ rel, bytes: () => readFileSync(from) });
+    entries.set(rel, { rel, bytes: () => readFileSync(from) });
   };
 
   for (const concept of checked.concepts) {
@@ -296,10 +320,10 @@ function planStage(recordDir: string, development: boolean): StagePlan {
     concepts: admitted,
     dirs: record.dirs.filter((d) => d.startsWith(KNOWLEDGE)).map((d) => d.slice(KNOWLEDGE.length)),
   });
-  for (const [rel, text] of indexes) entries.push({ rel, bytes: () => Buffer.from(text) });
+  for (const [rel, text] of indexes) entries.set(rel, { rel, bytes: () => Buffer.from(text) });
 
   return {
-    entries,
+    entries: [...entries.values()],
     manifest: {
       format: 1,
       name: appName,
@@ -354,19 +378,38 @@ function walkFiles(dir: string): string[] {
 const LOCK_POLL_MS = 25;
 /** How long a wait goes unexplained. A build that looks hung must say why. */
 const LOCK_ANNOUNCE_MS = 10_000;
+/**
+ * How long a lock may be held before a waiter stops believing in its holder.
+ *
+ * Enormously generous against the real contended case, which is what this bound
+ * has to clear: the other holder is another evaluation of the SAME build,
+ * staging the SAME record, and that is milliseconds for the records measured
+ * here — seven overlapping evaluations of a 150-document record still finish
+ * inside a second. Two minutes is not a guess at how long staging takes; it is
+ * long enough that reaching it means the holder is not staging at all.
+ */
+const LOCK_GIVE_UP_MS = 120_000;
 
 /** Synchronous, because everything on this path is: a bundler cannot await. */
 function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function isAlive(pid: number): boolean {
+/**
+ * What a signal-0 probe can honestly say about a pid. Three answers, because
+ * the middle one is not proof of anything: EPERM says something with that id
+ * exists and is not ours to signal, which is exactly what a RECYCLED pid owned
+ * by another user looks like. Folding it into "alive" is what made a waiter
+ * believe in a holder that had been dead for hours.
+ */
+type Liveness = "alive" | "not-ours" | "gone";
+
+function probePid(pid: number): Liveness {
   try {
     process.kill(pid, 0);
-    return true;
+    return "alive";
   } catch (error) {
-    // EPERM is a process that exists and is not ours to signal.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return (error as NodeJS.ErrnoException).code === "EPERM" ? "not-ours" : "gone";
   }
 }
 
@@ -388,10 +431,55 @@ function lockIsAbandoned(lockFile: string): boolean {
       return false;
     }
     const pid = Number(stamp);
-    if (Number.isInteger(pid) && pid > 0) return !isAlive(pid);
+    if (Number.isInteger(pid) && pid > 0) return probePid(pid) === "gone";
     if (look === 0) sleepSync(LOCK_POLL_MS * 2);
   }
   return true;
+}
+
+/** How long this lock file says it has been held; 0 once it is gone. */
+function lockHeldForMs(lockFile: string): number {
+  try {
+    return Math.max(0, Date.now() - statSync(lockFile).mtimeMs);
+  } catch {
+    // Released while we looked: the next acquire attempt takes it.
+    return 0;
+  }
+}
+
+/**
+ * Stop waiting, and say everything that is known about why.
+ *
+ * NOT "break the lock and carry on", which is the obvious alternative and is
+ * unsafe here: `fillStage` removes the stage and refills it IN PLACE, so a lock
+ * broken under a holder that IS still working hands the next reader a stage
+ * that is neither the old set nor the new one — the silent, published,
+ * 27-of-48 partial stage this file exists to prevent. A refusal an operator can
+ * act on is the honest end of an unbounded wait; publishing a short record is
+ * not.
+ */
+function refuseStuckLock(lockFile: string, heldMs: number): never {
+  let stamp = "";
+  try {
+    stamp = readFileSync(lockFile, "utf8").trim();
+  } catch {
+    // Released as we read it — say so rather than inventing a holder.
+  }
+  const pid = Number(stamp);
+  const evidence =
+    Number.isInteger(pid) && pid > 0
+      ? {
+          alive: `process ${pid} is alive to a signal-0 probe — but a RECYCLED pid is alive too, so that is not proof this holder is the one that took the lock`,
+          "not-ours": `signalling process ${pid} raised EPERM: something with that id exists and is not ours to signal, which is also what a RECYCLED pid owned by another user produces`,
+          gone: `process ${pid} is gone, and this lock should already have been broken`,
+        }[probePid(pid)]
+      : `the file records no usable pid (${stamp === "" ? "it is empty" : JSON.stringify(stamp)})`;
+  refuse(
+    "ksor-stage-locked",
+    `${path.basename(lockFile)} has been held for ${Math.round(heldMs / 1000)}s`,
+    `one evaluation writes the stage at a time, and a holder still holding after ${Math.round(LOCK_GIVE_UP_MS / 1000)}s is not staging — it was killed before it could release (Ctrl-C, a cancelled job, an OOM: none of them run the code that removes this file). The lock is not broken automatically because the stage is removed and refilled IN PLACE, so breaking one a live holder still holds would publish a half-written record. Evidence: ${evidence}`,
+    `if no build is running, delete ${lockFile} and build again`,
+  );
 }
 
 /**
@@ -415,12 +503,17 @@ function lockIsAbandoned(lockFile: string): boolean {
  *
  * `wx` is the whole primitive: create-if-absent, atomically, on every
  * filesystem Node supports — and it stamps the holder's pid in the same call,
- * so a waiter can tell a live holder from a killed one.
+ * so a waiter can tell a live holder from a killed one. Only from a KILLED one,
+ * though: a pid says nothing once it has been recycled, which is why the pid
+ * decides whether to break the lock and the CLOCK decides when to give up.
  *
- * Waiting on a LIVE holder is unbounded on purpose: it is another evaluation
- * of the same build, staging the same bytes from the same record, and this
- * build is not finished until it has. Unbounded is not silent, though — a wait
- * long enough to look like a hang names what it is waiting for.
+ * Waiting on a live holder is the point: it is another evaluation of the same
+ * build, staging the same bytes from the same record, and this build is not
+ * finished until it has. The wait is BOUNDED all the same, because a build tool
+ * may not hang — and this one did, live, on `pnpm dev` against a lock whose
+ * holder had been dead for hours (`LOCK_GIVE_UP_MS`, `refuseStuckLock`). A wait
+ * long enough to look like a hang names what it is waiting for; a wait long
+ * enough to BE one refuses and says what it knows.
  */
 function withStageLock<T>(stageDir: string, work: () => T): T {
   const lockFile = `${stageDir}.lock`;
@@ -448,6 +541,13 @@ function withStageLock<T>(stageDir: string, work: () => T): T {
       if (lockIsAbandoned(lockFile)) {
         rmSync(lockFile, { force: true });
         continue;
+      }
+      // Two ways to have waited too long, and both are real: THIS build has
+      // waited past the bound, or the lock has been held past it by a holder
+      // that may have been gone before this build started.
+      const held = lockHeldForMs(lockFile);
+      if (waited >= LOCK_GIVE_UP_MS || held >= LOCK_GIVE_UP_MS) {
+        refuseStuckLock(lockFile, Math.max(held, waited));
       }
       sleepSync(LOCK_POLL_MS);
       waited += LOCK_POLL_MS;
@@ -586,14 +686,30 @@ function refreshStage(recordDir: string, stageDir: string): void {
 let watching = false;
 
 /**
- * Watch the record in development, never in a build — and unref'd, so this
- * can never be the reason a process refuses to exit.
+ * Watch the record in development, never in a build — and NEVER the reason a
+ * process refuses to exit.
+ *
+ * `persistent: false` is what makes that true, and `unref()` alone did not.
+ * On macOS and Windows a recursive watch is native and `unref()` unrefs the
+ * one handle behind it; everywhere else — Linux, so every container and every
+ * CI runner — Node substitutes a JS implementation
+ * (`internal/fs/recursive_watch`) that opens one watcher PER DIRECTORY and
+ * whose `unref()` walks a map of `Stats` objects unrefing anything that is
+ * `instanceof StatWatcher`. Nothing in that map ever is, so `unref()` is a
+ * silent no-op there and every one of those watchers — created `persistent`,
+ * because that is `fs.watch`'s default — holds the event loop open forever.
+ *
+ * Measured as a build that never ends: an evaluation with NODE_ENV=development
+ * exits in milliseconds on macOS and never exits on Linux, so `spawnSync`
+ * waited on it and one CI job died at its 15-minute timeout with no file named
+ * (2026-08-25). A non-persistent watcher still delivers every event while the
+ * dev server holds the process open, which is the only time this runs.
  */
 function watchRecord(recordDir: string, stageDir: string): void {
   if (process.env.NODE_ENV !== "development" || watching) return;
   watching = true;
   let pending: ReturnType<typeof setTimeout> | null = null;
-  const watcher = watch(recordDir, { recursive: true }, () => {
+  const watcher = watch(recordDir, { recursive: true, persistent: false }, () => {
     if (pending !== null) clearTimeout(pending);
     // Debounced: one save is several filesystem events.
     pending = setTimeout(() => {

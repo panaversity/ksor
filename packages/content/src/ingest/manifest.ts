@@ -76,8 +76,30 @@ export interface ManifestNodeInit {
   readonly governance?: NodeGovernance;
 }
 
+/**
+ * An EMPTY list of sources (or of verifications) makes the same claim as no
+ * list at all — none — so it becomes the same value here, once, for every node
+ * in the system: both adapters, `parseManifest`, and every hand-built fixture
+ * pass through this constructor.
+ *
+ * Without it the two differed only in a way nothing could act on and one thing
+ * could lose: the emitter omits an empty list, the parser reads an absent key
+ * as null, so a round trip turned `[]` into `null` and the manifest's sha256 —
+ * which fills `instance_bundle_sha256`, the provenance digest of a generation —
+ * could not tell the two apart. `governanceOf` already normalises `verified`
+ * this way; this makes it true of `sources` and true wherever a node is built
+ * rather than only where one is read (review 2026-08-25).
+ *
+ * `audience` is deliberately NOT normalised: an empty audience list is served
+ * to nobody and `governanceToJson` already emits it, so it round-trips and it
+ * carries meaning a null does not.
+ */
+const orNullIfEmpty = <T>(list: readonly T[] | null | undefined): readonly T[] | null =>
+  list === undefined || list === null || list.length === 0 ? null : list;
+
 /** Mirrors the oracle dataclass defaults (parent/summary/permalink None, position 0, keywords ()). */
 export function manifestNode(init: ManifestNodeInit): ManifestNode {
+  const governance = init.governance ?? NO_GOVERNANCE;
   return {
     stable_id: init.stable_id,
     slug: init.slug,
@@ -88,7 +110,11 @@ export function manifestNode(init: ManifestNodeInit): ManifestNode {
     summary: init.summary ?? null,
     keywords: init.keywords ?? [],
     permalink: init.permalink ?? null,
-    governance: init.governance ?? NO_GOVERNANCE,
+    governance: {
+      ...governance,
+      sources: orNullIfEmpty(governance.sources),
+      verified: orNullIfEmpty(governance.verified),
+    },
   };
 }
 
@@ -429,8 +455,11 @@ function governanceToJson(g: NodeGovernance): Record<string, unknown> {
   if (g.audience !== null) out["audience"] = g.audience;
   if (g.docStatus !== null) out["doc_status"] = g.docStatus;
   if (g.owner !== null) out["owner"] = g.owner;
-  if (g.sources !== null && g.sources.length > 0) out["sources"] = g.sources;
-  if (g.verified !== null && g.verified.length > 0) out["verified"] = g.verified;
+  // `!== null` alone: an empty list never reaches here (manifestNode normalises
+  // it), so a length test could only ever drop a value the parser would read
+  // back differently.
+  if (g.sources !== null) out["sources"] = g.sources;
+  if (g.verified !== null) out["verified"] = g.verified;
   if (g.generated !== null) {
     out["generated"] =
       g.generated.at === null ? { by: g.generated.by } : { by: g.generated.by, at: g.generated.at };

@@ -4,8 +4,12 @@
 //
 // - public:   KSOR_SSO_URL + KSOR_MCP_RESOURCE_URL set AND KSOR_JWT_ALLOWED_AUDIENCES
 //             non-empty — the OAuth Resource-Server door; the bearer is the gate.
-// - disabled: KSOR_AUTH_DISABLED=1 — the ONLY unauthenticated path, a deliberate
-//             operator act, never an accident of a missing var.
+// - disabled: KSOR_AUTH=disabled-local (loopback dev) or =disabled-public (serves
+//             the record to anyone who can reach the port) — the ONLY
+//             unauthenticated paths, a deliberate operator act, never an
+//             accident of a missing var. The retired KSOR_AUTH_DISABLED /
+//             KSOR_ALLOW_PUBLIC_UNAUTHENTICATED pair is REFUSED by name, so an
+//             old runbook fails loudly instead of quietly meaning nothing.
 // - anything else THROWS AuthConfigError — refuse to boot, never serve the
 //   public door open ("disabled by default" must never silently become an open
 //   server — decision 7).
@@ -236,8 +240,9 @@ function configFromEnv(env: Env): AuthConfig | null {
  * Decide the boot posture from env. Fail-closed: an incomplete SSO env (a
  * deploy edit that drops one var — `--set-env-vars` REPLACES the whole map)
  * must never silently boot the PUBLIC door unauthenticated, unmetered, and
- * audit-anonymous. Explicit KSOR_AUTH_DISABLED=1 is the only unauthenticated
- * path.
+ * audit-anonymous. An explicit `KSOR_AUTH=disabled-local|disabled-public` is
+ * the only unauthenticated path; every other value, and the retired
+ * KSOR_AUTH_DISABLED, is refused below.
  */
 export function buildAuth(env: Env = process.env, deps: VerifierDeps = {}): Auth {
   const warn = deps.warn ?? defaultWarn;

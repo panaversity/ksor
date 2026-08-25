@@ -184,9 +184,12 @@ display title is `instance.md`'s `title:` key; there is no body H1 to read.
 - **OKF import** (R26) — reading a foreign bundle INTO a record. Demand-gated:
   it needs a second ingest adapter and a verb, and nobody has asked yet.
 
-The ranked audience rule is dead code rather than a live surface:
-`decideVisible` and `RANKED_AUDIENCE_CASES` are still present in the kernel and
-in the site's byte-copy, asserted only against each other. Nothing reads them.
+The ranked audience rule is GONE. `decideVisible` and `RANKED_AUDIENCE_CASES`
+were dead code asserted only against each other — and the suite doing the
+asserting was the site's half of decision 18's decision table, so the site's
+real staging rule (`overlaps`) had no conformance run against it at all. Both
+are deleted; the site's half now runs the site's own copy of `overlaps`
+against `AUDIENCE_CASES`.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
@@ -576,8 +579,10 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   print, a failed bundle and JavaScript off (verified live in both themes).
   Publication is the owner's call: `site: governance: false` in instance.md
   leaves the pages plain while the record keeps every key for the agent surface
-  and the audit trail — and it never hides the deprecation notice. The build
-  refuses a value that is not `true`/`false`.
+  and the audit trail — and it hides no CAVEAT: neither the deprecation notice
+  nor the lifecycle badge, which the sidebar, the listings and the search
+  results carry whatever the key says. The build refuses a value that is not
+  `true`/`false`.
   The **agent files carry the same record**: `llms.txt`, `llms-full.txt`, every
   `/md/` twin and `/.well-known/mcp/server.json` carry the build's `build_id`,
   `source_commit` and `ksor_version`, and each twin serves the concept's own

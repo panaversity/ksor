@@ -87,7 +87,10 @@ by the starter and by `ksor migrate`, and will never be reserved. `Summary`
 is a companion marker (§1), not a concept type.
 
 **2.2 Required everywhere:** `type`, `title`, `description`, `status`,
-`ksor.audience`. `title` and `description` are ONE LINE each
+`ksor.audience`. Required means present AND carrying text: a floor key that is
+blank, null, or a value YAML resolved to a number or a boolean (an unquoted
+`title: 2026`) is `ksor-missing-key`, because a key with nothing readable in
+it governs nothing. `title` and `description` are ONE LINE each
 (`ksor-one-line-form`, a trailing break from a `>` folded scalar included):
 §8 renders both into a single index bullet, so a break there does not render
 badly — it makes the bullet unreadable and drops the concept from the index,
@@ -109,7 +112,10 @@ citation is a GFM footnote **reference and definition** whose label is a
 `sources[].id` — the checker inspects both, and an unmatched label in either
 is `ksor-footnote-unkeyed` (footnotes are the one extension to CommonMark;
 they degrade to readable text); `verified` is a list of `{by, at}` and a bare
-mapping is accepted as a one-element list (OKF §5.2 MUST). Links resolve in
+mapping is accepted as a one-element list (OKF §5.2 MUST). `order` is a FINITE
+number (`ksor-frontmatter-invalid`): YAML's core schema resolves `.inf`,
+`-.inf`, `.nan` and an overflowing `1e400` to real numbers, and a position
+that is not finite is one the two surfaces would file differently. Links resolve in
 both OKF §6.1 forms — bundle-absolute (`/policies/x.md`, against
 `knowledge/`) and relative (against the source's directory), `.md` optional;
 the site rewrites bundle-absolute links to routes. Actors: `human:<id>`,
@@ -120,19 +126,28 @@ prefix and a team would silently classify as machine-confirmed. The policy's
 own actor slots additionally admit `team:<id>` (`ksor-policy-invalid`
 otherwise). **`ksor.owner` is free text and is NOT form-checked** — the
 convention is the same vocabulary plus `team:<id>`, and the spec recommends it,
-but the checker only ever COMPARES the value (to `ksor.deprecated.by`, R23),
-never parses it. That is deliberate for now: `ksor migrate` carries a
-pre-profile `owner: Product` through verbatim rather than inventing an actor
-for it, and refusing the result would refuse every migrated record. One
-consequence, stated because it is invisible otherwise: since
-`ksor.deprecated.by` IS form-checked, a bare-word owner can never equal it, so
-R23's "deprecated by the owner" branch is unreachable on such a document and
-the deprecation must come from a takedown authority instead. Reversed by
+but the checker never parses it — and never reads it as AUTHORITY either.
+That is deliberate for now: `ksor migrate` carries a pre-profile `owner:
+Product` through verbatim rather than inventing an actor for it, and refusing
+the result would refuse every migrated record. What follows from it is the R23
+clause above: the owner who may withdraw a document is the one `ownership` in
+the Governance Policy resolves (§4), never the one the document declares about
+itself. A record whose policy declares no `ownership` rule resolves no owner at
+all — the shape both `ksor init` and `ksor migrate` emit — so on it every
+deprecation must come from a takedown authority. Accepting `ksor.owner` as a
+fallback let a concept withdraw itself: `ksor.owner: human:mallory` beside
+`ksor.deprecated.by: human:mallory` passed `ksor-deprecator-unauthorised`, a
+governance act attested by its own subject, and asymmetric with approval, where
+`resolveApprovers` refuses outright when no rule matches. Reversed by
 form-checking `ksor.owner` (allowing `team:`) and teaching `ksor migrate` to
 rewrite or refuse a bare owner, in one change — never by the spec alone.
 Actor ids are published with the content; use handles, not addresses. Every
-timestamp is an ISO 8601 instant with an explicit offset; `ksor migrate`
-widens a bare date to midnight UTC. Trust tier derives from `verified`: none
+timestamp is an ISO 8601 instant with an explicit offset, on a day the
+calendar has; `ksor migrate` widens a bare date to midnight UTC. `Date.parse`
+ROLLS an impossible date instead of refusing it — `2026-02-30T00:00Z` is 2
+March, `T24:00` is the next day — so a timestamp whose own fields do not
+survive the round trip is `ksor-instant-form` rather than an `effective_from`
+embargoing to a date nobody wrote. Trust tier derives from `verified`: none
 → unverified; machine actors only → machine-confirmed; any `human:` →
 human-reviewed. **`verified` is a claim gated by pull-request review, NOT by
 the policy** — the Governance Policy has no verification family, so
@@ -251,7 +266,19 @@ that can never match is `ksor-policy-invalid` rather than a rule that silently
 does nothing: one carrying a file extension (`hr/handbook.md` — a concept id
 carries none) and one repeating the `knowledge/` prefix (the ledger's
 `stable_id` spells it out; a scope path starts inside). Both fell through to a
-broader rule with nothing red. The policy is ingested — the registry and authority sets
+broader rule with nothing red. A scope that constrains NOTHING is refused with
+them, in both directions: an empty `paths` or `types` list matches no concept
+at all — an empty list reads as "everywhere" and means "nowhere", and on
+`ownership` that silently returns deprecation authority to the document's own
+self-declared `owner:` — while a bare `scope: {}` matches EVERY concept at the
+widest tier, which is the state the one-letter typo produced. The record-wide
+fallback is written by omitting `scope`.
+
+Both control files are read with the frontmatter reader's posture (§2.6): one
+document, unique keys, a mapping at the root, and **plain data throughout**.
+The last is a value walk, not a schema setting — `schema: "core"` resolves
+`!!binary` to a Buffer, `!!set` to a Set and `!!omap` to a Map with no error
+and no warning, and a root-only check never looks at a value. The policy is ingested — the registry and authority sets
 as `ingestion_runs.policy JSONB`, plus `policy_sha256` — so the door and the
 snapshot token bind to a row, and the served container never needs the file.
 
@@ -268,6 +295,13 @@ removed, by, at, reason }` — `expected` is `present` when the verb saw the
 - an **amendment** `{ id, amends: <id>, expected: removed, by, at, reason }`
   — the sanctioned way to delete a denied file: amend, then delete, in the
   same change.
+
+**An entry is exactly one act.** Two of `stable_id`, `revokes` and `amends` in
+one entry is `ksor-ledger-invalid`: dispatching on whichever key was found
+first read a denial that also revoked as a denial and dropped the revocation,
+leaving the entry it named in force with nothing red. Each kind's key set is
+CLOSED for the reason the policy's is (§4) — a `scope:` on a revocation is a
+constraint its author believes is in force and no reader applies.
 
 Only `ksor takedown` writes it, and that is **enforced by validation, not
 assumed**: an entry's `by` — denial, revocation, amendment — is checked
@@ -459,8 +493,9 @@ ingest: `ksor-pointer-changed` (`CLAUDE.md` is not exactly `@AGENTS.md`),
 either direction), `ksor-site-holds-content` (a `.md`/`.mdx` inside
 `system/site`). Viewer
 and lock refusals (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`,
-`ksor-lock-missing`, `ksor-lock-stale`, `ksor-site-outdated`) belong to the
-site build and the door, not to the record checker (build spec §3).
+`ksor-audience-identifier-invalid`, `ksor-lock-missing`, `ksor-lock-stale`,
+`ksor-site-outdated`) belong to the site build and the door, not to the record
+checker (build spec §3).
 
 ## 7 · Acceptance
 

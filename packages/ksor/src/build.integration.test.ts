@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { checkRecord, type Lock } from "@panaversity/ksor-content/record";
+import { checkRecord, sha256Hex, type Lock } from "@panaversity/ksor-content/record";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { VALID } from "./__fixtures__/record-conformance.js";
@@ -248,6 +248,49 @@ describe("ksor build — acceptance 2: what moves build_id", () => {
   });
 });
 
+/**
+ * The invariant is "same corpus tree + same toolchain ⇒ same `build_id`", and
+ * `--as-of` defaults to `Date.now()`. `buildIdOf` does not hash `as_of`, but it
+ * DOES hash `documents[].admitted`, which `admittedViewersOf` computes AT
+ * `asOf` — so the invariant is unconditional only for a tree that declares no
+ * lifecycle instant, and time-dependent BY DESIGN for one that does (crossing
+ * an `effective_from` changes what was published, and the id must say so).
+ * Both halves are asserted, because neither is safe to assume from the other.
+ */
+describe("ksor build — what `as_of` does and does not move", () => {
+  it("moves nothing at all when no concept declares a lifecycle instant", () => {
+    const root = repo();
+    const abs = path.join(root, "knowledge/policies/purchase-approval.md");
+    writeFileSync(
+      abs,
+      readFileSync(abs, "utf8")
+        .split("\n")
+        .filter((l) => !/^\s*(stale_after|effective_from):/.test(l))
+        .join("\n"),
+    );
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "no lifecycle instants");
+
+    build(root, "--as-of", "2020-01-01T00:00:00Z");
+    const early = lockOf(root);
+    build(root, "--as-of", "2030-01-01T00:00:00Z");
+    const late = lockOf(root);
+    expect(late.build_id, "a decade apart, over a tree with no lifecycle instant").toBe(
+      early.build_id,
+    );
+    expect(late.documents.map((d) => d.admitted)).toEqual(early.documents.map((d) => d.admitted));
+
+    // And the invariant's own stated test: build twice, diff the lock.
+    const first = build(root);
+    expect(first.status, first.stderr).toBe(0);
+    const a = lockOf(root);
+    expect(build(root).status).toBe(0);
+    const b = lockOf(root);
+    expect(b.build_id).toBe(a.build_id);
+    expect({ ...b, as_of: "" }).toEqual({ ...a, as_of: "" });
+  });
+});
+
 describe("ksor build — acceptance 3: refusals write nothing", () => {
   it("a checker refusal exits 1 with the slug on the first stderr line, and no index or lock is written", () => {
     const root = repo();
@@ -336,6 +379,42 @@ describe("ksor build — assets are part of what was checked", () => {
     const second = lockOf(root);
     expect(second.assets[0]?.sha256).not.toBe(first.assets[0]?.sha256);
     expect(second.build_id).not.toBe(first.build_id);
+  });
+});
+
+/**
+ * The §8 indexes are the only file in `knowledge/` the BUILD writes, and they
+ * are the surface an external reader parses to find anything at all. They were
+ * in no section of the lock — not `documents` (the checker skips `index.md`),
+ * not `companions` (the four attachment kinds), not `assets` (non-markdown) —
+ * so the record of what was published stopped short of the file that lists
+ * what was published.
+ */
+describe("ksor build — the generated indexes are inside what the lock checked", () => {
+  it("records each index by the bytes it wrote, and an index edit moves build_id", () => {
+    const root = repo();
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const before = lockOf(root);
+    expect(before.indexes.map((i) => i.path)).toEqual(["index.md", "policies/index.md"]);
+    for (const index of before.indexes) {
+      expect(index.sha256, `${index.path} in the lock does not hash the bytes on disk`).toBe(
+        sha256Hex(readFileSync(path.join(root, "knowledge", index.path), "utf8")),
+      );
+    }
+
+    // A title edit rewrites one bullet of one index and leaves the other alone.
+    const welcome = path.join(root, "knowledge/welcome.md");
+    writeFileSync(welcome, readFileSync(welcome, "utf8").replace("title: Welcome", "title: Start"));
+    expect(build(root, "--as-of", AS_OF).status).toBe(0);
+    const after = lockOf(root);
+    expect(after.build_id).not.toBe(before.build_id);
+    const moved = after.indexes.filter(
+      (i) => i.sha256 !== before.indexes.find((b) => b.path === i.path)?.sha256,
+    );
+    expect(moved.map((i) => i.path)).toEqual(["index.md"]);
+    expect(after.indexes[0]?.sha256).toBe(
+      sha256Hex(readFileSync(path.join(root, "knowledge/index.md"), "utf8")),
+    );
   });
 });
 

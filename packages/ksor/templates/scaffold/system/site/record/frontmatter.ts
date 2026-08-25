@@ -6,6 +6,7 @@
 import { parseAllDocuments, YAMLParseError } from "yaml";
 
 import type { Refusal } from "./refusal";
+import { firstNonPlain, isPlainMapping } from "./yaml-file";
 
 export type Split =
   | {
@@ -102,33 +103,6 @@ export function splitFrontmatter(text: string, path: string): Split {
 function reasonOf(error: unknown): string {
   const first = error instanceof YAMLParseError ? error.message : String(error);
   return first.split("\n")[0]?.replace(/^\w*Error: /, "") ?? "unreadable";
-}
-
-function isPlainMapping(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null) return false;
-  const proto: unknown = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
-/** Path of the first value that is neither a scalar, an array nor a plain mapping — `null` when all are. */
-function firstNonPlain(value: unknown, at: string): string | null {
-  if (value === null) return null;
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return null;
-  }
-  if (Array.isArray(value)) {
-    for (const [i, item] of value.entries()) {
-      const hit = firstNonPlain(item, `${at}[${i}]`);
-      if (hit !== null) return hit;
-    }
-    return null;
-  }
-  if (!isPlainMapping(value)) return at === "" ? "(root)" : at;
-  for (const [key, item] of Object.entries(value)) {
-    const hit = firstNonPlain(item, at === "" ? key : `${at}.${key}`);
-    if (hit !== null) return hit;
-  }
-  return null;
 }
 
 function refuse(path: string, why: string, fix: string): Split {

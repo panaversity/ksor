@@ -53,6 +53,7 @@ export function lockWith(
       documents: [],
       companions: [],
       assets: [],
+      indexes: [],
     },
     null,
     2,
@@ -233,6 +234,15 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     ],
   },
   {
+    // The blocking half of the same rule: a floor key that is THERE and
+    // unusable. `title: 42` lost its quotes, and until the profile named it
+    // the document was dropped from the record — no page, no MCP node, no lock
+    // entry — with an EMPTY refusal list and exit 0.
+    name: "ksor-missing-key (present but not text)",
+    files: base({ "knowledge/bad.md": frontmatter(stable.replace("title: T", "title: 42")) }),
+    expected: ["ksor-missing-key knowledge/bad.md"],
+  },
+  {
     name: "ksor-status-unknown",
     files: base({
       "knowledge/bad.md": frontmatter(stable.replace("status: stable", "status: approved")),
@@ -292,6 +302,21 @@ export const REFUSALS: readonly ConformanceRecord[] = [
     files: base({
       "knowledge/bad.md": frontmatter(
         `${stable.replace("status: stable", "status: deprecated")}  deprecated: { by: "human:kim", at: 2026-08-22T10:00:00Z }\n`,
+      ),
+    }),
+    expected: ["ksor-deprecator-unauthorised knowledge/bad.md"],
+  },
+  {
+    // The state that used to PASS: the document names itself as its owner and
+    // withdraws itself. `knowledge/bad.md` sits outside the POLICY's only
+    // `ownership` scope (`policies`), so the record resolves no owner for it —
+    // and `ksor.owner` is free text the document writes about itself, never a
+    // substitute for one. A withdrawal a document attests for itself is not a
+    // governance act.
+    name: "ksor-deprecator-unauthorised (self-attested owner)",
+    files: base({
+      "knowledge/bad.md": frontmatter(
+        `${stable.replace("status: stable", "status: deprecated")}  owner: human:mallory\n  deprecated: { by: "human:mallory", at: 2026-08-22T10:00:00Z }\n`,
       ),
     }),
     expected: ["ksor-deprecator-unauthorised knowledge/bad.md"],

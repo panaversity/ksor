@@ -27,6 +27,7 @@ import {
   checkRecord,
   loadRecord,
   parseInstant,
+  parsePolicy,
   splitFrontmatter,
 } from "@panaversity/ksor-content/record";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -672,6 +673,17 @@ describe("ksor migrate — the actor is validated, not merely present", () => {
     ],
     ["a bare handle", "jane", "with no kind"],
     ["a team, which is not an individual", "team:people-ops", "which names no person"],
+    // `isIndividualActor` matches `^(human|process|team):(\\S+)$`, and `\\S+`
+    // admits every one of these. They reached `renderPolicy`, which interpolated
+    // them RAW into `actors: [...]` — a YAML flow sequence — so the string could
+    // close the sequence, split into two authorities, comment the rest of the
+    // line out, or open a quote the parser never sees closed.
+    ["a bracket that closes the flow sequence", "human:a]", "structure"],
+    ["a comma with no space", "human:a,b", "two authorities"],
+    ["a comment marker", "human:a#c", "structure"],
+    ["quotes", 'human:"a"', "structure"],
+    ["a newline", "human:a\nb", "structure"],
+    ["10 kB of id", `human:${"a".repeat(10240)}`, "not an identity"],
   ])("refuses %s, before writing anything", (_label, value) => {
     const root = record();
     const before = tree(root);
@@ -691,6 +703,136 @@ describe("ksor migrate — the actor is validated, not merely present", () => {
   it("still accepts a well-formed one", () => {
     const root = record();
     expect(run(root, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+  });
+
+  /**
+   * Defence in depth behind the argument guard: whatever reaches the renderer,
+   * the file it produces is a policy this record's OWN reader accepts, with the
+   * authorities it was given and no others. Hand-interpolation could not promise
+   * that — `actors: [${a.join(", ")}]` is only YAML when nothing in `a` is an
+   * indicator.
+   */
+  it("writes a policy `parsePolicy` reads back, naming exactly the actors it was given", () => {
+    const root = record();
+    expect(
+      run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", "human:j.smith").status,
+    ).toBe(0);
+    const parsed = parsePolicy(read(root, ".ksor/governance.yaml"), ".ksor/governance.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.policy.takedownActors).toEqual([ACTOR]);
+    expect(parsed.policy.approvalRules.flatMap((r) => [...r.actors]).sort()).toEqual([
+      "human:j.smith",
+      ACTOR,
+    ]);
+  });
+});
+
+/**
+ * The instance's H1 was the display title of a format-1 record, and `title:`
+ * is the display title of a format-2 one. Migrate stripped the H1
+ * UNCONDITIONALLY and preferred `title:` — so a record carrying both, saying
+ * two different things, had one of them silently deleted and the OTHER one
+ * silently promoted to the name every page, `llms.txt` and the MCP discovery
+ * document leads with. Migrate never authors knowledge, and deleting a heading
+ * an author wrote is not a smaller act than writing one.
+ */
+describe("ksor migrate — the instance H1 against a declared title", () => {
+  const instance = (frontmatter: string, heading: string): readonly [string, string] => [
+    "instance.md",
+    `---\nformat: 1\nname: acme\n${frontmatter}---\n\n# ${heading}\n\nOne sentence of scope.\n`,
+  ];
+  const concept = [
+    "knowledge/a.md",
+    "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n",
+  ] as const;
+
+  it("refuses when the two disagree, names both, and writes nothing", () => {
+    const root = repo([instance("title: The Handbook\n", "Acme HR"), concept]);
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("ksor-migrate-underivable");
+    expect(r.stderr).toContain("The Handbook");
+    expect(r.stderr).toContain("Acme HR");
+    expect(tree(root), "migrate wrote despite refusing the instance").toEqual(before);
+  });
+
+  it("strips a heading that merely repeats the declared title", () => {
+    const root = repo([instance("title: Acme HR\n", "Acme HR"), concept]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    expect(fm(root, "instance.md")["title"]).toBe("Acme HR");
+    expect(body(root, "instance.md")).not.toMatch(/^# /m);
+  });
+
+  it("still promotes the H1 when the frontmatter declares no title", () => {
+    const root = repo([instance("", "Acme HR"), concept]);
+    expect(run(root, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+    expect(fm(root, "instance.md")["title"]).toBe("Acme HR");
+    expect(body(root, "instance.md")).not.toMatch(/^# /m);
+  });
+});
+
+/**
+ * Decision 24: a summary companion inherits its parent's audience, status and
+ * takedown entirely, so any frontmatter key but `type: Summary` claims
+ * governance a non-node cannot carry — and the record checker refuses that as a
+ * CLASS (`ksor-attachment-frontmatter`). Migrate treated those keys as STALE
+ * and replaced the whole block, so `visibility: internal` on a summary was
+ * deleted, exit 0, nothing printed: a refusal turned into a silent rewrite of
+ * an author's governance.
+ */
+describe("ksor migrate — a summary companion's frontmatter", () => {
+  const files = (summary: string): readonly (readonly [string, string])[] => [
+    [
+      "instance.md",
+      "---\nformat: 1\nname: acme\naudiences: [public, internal]\n---\n\n# Acme\n\nOne sentence of scope.\n",
+    ],
+    ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+    ["knowledge/a.summary.md", summary],
+  ];
+
+  it("refuses a summary carrying governance, names the keys, and writes nothing", () => {
+    const root = repo(
+      files("---\nvisibility: internal\nowner: Legal\n---\n\nThe short version.\n"),
+    );
+    const before = tree(root);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, `stdout: ${r.stdout}\nstderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain("ksor-attachment-frontmatter");
+    expect(r.stderr).toContain("visibility");
+    expect(r.stderr).toContain("owner");
+    expect(tree(root), "migrate rewrote a summary it had refused").toEqual(before);
+  });
+
+  it("still marks a bare summary, which declares nothing to destroy", () => {
+    const root = repo(files("The short version.\n"));
+    expect(run(root, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+    expect(fm(root, "knowledge/a.summary.md")).toEqual({ type: "Summary" });
+    expect(body(root, "knowledge/a.summary.md")).toContain("The short version.");
+  });
+});
+
+/**
+ * `description:` seeds `llms.txt` and the MCP discovery document, and migrate
+ * derives it from the instance's first prose paragraph. `firstSentence` skipped
+ * headings and lists but not FENCED CODE, so a record whose body opens with a
+ * quickstart block published a line of shell as the sentence saying what the
+ * record is — to every agent that reads the discovery document.
+ */
+describe("ksor migrate — the derived description skips fenced code", () => {
+  it.each([["```"], ["~~~"]])("%s-fenced", (fence) => {
+    const root = repo([
+      [
+        "instance.md",
+        `---\nformat: 1\nname: acme\n---\n\n# Acme\n\n${fence}sh\npnpm install. Then run it.\n${fence}\n\nThe record of how Acme runs payroll. Everything else is elsewhere.\n`,
+      ],
+      ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    expect(fm(root, "instance.md")["description"]).toBe("The record of how Acme runs payroll.");
   });
 });
 
@@ -968,6 +1110,66 @@ describe("ksor migrate — the adopter's own gate", () => {
     }
     expect(scripts["bare"]).toBe("ksor ingest --instance instance.md --flip");
     expect(scripts["quoted"]).toBe("ksor ingest --flip");
+  });
+
+  /**
+   * The manifest is the adopter's file, formatted the way their repository is.
+   * Re-emitting the whole of it at `JSON.stringify(…, 2)` rewrote every line
+   * of a 4-space or tab-indented manifest, so the one script migrate actually
+   * changed arrived as a whole-file hunk nobody can review — and the next
+   * `prettier`/`biome` run in their CI reverted it.
+   */
+  it.each([
+    ["four spaces", "    "],
+    ["a tab", "\t"],
+  ])("keeps the manifest's own indentation (%s)", (_label, indent) => {
+    const manifest = {
+      name: "acme",
+      scripts: { "export-denylist": "ksor takedown --export", dev: "x" },
+    };
+    const root = repo([
+      files[0],
+      files[1],
+      ["package.json", `${JSON.stringify(manifest, null, indent)}\n`],
+    ]);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const after = read(root, "package.json");
+    expect(after.split("\n").filter((l) => l.startsWith(indent)).length).toBeGreaterThan(0);
+    expect(after, "the manifest was re-indented").toBe(
+      `${JSON.stringify({ name: "acme", scripts: { dev: "x" } }, null, indent)}\n`,
+    );
+  });
+
+  // Two more shapes of "the adopter's formatting is theirs": a minified
+  // manifest re-indented to two spaces is a whole-file hunk too, and
+  // `JSON.stringify` emits LF only, so a CRLF one came back with every line
+  // ending changed.
+  it("leaves a minified manifest minified, and a CRLF one CRLF", () => {
+    const manifest = {
+      name: "acme",
+      scripts: { "export-denylist": "ksor takedown --export", dev: "x" },
+    };
+    const minified = repo([files[0], files[1], ["package.json", JSON.stringify(manifest)]]);
+    expect(run(minified, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+    expect(read(minified, "package.json")).toBe(
+      JSON.stringify({ name: "acme", scripts: { dev: "x" } }),
+    );
+
+    const crlf = repo([
+      files[0],
+      files[1],
+      ["package.json", `${JSON.stringify(manifest, null, 2)}\n`.replaceAll("\n", "\r\n")],
+    ]);
+    expect(run(crlf, "migrate", "--write", "--actor", ACTOR).status).toBe(0);
+    const after = read(crlf, "package.json");
+    expect(after).toBe(
+      `${JSON.stringify({ name: "acme", scripts: { dev: "x" } }, null, 2)}\n`.replaceAll(
+        "\n",
+        "\r\n",
+      ),
+    );
+    expect(after.split("\n").filter((l) => l !== "" && !l.endsWith("\r"))).toEqual([]);
   });
 
   it("leaves a record that carries neither alone", () => {

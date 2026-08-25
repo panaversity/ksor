@@ -89,7 +89,12 @@ CREATE TABLE content_nodes (
     -- 2 human-reviewed). `provenance` (2.2) stays for a carried row; a 2.5
     -- ingest writes `sources`.
     audience      TEXT[],
-    doc_status    TEXT CHECK (doc_status IS NULL OR doc_status IN ('draft','stable','deprecated')),
+    -- Named, not auto-named: the 2.4 -> 2.5 migration adds this same CHECK by
+    -- name, and an unnamed inline constraint is auto-named after the column, so a
+    -- migrated database and a fresh one carried the SAME rule under two different
+    -- names — one schema nobody could diff (schema-parity.db.test.ts).
+    doc_status    TEXT CONSTRAINT nodes_doc_status_profile
+                    CHECK (doc_status IS NULL OR doc_status IN ('draft','stable','deprecated')),
     owner         TEXT,
     provenance    JSONB,                              -- pre-profile `provenance:`, carried rows only
     superseded_by TEXT,                               -- ksor.superseded_by, as a stable_id
@@ -100,7 +105,8 @@ CREATE TABLE content_nodes (
     deprecated    JSONB,
     effective_from TIMESTAMPTZ,
     stale_after   TIMESTAMPTZ,
-    trust_tier    SMALLINT CHECK (trust_tier IS NULL OR trust_tier BETWEEN 0 AND 2),
+    trust_tier    SMALLINT CONSTRAINT nodes_trust_tier_range
+                    CHECK (trust_tier IS NULL OR trust_tier BETWEEN 0 AND 2),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT nodes_stable_uniq  UNIQUE (tenant_id, generation, stable_id),

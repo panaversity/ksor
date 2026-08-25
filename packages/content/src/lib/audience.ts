@@ -25,7 +25,10 @@
  * or empty list overlaps nothing and is served to nobody.
  */
 
-export type ViewerRefusal = "ksor-viewer-omits-public" | "ksor-viewer-unregistered";
+export type ViewerRefusal =
+  | "ksor-viewer-omits-public"
+  | "ksor-viewer-unregistered"
+  | "ksor-audience-identifier-invalid";
 
 export class AudienceError extends Error {
   override readonly name: string = "AudienceError";
@@ -52,6 +55,9 @@ export function parseViewer(raw: string | undefined | null): string[] {
  * widened silently.
  */
 export function validateViewer(registry: readonly string[], viewer: readonly string[]): string[] {
+  // Before anything else: an identifier that cannot survive the encoding is not
+  // a narrower or wider viewer, it is a DIFFERENT one (see assertEncodable).
+  for (const id of viewer) assertEncodable(id);
   if (!viewer.includes("public")) {
     throw new AudienceError(
       "ksor-viewer-omits-public",
@@ -100,8 +106,36 @@ export function audienceAllowed(alias: string): string {
 /** The predicate for the usual `n` alias. */
 export const AUDIENCE_ALLOWED: string = audienceAllowed("n");
 
+/**
+ * The two things an audience identifier may not be, enforced where identifiers
+ * ENTER the encoding rather than only where the door validates them.
+ *
+ * The separator was documented as "chosen because no audience identifier may
+ * contain it" and nothing checked. It is not a style rule: `audienceGucs` joins
+ * on U+001F and the SQL splits on it, so `intern\x1fboard` does not travel as
+ * one identifier — it arrives as TWO, and the viewer holds an audience nobody
+ * granted. The sentinel is the same class: `*` is the value the predicate
+ * compares against for "the whole record", so an identifier spelled `*` is a
+ * name that means everything to the reader of the GUC.
+ *
+ * Both are refusals rather than escapes. An escape would make the two sides
+ * agree while leaving a governance identifier that reads one way in
+ * `.ksor/governance.yaml` and another in the database — and a registry is a
+ * short list a human wrote, so nothing legitimate is being turned away.
+ */
+function assertEncodable(id: string): void {
+  const bad = id.includes(SEP) ? "the unit separator U+001F" : id === WHOLE_RECORD ? "`*`" : null;
+  if (bad === null) return;
+  throw new AudienceError(
+    "ksor-audience-identifier-invalid",
+    `the audience identifier ${JSON.stringify(id)} contains ${bad}, which this record cannot carry — the viewer list is joined on U+001F and split on it in SQL, and \`*\` is the sentinel meaning the WHOLE record, so either one is read as a different set of audiences than the one written\n` +
+      "  fix: name audiences in plain words (letters, digits, `-`, `_`) in .ksor/governance.yaml and in KSOR_AUDIENCE",
+  );
+}
+
 /** The GUC {@link AUDIENCE_ALLOWED} reads, for a validated viewer list. */
 export function audienceGucs(viewer: readonly string[]): Readonly<Record<string, string>> {
+  for (const id of viewer) assertEncodable(id);
   return { "app.viewer": viewer.join(SEP) };
 }
 

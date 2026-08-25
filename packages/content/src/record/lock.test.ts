@@ -23,6 +23,7 @@ const INPUTS: BuildIdInputs = {
   ],
   companions: [{ path: "a.summary.md", sha256: "cc" }],
   assets: [{ path: "a.png", sha256: "dd" }],
+  indexes: [{ path: "index.md", sha256: "ee" }],
   instance_sha256: "ii",
   policy_sha256: "pp",
   ledger_sha256: "ll",
@@ -55,6 +56,9 @@ describe("buildIdOf (build spec §2)", () => {
     ["a document hash", { documents: [{ path: "a.md", sha256: "a2", admitted: ["public"] }] }],
     ["an admitted set", { documents: [{ path: "a.md", sha256: "aa", admitted: [] }] }],
     ["a companion", { companions: [] }],
+    ["an asset", { assets: [{ path: "a.png", sha256: "d2" }] }],
+    // A generated index is published bytes; the id must move when they do.
+    ["a generated index", { indexes: [{ path: "index.md", sha256: "e2" }] }],
     ["the instance", { instance_sha256: "i2" }],
     ["the policy", { policy_sha256: "p2" }],
     ["the ledger", { ledger_sha256: "l2" }],
@@ -159,6 +163,7 @@ describe("composeLock + parseLock", () => {
     ],
     companions: [{ path: "policies/x.summary.md", text: "s" }],
     assets: [{ path: "policies/x.png", bytes: new Uint8Array([1, 2, 3]) }],
+    indexes: [{ path: "index.md", text: "# R\n" }],
     denials: [],
   };
 
@@ -184,6 +189,10 @@ describe("composeLock + parseLock", () => {
     expect(lock.assets).toEqual([
       { path: "policies/x.png", sha256: sha256Hex(new Uint8Array([1, 2, 3])) },
     ]);
+    // The §8 indexes are GENERATED, and they are also published — the surface an
+    // external reader parses to find anything at all. They belonged in no
+    // section of the lock, so "what was published" stopped short of them.
+    expect(lock.indexes).toEqual([{ path: "index.md", sha256: sha256Hex("# R\n") }]);
     expect(lock.ledger_sha256).toBe(sha256Hex(""));
     const parsed = parseLock(JSON.stringify(lock));
     expect(parsed.ok && parsed.lock).toEqual(lock);
@@ -206,6 +215,10 @@ describe("composeLock + parseLock", () => {
         ...input,
         assets: [{ path: "policies/x.png", bytes: new Uint8Array([9]) }],
       }).build_id,
+    ).not.toBe(base);
+    // So do an index's, for the same reason.
+    expect(
+      composeLock({ ...input, indexes: [{ path: "index.md", text: "# Renamed\n" }] }).build_id,
     ).not.toBe(base);
   });
 

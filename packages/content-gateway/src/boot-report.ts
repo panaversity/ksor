@@ -15,19 +15,29 @@
  * disabled" and "abstain OFF" are the two lines that actually need to be seen.
  */
 
-/** Two-space indent, label padded so the values line up under each other. */
-const LABEL_WIDTH = 9;
+/**
+ * The column values start at, measured from the label — the two-space indent is
+ * added on top. It must stay STRICTLY GREATER than the longest label the report
+ * prints, which `boot-report.integration.test.ts` asserts against the real call
+ * sites rather than against a list someone has to remember to update.
+ */
+export const VALUE_COLUMN: number = 10;
 
 /**
- * A label longer than the column still gets a space. `padEnd` returns the
- * label unchanged when it is already too long, so a new eleven-character
- * label printed as `trust floorunverified` — one word, unreadable, and green
- * in every test because the alignment test only knew the labels that existed
- * (found live while adding the trust floor's own line).
+ * A label that does not FIT the column still gets a space. `padEnd` returns the
+ * label unchanged when it is already at or past the width, so a new
+ * eleven-character label printed as `trust floorunverified` — one word,
+ * unreadable, and green in every test because the alignment test only knew the
+ * labels that existed (found live while adding the trust floor's own line).
+ *
+ * The fit is what the width has to be one wider than, not the overrun: a label
+ * of EXACTLY the old width filled the field, took the separator branch anyway,
+ * and started its value one column right of every shorter label — aligned in
+ * the code's own terms and visibly crooked in the block (review finding 63).
  */
 export function bootLine(label: string, text: string): string {
-  const padded = label.padEnd(LABEL_WIDTH);
-  return `  ${padded}${padded === label ? " " : ""}${text}`;
+  const padded = label.padEnd(VALUE_COLUMN);
+  return `  ${padded === label ? `${label} ` : padded}${text}`;
 }
 
 export function bootHeader(corpusId: string): string {
@@ -66,15 +76,39 @@ export function withoutSdkResponseModeWarning<T>(body: () => T): T {
 }
 
 /**
- * Who may ask. `disabled` is not a neutral fact — it is the posture an operator
- * most needs to see, so it is stated in capitals with the mitigation that makes
- * it survivable (`buildAuth` refuses a non-loopback bind without auth, so the
- * only way to read this line is on a host that cannot be reached from outside).
+ * Who may ask, and — when nobody has to — WHAT THAT REACHES. `disabled` is not
+ * a neutral fact; it is the posture an operator most needs to see, so it is
+ * stated in capitals with the mitigation that makes it survivable (`buildAuth`
+ * refuses a non-loopback bind without auth, so the only way to read the plain
+ * DISABLED line is on a host that cannot be reached from outside).
+ *
+ * The viewer is an argument because the report carried both halves of this
+ * state and never their product: `KSOR_AUTH=disabled-public` printed one
+ * sentence and `KSOR_AUDIENCE=public,internal` printed another, so a door
+ * handing the internal half of the record to anonymous callers read exactly
+ * like one serving only the public half. Two green-looking lines (review
+ * finding 61).
+ *
+ * REPORTED, not refused, which is the decision this comment exists to record.
+ * Refusing would need a third variable to acknowledge the combination — and
+ * that is the shape `AuthDisabled.publicAllowed` was written to avoid: two
+ * variables that must agree to express one decision, plus a fourth combination
+ * that means nothing. Refusing WITHOUT an acknowledgement is worse: it deletes
+ * a documented capability from a private-network deployment that has no SSO,
+ * which is governance as a gate rather than a ladder (product principle 7).
+ * What was actually missing is that both facts were on the report and their
+ * product was not — and that the sentence said "the whole record" whether or
+ * not the whole record was being served, so the loud word had stopped meaning
+ * anything by the time it was true. Reversed if this combination is ever
+ * reachable WITHOUT the operator having named the restricted tier themselves —
+ * that would make it an accident, and accidents fail closed here.
  */
 export function authPosture(
   mode: "public" | "disabled",
   host: string,
   publicUnauthenticated: boolean,
+  /** What this door will serve — `ctx.viewer`'s ask, not the fail-closed placeholder. */
+  viewer: readonly string[],
 ): string {
   if (mode !== "disabled") {
     return "bearer tokens, verified against the record's authorization server";
@@ -85,9 +119,17 @@ export function authPosture(
   // can reach the port printed the reassurance meant for a loopback dev run.
   // The moment an operator most needs a loud line was the moment it lied.
   if (publicUnauthenticated) {
+    const restricted = viewer.filter((tier) => tier !== "public");
+    if (restricted.length > 0) {
+      return (
+        `UNAUTHENTICATED and bound to ${host} — KSOR_AUTH=disabled-public with ` +
+        `KSOR_AUDIENCE=${viewer.join(",")}, so the RESTRICTED half of this record ` +
+        `(${restricted.join(", ")}) is served to anyone who can reach this port`
+      );
+    }
     return (
-      `UNAUTHENTICATED and bound to ${host} — KSOR_AUTH=disabled-public is set, so ` +
-      "the whole record is served to anyone who can reach this port"
+      `UNAUTHENTICATED and bound to ${host} — KSOR_AUTH=disabled-public is set, so this ` +
+      "record's public audience is served to anyone who can reach this port"
     );
   }
   return `DISABLED — ${host} only, and a public bind will refuse to boot`;

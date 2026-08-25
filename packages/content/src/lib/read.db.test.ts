@@ -14,7 +14,8 @@ import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { contentPool, runIngest, runRead } from "../db.js";
+import { contentPool, runIngest, runRead, type DbOp } from "../db.js";
+import { WHOLE_RECORD_SCOPE } from "./audience.js";
 import { applySchema } from "../schema.js";
 import {
   documentChunks,
@@ -38,6 +39,21 @@ const PAD = " filler content well beyond the twenty-four character servable floo
 describe.runIf(adminDsn !== "")("read db acceptance", () => {
   let admin: pg.Pool;
   let pool: pg.Pool;
+
+  /**
+   * Every read in this file is entitled to the WHOLE record — these suites test
+   * resolution and denial, not audience — so the scope is STATED once here rather
+   * than on every call site. `runRead` binds no audience of its own: a read that
+   * names no viewer is served nothing (db.ts, review 2026-08-25), which is why
+   * the sentinel has to appear somewhere for these reads to see anything at all.
+   */
+  function readWhole<T>(
+    tenant: string,
+    op: DbOp<T>,
+    extra: Readonly<Record<string, string>> = {},
+  ): Promise<T> {
+    return runRead(pool, tenant, op, { ...WHOLE_RECORD_SCOPE, ...extra });
+  }
   let dbName: string;
 
   beforeAll(async () => {
@@ -173,7 +189,7 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
     pool.query("DELETE FROM takedown_denylist WHERE tenant_id = $1", [TENANT]);
 
   it("resolves an exact stable_id first", async () => {
-    const node = await runRead(pool, TENANT, (c) =>
+    const node = await readWhole(TENANT, (c) =>
       findDocument(c, scope, "handbook/onboarding/setup"),
     );
     expect(node.path, JSON.stringify(node)).toBe("handbook/onboarding/setup");
@@ -182,17 +198,15 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("a bare duplicate leaf fails loud with both shortest qualified addresses", async () => {
-    await expect(
-      runRead(pool, TENANT, (c) => findDocument(c, scope, "setup")),
-    ).rejects.toThrowError(
+    await expect(readWhole(TENANT, (c) => findDocument(c, scope, "setup"))).rejects.toThrowError(
       /ambiguous.*(onboarding\/setup.*security\/setup|security\/setup.*onboarding\/setup)/s,
     );
   });
 
   it("a path suffix disambiguates; an alias flattens inside a path address", async () => {
-    const direct = await runRead(pool, TENANT, (c) => findDocument(c, scope, "onboarding/setup"));
+    const direct = await readWhole(TENANT, (c) => findDocument(c, scope, "onboarding/setup"));
     expect(direct.stableId).toBe("handbook/onboarding/setup");
-    const viaAlias = await runRead(pool, TENANT, (c) =>
+    const viaAlias = await readWhole(TENANT, (c) =>
       findDocument(c, scope, "onboarding/getting-set-up"),
     );
     expect(viaAlias.nodeId, "alias must resolve to the same node").toBe(direct.nodeId);
@@ -200,24 +214,24 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
 
   it("an unknown slug raises the typed UnknownSlug; a draft never resolves", async () => {
     await expect(
-      runRead(pool, TENANT, (c) => findDocument(c, scope, "no-such-doc")),
+      readWhole(TENANT, (c) => findDocument(c, scope, "no-such-doc")),
     ).rejects.toBeInstanceOf(UnknownSlug);
     await expect(
-      runRead(pool, TENANT, (c) => findDocument(c, scope, "draft-doc")),
+      readWhole(TENANT, (c) => findDocument(c, scope, "draft-doc")),
     ).rejects.toBeInstanceOf(UnknownSlug);
   });
 
   it("a pin to a generation that was never published resolves nothing", async () => {
     await expect(
-      runRead(pool, TENANT, (c) =>
+      readWhole(TENANT, (c) =>
         findDocument(c, { ...scope, pinnedGeneration: 99 }, "onboarding/setup"),
       ),
     ).rejects.toBeInstanceOf(UnknownSlug);
   });
 
   it("document chunks feed the packer and reconstruct the document byte-exact", async () => {
-    const node = await runRead(pool, TENANT, (c) => findDocument(c, scope, "onboarding/setup"));
-    const chunks = await runRead(pool, TENANT, (c) => documentChunks(c, scope, node.nodeId));
+    const node = await readWhole(TENANT, (c) => findDocument(c, scope, "onboarding/setup"));
+    const chunks = await readWhole(TENANT, (c) => documentChunks(c, scope, node.nodeId));
     expect(
       chunks.map((c) => c.ordinal),
       JSON.stringify(chunks),
@@ -229,13 +243,13 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("unit tree lists distinct heading paths in curriculum order, preamble dropped", async () => {
-    const node = await runRead(pool, TENANT, (c) => findDocument(c, scope, "onboarding/setup"));
-    const tree = await runRead(pool, TENANT, (c) => unitTree(c, scope, node.nodeId));
+    const node = await readWhole(TENANT, (c) => findDocument(c, scope, "onboarding/setup"));
+    const tree = await readWhole(TENANT, (c) => unitTree(c, scope, node.nodeId));
     expect(tree).toEqual(["part-1", "part-1/deep", "part-2"]);
   });
 
   it("outline browse walks the published tree in position order, draft hidden", async () => {
-    const rows = await runRead(pool, TENANT, (c) => outline(c, scope, { depth: 2 }));
+    const rows = await readWhole(TENANT, (c) => outline(c, scope, { depth: 2 }));
     expect(
       rows.map((r) => r.headingPath),
       JSON.stringify(rows),
@@ -254,7 +268,7 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("outline drill-down re-bases to root-absolute and carries the permalink (column 8)", async () => {
-    const rows = await runRead(pool, TENANT, (c) =>
+    const rows = await readWhole(TENANT, (c) =>
       outline(c, scope, { root: "onboarding", depth: 1 }),
     );
     expect(rows.length, JSON.stringify(rows)).toBe(1); // children only; draft hidden
@@ -267,25 +281,25 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("outline accepts the very path addresses it emits", async () => {
-    const rows = await runRead(pool, TENANT, (c) =>
+    const rows = await readWhole(TENANT, (c) =>
       outline(c, scope, { root: "handbook/onboarding", depth: 1 }),
     );
     expect(rows[0]?.headingPath).toBe("handbook/onboarding/setup");
   });
 
   it("outline of a leaf yields []; an unknown node is loud", async () => {
-    const rows = await runRead(pool, TENANT, (c) =>
+    const rows = await readWhole(TENANT, (c) =>
       outline(c, scope, { root: "onboarding/setup", depth: 1 }),
     );
     expect(rows).toEqual([]);
     await expect(
-      runRead(pool, TENANT, (c) => outline(c, scope, { root: "no-such-node" })),
+      readWhole(TENANT, (c) => outline(c, scope, { root: "no-such-node" })),
     ).rejects.toThrowError(/no node with slug/);
   });
 
   it("an ambiguous outline anchor is refused, never silently merged", async () => {
     await expect(
-      runRead(pool, TENANT, (c) => outline(c, scope, { root: "setup" })),
+      readWhole(TENANT, (c) => outline(c, scope, { root: "setup" })),
     ).rejects.toThrowError(/ambiguous/);
   });
 
@@ -294,15 +308,15 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
     try {
       // stable_id-exact arm (oracle self-review A1: this arm once missed the predicate)
       await expect(
-        runRead(pool, TENANT, (c) => findDocument(c, scope, "handbook/onboarding/setup")),
+        readWhole(TENANT, (c) => findDocument(c, scope, "handbook/onboarding/setup")),
       ).rejects.toBeInstanceOf(UnknownSlug);
       // slug arm — the sibling under security still resolves uniquely
-      const survivor = await runRead(pool, TENANT, (c) => findDocument(c, scope, "setup"));
+      const survivor = await readWhole(TENANT, (c) => findDocument(c, scope, "setup"));
       expect(survivor.stableId, "denial must leave the sibling resolvable").toBe(
         "handbook/security/setup",
       );
       // outline arm
-      const rows = await runRead(pool, TENANT, (c) => outline(c, scope, { depth: 2 }));
+      const rows = await readWhole(TENANT, (c) => outline(c, scope, { depth: 2 }));
       expect(rows.map((r) => r.headingPath)).not.toContain("handbook/onboarding/setup");
     } finally {
       await undeny();
@@ -311,11 +325,11 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
 
   it("RLS fails closed: an unknown tenant resolves nothing, not an error", async () => {
     await expect(
-      runRead(pool, "globex", (c) =>
+      readWhole("globex", (c) =>
         findDocument(c, { ...scope, tenantId: "globex" }, "onboarding/setup"),
       ),
     ).rejects.toBeInstanceOf(UnknownSlug);
-    const rows = await runRead(pool, "globex", (c) =>
+    const rows = await readWhole("globex", (c) =>
       outline(c, { ...scope, tenantId: "globex" }, { depth: 2 }),
     );
     expect(rows).toEqual([]);

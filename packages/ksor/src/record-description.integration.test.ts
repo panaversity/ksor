@@ -55,7 +55,15 @@ function describeRecord(instanceMd: string): string {
   mkdirSync(path.join(dir, "lib"));
   mkdirSync(path.join(dir, "record"));
   mkdirSync(path.join(dir, "node_modules"));
-  for (const rel of ["lib/shared.ts", "lib/governance.ts", "record/frontmatter.ts"]) {
+  for (const rel of [
+    "lib/shared.ts",
+    "lib/governance.ts",
+    "record/frontmatter.ts",
+    // The splitter's YAML shape rules moved out into their own module; a copy
+    // list that names files is a list that has to be kept, and a missing one
+    // fails as ERR_MODULE_NOT_FOUND naming a temp directory rather than a rule.
+    "record/yaml-file.ts",
+  ]) {
     writeFileSync(
       path.join(dir, rel),
       readFileSync(path.join(SITE, rel), "utf8").replace(RELATIVE_IMPORT, "$1$2.ts$4"),

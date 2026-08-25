@@ -54,17 +54,50 @@ export const NO_GOVERNANCE: NodeGovernance = {
 };
 
 export function trustTierNumber(tier: TrustTier): 0 | 1 | 2 {
-  return TRUST_TIERS.indexOf(tier) as 0 | 1 | 2;
+  const index = TRUST_TIERS.indexOf(tier);
+  // `indexOf(...) as 0 | 1 | 2` returned -1 for a tier the vocabulary does not
+  // hold, wearing a type that says it cannot — and -1 lands in
+  // `content_nodes.trust_tier` as a number below the floor, which no reader
+  // interprets and no query filters on. The tier is derived, never authored,
+  // so an unknown one is a bug upstream rather than a value to store.
+  if (index === -1) {
+    throw new Error(
+      `unknown trust tier ${JSON.stringify(tier)} — expected ${TRUST_TIERS.join(" | ")}`,
+    );
+  }
+  return index as 0 | 1 | 2;
 }
 
 const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
 const act = (a: { readonly by: string; readonly at: number } | null): Act | null =>
   a === null ? null : { by: a.by, at: new Date(a.at).toISOString() };
 
+/**
+ * `generated.by` as the document declared it, or null when it declared no
+ * mapping at all.
+ *
+ * The profile requires `by` to be an actor, so a mapping without one cannot
+ * reach here through `parseConcept` — but `governanceOf` takes a `Concept`,
+ * which is an interface, and what the projection used to write in that state
+ * was `String(undefined)`: a producer named `undefined`, on the column that
+ * records WHO (decision 21). Fabricating an attributor is worse than stopping,
+ * and dropping the key silently would report an absence the document did not
+ * declare, so the unattributable mapping refuses out loud.
+ */
+function generatedBy(concept: Concept): string | null {
+  const generated = concept.frontmatter["generated"];
+  if (typeof generated !== "object" || generated === null) return null;
+  const by = (generated as Record<string, unknown>)["by"];
+  if (typeof by === "string") return by;
+  throw new Error(
+    `${concept.path}: \`generated.by\` is ${by === undefined ? "absent" : typeof by}, not an actor — the profile refuses this, so the concept did not come through it`,
+  );
+}
+
 /** The projection of a parsed concept — the frontmatter the profile validated, nothing re-read. */
 export function governanceOf(concept: Concept): NodeGovernance {
   const fm = concept.frontmatter;
-  const generated = fm["generated"];
+  const by = generatedBy(concept);
   const sources = fm["sources"];
   return {
     audience: [...concept.audience],
@@ -72,13 +105,7 @@ export function governanceOf(concept: Concept): NodeGovernance {
     owner: concept.owner,
     sources: Array.isArray(sources) ? (sources as Readonly<Record<string, unknown>>[]) : null,
     verified: concept.verified.length === 0 ? null : concept.verified.map((v) => act(v)!),
-    generated:
-      typeof generated === "object" && generated !== null
-        ? {
-            by: String((generated as Record<string, unknown>)["by"]),
-            at: iso(concept.generatedAt),
-          }
-        : null,
+    generated: by === null ? null : { by, at: iso(concept.generatedAt) },
     approval: act(concept.approval),
     deprecated: act(concept.deprecated),
     effectiveFrom: iso(concept.effectiveFrom),

@@ -20,9 +20,10 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import { Document, isCollection } from "yaml";
+
 import {
   formatRefusal,
-  isIndividualActor,
   loadRecord,
   parseInstant,
   parsePolicy,
@@ -34,8 +35,14 @@ import {
 
 import { exitCodes } from "../index.js";
 import { applyProse, type PackageManager } from "../init/manager.js";
+import { ACTOR_FORM, isWritableActor } from "./actor.js";
 import { DenialReadError, readDbDenials, type DbDenial } from "./denials.js";
-import { renderLedger, toLedgerEntries, type LedgerDenial } from "./ledger-out.js";
+import {
+  renderLedger,
+  toLedgerEntries,
+  type LedgerDenial,
+  type ReservedFate,
+} from "./ledger-out.js";
 import { renderDiff, type FileChange } from "./diff.js";
 import {
   instanceNameOf,
@@ -98,6 +105,12 @@ interface Parsed {
   readonly attributions: ReadonlyMap<string, string>;
 }
 
+/** A rejected value is quoted back to the operator; an unbounded one is not printed whole. */
+function cap(value: string): string {
+  const oneLine = value.replace(/[\r\n\u2028\u2029]/g, "\u23ce");
+  return oneLine.length > 80 ? `${oneLine.slice(0, 80)}\u2026` : oneLine;
+}
+
 function parseArgs(args: readonly string[]): Parsed | string {
   let instance: string | null = null;
   let write = false;
@@ -121,8 +134,13 @@ function parseArgs(args: readonly string[]): Parsed | string {
         // authorising nobody, and `--actor "human:jane, human:john"` rendered
         // as TWO authorities, granting approval to an identity the operator
         // never named. Both exited 0. Reproduced live, 2026-08-25.
-        if (!isIndividualActor(value)) {
-          return `${arg} must name ONE person or process — \`human:<id>\` or \`process:<id>\`, no spaces or commas — got "${value}"`;
+        //
+        // `isIndividualActor` was then applied here and closed those two and
+        // not the rest: its id is `\S+`, so `human:a]`, `human:a,b`, `human:a#c`
+        // and `human:"a"` all passed it and went on to be interpolated into a
+        // YAML flow sequence. `isWritableActor` is the WRITING rule (actor.ts).
+        if (!isWritableActor(value)) {
+          return `${arg} must name ONE individual — ${ACTOR_FORM} — got "${cap(value)}"`;
         }
         if (arg === "--actor") actor = value;
         else approveBy = value;
@@ -134,9 +152,16 @@ function parseArgs(args: readonly string[]): Parsed | string {
       } else {
         const at = value.indexOf("=");
         if (at <= 0 || at === value.length - 1) {
-          return `--attribute is <stable_id>=<actor>, got "${value}"`;
+          return `--attribute is <stable_id>=<actor>, got "${cap(value)}"`;
         }
-        attributions.set(value.slice(0, at), value.slice(at + 1));
+        // The half after `=` is an actor like any other, and it lands in the
+        // ledger AND in the policy's `takedown_authorities`. It was the one
+        // actor seam with no validation at all.
+        const asserted = value.slice(at + 1);
+        if (!isWritableActor(asserted)) {
+          return `--attribute names the actor who denied a document — ${ACTOR_FORM} — got "${cap(asserted)}"`;
+        }
+        attributions.set(value.slice(0, at), asserted);
       }
     } else if (arg === "--write") write = true;
     else if (arg === "--write-site") writeSite = true;
@@ -255,6 +280,8 @@ export async function runMigrate(
   const conceptIds = new Set<string>();
   /** Reserved-name targets THIS run has already claimed, so two sources cannot share one. */
   const claimed = new Map<string, string>();
+  /** What became of every reserved name walked, for the denials that name one. */
+  const fate = new Map<string, "moved" | "kept">();
   /** Concept id → path, for every `approved` document this run turns into a `draft`. */
   const demoted = new Map<string, string>();
   /** Every `ksor.superseded_by` this run would write, by the document writing it. */
@@ -266,14 +293,25 @@ export async function runMigrate(
     if (COMPANION.test(name)) {
       if (!name.endsWith(".summary.md")) continue;
       const out = migrateSummary(rel, text);
-      if (out.ok && out.outcome.changed) {
+      // Its refusals were DROPPED here, so a summary declaring governance was
+      // silently left alone by the one branch that had just decided to refuse
+      // it — the whole point of decision 24's class refusal, discarded one line
+      // after it was raised.
+      if (!out.ok) refusals.push(...out.refusals);
+      else if (out.outcome.changed) {
         changes.push({ path: rel, before: text, after: out.outcome.text });
       }
       continue;
     }
     let target = rel;
     if (RESERVED.has(name)) {
-      if (isGeneratedIndex(text, rel)) continue;
+      const reservedId = rel.replace(/\.md$/, "");
+      if (isGeneratedIndex(text, rel)) {
+        // Left exactly where it is: `ksor build` regenerates it, and it carries
+        // no prose to move. A denial that names it has nothing to follow.
+        fate.set(reservedId, "kept");
+        continue;
+      }
       const dir = rel.slice(0, rel.lastIndexOf("/"));
       target = `${dir}/overview.md`;
       if (record.files.has(target)) {
@@ -305,6 +343,7 @@ export async function runMigrate(
         continue;
       }
       claimed.set(target, rel);
+      fate.set(reservedId, "moved");
     }
     const out = migrateConcept(target, text, generatedAtOf(root, rel, parsed.generatedAt), ctx);
     if (!out.ok) {
@@ -354,7 +393,7 @@ export async function runMigrate(
   const hadLedger = record.files.has(".ksor/takedowns.yaml");
   const denials = hadLedger
     ? []
-    : await collectDenials(identity, oldFm, parsed.attributions, refusals, io);
+    : await collectDenials(identity, oldFm, parsed.attributions, fate, refusals, io);
   const takedownActors = new Set<string>(denials.map((d) => d.by));
   if (denials.length > 0) {
     changes.push({
@@ -463,6 +502,7 @@ async function collectDenials(
   identity: InstanceNameResult,
   fm: Readonly<Record<string, unknown>>,
   attributions: ReadonlyMap<string, string>,
+  fate: ReservedFate,
   refusals: Refusal[],
   io: MigrateIo,
 ): Promise<readonly LedgerDenial[]> {
@@ -510,7 +550,7 @@ async function collectDenials(
     return [];
   }
   io.err(`read ${rows.length} denylist row(s) from ${dsnEnv}\n`);
-  const outcome = toLedgerEntries(rows, attributions);
+  const outcome = toLedgerEntries(rows, attributions, fate);
   refusals.push(...outcome.refusals);
   return outcome.entries;
 }
@@ -562,23 +602,64 @@ function renderPolicy(input: PolicyInput): string | null {
     });
     return null;
   }
-  const lines = [
-    "# The Governance Policy: who has authority over this record (record spec §4).",
-    "# Written by `ksor migrate` from the actors it was given; review it before merging.",
-    'version: "0.1"',
-  ];
-  if (input.registry.length > 0) {
-    lines.push("audiences:");
-    for (const a of input.registry) {
-      lines.push(`  ${a}:`, `    description: Migrated from the record's \`audiences:\` model.`);
-    }
-  }
-  lines.push("approval_authorities:", `  - actors: [${approvers.join(", ")}]`);
   const takedown = [
     ...new Set([...input.takedownActors, ...(input.actor === null ? [] : [input.actor])]),
   ];
-  lines.push("takedown_authorities:", `  actors: [${takedown.join(", ")}]`);
-  return `${lines.join("\n")}\n`;
+  const audiences: Record<string, unknown> = {};
+  for (const a of input.registry) {
+    audiences[a] = { description: "Migrated from the record's `audiences:` model." };
+  }
+  // Built as a DOCUMENT and stringified, never interpolated. `actors:
+  // [${xs.join(", ")}]` is only YAML while nothing in `xs` is an indicator, and
+  // an actor is a string this tool did not write: `human:a]` closed the
+  // sequence, `human:a,b` became two authorities, `human:a#c` commented the
+  // rest of the line out. The seams now refuse those (actor.ts), and this makes
+  // the refusal the only thing standing between them and a broken file rather
+  // than the last thing (decision 26: the record is real YAML, one parser —
+  // written by that parser too).
+  const doc = new Document(
+    {
+      version: "0.1",
+      ...(input.registry.length > 0 ? { audiences } : {}),
+      approval_authorities: [{ actors: [...approvers] }],
+      takedown_authorities: { actors: [...takedown] },
+    },
+    // Two authority lists with the same members are the COMMON case, and
+    // `yaml` would otherwise emit the second as `*a1` — legal, and unreadable
+    // in the one file a human is being asked to review.
+    { aliasDuplicateObjects: false },
+  );
+  // (named `at`, not `path`: `path` is the node:path import in this module)
+  for (const at of [
+    ["approval_authorities", 0, "actors"],
+    ["takedown_authorities", "actors"],
+  ]) {
+    const node: unknown = doc.getIn(at, true);
+    if (isCollection(node)) node.flow = true;
+  }
+  doc.commentBefore = [
+    " The Governance Policy: who has authority over this record (record spec §4).",
+    " Written by `ksor migrate` from the actors it was given; review it before merging.",
+  ].join("\n");
+  const text = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
+
+  // Read back what was written, with the record's OWN reader, before it is
+  // offered as a change. This is the posture decision 23 records for the
+  // served tool surface: hand the rendering over, then refuse to proceed on a
+  // state that breaks it. Nothing should be able to reach here and fail — and
+  // that is exactly the claim worth checking on the file that decides who may
+  // approve and who may take down.
+  const readBack = parsePolicy(text, ".ksor/governance.yaml");
+  if (!readBack.ok) {
+    input.refusals.push({
+      slug: "ksor-migrate-underivable",
+      path: ".ksor/governance.yaml",
+      why: `migrate rendered a policy its own reader will not accept (${readBack.refusals[0]?.why ?? "unknown"}) — it will not write a governance file the record refuses`,
+      fix: `re-run with plainer actors than ${JSON.stringify([...approvers, ...takedown])}, and report this: an actor that passed the argument guard should never render an unreadable policy`,
+    });
+    return null;
+  }
+  return text;
 }
 
 /** Every spelling of "ignore the whole `.ksor` directory" a pre-profile scaffold carried. */
@@ -690,8 +771,32 @@ function manifestChange(root: string): FileChange | null {
         ? stripped.replace(/^.*?export-denylist\s*&&\s*/, "ksor build && ")
         : stripped;
   }
-  const after = `${JSON.stringify({ ...manifest, scripts: next }, null, 2)}\n`;
+  // The manifest is the ADOPTER's file, formatted the way their repository is.
+  // Re-emitting it at a fixed two spaces rewrote every line of a 4-space or
+  // tab-indented one, so the single script this actually changes arrived as an
+  // unreviewable whole-file hunk — and their next formatter run reverted it.
+  // The indentation and the line endings are read off the bytes; nothing else
+  // about the file's shape is ours to preserve, because a structured rewrite is
+  // the point (a half-applied string edit would still parse, and then lie).
+  const rendered = JSON.stringify({ ...manifest, scripts: next }, null, indentOf(before));
+  // `JSON.stringify` emits LF only, so a CRLF manifest came back with every
+  // line ending changed — the same unreadable whole-file hunk by another route.
+  // Only structural newlines are real here: one inside a string value is
+  // already escaped as the two characters `\n`.
+  const eol = before.includes("\r\n") ? "\r\n" : "\n";
+  const after = `${rendered.replaceAll("\n", eol)}${/\r?\n$/.test(before) ? eol : ""}`;
   return before === after ? null : { path: "package.json", before, after };
+}
+
+/** The indentation the adopter's manifest is written in: their string, or none when it is minified. */
+function indentOf(json: string): string | number {
+  const indent = /\n([ \t]+)\S/.exec(json)?.[1];
+  // No indented member at all: either minified, or one line. Re-indenting it
+  // would be the rewrite this exists to avoid, so it stays as it is.
+  if (indent === undefined) return json.includes("\n") ? 2 : 0;
+  // `JSON.stringify` caps a string indent at 10 characters and ignores one
+  // built of anything else, so a value it would not honour is not offered to it.
+  return indent.length <= 10 && /^( +|\t+)$/.test(indent) ? indent : 2;
 }
 
 /** What a text file of the template is; the site's icon has no diff to review. */
