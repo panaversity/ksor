@@ -78,6 +78,9 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
   const assets = record.assets ?? new Map<string, Uint8Array>();
 
   // ── the bundle: concepts, companions, reserved names ───────────────────
+  // A document that fails to parse is not a concept, so the indexes generated
+  // below are the indexes of a DIFFERENT tree — see the staleness block.
+  let dropped = false;
   const concepts = new Map<string, Concept>();
   const bodies = new Map<string, string>();
   for (const path of paths) {
@@ -98,11 +101,13 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     const split = splitFrontmatter(text, path);
     if (!split.ok) {
       refusals.push(split.refusal);
+      dropped = true;
       continue;
     }
     const parsed = parseConcept(path, split.frontmatter ?? {});
     if (!parsed.ok) {
       refusals.push(...parsed.refusals);
+      dropped = true;
       continue;
     }
     concepts.set(parsed.concept.id, parsed.concept);
@@ -191,7 +196,14 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     if (policy !== null) checkAgainstPolicy(concept, policy, refusals);
   }
 
-  if (options.mode === "check") {
+  // Staleness is only answerable when every document parsed. A refused document
+  // is not a concept, so its directory generates a different index or none at
+  // all, and comparing against that produced one extra refusal per affected
+  // directory AND per ancestor — each prescribing "run `ksor build`", which
+  // refuses on the real error and writes nothing, and each saying of a correct
+  // index that it belongs to "a directory that earns none". One bad document,
+  // one problem; fix it and the next run answers this honestly.
+  if (options.mode === "check" && !dropped) {
     const expected = new Set(indexes.keys());
     const committed = paths.filter((p) => p.startsWith(KNOWLEDGE) && p.endsWith("/index.md"));
     for (const path of new Set([...expected, ...committed])) {

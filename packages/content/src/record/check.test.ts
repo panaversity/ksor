@@ -485,3 +485,68 @@ describe("checkRecord — every link target is judged, not only a concept", () =
     ).toEqual([]);
   });
 });
+
+/**
+ * One bad document used to produce a CASCADE of `ksor-index-stale` refusals.
+ * A refused document is not a concept, so its directory generates a different
+ * index (or none), and the staleness comparison — which runs over the concepts
+ * that PARSED — reported every affected directory and every ancestor. Their
+ * printed fix ("run `ksor build`, which regenerates every index, and commit the
+ * result") cannot be applied: `ksor build` refuses on the real error and writes
+ * nothing. Worse, when the refused document was the directory's only one, the
+ * why-line said "an index exists for a directory that earns none" about an
+ * index that is correct.
+ */
+describe("checkRecord — a refused document produces ONE problem, not a cascade", () => {
+  const good = doc("Returns", PUBLIC);
+  const typo = good.replace("ksor:", "ksor:\n  effective-from: 2026-01-01T00:00:00Z");
+  const indexes = (files: Record<string, string>): Map<string, string> =>
+    checkRecord(record(files, ["knowledge/policies"]), { mode: "build" }).indexes;
+
+  it("the green record checks clean, indexes and all", () => {
+    const files = { "knowledge/policies/returns.md": good };
+    const generated = indexes(files);
+    expect(
+      slugs(
+        {
+          ...files,
+          "knowledge/index.md": generated.get("knowledge/index.md") ?? "",
+          "knowledge/policies/index.md": generated.get("knowledge/policies/index.md") ?? "",
+        },
+        ["knowledge/policies"],
+        "check",
+      ),
+    ).toEqual([]);
+  });
+
+  it("one frontmatter typo yields one refusal — and never an index instruction that cannot be run", () => {
+    const generated = indexes({ "knowledge/policies/returns.md": good });
+    const out = slugs(
+      {
+        "knowledge/policies/returns.md": typo,
+        "knowledge/index.md": generated.get("knowledge/index.md") ?? "",
+        "knowledge/policies/index.md": generated.get("knowledge/policies/index.md") ?? "",
+      },
+      ["knowledge/policies"],
+      "check",
+    );
+    expect(out).toEqual(["ksor-ksor-key-unknown knowledge/policies/returns.md"]);
+  });
+
+  it("a genuinely stale index is still refused when every document parses", () => {
+    expect(
+      slugs(
+        {
+          "knowledge/policies/returns.md": good,
+          "knowledge/index.md": "# Wrong\n",
+          "knowledge/policies/index.md": "# Wrong\n",
+        },
+        ["knowledge/policies"],
+        "check",
+      ),
+    ).toEqual([
+      "ksor-index-stale knowledge/index.md",
+      "ksor-index-stale knowledge/policies/index.md",
+    ]);
+  });
+});
