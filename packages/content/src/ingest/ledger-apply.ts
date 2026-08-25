@@ -3,15 +3,22 @@
  *
  * `.ksor/takedowns.yaml` is the HISTORY; `takedown_denylist` is the STATE, one
  * row per stable_id. Applying the ledger folds the entries in file order into
- * the state each stable_id ends in — the latest denial that names it, and
- * whether a revocation followed — and upserts exactly that. So applying is
- * idempotent by construction (the same ledger folds to the same state), a
- * re-denial after a revocation updates the row's `ledger_id` and clears the
- * revocation, a revocation sets `revoked_ledger_id` / `revoked_at` on the row
- * its `revokes` names, an amendment changes no row (it records the FILE's
- * expected state), rows are never deleted, and a pre-existing unledgered row —
- * written before the ledger existed — gets its `ledger_id` attached by the
- * stable_id match.
+ * the state each stable_id ends in — the latest IN-FORCE denial that names it,
+ * or, when none is in force, the latest denial and the revocation that lifted
+ * it — and upserts exactly that. So applying is idempotent by construction (the
+ * same ledger folds to the same state), a re-denial after a revocation updates
+ * the row's `ledger_id` and clears the revocation, a revocation sets
+ * `revoked_ledger_id` / `revoked_at` on the row its `revokes` names, an
+ * amendment changes no row (it records the FILE's expected state), rows are
+ * never deleted, and a pre-existing unledgered row — written before the ledger
+ * existed — gets its `ledger_id` attached by the stable_id match.
+ *
+ * WHICH DENIALS ARE LIVE IS `inForce`'S ANSWER, not a second one. The fold used
+ * to key its own state by stable_id, last denial wins — so a stable_id carrying
+ * TWO denials with only the newer revoked came out revoked here while `inForce`
+ * (which keys by ENTRY id) still held the older one. The site kept the document
+ * withdrawn and this fold cleared `revoked_at`, so the door served it: decision
+ * 19's forbidden state, reached by two functions answering one question.
  *
  * Direction is file → database, always: the verb writes the entry first and
  * the row second, and ingest re-derives the rows from the merged file.
@@ -19,6 +26,7 @@
 import type pg from "pg";
 
 import type { ContentInstance } from "../instance.js";
+import { inForce } from "../record/ledger.js";
 import type { Denial, Ledger } from "../record/ledger.js";
 
 export interface DenialState {
@@ -30,22 +38,29 @@ export interface DenialState {
 
 /** The state each denied stable_id ends in after the whole ledger, in first-seen order. */
 export function foldLedger(ledger: Ledger): DenialState[] {
-  const byEntry = new Map<string, DenialState>();
-  const byStableId = new Map<string, string>();
+  const live = new Set(inForce(ledger).map((d) => d.id));
+  const revocations = new Map<string, { readonly id: string; readonly at: string }>();
   for (const entry of ledger.entries) {
-    if (entry.kind === "denial") {
-      const state: DenialState = { stableId: entry.stableId, denial: entry, revokedBy: null };
-      byEntry.set(entry.id, state);
-      byStableId.set(entry.stableId, entry.id);
-    } else if (entry.kind === "revocation") {
-      const target = byEntry.get(entry.revokes);
-      if (target !== undefined) {
-        byEntry.set(entry.revokes, { ...target, revokedBy: { id: entry.id, at: entry.at } });
-      }
-    }
-    // an amendment marks the FILE's expected state; the row is unchanged
+    if (entry.kind === "revocation") revocations.set(entry.revokes, { id: entry.id, at: entry.at });
   }
-  return [...byStableId.values()].map((id) => byEntry.get(id)!);
+
+  const byStableId = new Map<string, DenialState>();
+  for (const entry of ledger.entries) {
+    if (entry.kind !== "denial") continue;
+    const standing = live.has(entry.id);
+    const current = byStableId.get(entry.stableId);
+    // A stable_id is denied while ANY denial naming it is in force, so a revoked
+    // later entry must not overwrite an earlier one that still stands.
+    if (current !== undefined && current.revokedBy === null && !standing) continue;
+    byStableId.set(entry.stableId, {
+      stableId: entry.stableId,
+      denial: entry,
+      // `inForce` drops a denial only on revocation, so a denial that is not
+      // live has a revocation naming it.
+      revokedBy: standing ? null : (revocations.get(entry.id) ?? null),
+    });
+  }
+  return [...byStableId.values()];
 }
 
 export interface LedgerApplyReport {

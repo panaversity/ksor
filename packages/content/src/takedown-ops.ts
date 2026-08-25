@@ -70,8 +70,12 @@ export async function listTakedowns(
 ): Promise<TakedownRow[]> {
   return runRead(pool, instance.tenantId, async (client) => {
     const result = await client.query(
+      // `revoked_at IS NULL` is what `lib/takedown.ts` reads, and this is the
+      // operator's own view of the same state: a revoked row is denied nowhere,
+      // so listing it reports a withdrawal that no surface is enforcing.
       "SELECT stable_id, scope, reason, created_at FROM takedown_denylist" +
-        " WHERE tenant_id = $1 AND corpus_id = $2 ORDER BY created_at, stable_id",
+        " WHERE tenant_id = $1 AND corpus_id = $2 AND revoked_at IS NULL" +
+        " ORDER BY created_at, stable_id",
       [instance.tenantId, instance.corpusId],
     );
     return result.rows.map((r: Record<string, unknown>) => ({

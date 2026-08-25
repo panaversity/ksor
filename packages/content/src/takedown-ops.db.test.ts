@@ -71,6 +71,33 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
     ]);
   });
 
+  /**
+   * `--list` is the operator's own check on what is denied, so it must read the
+   * SAME state the serving predicate does: a row whose `revoked_at` is set is
+   * not denied anywhere else, and reporting it here made the duplicate-denial
+   * leak look like correct behaviour instead of surfacing it.
+   */
+  it("a revoked row is not listed — the list is what is IN FORCE", async () => {
+    const revoked = parseLedger(
+      LEDGER +
+        `- id: "2026-08-25T11:00:00Z-bbb222"\n  revokes: "2026-08-25T10:00:00Z-aaa111"\n` +
+        `  by: "human:ciso"\n  at: "2026-08-25T11:00:00Z"\n`,
+      ".ksor/takedowns.yaml",
+    );
+    if (!revoked.ok) throw new Error(JSON.stringify(revoked.refusals));
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, revoked.ledger));
+    expect(await listTakedowns(pool, instance)).toEqual([]);
+    const row = await pool.query(
+      "SELECT revoked_at FROM takedown_denylist WHERE tenant_id = $1 AND stable_id = $2",
+      [TENANT, "knowledge/withdrawn"],
+    );
+    expect(row.rows[0]?.revoked_at, "the row stays — only the denial lifts").not.toBeNull();
+    // Put the record back the way the rest of this file expects it.
+    const again = parseLedger(LEDGER, ".ksor/takedowns.yaml");
+    if (!again.ok) throw new Error(JSON.stringify(again.refusals));
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, again.ledger));
+  });
+
   it("the §7 act is readable, and names the LEDGER's actor rather than whoever ran the apply", async () => {
     const rows = await readLedger(pool, instance, 10);
     const act = rows.find((r) => r.action === "takedown_applied");
