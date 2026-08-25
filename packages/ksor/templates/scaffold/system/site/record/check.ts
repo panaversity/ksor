@@ -38,7 +38,8 @@ export interface CheckOptions {
   /** `check` is read-only and refuses a stale index; `build` regenerates and never does. */
   readonly mode: "check" | "build";
   /** What the ledger must still contain, entry by entry (git history, the committed lock). */
-  readonly ledgerBaselines?: readonly LedgerBaseline[];
+  /** Required, not optional: a caller that forgets these silently gets the STRICT rule, which is how ingest came to refuse a departed authority the site had published. */
+  readonly ledgerBaselines: readonly LedgerBaseline[];
 }
 
 export interface CheckResult {
@@ -273,12 +274,12 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
     // used to omit them — two arguments, so `baselines` took its default and the
     // accepted set was always empty, while `options.ledgerBaselines` sat right
     // here and was forwarded to `checkLedgerAppendOnly` one line below. The
-    // parameter is required now, so the next caller that forgets does not
-    // compile instead of quietly getting the strict rule.
+    // BOTH the parameter and `CheckOptions.ledgerBaselines` are required now,
+    // so a caller that forgets does not compile. Requiring only the inner
+    // parameter left the public seam optional, and the next caller did forget:
+    // ingest passed `{ mode: "build" }` and got the strict rule in silence.
     if (policy !== null) {
-      refusals.push(
-        ...checkLedgerActors(ledger, policy.takedownActors, options.ledgerBaselines ?? []),
-      );
+      refusals.push(...checkLedgerActors(ledger, policy.takedownActors, options.ledgerBaselines));
     }
     refusals.push(
       ...checkLedgerAgainstTree(ledger, {
@@ -286,7 +287,7 @@ export function checkRecord(record: RecordFiles, options: CheckOptions): CheckRe
         dirs: new Set(dirs),
       }),
     );
-    refusals.push(...checkLedgerAppendOnly(ledger, options.ledgerBaselines ?? []));
+    refusals.push(...checkLedgerAppendOnly(ledger, options.ledgerBaselines));
   }
 
   return {
