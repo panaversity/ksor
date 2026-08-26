@@ -59,7 +59,16 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 > **KSoR is an open knowledge infrastructure framework that makes governed knowledge usable by people, AI agents, and other knowledge systems without giving any one vendor ownership of the record.**
 
-**New to the idea?** [**KSoR in eight concepts**](https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing) is a 17-slide walkthrough that follows a single hospital through the eight ideas behind a Knowledge System of Record: one authoritative record, what belongs in it, provenance, the governance boundary, abstention, citation, how new knowledge gets approved, and the many open projections that read it. Plain language, no code — the deck to open when you are introducing KSoR to a team.
+<p align="center">
+  <a href="https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing">
+    <img src="https://raw.githubusercontent.com/panaversity/ksor/main/slides-ksor-8-concepts.png" alt="KSoR in eight concepts — title slide: One Book Everyone Must Follow" width="90%">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing">KSoR in eight concepts →</a></strong><br>
+  17 slides, one hospital, plain language, no code. One authoritative record, what belongs in it, provenance, the governance boundary, abstention, citation, how new knowledge gets approved, and the many open projections that read it — the deck to open when you are introducing KSoR to a team.
+</p>
 
 ---
 
