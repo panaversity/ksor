@@ -87,11 +87,18 @@ import { envFloat, envInt } from "../env.js";
 
 export { envFloat, envInt };
 
-export const EMBED_TIMEOUT_S: number = envFloat("KSOR_EMBED_TIMEOUT_S", 60.0, 1.0);
+// Read at USE, never bound to a module-scope const: every static import
+// evaluates before `loadDotEnv()` runs inside `main()`, so a module-load read
+// froze the default and silently ignored a value set in `.env` (kernel review
+// finding A2). Both call sites are inside `buildShippedProvider`, which every
+// composition root builds through after `main()` has loaded the env.
+/** The per-request HTTP timeout for a document (ingest/batch) embed. */
+export const EMBED_TIMEOUT_S = (): number => envFloat("KSOR_EMBED_TIMEOUT_S", 60.0, 1.0);
 /** Oracle env var: SOR_QUERY_EMBED_TIMEOUT_S. Note: query-embed.ts reads the
  * SAME variable with a different default (5.0) as its hard wall clock — two
  * deliberate reads, carried from the oracle (embedding.py:62 vs query_embed.py:44). */
-export const QUERY_EMBED_TIMEOUT_S: number = envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 10.0, 1.0);
+export const QUERY_EMBED_TIMEOUT_S = (): number =>
+  envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 10.0, 1.0);
 
 // ---------------------------------------------------------------------------
 // Pure helpers (eval-locked; the embed_input recipe won the bake-off —

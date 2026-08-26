@@ -115,7 +115,7 @@ export function buildShippedProvider(
     dim: opts.dim ?? EMBED_DIM,
     documentTaskLabel: EMBED_TASK_DOCUMENT,
     queryTaskLabel: EMBED_TASK_QUERY,
-    documentTimeoutS: EMBED_TIMEOUT_S,
-    queryTimeoutS: QUERY_EMBED_TIMEOUT_S,
+    documentTimeoutS: EMBED_TIMEOUT_S(),
+    queryTimeoutS: QUERY_EMBED_TIMEOUT_S(),
   });
 }

@@ -37,9 +37,19 @@ import type { EmbeddingProvider } from "./embedding.js";
 // Each L1 entry is a ~1536-float pgvector literal (~25 KB), so 10k entries
 // ≈ 250 MB — the dominant in-process footprint. Env-tunable (fail-soft) so
 // an operator can shrink it to fit a smaller memory allocation.
+//
+// Read LAZILY and memoized, never at module load: static imports evaluate
+// before `loadDotEnv()` runs in `main()`, so a module-load read ignored every
+// `.env` value (kernel review finding A2 — an adopter who set this to fit a
+// small runtime still got the 250 MB default and could OOM). `_testing.reset()`
+// clears the memo.
 /** Oracle env var: SOR_EMBED_CACHE_MAX. */
-const CACHE_MAX_INITIAL: number = envInt("KSOR_EMBED_CACHE_MAX", 10000, 1);
-let cacheMax: number = CACHE_MAX_INITIAL;
+let memoizedCacheMax: number | undefined;
+/** A `_testing.setCacheMax()` override; `undefined` = follow the env-derived value. */
+let cacheMaxOverride: number | undefined;
+function currentCacheMax(): number {
+  return cacheMaxOverride ?? (memoizedCacheMax ??= envInt("KSOR_EMBED_CACHE_MAX", 10_000, 1));
+}
 
 export const BREAKER_COOLDOWN_S = 10.0;
 
@@ -49,8 +59,9 @@ export const BREAKER_COOLDOWN_S = 10.0;
 // both (oracle E2E review SB8). Deliberately the SAME env var embedding.ts
 // reads with default 10.0 as the per-request HTTP timeout — two reads, two
 // defaults, carried from the oracle (query_embed.py:44 vs embedding.py:62).
-/** Oracle env var: SOR_QUERY_EMBED_TIMEOUT_S. */
-export const EMBED_WALL_TIMEOUT_S: number = envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 5.0, 0.1);
+/** Oracle env var: SOR_QUERY_EMBED_TIMEOUT_S. Read at use, not at module load
+ * — see the cache-max note above. */
+export const EMBED_WALL_TIMEOUT_S = (): number => envFloat("KSOR_QUERY_EMBED_TIMEOUT_S", 5.0, 0.1);
 
 // L1 (insertion-ordered Map → LRU), the in-flight map, and the breaker are
 // MODULE-GLOBAL: one embedding space per process is the deployed shape. A
@@ -102,16 +113,17 @@ export function breakerOpenUntil(provider: EmbeddingProvider): number {
 }
 
 function withWallClock(work: Promise<number[][]>): Promise<number[][]> {
+  const wallTimeoutS = EMBED_WALL_TIMEOUT_S();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       // The losing embed cannot be cancelled (module note); its settlement is
       // already observed by the handlers below, so nothing goes unhandled.
       reject(
         new QueryEmbedTimeoutError(
-          `query embed exceeded the ${EMBED_WALL_TIMEOUT_S}s wall clock — treated as a provider failure (degrade to keyword-only)`,
+          `query embed exceeded the ${wallTimeoutS}s wall clock — treated as a provider failure (degrade to keyword-only)`,
         ),
       );
-    }, EMBED_WALL_TIMEOUT_S * 1000);
+    }, wallTimeoutS * 1000);
     work.then(
       (value) => {
         clearTimeout(timer);
@@ -151,7 +163,7 @@ async function embedMiss(
     const literal = vlit(vec);
     cache.delete(key);
     cache.set(key, literal); // insert at the LRU tail
-    while (cache.size > cacheMax) {
+    while (cache.size > currentCacheMax()) {
       const oldest = cache.keys().next().value;
       if (oldest === undefined) break;
       cache.delete(oldest);
@@ -215,9 +227,10 @@ export const _testing: { reset(): void; setCacheMax(n: number): void } = {
     cache.clear();
     inflight.clear();
     breakerOpenUntilByMs.clear();
-    cacheMax = CACHE_MAX_INITIAL;
+    cacheMaxOverride = undefined;
+    memoizedCacheMax = undefined; // the next read re-consults KSOR_EMBED_CACHE_MAX
   },
   setCacheMax(n: number): void {
-    cacheMax = n;
+    cacheMaxOverride = n;
   },
 };
