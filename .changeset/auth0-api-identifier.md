@@ -23,3 +23,12 @@ door. Half of these failures never reach ksor, and one `curl` at the token
 endpoint separates the halves — which is how this diagnosis was actually made,
 after several rounds of reasoning about dashboard toggles that turned out not to
 be the cause.
+
+**And it now says you need more than one Application.** The recipe never
+mentioned the site's own sign-in control, never said its Application is a
+different TYPE from an assistant's, and never said the two cannot be the same
+registration — a public client with no secret and a confidential client that
+sends one are different things, and using one for both returns a bare `401` at
+the token endpoint that names nothing. A table at the top of the recipe now
+gives one row per caller: what type, what token-endpoint auth, what callback,
+and whether it needs the grant from step 5.

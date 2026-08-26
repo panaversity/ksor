@@ -298,6 +298,25 @@ Nothing else in this recipe makes sense until that lands. You are not building
 an API; you are describing the one you already have so Auth0 can mint tokens
 aimed at it.
 
+**You will need MORE THAN ONE Application, and they are different types.** This
+is the single thing most likely to waste your afternoon, because one application
+configured for one caller returns a plain `401` to the other with nothing
+naming the mismatch (found the hard way, 2026-08-26). One API, one caller per
+row:
+
+| The caller                                        | Auth0 Application Type      | Token endpoint auth        | Callback                                                            | Needs step 5 |
+| ------------------------------------------------- | --------------------------- | -------------------------- | ------------------------------------------------------------------- | ------------ |
+| the SITE's sign-in control (`NEXT_PUBLIC_KSOR_*`) | **Single Page Application** | **None** — PKCE, no secret | `https://your-site/auth/callback`                                   | no           |
+| an assistant a person logs into (Claude, an IDE)  | **Regular Web Application** | client secret              | the assistant's own, e.g. `https://claude.ai/api/mcp/auth_callback` | **yes**      |
+| a script, worker or backend agent                 | **Machine to Machine**      | client secret              | none                                                                | **yes**      |
+
+The site row is a different flow and not really part of this page: it requests
+`openid profile email` and **no audience**, so it never touches your API and
+needs no grant. It is here only so you do not try to serve it and an assistant
+from one application — a public client with no secret and a confidential client
+that sends one cannot be the same registration, and the failure is a `401` at
+the token endpoint that says nothing about why.
+
 ### 1. Describe the door
 
 **Applications → APIs → Create API.** The **Identifier** you type becomes the
