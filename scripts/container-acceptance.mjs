@@ -84,15 +84,16 @@ try {
   // 1. Scaffold with the local CLI.
   run(process.execPath, [cli, "init", "demo"], { cwd: work });
 
-  // 2. Point the record at the database. The scaffold ships the block
-  //    commented out, which is the adopter's first edit on this rung.
+  // 2. The record already points at the database: the scaffold ships
+  //    `database.dsn_env` live, so this rung needs no edit to instance.md at
+  //    all. Asserted rather than assumed — if the block ever goes back to
+  //    being commented out, every step below would fail further along and for
+  //    a reason that does not name this one.
   const instancePath = path.join(project, "instance.md");
-  const instance = readFileSync(instancePath, "utf8").replace(
-    "# database:\n#   dsn_env: KSOR_DB_URL",
-    "database:\n  dsn_env: KSOR_DB_URL",
-  );
-  if (!instance.includes("\ndatabase:\n")) fail("could not enable the database block");
-  writeFileSync(instancePath, instance);
+  const instance = readFileSync(instancePath, "utf8");
+  if (!instance.includes("\ndatabase:\n  dsn_env: KSOR_DB_URL")) {
+    fail("the scaffold no longer ships a live `database.dsn_env` block");
+  }
 
   // 3. Install the LOCAL build, not the published one.
   //

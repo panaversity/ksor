@@ -155,8 +155,8 @@ function handoff(io: InitIo, name: string, targetWasDot: boolean, manager: Packa
       `  ${run("dev").padEnd(15)} # the site, live at http://localhost:3000\n` +
       "\n" +
       "Then, for the agent surface (needs Postgres and a provider key):\n" +
-      `  ${run("provision").padEnd(15)} # once: uncomment \`database:\` in instance.md, copy\n` +
-      "                  #   .env.example to .env, then apply the schema\n" +
+      `  ${run("provision").padEnd(15)} # once: copy .env.example to .env and set KSOR_DB_URL,\n` +
+      "                  #   then apply the schema\n" +
       `  ${run("refresh").padEnd(15)} # PUBLISH the record — ingest knowledge/ into a generation\n` +
       `  ${run("serve").padEnd(15)} # the MCP server, over what you just published\n` +
       "\n" +
