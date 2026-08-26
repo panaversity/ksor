@@ -28,8 +28,11 @@ import { verbs } from "./index.js";
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (rel: string): string =>
   rel.startsWith(".changeset/")
-    ? releaseNote(repoRoot, rel)
+    ? releaseNote(repoRoot, rel).text
     : readFileSync(path.join(repoRoot, rel), "utf8");
+/** True when this note is still a pending changeset a reviewer can change. */
+const isPending = (rel: string): boolean =>
+  !rel.startsWith(".changeset/") || releaseNote(repoRoot, rel).pending;
 
 const SCAFFOLD = "packages/ksor/templates/scaffold";
 
@@ -66,6 +69,12 @@ describe("every runbook that migrates a record shows how to keep it published", 
   ];
 
   it.each(RUNBOOKS)("%s — no `migrate --write` block omits --approve-by", (file) => {
+    // Structure, not presence: this scans EVERY fenced block, so once a
+    // changeset is folded into the changelog it would scan the whole published
+    // history and assert today's rule against prose written before it existed.
+    // Skipped there rather than run against the wrong text — which is how the
+    // first version of this fix turned the case vacuous instead of red.
+    if (!isPending(file)) return;
     const offenders = fencedBlocks(read(file))
       .filter((block) => /ksor migrate\b[^\n]*--write/.test(block))
       .filter((block) => !block.includes("--approve-by"));

@@ -81,7 +81,7 @@ describe("the documented tool-definition sizes", () => {
     for (const rel of documents) {
       // A changeset is consumed at release; its prose lives on in CHANGELOG.md.
       const text = rel.startsWith(".changeset/")
-        ? releaseNote(ROOT, rel)
+        ? releaseNote(ROOT, rel).text
         : readFileSync(path.join(ROOT, rel), "utf8");
       expect(text, `${rel} prints the transmitted figure`).toContain(grouped(transmitted));
       expect(text, `${rel} reconciles it with the per-tool sum`).toContain(grouped(sum));
