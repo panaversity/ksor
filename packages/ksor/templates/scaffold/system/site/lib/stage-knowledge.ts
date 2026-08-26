@@ -670,30 +670,51 @@ function fillStage(recordDir: string, stageDir: string, development: boolean): v
 }
 
 /**
- * Dev only: carry edits into the files the stage already holds, so
- * `pnpm dev` shows the record as the owner is writing it rather than as it
- * stood when the server started — the regenerated indexes included, so a
- * retitled document is retitled in its folder's listing too.
+ * Dev only: carry edits AND ARRIVALS into the stage, so `pnpm dev` shows the
+ * record as the owner is writing it rather than as it stood when the server
+ * started — the regenerated indexes included, so a retitled document is
+ * retitled in its folder's listing too.
  *
- * Edits only — never adds, never removals. fumadocs' own watcher cannot see
- * a dot-prefixed collection directory (measured 2026-08-18: adding a file to
- * the stage regenerated nothing, and removing one left the generated imports
- * pointing at a file that was gone), so a document that ARRIVES or changes
- * audience needs the restart `pnpm dev` already needs for instance.md. Leaving
- * that to a restart keeps dev honest in the direction that matters: the
- * published build is always staged from scratch.
+ * Adds and edits — never removals. The 2026-08-18 measurement this refused
+ * adds on ("fumadocs' own watcher cannot see a dot-prefixed collection
+ * directory") no longer holds: on fumadocs-mdx 15.3.0 a file written into
+ * `.staged-knowledge` DOES regenerate the collection, twice-observed as
+ * `[MDX] generated files` in the dev log. What actually kept a new document
+ * off every surface was this function, which walked the STAGE and skipped
+ * anything the stage did not already hold — so a plan entry with no file on
+ * disk was never written, and the manifest that names what publishes never
+ * learned about it either.
+ *
+ * Measured before and after, adding a document while `pnpm dev` ran:
+ * `/docs/<new>/` 404 -> 200, sidebar 0 -> 1, `llms.txt` 0 -> 1. It worked
+ * this way before the stage existed (0.0.40 serves an added document at 200),
+ * so this is a regression repaired rather than a feature.
+ *
+ * REMOVALS still wait for the restart `pnpm dev` already needs for
+ * instance.md: the same measurement found a deleted file leaves fumadocs'
+ * generated imports pointing at something gone, which takes the dev server
+ * down rather than showing a stale page. An arrival has no such failure mode
+ * — nothing points at a file that has only just appeared.
  */
 function refreshStage(recordDir: string, stageDir: string): void {
   // Under the lock like every other write here: a save landing while another
   // evaluation is refilling the stage is the same race from the other side.
   withStageLock(stageDir, () => {
     const plan = planStage(recordDir, true);
-    const permitted = new Map(plan.entries.map((e) => [path.join(stageDir, e.rel), e] as const));
-    for (const staged of walkFiles(stageDir)) {
-      const entry = permitted.get(staged);
-      if (entry === undefined) continue;
+    // Drive from the PLAN, not from the stage. Walking the stage could only
+    // ever find what was already there, which is exactly why an arrival was
+    // invisible: it has no file to walk onto.
+    for (const entry of plan.entries) {
+      const staged = path.join(stageDir, entry.rel);
       const bytes = entry.bytes();
-      if (bytes.equals(readFileSync(staged))) continue;
+      let current: Buffer | null = null;
+      try {
+        current = readFileSync(staged);
+      } catch {
+        // Not staged yet — an arrival. Written below.
+      }
+      if (current !== null && current.equals(bytes)) continue;
+      mkdirSync(path.dirname(staged), { recursive: true });
       writeFileSync(staged, bytes);
     }
     writeManifest(stageDir, plan.manifest);
