@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm -C system/site dev",
     "build": "ksor build && pnpm -C system/site build",
+    "preview": "node system/site/preview.mjs",
     "check": "node .agents/skills/format-checker/check.mjs",
     "provision": "pnpm schema && pnpm grant",
     "serve": "ksor serve",
