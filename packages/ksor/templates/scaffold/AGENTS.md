@@ -60,9 +60,9 @@ pnpm check       # the format checker — run before handing off any knowledge c
 with honest abstention. It is the climbed rung — not required for `pnpm dev`.
 Stand it up in this order (each step's errors explain how to fix themselves):
 
-1. **Configure `instance.md`.** One block is required, and it is already
-   there, commented out — uncomment it. It names the environment variable
-   holding your DSN (never the DSN itself):
+1. **Check `instance.md`.** The one required block is already filled in — it
+   names the environment variable holding your DSN (never the DSN itself), and
+   there is nothing to do here unless you want a different variable name:
 
    ```yaml
    database:
