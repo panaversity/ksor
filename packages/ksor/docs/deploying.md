@@ -254,6 +254,26 @@ and reaches the site at its next build (it reads the ledger), so the act that
 withdraws a document is the same merged commit on both surfaces. Merge the
 ledger entry, rebuild, redeploy.
 
+**Your deploy runs it too, and that is deliberate.** `vercel.json` builds with
+`pnpm build`, so the host regenerates the indexes and the lock before building
+the site. The consequence is worth knowing in both directions: you can deploy
+without ever having run `ksor build` yourself — the record checker still runs
+there, so a record that breaks the profile still fails the deploy — but the
+`build.lock.json` in your repository is not necessarily the one that shipped.
+The `build_id` that DID ship is stamped into the deployed `llms.txt`.
+
+If you want the stricter property — the deployed build_id is one a human
+reviewed in a pull request — build the site alone instead:
+
+```json
+"buildCommand": "pnpm -C system/site build"
+```
+
+The site refuses `ksor-lock-missing` or `ksor-lock-stale` when the committed
+lock does not describe the tree, so a deploy then fails until someone runs
+`ksor build` and commits the result. That is your file to change; ksor does not
+choose it for you.
+
 ## Keeping people out of the site
 
 The door has auth ([authorization.md](./authorization.md)). The **site** is
