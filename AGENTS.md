@@ -1227,6 +1227,53 @@ gateway` package, serve-by-spawn) is superseded._
     **owner-only** — the audience leak guarantee, and retiring `sor_id`
     against decision 14 — are not reversible without an owner decision.
 
+28. **A retired surface is REMOVED, never deprecated** (owner, 2026-08-26).
+    Pre-1.0, and the whole population of built records is ours — `migrate` has
+    never shipped at all (`docs/status.md`), and the owner confirmed there are
+    no external adopters. A deprecation window therefore buys nobody anything
+    and costs everybody the second code path coding principle 4 forbids. So a
+    surface this project retires is gone in the release that retires it, and
+    what replaces it is a REFUSAL naming the fix, never a fallback that keeps
+    working quietly.
+
+    This branch already did it five times and recorded it nowhere, which is why
+    the rule is being written down rather than invented: the `--knowledge` flag
+    refuses as an ordinary unknown one rather than warning
+    (`packages/content/src/commands.ts`); `ksor takedown --export` and
+    `.ksor-denylist.json` are gone; nine frontmatter keys are refused BY NAME
+    rather than ignored (`LEGACY_KEYS` in `record/profile.ts`); `audiences:`
+    and `default_visibility:` refuse with a hint
+    rather than being read where they used to live (`MOVED_INSTANCE_KEYS`);
+    `instance.md format: 1` refuses outright.
+
+    **What makes this safe rather than merely fast is that removal is paired
+    with a MIGRATION, not with a warning.** `ksor migrate --write` carries the
+    record across, and where it cannot know something it refuses by name
+    instead of guessing (`ksor-migrate-underivable`). A removal with no
+    migration path is not covered by this decision and stops for a human. The
+    migration must also carry the adopter's TOOLING, not only their content:
+    this rule was written the same day an audit found `migrate` fixing the
+    `build` script and not `refresh`, so a correct upgrade left the adopter's
+    own gate red — an upgrade that does that is not an upgrade.
+
+    **The one exception, and why it is one.** A missing FLOOR refuses; a
+    missing `min_trust_tier` is NOTICED (`content-gateway/src/gateway-verify.ts`).
+    The line is guarantee versus capability: without the
+    floor text a guarantee is broken, and without the parameter every
+    guarantee still holds and only an affordance is absent. An absence nobody
+    is told about is one nobody fixes, so it is reported — never silently
+    tolerated. That is the shape any future affordance takes; it is not a
+    licence to notice a broken guarantee.
+
+    **What it costs, stated plainly:** our own records upgrade or stop. There
+    is no version of ksor that reads both shapes, by design.
+
+    **Reversed the day a record we do not operate is built by a published
+    release** — from then on a retirement either ships with a migration that
+    runs unattended, or waits for a major. Not reversible by convenience: "an
+    adopter might" is not an adopter, and the reversal condition is an event
+    that can be observed rather than forecast.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as

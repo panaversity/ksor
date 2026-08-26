@@ -27,7 +27,13 @@ import {
   NoDatabaseDeclared,
   type ContentInstance,
 } from "./instance.js";
-import { applySchema, renderSchema, schemaVersion, SchemaStateError } from "./schema.js";
+import {
+  applySchema,
+  renderSchema,
+  schemaCompatibleFrom,
+  schemaVersion,
+  SchemaStateError,
+} from "./schema.js";
 import { compareSchemaVersion, runMigrations } from "./migrate.js";
 import { grantIngest, revokeIngest } from "./grant.js";
 import {
@@ -442,7 +448,7 @@ async function readSchemaState(pool: pg.Pool): Promise<SchemaState> {
         "schema_meta exists but records no version — this database was initialized and then " +
           "lost its version row. Re-applying the DDL over live tables would fail on existing " +
           "relations; restore the row with the version the data actually has, e.g.\n" +
-          `  INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('${schemaVersion()}', '2.0');`,
+          `  INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('${schemaVersion()}', '${schemaCompatibleFrom()}');`,
       );
     }
     return { kind: "applied", version };

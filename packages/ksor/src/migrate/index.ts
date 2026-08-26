@@ -903,10 +903,24 @@ function manifestChange(root: string): FileChange | null {
     // with a space, the commonest reason to quote one — was left in the script
     // whole, which is the one case this strip exists for.
     const stripped = value.replace(/\s+--knowledge(?:=|\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/g, "");
+    // `refresh` needs the same prefix `build` gets, for a different reason.
+    // `build` carried a REMOVED token (`export-denylist`); `refresh` is merely
+    // now-INSUFFICIENT — `ksor ingest` gained a lock gate on this branch
+    // (`ingest/lock-gate.ts`), so a refresh that does not build first refuses
+    // `ksor-lock-stale` the first time the record is edited. Matched by the
+    // script it CALLS, not by its name: the manager prefix differs per
+    // scaffold (`pnpm ingest` / `npm run ingest` / `bun run ingest`), and
+    // matching that never touches the `ingest` script itself, whose value is
+    // `ksor ingest …`. Found by audit, 2026-08-26: the scaffold's own
+    // `refresh` was fixed and migrate was not, so the upgrade left the
+    // adopter's gate red — which `:519` says an upgrade may not do.
+    const callsIngestScript = /\b(?:pnpm|npm run|bun run)\s+ingest\b/.test(stripped);
     next[key] =
       key === "build"
         ? stripped.replace(/^.*?export-denylist\s*&&\s*/, "ksor build && ")
-        : stripped;
+        : callsIngestScript && !stripped.includes("ksor build")
+          ? `ksor build && ${stripped}`
+          : stripped;
   }
   // The manifest is the ADOPTER's file, formatted the way their repository is.
   // Re-emitting it at a fixed two spaces rewrote every line of a 4-space or

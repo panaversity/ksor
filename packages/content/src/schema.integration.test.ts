@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { renderSchema, renderSchemaText, schemaSqlPath, schemaVersion } from "./schema.js";
+import {
+  renderSchema,
+  renderSchemaText,
+  schemaCompatibleFrom,
+  schemaSqlPath,
+  schemaVersion,
+} from "./schema.js";
 
 describe("schemaVersion parses the DDL's declared version (one source, no drift)", () => {
   it("returns a semver-ish version that the schema.sql INSERT actually declares", () => {
@@ -10,6 +16,22 @@ describe("schemaVersion parses the DDL's declared version (one source, no drift)
     expect(v, "schema version shape").toMatch(/^\d+\.\d+$/);
     // the parsed version is exactly what the applied DDL writes into schema_meta
     expect(readFileSync(schemaSqlPath(), "utf8")).toContain(`VALUES ('${v}', `);
+  });
+});
+
+describe("schemaCompatibleFrom parses the same row's second value", () => {
+  it("reads what the DDL declares, so the printed remedy cannot go stale", () => {
+    const declared = /INSERT INTO schema_meta[^;]*VALUES\s*\(\s*'([^']+)'\s*,\s*'([^']+)'/i.exec(
+      readFileSync(schemaSqlPath(), "utf8"),
+    );
+    expect(declared, "schema.sql must declare both values on one row").not.toBeNull();
+    expect(schemaVersion()).toBe(declared![1]);
+    expect(
+      schemaCompatibleFrom(),
+      "the `schema_meta exists but records no version` remedy prints this; it was hardcoded to " +
+        "'2.0' and silently became false when 2.5 dropped `visibility`, telling an operator to " +
+        "record that a 2.0 reader can read a 2.5 database",
+    ).toBe(declared![2]);
   });
 });
 

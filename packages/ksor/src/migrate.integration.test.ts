@@ -1088,6 +1088,12 @@ describe("ksor migrate — the adopter's own gate", () => {
             dev: "pnpm -C system/site dev",
             build: "pnpm export-denylist && pnpm -C system/site build",
             "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
+            // The two an 0.0.40 record actually shipped. `refresh` had no
+            // `ksor build` because there was no lock gate to satisfy; there is
+            // now, so migrate has to add one or the upgrade leaves the
+            // adopter's own gate red.
+            refresh: "pnpm ingest && pnpm gc",
+            ingest: "ksor ingest --instance instance.md --knowledge knowledge --flip",
             check: "node .agents/skills/format-checker/check.mjs",
           },
         },
@@ -1138,6 +1144,25 @@ describe("ksor migrate — the adopter's own gate", () => {
     expect(manifest.scripts["build"]).toBe("ksor build && pnpm -C system/site build");
     // Everything else is left exactly as the adopter had it.
     expect(manifest.scripts["dev"]).toBe("pnpm -C system/site dev");
+  });
+
+  it("gives refresh the build it now needs, and does not touch the ingest script itself", () => {
+    const root = repo(files);
+    const r = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(r.status, r.stderr).toBe(0);
+    const manifest = JSON.parse(read(root, "package.json")) as {
+      scripts: Record<string, string>;
+    };
+    // Without this, the first `pnpm refresh` after a successful upgrade
+    // refuses `ksor-lock-stale` — the scaffold's own `refresh` gained
+    // `ksor build &&` on this branch and migrate did not follow it across.
+    expect(
+      manifest.scripts["refresh"],
+      "a migrated record's refresh must build before it ingests",
+    ).toBe("ksor build && pnpm ingest && pnpm gc");
+    // Matched by the script it CALLS, so the ingest script itself — which
+    // runs `ksor ingest` directly — keeps its shape and only loses the flag.
+    expect(manifest.scripts["ingest"]).toBe("ksor ingest --instance instance.md --flip");
   });
 
   /**
