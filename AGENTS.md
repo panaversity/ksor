@@ -1274,6 +1274,49 @@ gateway` package, serve-by-spawn) is superseded._
     adopter might" is not an adopter, and the reversal condition is an event
     that can be observed rather than forecast.
 
+29. **The deploy REGENERATES the lock; it does not verify it** (owner,
+    2026-08-26). `vercel.json` builds the site with `pnpm build`, which is
+    `ksor build && <site build>`, so a host regenerates every `index.md` and
+    `build.lock.json` before the site is built. An adopter can therefore deploy
+    without ever having run `ksor build`, and the lock committed to their
+    repository is not necessarily the one that shipped.
+
+    Weighed and kept, because the alternative taxes the wrong person. Measured
+    on a real scaffold: the site build ALONE refuses `ksor-lock-missing` with no
+    lock and `ksor-lock-stale` when a document changed since one was written
+    (naming the document), and succeeds on a matching lock writing no tracked
+    file. So decoupling works — and it would oblige every adopter to run
+    `ksor build` and commit on EVERY knowledge edit, forever, or watch their
+    deploy fail. Product principle 7: governance is a ladder, and demanding a
+    reviewed lock of a level-0 project is a bug, not rigour.
+
+    **What is NOT given up.** The record checker runs on the deploy exactly as
+    it does locally — a record that breaks the profile fails there, exit 1,
+    nothing written. And the `build_id` that shipped is stamped into the
+    deployed `llms.txt`, so what was published is always discoverable from the
+    artifact. What is given up is narrower than it first looks: that the lock
+    in git is the one that shipped, and therefore that a human reviewed the
+    `build_id` in a pull request.
+
+    **The stricter posture needs no product change**, which is why none was
+    made: `buildCommand: "pnpm -C system/site build"` is one line in the
+    adopter's own `vercel.json` (decision 4 — that file is theirs), and the
+    refusals it relies on already exist and are asserted. It is documented in
+    `docs/deploying.md` as a choice rather than shipped as a flag.
+
+    Two costs recorded rather than argued away. `ksor build` rewrites
+    `build.lock.json` on EVERY run because `as_of` is the current instant, so a
+    no-op `pnpm build` leaves git dirty by one line (`--as-of` pins it; the
+    `build_id` itself is stable for the same tree). And `ksor-lock-stale` can
+    never fire on a deploy that regenerates the thing it checks — the gate is
+    real, it is simply not on that path.
+
+    **Reversed by the first adopter who needs the deployed `build_id` to have
+    been reviewed before it shipped** — a regulated record, or an audit that
+    asks which commit produced a published answer. That is an observable event,
+    not a forecast, and when it arrives the change is a default flip plus a
+    migration note, not new machinery.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as
