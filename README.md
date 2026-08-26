@@ -102,14 +102,6 @@ structure around it. The project ships `AGENTS.md` with the working rules,
 and the agent will interview you to replace the placeholder in `instance.md`
 — the file that says what this knowledge base covers.
 
-Two commands are worth knowing on day one (shown with pnpm here and for the
-rest of this page; your own project's README uses your manager):
-
-```bash
-pnpm check    # validates your knowledge files — run it before sharing a change
-pnpm build    # builds a fully static site into system/site/out/, hostable anywhere
-```
-
 **Later, when you want AI agents to query your knowledge directly**, you add
 a Postgres database and an embedding API key, then run three commands:
 `pnpm provision` once, `pnpm refresh` to publish, and `pnpm serve`. The full
