@@ -14,6 +14,21 @@ embedding cost on every cold start and would need write credentials at runtime.
 So **a first deploy with no ingest serves an empty record.** It is not broken;
 nothing was ever published to it.
 
+## `ksor ingest` or `pnpm refresh`?
+
+Both, and they are not alternatives — one contains the other.
+
+|                | makes correct                                                                       | needs a database |
+| -------------- | ----------------------------------------------------------------------------------- | ---------------- |
+| `ksor build`   | the **site** — checks the record, regenerates the indexes, writes `build.lock.json` | no               |
+| `ksor ingest`  | the **agent door** — embeds, loads Postgres, flips a generation                     | yes              |
+| `pnpm refresh` | both, in order: `ksor build` → `ksor ingest --flip` → `ksor gc`                     | yes              |
+
+`pnpm refresh` is the scaffold's script and the one to reach for by hand — it
+is a single command that leaves every surface current. `ksor ingest` is the
+verb underneath it, and it is what CI, a deploy step, or an agent calls when
+the individual step is the subject. The rest of this page is about that verb.
+
 ## Before the first command
 
 Ingest reads your markdown, sends each new chunk to an embedding provider, and

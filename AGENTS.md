@@ -69,24 +69,35 @@ the machinery instead of the value:
 
 Used precisely; do not repurpose.
 
-| Term                | Means                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------- |
-| **corpus**          | the governed markdown under `knowledge/` — the source of truth. It is an OKF bundle (27)      |
-| **concept**         | one governed document in the bundle. Its id is its bundle-relative path without `.md`         |
-| **companion**       | a file attached to a concept — summary, flashcards, quiz, slides. Never a concept itself (24) |
-| **instance**        | one deployment configured (`instance.md`): identity, floors, budgets. **Not governance**      |
-| **policy**          | `.ksor/governance.yaml` — the audience registry and the approval/takedown authorities (27)    |
-| **ledger**          | `.ksor/takedowns.yaml` — the committed, append-only record of every takedown act (27)         |
-| **build**           | one execution of `ksor build`, identified by a `build_id`                                     |
-| **build_id**        | what every machine artefact stamps — the content hash of everything a projection reads        |
-| **generation**      | the monotonic version of published content — what a citation pins. **Not `build_id`**         |
-| **build.lock.json** | the committed record of a build: what was published, from which commit, with which toolchain  |
-| **surface**         | something that serves the corpus — the website and the MCP server                             |
-| **scaffold**        | what `ksor init` writes into an adopter's repo — owned by the adopter (decision 4)            |
-| **audience**        | an identifier a concept lists and a viewer holds; the concept is admitted when they overlap   |
-| **viewer**          | the audience list a build or a request is made for — always contains `public`                 |
-| **trust tier**      | unverified · machine-confirmed · human-reviewed — derived from `verified[]`, never declared   |
-| **abstain**         | the corpus does not cover this — a correct answer, never an error                             |
+| Term                | Means                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------ |
+| **corpus**          | the governed markdown under `knowledge/` — the source of truth. It is an OKF bundle (27)         |
+| **concept**         | one governed document in the bundle. Its id is its bundle-relative path without `.md`            |
+| **companion**       | a file attached to a concept — summary, flashcards, quiz, slides. Never a concept itself (24)    |
+| **instance**        | one deployment configured (`instance.md`): identity, floors, budgets. **Not governance**         |
+| **policy**          | `.ksor/governance.yaml` — the audience registry and the approval/takedown authorities (27)       |
+| **ledger**          | `.ksor/takedowns.yaml` — the committed, append-only record of every takedown act (27)            |
+| **build**           | one execution of `ksor build`, identified by a `build_id`                                        |
+| **refresh**         | the scaffold's `pnpm refresh` — PUBLISH: `ksor build`, then `ksor ingest --flip`, then `ksor gc` |
+| **build_id**        | what every machine artefact stamps — the content hash of everything a projection reads           |
+| **generation**      | the monotonic version of published content — what a citation pins. **Not `build_id`**            |
+| **build.lock.json** | the committed record of a build: what was published, from which commit, with which toolchain     |
+| **surface**         | something that serves the corpus — the website and the MCP server                                |
+| **scaffold**        | what `ksor init` writes into an adopter's repo — owned by the adopter (decision 4)               |
+| **audience**        | an identifier a concept lists and a viewer holds; the concept is admitted when they overlap      |
+| **viewer**          | the audience list a build or a request is made for — always contains `public`                    |
+| **trust tier**      | unverified · machine-confirmed · human-reviewed — derived from `verified[]`, never declared      |
+| **abstain**         | the corpus does not cover this — a correct answer, never an error                                |
+
+One command is confused with its own halves, so the mental model is written
+down rather than left to be inferred: **`ksor build` makes the SITE correct**
+(it checks the record, regenerates the indexes and writes the lock — no
+database), **`ksor ingest` makes the AGENT DOOR correct** (it embeds, loads
+Postgres and flips a generation), and **`pnpm refresh` runs both** so every
+surface is current. The scaffold's script is the name an adopter uses;
+`ksor ingest` is the name CI and this repo's docs use, because there the
+individual step is the subject. That split is deliberate — it is not two ways
+to do one thing.
 
 Two pairs are confused often enough to be worth naming. **`build_id` is not a
 `generation`**: the first connects every projection of one publication, the
