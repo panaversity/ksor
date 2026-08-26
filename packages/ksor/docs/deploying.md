@@ -113,6 +113,34 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 
 ## Deploying both surfaces to Vercel
 
+> **Importing from the Vercel dashboard: clear the Root Directory first.**
+> Vercel auto-detects a root directory by looking for a framework, finds the
+> Next app, and fills the field with **`system/site`**. The build then reads
+> `system/site/vercel.json`, which does not exist, and fails with:
+>
+> ```
+> Error: Project framework is set to "services", but no services are declared.
+> ```
+>
+> The services ARE declared — in `vercel.json` at the repository root, which is
+> the only place they can be, because one of them builds the site and the other
+> builds a container from the root `Dockerfile`. The import screen even lists
+> both, because that step reads the root file; the BUILD step uses the Root
+> Directory override instead.
+>
+> **Set Root Directory to the repository root (`./`) and redeploy.** Nothing in
+> the record changes. Found by an adopter on 2026-08-26, and it will happen on
+> every dashboard import until Vercel's detection changes — the layout that
+> triggers it, code under `system/`, is decision 8 and is not moving.
+>
+> Also confirm **Application Preset is `Services`**; with any other preset the
+> `services` key is ignored and `/mcp` never exists. Vercel Services is in Beta.
+>
+> **If it still argues, deploy the site alone** — it needs no preset and no
+> services: build command `pnpm -C system/site build`, output directory
+> `system/site/out`. That is the stricter posture decision 29 describes, and
+> the door can be deployed separately.
+
 The emitted `vercel.json` declares both services and routes between them:
 
 ```json

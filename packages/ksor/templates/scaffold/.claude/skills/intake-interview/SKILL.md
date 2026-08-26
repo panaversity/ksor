@@ -12,49 +12,75 @@ prose IS the agent surface's system prompt (`ksor serve` wires it into the MCP
 server's instructions). Do not draft it from guesses — interview the owner, one
 question at a time, and write down what they actually say.
 
-## The first six questions
+## Ask THREE questions, one at a time
 
-Ask these one at a time; follow up until each answer is concrete enough to
-act on:
+Seven questions is where this skill used to start, and it did not survive
+contact: an agent running it decided five were too many, defaulted them, and
+reported "answered: all seven" — including the one that decides who may
+approve a document. A process the tool executing it shortcuts is too long.
 
-1. **Authority** — "What should this record be the _final word_ on? Finish
-   the sentence: when someone here disagrees with this corpus, the corpus
-   wins about ___."
-2. **Boundary** — "What is explicitly _outside_ it — near-miss topics people
-   will ask about that this record should refuse rather than guess at?"
-3. **Audience** — "Who reads it — people, agents, both? In what situations,
-   making what decisions?"
-4. **Sources** — "Which existing materials are authoritative inputs (name
-   the actual documents, systems, people), and which are explicitly _not_
-   trusted?"
-5. **Strictness** — "When the record doesn't cover a question, how firmly
-   should it decline? ('Not in this corpus' is a correct answer here —
-   confirm the owner wants that behavior and where they want it softened.)"
-6. **Audiences** — "Does every reader of this record see every document? If
-   not, what are the audiences?" A yes is the common answer and the whole
-   answer: register none, and every document says `ksor.audience: [public]`.
-   Anything else means registering each audience in
-   `.ksor/governance.yaml` under `audiences:`, with a one-line
-   `description:` of who is in it — `public` is reserved and never
-   registered. There is no ranking and no default: a document lists the
-   audiences that may read it, a reader holds a list that always includes
-   `public`, and the document is visible when the two lists OVERLAP. Tell
-   the owner what this does and does not do: builds are made per audience,
-   but anyone who can clone the repository reads everything in it — if
-   someone must not read a document and can clone, that document belongs in
-   a different repository.
+So three are asked, and they are the three that cannot be defaulted:
 
-## Then ask the seventh, because a policy cannot be guessed
+1. **Scope** — "What should this record be the _final word_ on? Finish the
+   sentence: when someone here disagrees with this corpus, the corpus wins
+   about ___."
+2. **Boundary** — "What is just _outside_ that — the near-miss topics people
+   will ask about here that the record should refuse rather than guess at?"
+3. **Authority** — "Who may approve a document for publication, and who may
+   withdraw one?"
 
-7. **Authority** — "Who may approve a document for publication, and who may
-   withdraw one?" Names, not roles-in-the-abstract: they become
-   `approval_authorities` and `takedown_authorities` in
-   `.ksor/governance.yaml`, and the checker refuses an approval or a
-   takedown by anyone the policy does not name. The scaffold ships
-   `human:you` in both — a placeholder that must not survive this
-   conversation. An actor is `human:<handle>`, `process:<name>` or
-   `<producer>/<version>`; handles are published with the record, so use the
-   handle the owner would put in a commit, never an email address.
+Scope and Boundary are asked because the abstention gate is meaningless
+without an edge: a record authoritative for everything has no outside, so an
+agent asked something the owner never wrote about reaches for its training
+instead of declining. Authority is asked because a governance act names its
+actor and the tool never guesses one — the scaffold ships `human:you` in
+both authority lists, and a placeholder that survives this conversation is a
+person who was never there.
+
+Follow up until each is concrete. "Our engineering docs" is not yet an
+answer; "our leave, expense and conduct policies — the current ones, not
+historical versions" is.
+
+## Then STATE the defaults; do not ask them
+
+Show these as a block, say they are defaults, and invite a correction. Do not
+walk them one at a time — they are near-constant, and asking makes the
+interview feel like a form.
+
+|           | default                                           |
+| --------- | ------------------------------------------------- |
+| read by   | people and agents both                            |
+| declines  | firmly — "not in this corpus" is a correct answer |
+| audiences | one, `public` — every reader sees every document  |
+| sources   | none yet — the corpus is still the samples        |
+
+Each is written only if the owner does not object, and the write-back names
+which were answered and which were defaulted. **Never report a default as an
+answer.** Two answered and four defaulted is an honest sentence; "all seven
+answered" is not, and it is what happened the first time this skill ran.
+
+**If the owner says NOT every reader sees every document**, then and only
+then: register each audience in `.ksor/governance.yaml` under `audiences:`
+with a one-line `description:` of who is in it — `public` is reserved and
+never registered. There is no ranking and no default: a document lists the
+audiences that may read it, a reader holds a list that always includes
+`public`, and the document is visible when the two lists OVERLAP. Tell them
+what this does and does not do: builds are made per audience, but anyone who
+can clone the repository reads everything in it — if someone must not read a
+document and can clone, that document belongs in a different repository.
+
+## What the answers become
+
+Scope and Boundary become the BODY of `instance.md`, which `ksor serve` wires
+into the MCP server's instructions — so it is read by every agent that
+connects, and vague prose there is vague instructions everywhere.
+
+Authority becomes `approval_authorities` and `takedown_authorities` in
+`.ksor/governance.yaml`. Names, not roles-in-the-abstract: the checker refuses
+an approval or a takedown by anyone the policy does not name. An actor is
+`human:<handle>`, `process:<name>` or `<producer>/<version>`; handles are
+published with the record, so use the handle the owner would put in a commit,
+never an email address.
 
 ## Then write
 
