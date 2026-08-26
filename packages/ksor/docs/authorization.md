@@ -298,6 +298,25 @@ Nothing else in this recipe makes sense until that lands. You are not building
 an API; you are describing the one you already have so Auth0 can mint tokens
 aimed at it.
 
+**You will need MORE THAN ONE Application, and they are different types.** This
+is the single thing most likely to waste your afternoon, because one application
+configured for one caller returns a plain `401` to the other with nothing
+naming the mismatch (found the hard way, 2026-08-26). One API, one caller per
+row:
+
+| The caller                                        | Auth0 Application Type      | Token endpoint auth        | Callback                                                            | Needs step 5 |
+| ------------------------------------------------- | --------------------------- | -------------------------- | ------------------------------------------------------------------- | ------------ |
+| the SITE's sign-in control (`NEXT_PUBLIC_KSOR_*`) | **Single Page Application** | **None** — PKCE, no secret | `https://your-site/auth/callback`                                   | no           |
+| an assistant a person logs into (Claude, an IDE)  | **Regular Web Application** | client secret              | the assistant's own, e.g. `https://claude.ai/api/mcp/auth_callback` | **yes**      |
+| a script, worker or backend agent                 | **Machine to Machine**      | client secret              | none                                                                | **yes**      |
+
+The site row is a different flow and not really part of this page: it requests
+`openid profile email` and **no audience**, so it never touches your API and
+needs no grant. It is here only so you do not try to serve it and an assistant
+from one application — a public client with no secret and a confidential client
+that sends one cannot be the same registration, and the failure is a `401` at
+the token endpoint that says nothing about why.
+
 ### 1. Describe the door
 
 **Applications → APIs → Create API.** The **Identifier** you type becomes the
@@ -308,6 +327,24 @@ has to resolve.
 Name:       my-record
 Identifier: https://your-host.example.com/mcp
 ```
+
+**Type the whole URL, `/mcp` included, and get it right the first time.** The
+Identifier must equal `KSOR_MCP_RESOURCE_URL` character for character — the host
+alone is not enough, because that is not what the door will compare against. And
+**Auth0 does not let you edit an Identifier after the API is created**: a wrong
+one is fixed by creating a NEW API with the right string and granting your
+application access to that one instead.
+
+Two Auth0 errors tell you exactly where you are, and they are easy to confuse
+because both arrive as a failed token request (reported by an adopter,
+2026-08-26):
+
+| Auth0 says                                                               | Means                                                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `Service not enabled within domain: https://…/mcp`                       | **no API has that Identifier.** Yours was created with a different string — make a new one |
+| `Client "…" is not authorized to access resource server "https://…/mcp"` | the API is right and the **grant** is missing — step 5                                     |
+
+Moving from the first message to the second is progress, not a new problem.
 
 Creating it also creates a machine-to-machine **test application** named
 `<API> (Test Application)`. That is your first caller — you do not need to make
@@ -447,9 +484,25 @@ Use the commands below when it did NOT work, or when the caller is a script
 rather than a person. A token from your provider proves the provider works; it
 does not prove the door does. Both halves matter, and the refusal matters more.
 
+**0. Ask the provider for a token FIRST, before you touch the door.** Half the
+failures on this page never reach ksor at all, and this one command separates
+the two halves in a second:
+
+```sh
+curl -s -X POST https://YOUR_TENANT.us.auth0.com/oauth/token \
+  -H 'content-type: application/json' \
+  -d '{"grant_type":"client_credentials","client_id":"…","client_secret":"…",
+       "audience":"https://your-host.example.com/mcp"}'
+```
+
+An `error` here is the PROVIDER refusing, and no amount of ksor configuration
+will change it — see the table in step 1 for what each message means. An
+`access_token` here means the provider works, and anything still failing is the
+door or the token's contents, which is what the rest of this section is for.
+
 **1. Decode the token before using it.** This is the single most useful
-debugging step on this page, because a valid token audienced at the wrong thing
-looks identical to a broken one:
+debugging step once you have one, because a valid token audienced at the wrong
+thing looks identical to a broken one:
 
 ```sh
 echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, aud, exp}'
