@@ -1,427 +1,277 @@
-// Pure unit tier for the plain-tree adapter: ordering, ids, titles, skips —
-// all over in-memory trees (fs walking lives in plain-tree.integration.test.ts).
-// Expectations oracle-verified against plain_tree.py @ b554f91 (probe run 2026-08-19).
+// Pure unit tier for the record adapter: identity, order, governance
+// projection — over in-memory records that went through the ONE checker
+// (fs walking lives in plain-tree.integration.test.ts).
 
 import { describe, expect, it } from "vitest";
 
-import { ManifestError, manifestToJson } from "../manifest.js";
-import {
-  buildManifestFromTree,
-  frontmatterMeta,
-  type PlainTreeResult,
-  type TreeDir,
-  type TreeEntry,
-} from "./plain-tree.js";
+import { checkRecord, type RecordFiles } from "../../record/check.js";
+import { buildManifestFromRecord, type PlainTreeResult } from "./plain-tree.js";
 
-function file(name: string, text = "# Body\n\ntext\n"): TreeEntry {
-  return { kind: "file", name, text };
+const POLICY = `version: "0.1"
+audiences:
+  internal:
+    description: Staff
+  board:
+    description: The board
+approval_authorities:
+  - actors: [human:cfo]
+takedown_authorities:
+  actors: [human:ciso]
+`;
+const INSTANCE = `---
+format: 2
+name: acme
+title: Acme
+description: The Acme record.
+---
+Instructions.
+`;
+
+function doc(
+  title: string,
+  opts: { audience?: string; order?: number; status?: string; extra?: string } = {},
+): string {
+  const status = opts.status ?? "stable";
+  return (
+    `---\ntype: Document\ntitle: ${title}\ndescription: One sentence.\nstatus: ${status}\n` +
+    (opts.order === undefined ? "" : `order: ${opts.order}\n`) +
+    `generated: { by: "x/1", at: 2026-08-20T09:00:00Z }\n` +
+    (opts.extra ?? "") +
+    `ksor:\n  audience: [${opts.audience ?? "public"}]\n` +
+    (status === "stable" ? `  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }\n` : "") +
+    `---\n\nBody of ${title}.\n`
+  );
 }
 
-function dir(name: string, ...entries: TreeEntry[]): TreeDir {
-  return { kind: "dir", name, entries };
+function build(files: Record<string, string>, dirs: string[] = []): PlainTreeResult {
+  const record: RecordFiles = {
+    files: new Map(
+      Object.entries({ "instance.md": INSTANCE, ".ksor/governance.yaml": POLICY, ...files }),
+    ),
+    dirs,
+  };
+  const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
+  if (check.refusals.length > 0) throw new Error(JSON.stringify(check.refusals));
+  return buildManifestFromRecord(check, dirs, { corpusId: "c", sourceCommit: "dev" });
 }
 
-function symlink(name: string): TreeEntry {
-  return { kind: "symlink", name };
+/**
+ * The adapter, on a tree the checker would refuse. `ksor build` never reaches
+ * here — the refusal comes first — but the adapter is defence in depth for a
+ * path that arrived some other way, so what it does with one is still pinned.
+ */
+function buildUnchecked(files: Record<string, string>, dirs: string[] = []): PlainTreeResult {
+  const record: RecordFiles = {
+    files: new Map(
+      Object.entries({ "instance.md": INSTANCE, ".ksor/governance.yaml": POLICY, ...files }),
+    ),
+    dirs,
+  };
+  const check = checkRecord(record, { mode: "build", ledgerBaselines: [] });
+  return buildManifestFromRecord(check, dirs, { corpusId: "c", sourceCommit: "dev" });
 }
 
-function build(root: TreeDir, onSkip?: (line: string) => void): PlainTreeResult {
-  return buildManifestFromTree(root, {
-    corpusId: "c",
-    sourceCommit: "dev",
-    onSkip: onSkip ?? (() => {}),
-  });
-}
-
-describe("ordering", () => {
-  // The rule itself, and its full decision table, live in lib/order-rule.ts and
-  // lib/order-conformance.ts — asserted there against BOTH surfaces. These are
-  // the adapter's own edges: the governed key it reads, and the shapes only a
-  // real tree has.
-  //
-  // These tests used to assert `position:` / `sidebar_position:`, the
-  // predecessor's Docusaurus keys. No compliant record may declare either — the
-  // format checker closes the frontmatter key set and `order` is the ordering
-  // key in it — so the adapter was reading keys that never appear and ignoring
-  // the one that does (found live 2026-08-21).
-
-  it("honors the governed `order:` key over name order", () => {
-    const root = dir(
-      "docs",
-      file("a.md", "---\norder: 2\n---\n# A\n"),
-      file("b.md", "---\norder: 1\n---\n# B\n"),
+describe("identity — path is the id (decision 26 retires sor_id)", () => {
+  it("a concept is `knowledge/<id>`, a directory is `knowledge/<dir>#section`, an index is nothing", () => {
+    const { manifest, sources } = build(
+      {
+        "knowledge/a.md": doc("A"),
+        "knowledge/index.md": "# Acme\n",
+        "knowledge/pol/index.md": "# Pol\n",
+        "knowledge/pol/b.md": doc("B"),
+      },
+      ["knowledge/pol"],
     );
-    const m = build(root).manifest;
-    expect(m.nodes.map((n) => n.slug)).toEqual(["b", "a"]);
-    expect(m.nodes.map((n) => n.position)).toEqual([1, 2]);
-  });
-
-  it("does NOT read the predecessor's position keys", () => {
-    // Reading them would be worse than ignoring them: the site never has, so a
-    // record that declared one would be ordered differently on the two surfaces
-    // — and the checker would refuse the document anyway.
-    const root = dir(
-      "docs",
-      file("a.md", "---\nposition: 2\n---\n# A\n"),
-      file("b.md", "---\nsidebar_position: 1\n---\n# B\n"),
-    );
-    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["a", "b"]);
-  });
-
-  it("orders sections by their index file's `order:`", () => {
-    const root = dir(
-      "docs",
-      dir("zeta", file("index.md", "---\norder: 1\ntitle: Zeta\n---\n"), file("z.md")),
-      dir("alpha", file("index.md", "---\norder: 2\ntitle: Alpha\n---\n"), file("a.md")),
-    );
-    const sections = build(root).manifest.nodes.filter((n) => n.kind === "section");
-    expect(sections.map((n) => n.slug)).toEqual(["zeta", "alpha"]);
-    expect(sections.map((n) => n.position)).toEqual([1, 2]);
-  });
-
-  it("falls back to name order, case PRESERVED, without an order", () => {
-    // Case-preserving because the site compares routes and does not fold case;
-    // `B` (66) therefore precedes `a` (97). One bytewise truth, both surfaces.
-    const root = dir("docs", file("Bravo.md"), file("alpha.md"), file("charlie.md"));
-    expect(build(root).manifest.nodes.map((n) => n.slug)).toEqual(["bravo", "alpha", "charlie"]);
-  });
-});
-
-describe("sections and indexes", () => {
-  it("a dir's index.md is the section's own content, not a child", () => {
-    const root = dir(
-      "docs",
-      dir("sect", file("index.md", "---\ntitle: Sect\n---\n"), file("child.md")),
-    );
-    const { manifest } = build(root);
-    const section = manifest.nodes.find((n) => n.kind === "section");
-    expect(section?.stable_id).toBe("docs/sect/index");
-    expect(section?.title).toBe("Sect");
-    const childNode = manifest.nodes.find((n) => n.slug === "child");
-    expect(childNode?.parent).toBe("docs/sect/index");
-    // index.md appears as the section's file, never as a document node
-    expect(manifest.files.map((f) => f.path)).toEqual(["docs/sect/index.md", "docs/sect/child.md"]);
-    expect(manifest.nodes.filter((n) => n.slug === "index")).toEqual([]);
-  });
-
-  it("two index-named files in one dir fail loud", () => {
-    const root = dir("docs", dir("sect", file("index.md"), file("README.md")));
-    expect(() => build(root)).toThrow(ManifestError);
-    expect(() => build(root)).toThrow(/ambiguous section index/);
-  });
-
-  it("a root index.md becomes the corpus landing document at position 0", () => {
-    const root = dir("docs", file("index.md", "---\ntitle: Landing\n---\n"), file("a.md"));
-    const { manifest } = build(root);
-    expect(manifest.nodes[0]).toMatchObject({
-      stable_id: "docs/index",
-      slug: "docs",
-      title: "Landing",
-      kind: "document",
-      position: 0,
-      parent: null,
-    });
-  });
-
-  it("an ambiguous ROOT index fails loud too", () => {
-    const root = dir("docs", file("index.md"), file("README.md"), file("a.md"));
-    expect(() => build(root)).toThrow(/ambiguous section index/);
-  });
-
-  it("a file and a dir of the same name are refused as a sibling slug collision, named", () => {
-    // docs/foo.md and docs/foo/ both want the URL segment 'foo' under docs —
-    // the DB's nodes_sibling_uniq would reject them with an opaque error; the
-    // manifest refuses first, naming both (review finding #13, 2026-08-19).
-    // The canonical "section with an intro" is docs/foo/index.md, not this.
-    const root = dir("docs", file("foo.md"), dir("foo", file("child.md")));
-    expect(() => build(root)).toThrowError(/sibling slug collision.*foo/s);
-  });
-
-  it("two files that slugify to the same name are refused, named", () => {
-    const root = dir("docs", file("Getting Started.md"), file("getting-started.md"));
-    expect(() => build(root)).toThrowError(/sibling slug collision/);
-  });
-
-  it("an index-less section humanizes its dir name for the title", () => {
-    const root = dir("docs", dir("power-and-fire", file("a.md")));
-    const section = build(root).manifest.nodes.find((n) => n.kind === "section");
-    expect(section?.title).toBe("Power And Fire");
-  });
-});
-
-describe("identity", () => {
-  it("frontmatter sor_id wins over the path, trimmed", () => {
-    const root = dir("docs", file("a.md", "---\nsor_id: ' custom-a '\n---\n"));
-    expect(build(root).manifest.nodes[0]?.stable_id).toBe("custom-a");
-  });
-
-  it("path fallback strips only the last suffix; .mdx files keep their path in files[]", () => {
-    const root = dir("docs", file("b.mdx", "---\norder: 1\n---\n"), file("a.b.md"));
-    const { manifest } = build(root);
-    expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["docs/b", "docs/a.b"]);
-    expect(manifest.files.map((f) => f.path)).toEqual(["docs/b.mdx", "docs/a.b.md"]);
-  });
-
-  it("non-Latin names get stable hash slugs, deterministic across builds", () => {
-    const root = dir("docs", file("اردو.md"));
-    const one = build(root).manifest.nodes[0]?.slug;
-    const two = build(root).manifest.nodes[0]?.slug;
-    expect(one, "slug seen: " + JSON.stringify(one)).toBe("x-234d81e4"); // oracle-verified constant
-    expect(two).toBe(one);
-  });
-});
-
-describe("titles", () => {
-  it("humanizes filename stems with Python str.title() parity — apostrophe quirk included", () => {
-    const root = dir("docs", file("rock'n'roll.md"), file("dont_panic-now.md"));
-    const titles = build(root).manifest.nodes.map((n) => n.title);
-    expect(titles).toContain("Rock'N'Roll"); // oracle-verified: don't → Don'T
-    expect(titles).toContain("Dont Panic Now");
-  });
-
-  it("an UNQUOTED title containing ': ' empties the whole meta, like PyYAML's error path", () => {
-    const root = dir(
-      "docs",
-      file("badges.md", "---\ntitle: Rule 10: Machine Badges\nposition: 3\n---\n"),
-    );
-    const node = build(root).manifest.nodes[0];
-    expect(node?.title, "title seen: " + JSON.stringify(node?.title)).toBe("Badges"); // fell back to the stem
-  });
-
-  it("a QUOTED title containing ': ' survives", () => {
-    const root = dir("docs", file("injuries.md", '---\ntitle: "Rule 30: Injuries"\n---\n'));
-    expect(build(root).manifest.nodes[0]?.title).toBe("Rule 30: Injuries");
-  });
-});
-
-describe("skips — loud, never silent", () => {
-  it("hidden and underscore entries are reported and excluded", () => {
-    const skips: string[] = [];
-    const root = dir(
-      "docs",
-      file(".hidden.md"),
-      file("_draft.md"),
-      dir("_notes", file("x.md")),
-      file("real.md"),
-    );
-    const { manifest } = build(root, (l) => skips.push(l));
-    expect(skips).toEqual([
-      "plain-tree: skipped docs/.hidden.md",
-      "plain-tree: skipped docs/_draft.md",
-      "plain-tree: skipped docs/_notes",
+    expect(manifest.nodes.map((n) => `${n.kind} ${n.stable_id}`)).toEqual([
+      "document knowledge/a",
+      "section knowledge/pol#section",
+      "document knowledge/pol/b",
     ]);
-    expect(manifest.files.map((f) => f.path)).toEqual(["docs/real.md"]);
+    expect(manifest.files.map((f) => f.path)).toEqual(["knowledge/a.md", "knowledge/pol/b.md"]);
+    expect([...sources.values()], "an index is never chunked").not.toContain("knowledge/index.md");
+    const b = manifest.nodes.find((n) => n.stable_id === "knowledge/pol/b");
+    expect(b?.parent).toBe("knowledge/pol#section");
+    expect(b?.title).toBe("B");
+    expect(b?.summary, "the description rides the node's summary").toBe("One sentence.");
   });
 
-  it("symlinks are skipped loudly and never followed", () => {
-    const skips: string[] = [];
-    const root = dir("docs", symlink("escape"), file("real.md"));
-    const { manifest, sources } = build(root, (l) => skips.push(l));
-    expect(skips).toEqual(["plain-tree: skipped docs/escape (symlink)"]);
-    expect(manifest.files.map((f) => f.path)).toEqual(["docs/real.md"]);
-    expect([...sources.keys()]).toEqual(["docs/real.md"]);
+  it("an EMPTY directory is still a section shell, and a section's title is humanised", () => {
+    const { manifest } = build({ "knowledge/a.md": doc("A") }, ["knowledge/purchase-policies"]);
+    const section = manifest.nodes.find((n) => n.kind === "section");
+    expect(section?.stable_id).toBe("knowledge/purchase-policies#section");
+    expect(section?.title).toBe("Purchase policies");
+    expect(section?.governance.audience, "no descendants: visible to nobody").toEqual([]);
   });
 
-  it("an all-skips tree reports every skip BEFORE failing on emptiness", () => {
-    const skips: string[] = [];
-    const root = dir("docs", file("_only.md"));
-    expect(() => build(root, (l) => skips.push(l))).toThrow(/contains no Markdown/);
-    expect(skips).toEqual(["plain-tree: skipped docs/_only.md"]);
-  });
-
-  it("an empty tree fails loud", () => {
-    expect(() => build(dir("docs"))).toThrow(/contains no Markdown/);
-  });
-});
-
-describe("output shape", () => {
-  it("is deterministic and round-trips the strict parser", () => {
-    const root = dir(
-      "docs",
-      file("index.md", "---\ntitle: Landing\n---\n"),
-      dir("sect", file("index.md", "---\nposition: 1\ntitle: Sect\n---\n"), file("child.md")),
+  /**
+   * The predicate decision 24 says was breached last time: `x.summary.md` once
+   * ingested as a node of its own because the walk was a bare suffix test. A
+   * sim reaches this file as an ASSET rather than a name, so the same mistake
+   * cannot be made the same way — but it is asserted here anyway, because
+   * "a sim has no stable id and no MCP node" is the governance claim, and the
+   * only place it can be read off is the manifest the kernel ingests.
+   */
+  it("a carried sim creates no node and is never chunked — it is an asset", () => {
+    const check = checkRecord(
+      {
+        files: new Map(
+          Object.entries({
+            "instance.md": INSTANCE,
+            ".ksor/governance.yaml": POLICY,
+            "knowledge/a.md": doc("A"),
+          }),
+        ),
+        dirs: [],
+        assets: new Map([["knowledge/goal-loop.sim.html", new Uint8Array()]]),
+      },
+      { mode: "build", ledgerBaselines: [] },
     );
-    const one = manifestToJson(build(root).manifest);
-    const two = manifestToJson(build(root).manifest);
-    expect(one).toEqual(two);
-  });
+    expect(check.refusals, "the checker refused a sim it is meant to admit").toEqual([]);
+    expect(
+      check.concepts.map((c) => c.id),
+      "a sim became a concept, which would give it an id of its own",
+    ).toEqual(["a"]);
 
-  it("maps every manifest path to its source path under rootPath", () => {
-    const root = dir("docs", dir("sect", file("index.md"), file("child.md")));
-    const { sources } = buildManifestFromTree(root, {
+    const { manifest, sources } = buildManifestFromRecord(check, [], {
       corpusId: "c",
       sourceCommit: "dev",
-      rootPath: "/abs/docs",
-      onSkip: () => {},
     });
-    expect(Object.fromEntries(sources)).toEqual({
-      "docs/sect/index.md": "/abs/docs/sect/index.md",
-      "docs/sect/child.md": "/abs/docs/sect/child.md",
+    expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["knowledge/a"]);
+    expect(manifest.files.map((f) => f.path)).toEqual(["knowledge/a.md"]);
+    expect([...sources.values()]).not.toContain("knowledge/goal-loop.sim.html");
+  });
+
+  it("companions create no node and are never chunked", () => {
+    const { manifest } = build({
+      "knowledge/a.md": doc("A"),
+      "knowledge/a.summary.md": "---\ntype: Summary\n---\nShort.\n",
+      "knowledge/a.flashcards.yaml": "deck: {}\n",
     });
+    expect(manifest.nodes.map((n) => n.stable_id)).toEqual(["knowledge/a"]);
+    expect(manifest.files).toHaveLength(1);
   });
 });
 
-describe("frontmatterMeta", () => {
-  it("reads top-level scalars: quoted, single-quoted, int, float, bool, null", () => {
-    const meta = frontmatterMeta(
-      "---\ntitle: \"A: B\"\nother: 'it''s'\nposition: 3\nweight: 2.5\ndraft: true\nempty:\n---\nbody",
+describe("ordering — the governed `order:` key, then name (lib/order-rule.ts)", () => {
+  it("honors order over name, for documents and directories alike", () => {
+    const { manifest } = build(
+      {
+        "knowledge/a.md": doc("A", { order: 2 }),
+        "knowledge/b.md": doc("B", { order: 1 }),
+        "knowledge/z/first.md": doc("F", { order: 0 }),
+      },
+      ["knowledge/z"],
     );
-    expect(meta).toEqual({
-      title: "A: B",
-      other: "it's",
-      position: 3,
-      weight: 2.5,
-      draft: true,
-      empty: null,
-    });
+    expect(manifest.nodes.filter((n) => n.parent === null).map((n) => n.slug)).toEqual([
+      "z",
+      "b",
+      "a",
+    ]);
+    expect(manifest.nodes.filter((n) => n.parent === null).map((n) => n.position)).toEqual([
+      1, 2, 3,
+    ]);
   });
 
-  it("returns {} without frontmatter and requires it at byte 0", () => {
-    expect(frontmatterMeta("# No fm\n")).toEqual({});
-    expect(frontmatterMeta("\n---\ntitle: A\n---\n")).toEqual({});
-  });
-
-  it("handles CRLF frontmatter", () => {
-    expect(frontmatterMeta("---\r\ntitle: A\r\nposition: 1\r\n---\r\nbody")).toEqual({
-      title: "A",
-      position: 1,
-    });
-  });
-
-  it("strips trailing comments from plain scalars", () => {
-    expect(frontmatterMeta("---\nposition: 1  # first\n---\n")).toEqual({ position: 1 });
-  });
-
-  it("ignores nested structure but keeps the surrounding scalars", () => {
-    const meta = frontmatterMeta("---\ntitle: A\nitems:\n  - one\n  - two\n---\n");
-    expect(meta["title"]).toBe("A");
-  });
-
-  it("poisons the WHOLE meta on YAML PyYAML would refuse", () => {
-    expect(frontmatterMeta("---\ntitle: Rule 10: Machine Badges\nposition: 3\n---\n")).toEqual({});
-    expect(frontmatterMeta("---\nnot a mapping line\n---\n")).toEqual({});
-    // A block scalar is NOT in this list: PyYAML parses it, so the document is
-    // valid and only the key is beyond this reader (#78).
-    expect(frontmatterMeta("---\ntitle: >\n  folded\n---\n")).toEqual({ title: null });
-  });
-});
-
-/**
- * Issue #78 — a value this reader does not model is not an invalid document.
- *
- * `scalarValue` refused anything opening with `[ { | > & * !` and the caller
- * treated the refusal as poison, emptying the whole meta. So one YAML list
- * alongside the title took the title with it, and four documents in a real book
- * were served under filename-derived names — "The System of Context: Connecting
- * the Records to Real Work" stored as "System Of Context".
- *
- * The reader is documented as PyYAML-compatible, and PyYAML parses a flow
- * sequence perfectly well. Only what PyYAML would REJECT may empty the meta.
- */
-describe("valid YAML this reader does not model keeps the rest (#78)", () => {
-  const KEEPS = {
-    "a flow sequence": 'authors: ["Panaversity Team"]',
-    "a flow mapping": "slides: { height: 700 }",
-    "a block scalar": "summary: |",
-    "an anchor": "base: &defaults",
-  };
-  for (const [what, line] of Object.entries(KEEPS)) {
-    it(`${what} does not cost the document its title`, () => {
-      const meta = frontmatterMeta(
-        `---\ntitle: "Preface: The Right Side"\n${line}\norder: 3\n---\n\nbody\n`,
-      );
-      expect(meta["title"], `meta was emptied by ${what}: ${JSON.stringify(meta)}`).toBe(
-        "Preface: The Right Side",
-      );
-      expect(meta["order"], "and the governed ordering key went with it").toBe(3);
-    });
-  }
-
-  const POISONS = {
-    "an unquoted plain scalar containing ': '": "title: Preface: The Right Side",
-    "a key with a trailing colon in its value": "title: Preface:",
-  };
-  for (const [what, line] of Object.entries(POISONS)) {
-    it(`${what} still empties the meta — PyYAML raises there`, () => {
-      expect(frontmatterMeta(`---\n${line}\norder: 3\n---\n\nbody\n`)).toEqual({});
-    });
-  }
-
-  it("the real shape that lost four titles", () => {
-    const meta = frontmatterMeta(
-      '---\ntitle: "Preface: The Right Side of the Line"\n' +
-        'authors: ["Panaversity Team"]\ndate: "2026-07-04"\nsidebar_position: -9\n---\n\nbody\n',
+  it("a directory ranks by the lowest order among its own concepts, unordered last", () => {
+    const { manifest } = build(
+      {
+        "knowledge/a.md": doc("A"),
+        "knowledge/late/x.md": doc("X"),
+        "knowledge/early/y.md": doc("Y", { order: 1 }),
+      },
+      ["knowledge/late", "knowledge/early"],
     );
-    expect(meta["title"]).toBe("Preface: The Right Side of the Line");
-    expect(meta["sidebar_position"], "so #74's warning can see it too").toBe(-9);
+    expect(manifest.nodes.filter((n) => n.parent === null).map((n) => n.slug)).toEqual([
+      "early",
+      "a",
+      "late",
+    ]);
   });
 });
 
-/**
- * Issue #74 — an ordering key this record does not read must not be ignored in
- * silence.
- *
- * Found by ingesting a real 81-document Docusaurus book: 73 files declared
- * `sidebar_position`, ksor read only the governed `order:` key, ordering fell
- * back to filename — alphabetical — and nothing in the output said why. That
- * order is what `llms.txt`, the sidebar and the MCP `outline` all serve, so the
- * book was served scrambled and the reader had no way to learn it.
- *
- * Ignoring the key is correct; the silence is the defect. This adapter already
- * holds the principle for its other fallbacks: a skip is REPORTED, never silent.
- */
-describe("a foreign ordering key is reported, not silently ignored (#74)", () => {
-  const withPos = (name: string, key: string, value: string): TreeEntry =>
-    file(name, `---\ntitle: T\n${key}: ${value}\n---\n\n# T\n\ntext\n`);
+describe("governance is projected from the profile, never re-read", () => {
+  it("carries audience, status, tier, approval and effectivity onto the node", () => {
+    const { manifest } = build({
+      "knowledge/p.md": doc("P", {
+        audience: "internal, board",
+        extra:
+          'verified:\n  - { by: "human:kim", at: 2026-08-22T10:00:00Z }\nstale_after: 2027-01-01T00:00:00Z\n',
+      }),
+    });
+    const g = manifest.nodes[0]!.governance;
+    expect(g.audience).toEqual(["internal", "board"]);
+    expect(g.docStatus).toBe("stable");
+    expect(g.trustTier, "a human verifier is tier 2").toBe(2);
+    expect(g.approval).toEqual({ by: "human:cfo", at: "2026-08-21T09:00:00.000Z" });
+    expect(g.generated).toEqual({ by: "x/1", at: "2026-08-20T09:00:00.000Z" });
+    expect(g.staleAfter).toBe("2027-01-01T00:00:00.000Z");
+    expect(g.verified).toEqual([{ by: "human:kim", at: "2026-08-22T10:00:00.000Z" }]);
+  });
 
-  it("names the key, the count and the remedy", () => {
-    const lines: string[] = [];
-    build(
-      dir(
-        "root",
-        withPos("a.md", "sidebar_position", "3"),
-        withPos("b.md", "sidebar_position", "1"),
-        withPos("c.md", "sidebar_position", "2"),
+  it("a draft carries no approval and tier 0; a stable, unverified concept is tier 0 too", () => {
+    const { manifest } = build({
+      "knowledge/d.md": doc("D", { status: "draft" }),
+      "knowledge/s.md": doc("S"),
+    });
+    const byId = new Map(manifest.nodes.map((n) => [n.stable_id, n.governance]));
+    expect(byId.get("knowledge/d")).toMatchObject({
+      docStatus: "draft",
+      approval: null,
+      trustTier: 0,
+    });
+    expect(byId.get("knowledge/s")).toMatchObject({ docStatus: "stable", trustTier: 0 });
+  });
+
+  it("a section carries the UNION of its descendants' audiences — the one predicate admits it iff a descendant is visible", () => {
+    const { manifest } = build(
+      {
+        "knowledge/sec/pub.md": doc("Pub"),
+        "knowledge/sec/deep/int.md": doc("Int", { audience: "internal" }),
+        "knowledge/sec/deep/brd.md": doc("Brd", { audience: "board" }),
+      },
+      ["knowledge/sec", "knowledge/sec/deep"],
+    );
+    const byId = new Map(manifest.nodes.map((n) => [n.stable_id, n.governance.audience]));
+    expect(byId.get("knowledge/sec#section")).toEqual(["board", "internal", "public"]);
+    expect(byId.get("knowledge/sec/deep#section")).toEqual(["board", "internal"]);
+  });
+
+  it("superseded_by is carried as a stable_id", () => {
+    const { manifest } = build({
+      "knowledge/old.md": doc("Old", {
+        status: "deprecated",
+        extra: "",
+      }).replace(
+        "ksor:\n",
+        'ksor:\n  deprecated: { by: "human:ciso", at: 2026-08-22T10:00:00Z }\n  superseded_by: new\n',
       ),
-      (l) => lines.push(l),
-    );
-    const said = lines.join("\n");
-    expect(said, `nothing was reported. Lines: ${JSON.stringify(lines)}`).toMatch(
-      /sidebar_position/,
-    );
-    expect(said, "the count must be there — 3 of 3 is a different problem from 3 of 300").toMatch(
-      /\b3\b/,
-    );
-    expect(said, "and the remedy: the governed key it should be renamed to").toMatch(/order:/);
+      "knowledge/new.md": doc("New"),
+    });
+    const old = manifest.nodes.find((n) => n.stable_id === "knowledge/old")!.governance;
+    expect(old.docStatus).toBe("deprecated");
+    expect(old.supersededBy).toBe("knowledge/new");
+    expect(old.deprecated).toEqual({ by: "human:ciso", at: "2026-08-22T10:00:00.000Z" });
   });
+});
 
-  it("says nothing when the document ALSO declares the governed key", () => {
-    // `order:` wins, so there is no fallback and nothing to warn about. A
-    // warning here would train the reader to ignore the channel.
-    const lines: string[] = [];
-    build(
-      dir(
-        "root",
-        file("a.md", `---\ntitle: T\norder: 1\nsidebar_position: 9\n---\n\n# T\n\ntext\n`),
-      ),
-      (l) => lines.push(l),
-    );
-    expect(lines.filter((l) => l.includes("sidebar_position"))).toEqual([]);
-  });
-
-  it("says nothing about a corpus that declares no foreign key at all", () => {
-    const lines: string[] = [];
-    build(dir("root", file("a.md"), file("b.md")), (l) => lines.push(l));
-    expect(lines.filter((l) => /ordering key/.test(l))).toEqual([]);
-  });
-
-  it("covers the other ecosystems' keys, not just Docusaurus's", () => {
-    const lines: string[] = [];
-    build(dir("root", withPos("a.md", "weight", "3"), withPos("b.md", "nav_order", "1")), (l) =>
-      lines.push(l),
-    );
-    const said = lines.join("\n");
-    expect(said).toMatch(/weight/);
-    expect(said).toMatch(/nav_order/);
+describe("slugs", () => {
+  it("a non-Latin name is refused as a PATH, and still gets a stable slug if one arrives", () => {
+    // Two guarantees, not one: the record may not carry the name (paths are
+    // identities and a non-ascii one is not portable), and the adapter still
+    // derives a stable slug rather than an empty one if a tree reaches it
+    // another way. The title carries the document's real name in any language.
+    const files = { "knowledge/政策.md": doc("Policy") };
+    const refused = checkRecord(
+      {
+        files: new Map(
+          Object.entries({ "instance.md": INSTANCE, ".ksor/governance.yaml": POLICY, ...files }),
+        ),
+        dirs: [],
+      },
+      { mode: "build", ledgerBaselines: [] },
+    ).refusals.map((r) => r.slug);
+    expect(refused).toContain("ksor-name-unportable");
+    const { manifest } = buildUnchecked(files);
+    expect(manifest.nodes[0]!.slug).toMatch(/^x-[0-9a-f]{8}$/);
   });
 });

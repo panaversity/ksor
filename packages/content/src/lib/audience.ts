@@ -1,130 +1,140 @@
 /**
- * The audience seam: which documents a viewer at a given tier may be served.
+ * The audience seam: which documents a VIEWER may be served (record spec §2.4).
  *
- * `visibility:` was the record's access-control model and was enforced in
- * exactly one place — the site's build-time staging step. Ingest dropped the
- * key, so the MCP door had nothing to filter on and served restricted documents
- * to every agent (review 2026-08-20, reproduced live). Schema 2.2 carries
- * `content_nodes.visibility`; this module is the predicate that uses it, bound
- * into search, read and outline the way `lib/takedown.ts` binds denial — ONE
- * seam, so a path cannot quietly skip it.
+ * A concept holds a LIST of audience identifiers (`ksor.audience`); a viewer
+ * holds a list that always includes `public`; the concept is visible when the
+ * two overlap — `n.audience && :viewer`. Rank moved to the viewer and
+ * membership stayed on the document, which is what let every row of the old
+ * ranked table keep its meaning (`AUDIENCE_CASES` is the rule;
+ * `audience-conformance.db.test.ts` runs the predicate against every row
+ * through real Postgres).
  *
- * The model is the site's, deliberately unchanged: `audiences:` is ordered
- * least- to most-restricted with the public tier first, and a viewer at tier i
- * may see any document whose visibility sits at or below i. A document that
- * declares no visibility takes `default_visibility`.
+ * This is ONE of three predicates, not the whole admission decision:
+ * `lib/admit.ts` composes it with `lib/lifecycle.ts` and `lib/trust.ts` into
+ * the set that search, read, outline and the calibration sampler bind, the way
+ * `lib/takedown.ts` binds denial. Bind THAT, not this — a path that overlapped
+ * audience alone would serve drafts and expired documents to the right people.
+ *
+ * A SECTION is not decided here. Ingest gives it the union of its descendants'
+ * lists, which is enough for audience and for nothing else — a section whose
+ * every document is a draft or past its review date would still carry their
+ * lists — so admission resolves it by a descendant walk instead (`admit.ts`).
+ * The union stays on the row because it is what the site's own tree reads.
+ *
+ * Omission is a refusal upstream (the checker), never a default here: a NULL
+ * or empty list overlaps nothing and is served to nobody.
  */
 
-export interface AudienceModel {
-  /** Ordered least- to most-restricted; empty = the record declares no model. */
-  readonly audiences: readonly string[];
-  /** The tier a document takes when it names none. */
-  readonly defaultVisibility: string | null;
-}
+export type ViewerRefusal =
+  | "ksor-viewer-omits-public"
+  | "ksor-viewer-unregistered"
+  | "ksor-audience-identifier-invalid";
 
+/**
+ * A refusal about WHO this door serves.
+ *
+ * Same two-audience shape as `GovernanceGateError`, for the same reason: the
+ * OPERATOR needs to see what the record actually registers, and a CALLER — who
+ * under `KSOR_AUTH=disabled-public` is anyone who can reach the port — does not
+ * need the record's audience vocabulary read out to them because the operator
+ * mistyped an environment variable. The names of a record's audiences are its
+ * governance structure, not a public fact about it.
+ *
+ * So `registered` arrives through its own parameter and lands on `message`
+ * alone; `wire` is the text this constructor was handed. The viewer list itself
+ * is NOT record content — it is the operator's own env — and stays in both.
+ */
 export class AudienceError extends Error {
   override readonly name: string = "AudienceError";
+  readonly slug: ViewerRefusal;
+  /** The refusal minus the record's own audience registry. */
+  readonly wire: string;
+
+  constructor(slug: ViewerRefusal, wire: string, registered: readonly string[] | null = null) {
+    const text = `${slug}: ${wire}`;
+    super(
+      registered === null
+        ? text
+        : // "none registered" is not padding: it separates a record with no
+          // policy row from one whose policy simply lacks this entry, which are
+          // different fixes.
+          `${text}\n  this record registers, for your logs: ${
+            registered.length === 0 ? "(none registered)" : registered.join(", ")
+          }`,
+    );
+    this.slug = slug;
+    this.wire = text;
+  }
+}
+
+/** `KSOR_AUDIENCE` is a comma list; unset or empty means `[public]` (build spec §3). */
+export function parseViewer(raw: string | undefined | null): string[] {
+  const list = (raw ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v !== "");
+  return list.length === 0 ? ["public"] : [...new Set(list)];
 }
 
 /**
- * The visibility values a viewer at `viewer` may be served, or `null` when the
- * record declares no audience model at all (nothing to filter — the level-0
- * shape, unchanged).
- *
- * A viewer tier the model does not know is an ERROR, never a silent widening:
- * the failure mode this whole seam exists to end is a filter that quietly
- * passes everything.
+ * The viewer list this door serves, validated against the policy's registry
+ * (`public` is reserved and never registered). A list that omits `public` or
+ * names an identifier no policy declares is refused at boot, never narrowed or
+ * widened silently.
  */
-export function visibleTiers(model: AudienceModel, viewer: string | null): string[] | null {
-  if (model.audiences.length === 0) {
-    // A tier was ASKED for against a record that declares none. Ignoring it
-    // silently served the whole record to a caller who explicitly narrowed
-    // themselves — the site refuses this exact configuration by name
-    // (round-1 review of #43).
-    if (viewer !== null && viewer !== "") {
-      throw new AudienceError(
-        `an audience ${JSON.stringify(viewer)} was requested, but this record declares no ` +
-          "`audiences:` model — so nothing can be narrowed and the whole record would be " +
-          "served. Declare audiences: in instance.md, or unset KSOR_AUDIENCE.",
-      );
-    }
-    return null;
-  }
-  const tier = viewer ?? model.audiences[0]!;
-  const index = model.audiences.indexOf(tier);
-  if (index < 0) {
+export function validateViewer(registry: readonly string[], viewer: readonly string[]): string[] {
+  // Before anything else: an identifier that cannot survive the encoding is not
+  // a narrower or wider viewer, it is a DIFFERENT one (see assertEncodable).
+  for (const id of viewer) assertEncodable(id);
+  if (!viewer.includes("public")) {
     throw new AudienceError(
-      `unknown audience ${JSON.stringify(tier)} — this record declares ` +
-        `[${model.audiences.join(", ")}]. Serving an unknown tier would have to guess how much ` +
-        "of the record it may show; refusing.",
+      "ksor-viewer-omits-public",
+      `the viewer list [${viewer.join(", ")}] omits \`public\` — every viewer holds the unrestricted audience, so a list without it would hide the public half of the record\n` +
+        "  fix: KSOR_AUDIENCE is a comma list that includes public, e.g. KSOR_AUDIENCE=public,internal",
     );
   }
-  return model.audiences.slice(0, index + 1);
+  const unknown = viewer.filter((v) => v !== "public" && !registry.includes(v));
+  if (unknown.length > 0) {
+    throw new AudienceError(
+      "ksor-viewer-unregistered",
+      `the viewer list names ${unknown.map((u) => `\`${u}\``).join(", ")}, which this record's audience registry does not declare — serving an unknown identifier would have to guess how much of the record it may show\n` +
+        "  fix: use registered audiences, or register it in .ksor/governance.yaml and re-ingest",
+      registry,
+    );
+  }
+  return [...viewer];
 }
 
 /**
- * The sentinel for "this record declares no audience model".
- *
- * It is a VALUE, not the absence of one, and that is the whole point. The
- * predicate used to read an UNBOUND GUC as "no model" and evaluate TRUE, so a
- * statement running with no scope bound served every tier.
- *
- * Two layers, and it matters which is which:
- *
- *   SQL      an unbound `app.audience_tiers` matches NOTHING. A statement that
- *            somehow runs outside `runRead` returns no rows rather than the
- *            whole record.
- *   runRead  binds this sentinel by DEFAULT, so a library caller that does not
- *            narrow gets the whole record — stated, not inherited from an
- *            unbound GUC.
- *
- * So the serving DOOR is what must be right: `service.ts` overrides the default
- * on every path with the caller's tier, and `audience-binding.test.ts` asserts
- * that none of them can lose it. The SQL is the backstop, not the guarantee
- * (round-3 review of #43 corrected the earlier, overstated claim).
+ * The sentinel for "the whole record" — calibration (the floor is a property of
+ * the corpus), ingest-side verification, and tests. A VALUE, so "everything" is
+ * something a caller says rather than what happens when nobody binds a scope:
+ * an UNBOUND `app.viewer` overlaps nothing and the predicate is false.
  */
-const NO_MODEL: string = "*";
+const WHOLE_RECORD = "*";
 
-/** The unit separator, chosen because no audience name may contain it. */
-const SEP = "\u001f";
+/** The unit separator, chosen because no audience identifier may contain it. */
+const SEP = "";
 
 /**
- * The serving-path predicate, written against transaction GUCs rather than
- * positional parameters.
+ * The serving-path predicate for a node aliased `alias`, written against a
+ * transaction GUC rather than a positional parameter: the retrieval statements
+ * share one `ARM_WHERE` string and renumber its parameters by substitution, so
+ * a GUC composes the way the tenant wall does — bound in the same `set_config`
+ * round trip, invisible to the numbering, and impossible to leak to the next
+ * pool borrower.
  *
- * The retrieval statements share one `ARM_WHERE` string and renumber its
- * parameters by substitution (`$5` -> `$4`), so threading a new positional
- * parameter through them is exactly the fragile edit a reviewer flagged. GUCs
- * compose the way the tenant wall already does — bound transaction-locally in
- * the same `set_config` round trip, invisible to the numbering, and impossible
- * to leak to the next pool borrower.
- *
- * Parameterised by TABLE ALIAS, because the outline's child_count subquery
- * scans a second alias — and hand-copying the predicate for it produced two
- * copies of the seam this module exists to make singular, which promptly
- * drifted apart and returned child_count 0 for every node (review of PR #43,
- * found by its own test).
- *
- * `app.audience_tiers = '*'` means "this record declares no audience model".
- * UNBOUND means nobody stated a scope, and the predicate matches nothing —
- * fail closed, so a forgotten binding is an outage rather than a leak.
- */
-/**
- * `nullif(…, '')` because an EMPTY `visibility:` means the same as declaring
- * none, and the TypeScript half of this rule has always said so. The SQL left
- * `''` alone, so it matched no tier and the document was served to nobody while
- * the site published it at `default_visibility` — a disagreement decision 18's
- * shared table is supposed to make impossible, and did not catch because the
- * one empty-string row expected `false` under both readings for different
- * reasons (round-5 review of #43). Not reachable today — both frontmatter
- * readers reject an empty `visibility:` earlier — which is exactly why it had
- * to be fixed before something made it reachable.
+ * The alias parameter is vestigial — it existed because the outline's
+ * child_count subquery scanned a second alias, which `admittedCte` now covers,
+ * and every remaining caller passes `"n"`. It is kept rather than inlined
+ * because the string this produces is hashed into `GATE_PREDICATE_DIGEST` and
+ * pinned by value in `calibration-digest.test.ts`: collapsing it must not move
+ * a byte, and there is nothing to gain by finding out.
  */
 export function audienceAllowed(alias: string): string {
   return `(
-    current_setting('app.audience_tiers', true) = '${NO_MODEL}'
-    OR coalesce(nullif(${alias}.visibility, ''), coalesce(current_setting('app.default_visibility', true), '')) =
-       ANY (string_to_array(coalesce(current_setting('app.audience_tiers', true), ''), E'\\x1f'))
+    current_setting('app.viewer', true) = '${WHOLE_RECORD}'
+    OR ${alias}.audience && string_to_array(current_setting('app.viewer', true), E'\\x1f')
 )`;
 }
 
@@ -132,42 +142,37 @@ export function audienceAllowed(alias: string): string {
 export const AUDIENCE_ALLOWED: string = audienceAllowed("n");
 
 /**
- * The GUCs {@link AUDIENCE_ALLOWED} reads.
+ * The two things an audience identifier may not be, enforced where identifiers
+ * ENTER the encoding rather than only where the door validates them.
  *
- * A record that declares no model still binds the {@link NO_MODEL} sentinel
- * EXPLICITLY, so every serving path states its audience scope and a missing
- * binding cannot be mistaken for "unrestricted". This sentence used to say the
- * opposite — empty object, nothing bound, predicate stays TRUE — which is the
- * fail-open the module was rewritten to end, still described directly above
- * the code that ends it (round-9 review of PR 43).
+ * The separator was documented as "chosen because no audience identifier may
+ * contain it" and nothing checked. It is not a style rule: `audienceGucs` joins
+ * on U+001F and the SQL splits on it, so `intern\x1fboard` does not travel as
+ * one identifier — it arrives as TWO, and the viewer holds an audience nobody
+ * granted. The sentinel is the same class: `*` is the value the predicate
+ * compares against for "the whole record", so an identifier spelled `*` is a
+ * name that means everything to the reader of the GUC.
+ *
+ * Both are refusals rather than escapes. An escape would make the two sides
+ * agree while leaving a governance identifier that reads one way in
+ * `.ksor/governance.yaml` and another in the database — and a registry is a
+ * short list a human wrote, so nothing legitimate is being turned away.
  */
-export function audienceGucs(
-  model: AudienceModel,
-  viewer: string | null,
-): Readonly<Record<string, string>> {
-  const tiers = visibleTiers(model, viewer);
-  // Bound EXPLICITLY even when there is no model, so every serving path states
-  // its audience scope and a missing one cannot be mistaken for "unrestricted".
-  if (tiers === null) return { "app.audience_tiers": NO_MODEL };
-  return {
-    "app.audience_tiers": tiers.join(SEP),
-    // A document that declares no visibility takes this tier. Bound as the
-    // empty string when the record names no default, which matches no allowed
-    // tier — so an undeclared document in a record with an audience model but
-    // no default fails CLOSED rather than being served to everyone.
-    "app.default_visibility": model.defaultVisibility ?? "",
-  };
+function assertEncodable(id: string): void {
+  const bad = id.includes(SEP) ? "the unit separator U+001F" : id === WHOLE_RECORD ? "`*`" : null;
+  if (bad === null) return;
+  throw new AudienceError(
+    "ksor-audience-identifier-invalid",
+    `the audience identifier ${JSON.stringify(id)} contains ${bad}, which this record cannot carry — the viewer list is joined on U+001F and split on it in SQL, and \`*\` is the sentinel meaning the WHOLE record, so either one is read as a different set of audiences than the one written\n` +
+      "  fix: name audiences in plain words (letters, digits, `-`, `_`) in .ksor/governance.yaml and in KSOR_AUDIENCE",
+  );
 }
 
-/**
- * The scope for a caller that is entitled to the WHOLE record: calibration
- * (the floor is a property of the corpus, not of one tier), ingest-side
- * verification, and tests that assert on the record as a whole.
- *
- * It exists so "everything" is something a caller SAYS rather than something
- * that happens when nobody binds a scope.
- */
-export const WHOLE_RECORD_SCOPE: Readonly<Record<string, string>> = audienceGucs(
-  { audiences: [], defaultVisibility: null },
-  null,
-);
+/** The GUC {@link AUDIENCE_ALLOWED} reads, for a validated viewer list. */
+export function audienceGucs(viewer: readonly string[]): Readonly<Record<string, string>> {
+  for (const id of viewer) assertEncodable(id);
+  return { "app.viewer": viewer.join(SEP) };
+}
+
+/** The scope for a caller entitled to the WHOLE record. */
+export const WHOLE_RECORD_SCOPE: Readonly<Record<string, string>> = { "app.viewer": WHOLE_RECORD };

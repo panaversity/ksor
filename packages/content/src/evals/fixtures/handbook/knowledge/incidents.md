@@ -1,7 +1,13 @@
 ---
+type: Document
 title: Security incidents
-status: approved
+description: How to report a security incident and how severity is decided.
+status: stable
 order: 5
+generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }
 ---
 
 # Security incidents

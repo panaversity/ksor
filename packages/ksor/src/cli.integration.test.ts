@@ -45,7 +45,16 @@ describe("ksor CLI (built artifact)", () => {
   it("a verb's --help reaches THAT verb, not the generic usage", () => {
     const result = runCli(["ingest", "--help"]);
     expect(result.status, result.stdout + result.stderr).toBe(0);
-    expect(result.stdout, "the verb's own flags").toContain("--knowledge");
+    // `--knowledge` is gone: the record root beside instance.md supplies it
+    // (record spec §1), so the verb's own flags are what is left.
+    expect(result.stdout, "the verb's own flags").toContain("--instance");
+    expect(result.stdout, "the verb's own flags").toContain("--flip");
+    expect(result.stdout, "the record root supplies it now").not.toContain("--knowledge");
+    // …and passing it refuses rather than being quietly tolerated: a flag that
+    // works while absent from `--help` is a trap. `ksor migrate` strips it from
+    // the scripts the pre-profile scaffold shipped.
+    const retired = runCli(["ingest", "--instance", "instance.md", "--knowledge", "knowledge"]);
+    expect(retired.status, `${retired.stdout}${retired.stderr}`).toBe(1);
   });
 
   it("a mistyped flag is REFUSED (exit 1), not reported as a broken environment", () => {
@@ -56,16 +65,16 @@ describe("ksor CLI (built artifact)", () => {
   });
 
   it("names the verb it refuses to fake", () => {
-    const result = runCli(["build"]);
+    const result = runCli(["dev"]);
     expect(result.status).toBe(2);
-    expect(result.stdout).toContain("ksor build: designed but not implemented");
+    expect(result.stdout).toContain("ksor dev: designed but not implemented");
   });
 
   it("refuses an unknown verb with exit 1 and a stable error slug", () => {
     const result = runCli(["frobnicate"]);
     expect(result.status).toBe(1);
     expect(result.stderr.split("\n")[0]).toBe("error: unknown-verb");
-    expect(result.stderr).toContain("init, dev, build, serve");
+    expect(result.stderr).toContain("init, dev, build, migrate, serve");
   });
 
   it("answers --help and -h with usage and exit 0 — help is not an unimplemented verb", () => {
@@ -86,6 +95,116 @@ describe("ksor CLI (built artifact)", () => {
       const result = spawnSync(process.execPath, [distCli, "serve"], { cwd, encoding: "utf8" });
       expect(result.status, result.stderr).toBe(3);
       expect(result.stderr).toContain("instance.md");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("serve takes `--instance <dir>`, the same as every other verb", () => {
+    // `--instance` accepts a directory everywhere else — `build` documented it
+    // and `schema`/`grant`/`ingest` were fixed to match. `serve` resolved its
+    // own path and answered `EISDIR: illegal operation on a directory, read`:
+    // a raw errno naming no rule, no reason and no fix, on the one flag a
+    // person is most likely to type as `.` (found on a live walk, 2026-08-25).
+    // It must reach the SAME refusal the other verbs reach — about the record,
+    // not about the filesystem.
+    const cwd = mkdtempSync(path.join(tmpdir(), "ksor-serve-dir-"));
+    try {
+      writeFileSync(
+        path.join(cwd, "instance.md"),
+        "---\nformat: 2\nname: dirflag\ntitle: Dir flag\ndescription: One sentence.\n---\n\nScope.\n",
+      );
+      const result = spawnSync(process.execPath, [distCli, "serve", "--instance", "."], {
+        cwd,
+        encoding: "utf8",
+        env: { ...process.env, KSOR_AUTH: "disabled-local" },
+      });
+      expect(result.stderr, "a raw errno reached the operator").not.toContain("EISDIR");
+      // The record has no `database:`, which is what it should now be told.
+      expect(result.stderr).toContain("database");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("serve and init answer their OWN --help — the two verbs that had no page", () => {
+    // Every other verb documents itself. `serve` is one of the four commands
+    // the README tells an adopter to run, is configured entirely by
+    // environment variable, and is the verb whose bind failure sends a reader
+    // hunting for a flag — and both it and `init` fell through to the generic
+    // verb list (first-hour walkthrough, 2026-08-26).
+    const serve = runCli(["serve", "--help"]);
+    expect(serve.status, serve.stderr).toBe(0);
+    expect(serve.stdout, "not the generic verb list").not.toContain("Usage: ksor <verb>");
+    expect(serve.stdout, "the flag it takes").toContain("--instance");
+    expect(serve.stdout, "the variable a busy port sends you looking for").toContain(
+      "KSOR_MCP_PORT",
+    );
+    expect(serve.stdout, "the variable without which it refuses to boot").toContain("KSOR_AUTH");
+    expect(serve.stdout, "asking a question must never perform the act").not.toContain("serving");
+
+    const init = runCli(["init", "--help"]);
+    expect(init.status, init.stderr).toBe(0);
+    expect(init.stdout, "not the generic verb list").not.toContain("Usage: ksor <verb>");
+    expect(init.stdout).toContain("ksor init <name>");
+    expect(init.stdout, "the form that scaffolds in place").toContain("ksor init .");
+  });
+
+  it("every write-plane refusal opens with `error: <slug>`, the contract docs/index.md states", () => {
+    // `ksor build` printed `error: ksor-instance-format`; `ksor schema` printed
+    // its sentence with no slug at all, so an agent branching on the first
+    // stderr line could read one verb and not the other (first-hour
+    // walkthrough, 2026-08-26).
+    const cases: readonly (readonly [readonly string[], string])[] = [
+      [["schema"], "error: bad-args"],
+      [["schema", "--dim", "8", "--instance", "instance.md"], "error: bad-args"],
+      [["schema", "--dim", "zero"], "error: bad-args"],
+      [["schema", "--dim", "8", "--apply"], "error: bad-args"],
+      [["ingest"], "error: bad-args"],
+      [["calibrate"], "error: bad-args"],
+      [["gc"], "error: bad-args"],
+      [["grant"], "error: bad-args"],
+      [["takedown"], "error: ksor-takedown-unspecified"],
+    ];
+    for (const [args, slug] of cases) {
+      const r = runCli([...args]);
+      expect(r.status, `ksor ${args.join(" ")}: ${r.stdout}${r.stderr}`).toBe(1);
+      expect(r.stderr.split("\n")[0], `ksor ${args.join(" ")}`).toBe(slug);
+    }
+  });
+
+  it("a write-plane verb names the record's own slug when the record is what refused", () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), "ksor-slug-"));
+    try {
+      writeFileSync(
+        path.join(cwd, "instance.md"),
+        "---\nformat: 2\nname: slug\ntitle: Slug\ndescription: One sentence.\nvector_floor: 0.609\n---\n\nScope.\n",
+      );
+      for (const verb of ["schema", "ingest", "calibrate", "gc", "grant"]) {
+        const r = spawnSync(process.execPath, [distCli, verb, "--instance", "."], {
+          cwd,
+          encoding: "utf8",
+        });
+        expect(r.status, `ksor ${verb}: ${r.stdout}${r.stderr}`).toBe(1);
+        expect(r.stderr.split("\n")[0], `ksor ${verb}`).toBe("error: ksor-instance-format");
+        // …and says it once. The same sentence used to arrive inline on the
+        // error line AND again under `why:`.
+        expect(
+          r.stderr.split("unknown top-level key").length - 1,
+          `ksor ${verb} repeats its own why:\n${r.stderr}`,
+        ).toBe(1);
+        // The block the misplaced key belongs to, by name — "nest it under the
+        // block it belongs to" never said which block.
+        expect(r.stderr, `ksor ${verb} names the block`).toContain("retrieval:");
+      }
+      // `ksor build` on the same tree answers the same shape — `error: <slug>`
+      // alone on line one — and names the same rule about the same file. (It
+      // leads with the MISSING POLICY, because a record with no
+      // .ksor/governance.yaml has a bigger problem than a misplaced key; both
+      // refusals are in the report.)
+      const build = spawnSync(process.execPath, [distCli, "build"], { cwd, encoding: "utf8" });
+      expect(build.stderr.split("\n")[0]).toMatch(/^error: ksor-[a-z-]+$/);
+      expect(build.stderr).toContain("ksor-instance-format");
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -115,9 +234,9 @@ describe("ksor CLI (built artifact)", () => {
   it("names the missing flag when a corpus verb is under-specified (exit 1)", () => {
     // The exact flags the scaffold's package.json scripts pass — a rename in
     // the content CLI's parser must fail HERE, not in an adopter's project.
-    const ingest = runCli(["ingest", "--instance", "instance.md"]);
+    const ingest = runCli(["ingest"]);
     expect(ingest.status, ingest.stdout).toBe(1);
-    expect(`${ingest.stdout}${ingest.stderr}`).toContain("--knowledge");
+    expect(`${ingest.stdout}${ingest.stderr}`).toContain("--instance");
 
     for (const verb of ["calibrate", "gc", "grant"]) {
       const result = runCli([verb]);
@@ -201,177 +320,169 @@ describe("a governance act must NAME who performed it", () => {
   });
 
   it("never infers one from the environment", () => {
-    const src = readFileSync(
-      path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "..",
-        "..",
-        "content",
-        "src",
-        "commands.ts",
-      ),
-      "utf8",
-    );
-    const block = src.slice(src.indexOf("const namedActor"), src.indexOf("if (values.export"));
-    expect(block, "an actor guessed from the shell attributes nothing").not.toMatch(
-      /process\.env\["USERNAME?"\]/,
-    );
+    // WHOLE files, not a slice between two landmarks: this used to bracket
+    // `const namedActor` and `if (values.export`, both of which have since been
+    // removed, so `indexOf` returned -1 twice and the assertion ran against an
+    // empty string — a test that could no longer fail. Its pattern could not
+    // fail either: `USERNAME?` is `USERNAM` plus an optional `E`, so the very
+    // variable decision 21 names first, `$USER`, was the one it did not match
+    // (both found 2026-08-25).
+    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "content");
+    for (const rel of ["src/commands.ts", "src/takedown-verb.ts"]) {
+      expect(
+        readFileSync(path.join(dir, rel), "utf8"),
+        `${rel}: an actor guessed from the shell attributes nothing`,
+      ).not.toMatch(/process\.env\[["'](?:USER|USERNAME|LOGNAME)["']\]/);
+    }
   });
 });
 
-describe("takedown --export: answers for a record with no database, fails loudly for a broken one", () => {
-  const write = (dir: string, database: string): string => {
-    const file = path.join(dir, "instance.md");
+/**
+ * `ksor takedown`'s ARGUMENTS, through the built binary — both defects here
+ * were found by typing the verb the way its own `--help` documents it, and
+ * neither was reachable from the pure planner alone (2026-08-25 walk).
+ *
+ * A level-0 record, so the whole act is the ledger entry and no database is
+ * involved: the argument paths are what is under test, not the row.
+ */
+describe("ksor takedown — the arguments an adopter actually types", () => {
+  /** A record at `<tmp>/rec`, so the PARENT is ours to assert nothing leaked into. */
+  function record(): { readonly parent: string; readonly root: string } {
+    const parent = mkdtempSync(path.join(tmpdir(), "ksor-takedown-args-"));
+    const root = path.join(parent, "rec");
+    mkdirSync(path.join(root, ".ksor"), { recursive: true });
+    mkdirSync(path.join(root, "knowledge", "policies"), { recursive: true });
     writeFileSync(
-      file,
-      `---\nformat: 1\nname: acme-export\n${database}---\n\n# Record\n\nBody.\n`,
+      path.join(root, "instance.md"),
+      '---\nformat: 2\nname: args-test\ntitle: Args Test\ndescription: "A record that exists to be typed at."\n---\n\nA record that exists to be typed at.\n',
       "utf8",
     );
-    return file;
-  };
-  const DECLARED = "database:\n  dsn_env: KSOR_EXPORT_TEST_DSN\n";
-
-  const exportTo = (dir: string, instance: string, env: Record<string, string>) => {
-    const out = path.join(dir, ".ksor-denylist.json");
-    const result = spawnSync(
-      process.execPath,
-      [distCli, "takedown", "--instance", instance, "--export", out],
-      { encoding: "utf8", env: { ...process.env, ...env } },
+    writeFileSync(
+      path.join(root, ".ksor", "governance.yaml"),
+      'version: "0.1"\napproval_authorities:\n  - actors: [human:ciso]\ntakedown_authorities:\n  actors: [human:ciso]\n',
+      "utf8",
     );
-    return { result, out };
-  };
+    writeFileSync(path.join(root, "knowledge", "policies", "x.md"), "# X\n", "utf8");
+    return { parent, root };
+  }
 
-  it("a level-0 record (no database: block) exports source=none and exits 0", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
+  const deny = (root: string, ...rest: readonly string[]) =>
+    runCli(["takedown", "--instance", root, "--actor", "human:ciso", "--reason", "legal", ...rest]);
+
+  /**
+   * `--instance .` is what `build --help` documents for the same flag name and
+   * what every other verb accepts. takedown took the argument verbatim and read
+   * the record root as `dirname(resolve("."))` — the record's PARENT — so it
+   * reported `ksor-policy-missing` about a record whose `.ksor/governance.yaml`
+   * was right there, and its printed fix would have had the adopter overwrite
+   * their real `approval_authorities` and `takedown_authorities`. A false
+   * report whose remedy destroys governance.
+   */
+  it("accepts a DIRECTORY for --instance, like every other verb", () => {
+    const { parent, root } = record();
     try {
-      const { result, out } = exportTo(dir, write(dir, ""), {});
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      const manifest = JSON.parse(readFileSync(out, "utf8"));
-      expect(manifest.source, "a level-0 record has no database to ask").toBe("none");
-      expect(manifest.denied).toEqual([]);
-      expect(manifest.corpus_id, "the corpus id survives the refusal").toBe("acme-export");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("a declared database whose env var is UNSET refuses — it is unreachable, not absent", () => {
-    // "This record has no database" and "this host cannot reach the record's
-    // database" are opposite answers, and conflating them published a
-    // withdrawn document: the site's isDenied reads only `denied`, never
-    // `source`, so file PRESENCE is the whole fail-closed gate — and writing
-    // source="none" here created the file. The live shape is a Vercel build,
-    // where the site is database-free by design and the DSN exists only in the
-    // serving runtime (round-4 review of #43).
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const { result, out } = exportTo(dir, write(dir, DECLARED), {
-        KSOR_EXPORT_TEST_DSN: "",
-      });
-      expect(result.status, "a build must not publish while it cannot ask").not.toBe(0);
-      expect(existsSync(out), "and must leave nothing that looks like an answer").toBe(false);
-      expect(result.stderr, "the refusal names the variable and the fix").toContain(
-        "KSOR_EXPORT_TEST_DSN",
-      );
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("an UNREACHABLE database exits non-zero — the case `|| true` used to swallow", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const { result } = exportTo(dir, write(dir, DECLARED), {
-        KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
-      });
-      expect(result.status, "a build must halt, not publish an empty denylist").not.toBe(0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("warns when the project cannot CONSUME the manifest — the upgrade path", () => {
-    // A scaffold is adopter-owned (decision 4), so upgrading the CLI does not
-    // touch their system/site or their package.json. A project scaffolded
-    // before the manifest existed has neither the build step that exports it
-    // nor the staging code that reads it — so a takedown was imposed, the
-    // CLI's own remedy was followed exactly, the site rebuilt, and the
-    // withdrawn document was still in out/docs/ and llms.txt while the MCP
-    // door on the same database refused it (round-7 review of #43).
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const instance = write(dir, "");
-      writeFileSync(
-        path.join(dir, "package.json"),
-        JSON.stringify({ scripts: { build: "pnpm -C system/site build" } }),
-        "utf8",
-      );
-      const libDir = path.join(dir, "system", "site", "lib");
-      mkdirSync(libDir, { recursive: true });
-      writeFileSync(path.join(libDir, "stage-knowledge.ts"), "// no denylist read\n", "utf8");
-
-      const { result } = exportTo(dir, instance, {});
-      expect(result.status, "the export itself still succeeds").toBe(0);
-      expect(result.stderr, "the build never runs the export").toContain("package.json never runs");
-      expect(result.stderr, "and the site would not read it anyway").toContain("does not read");
-      // The warning has to be actionable, not just alarming.
-      expect(result.stderr).toContain('"export-denylist": "ksor takedown');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("stays SILENT for a project that does consume it", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      const instance = write(dir, "");
-      writeFileSync(
-        path.join(dir, "package.json"),
-        JSON.stringify({
-          scripts: {
-            "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
-            build: "pnpm export-denylist && pnpm -C system/site build",
-          },
-        }),
-        "utf8",
-      );
-      const libDir = path.join(dir, "system", "site", "lib");
-      mkdirSync(libDir, { recursive: true });
-      writeFileSync(
-        path.join(libDir, "stage-knowledge.ts"),
-        'const DENYLIST_FILE = ".ksor-denylist.json";\n',
-        "utf8",
-      );
-      const { result } = exportTo(dir, instance, {});
-      expect(result.status).toBe(0);
-      expect(result.stderr, "a current scaffold must not be nagged").not.toContain("WARNING");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("a FAILED export leaves NO manifest, so the site fails closed instead of trusting a stale one", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "ksor-export-"));
-    try {
-      // First, a successful export writes one (level-0: no database to ask).
-      const instance = write(dir, "");
-      expect(exportTo(dir, instance, {}).result.status).toBe(0);
-      const out = path.join(dir, ".ksor-denylist.json");
-      expect(existsSync(out)).toBe(true);
-      // The record then grows a database, and it is unreachable. The stale
-      // answer — written when there was genuinely nothing to ask — must not
-      // survive to be published as though it still applied.
-      write(dir, DECLARED);
-      const { result } = exportTo(dir, instance, {
-        KSOR_EXPORT_TEST_DSN: "postgresql://nobody@127.0.0.1:1/nothing",
-      });
-      expect(result.status).not.toBe(0);
+      const r = deny(root, "knowledge/policies/x");
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stderr, "the policy is right there").not.toContain("ksor-policy-missing");
       expect(
-        existsSync(out),
-        "a stale manifest looks authoritative and can predate the takedown being published",
+        existsSync(path.join(root, ".ksor", "takedowns.yaml")),
+        "the entry lands in the record's own .ksor/, not a directory above it",
+      ).toBe(true);
+      expect(readFileSync(path.join(root, ".ksor", "takedowns.yaml"), "utf8")).toContain(
+        "knowledge/policies/x",
+      );
+      expect(existsSync(path.join(parent, ".ksor")), "nothing was written above the record").toBe(
+        false,
+      );
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The same root cause reached `--list` by a different route: `parseInstance`
+   * on the DIRECTORY throws EISDIR rather than `NoDatabaseDeclared`, so the
+   * level-0 branch — answer from the committed ledger — was never taken, and a
+   * record with no database was told to stand up Postgres.
+   */
+  it("--list on a level-0 record answers from the ledger, given a directory", () => {
+    const { parent, root } = record();
+    try {
+      const r = runCli(["takedown", "--instance", root, "--list"]);
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stderr, "a level-0 record is not missing an environment").not.toContain("dsn_env");
+      expect(r.stdout).toContain("nothing is denied in this corpus");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The record root. It used to reach `join(root, null)` and exit **3** with a
+   * raw `TypeError: The "path" argument must be of type string` — the
+   * ENVIRONMENT code, for an argument the operator typed — and the anchored
+   * spelling was worse: exit 0, with an entry written that the next
+   * `ksor build` refuses for as long as the append-only ledger exists.
+   */
+  it.each([
+    ["subtree", "knowledge/"],
+    ["subtree", "knowledge/#section"],
+    ["node", "knowledge/"],
+  ])("refuses the record root at %s scope (`%s`) — nothing written", (scope, id) => {
+    const { parent, root } = record();
+    try {
+      const r = scope === "subtree" ? deny(root, "--scope", "subtree", id) : deny(root, id);
+      expect(r.status, r.stdout + r.stderr).toBe(1);
+      expect(r.stderr.split("\n")[0], "slug-first on stderr").toBe(
+        "error: ksor-takedown-record-root",
+      );
+      expect(r.stderr, "the remedy is the form that works").toContain(
+        "--scope subtree knowledge/<section>",
+      );
+      expect(
+        existsSync(path.join(root, ".ksor", "takedowns.yaml")),
+        "a refused act writes no entry — the ledger is append-only",
       ).toBe(false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The shell's trailing slash, recorded verbatim. This is the quietest of the
+   * four: `knowledge/policies/x/` matched no concept, so both surfaces denied
+   * nothing — and `expected: removed` AGREED with "no such concept", so the
+   * checker stayed green and no surface ever said the hold was fake. The verb
+   * said `denied`, and that was the only thing anyone would ever see.
+   */
+  it("records the id the record uses, not the one the shell completed", () => {
+    const { parent, root } = record();
+    try {
+      const r = deny(root, "knowledge/policies/x/");
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      const ledger = readFileSync(path.join(root, ".ksor", "takedowns.yaml"), "utf8");
+      expect(ledger, "the trailing slash is not part of the id").toContain(
+        'stable_id: "knowledge/policies/x"',
+      );
+      expect(
+        ledger,
+        "and `expected` therefore reports what is actually there — the document IS present",
+      ).toContain("expected: present");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("still denies a top-level section — the refusal is the root, not the depth", () => {
+    const { parent, root } = record();
+    try {
+      const r = deny(root, "--scope", "subtree", "knowledge/policies");
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(readFileSync(path.join(root, ".ksor", "takedowns.yaml"), "utf8")).toContain(
+        "knowledge/policies#section",
+      );
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
     }
   });
 });

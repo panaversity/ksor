@@ -31,10 +31,14 @@ instead of their training memory. The corpus grows with each implemented verb.
   needing Postgres and a provider key — alongside the write plane that keeps
   the record current: `ksor schema` (provision or migrate the database),
   `ksor grant` (authorize a tenant for ingest), `ksor ingest` (build and publish
-  a generation), `ksor takedown` (withdraw a document from EVERY surface, and
-  export the manifest the site build reads), `ksor calibrate` (measure the
-  abstention floor) and `ksor gc` (reap retired generations). Only `ksor dev` and `ksor build` remain designed, not
-  implemented: each prints an honest notice and exits `2`.
+  a generation), `ksor takedown` (withdraw a document from EVERY
+  surface — the committed ledger first, the denylist row second, so a record
+  with no database can withdraw one), `ksor calibrate` (measure the
+  abstention floor) and `ksor gc` (reap retired generations). `ksor build`
+  (check the record, generate its indexes, write `build.lock.json`) and
+  `ksor migrate` (rewrite a pre-profile record into the KSoR Profile — a diff
+  first, `--write` to apply) need no database. Only `ksor dev` remains designed, not implemented: it prints an
+  honest notice and exits `2`.
   - **[tool-surface.md](./tool-surface.md)** — shaping what agents see.
     `system/gateways/content.ts` is emitted, adopter-owned and deletable; it
     decides tool names, what the record says it covers, and how much of the
@@ -62,15 +66,24 @@ instead of their training memory. The corpus grows with each implemented verb.
 ## For the agent operating a scaffolded project
 
 Read the scaffold's own `AGENTS.md` first — it is the working contract.
-Knowledge lives in `knowledge/` and never inside the site; frontmatter uses
-a closed key set (`title` + `status` required); `pnpm check` explains any
-violation and how to fix it. Reading order is the governed `order:`
-frontmatter key — never `meta.json` or `sidebar_position` — and it drives
-every surface: the sidebar, `llms.txt`, and the MCP `outline` tool. If the
-instance declares an `audiences:` model, documents may carry a
-`visibility:` key and per-audience builds (`KSOR_AUDIENCE=<tier> pnpm
-build`) stage only what that tier may see — publication, not authorship:
-anyone who can clone reads everything. The site shell
+Knowledge lives in `knowledge/` and never inside the site. A document is an
+OKF concept in the KSoR Profile: `type`, `title`, `description`, `status`
+(`draft | stable | deprecated`) and `ksor.audience` are required, and a
+`stable` one additionally carries `generated` and a `ksor.approval` by an
+actor the Governance Policy authorises. Keys the profile does not know are
+PRESERVED rather than refused; the pre-profile ones (`visibility`, `owner`,
+`provenance`, `effective`, `superseded`, `sor_id`) are refused by name, each
+naming its replacement. `pnpm check` explains any violation and how to fix it.
+Reading order is the governed `order:` frontmatter key — never `meta.json` or
+`sidebar_position` — and it drives every surface: the sidebar, `llms.txt`, and
+the MCP `outline` tool.
+
+Audience is a LIST, matched by overlap. `.ksor/governance.yaml` registers the
+audiences; each concept lists the ones it is for; a build names its viewer as a
+comma list that must include `public`
+(`KSOR_AUDIENCE=public,internal pnpm build`) and stages only the concepts whose
+list overlaps it. It is publication, not authorship: anyone who can clone reads
+everything. The site shell
 at `system/site/` is replaceable behind a five-clause surface contract — the
 shell is a slot, and the contract (render the record, `llms.txt`, per-page md
 artifacts, browser smoke, no authored content) is what a replacement must meet.

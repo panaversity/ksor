@@ -1,148 +1,199 @@
+/**
+ * The projection from a parsed `Concept` onto the row (`content_nodes`,
+ * schema 2.5). It is the last step before governance becomes DATA, and it had
+ * no test of its own: the file's previous suite tested
+ * `governanceFromFrontmatter`, the hand-rolled five-key reader decision 26
+ * deleted, and went with it — leaving the projection that survived unasserted.
+ *
+ * Two of its three branches could not state an absence honestly. Both are
+ * unreachable through `parseConcept` (the profile requires `generated.by` to
+ * be an actor and derives the tier from `verified`), which is exactly why they
+ * are asserted here: `governanceOf` takes a `Concept`, an INTERFACE any kernel
+ * caller can build, and what it wrote in those states was not "nothing" but a
+ * plausible-looking lie on a governance column — a producer literally named
+ * `undefined`, and a `trust_tier` of -1 wearing the type `0 | 1 | 2`.
+ */
 import { describe, expect, it } from "vitest";
 
-import { frontmatterMeta } from "./adapters/plain-tree.js";
-import { governanceFromFrontmatter, frontmatterListValues, NO_GOVERNANCE } from "./governance.js";
+import { parseConcept, TRUST_TIERS, type Concept, type TrustTier } from "../record/profile.js";
+import { governanceOf, NO_GOVERNANCE, sectionGovernance, trustTierNumber } from "./governance.js";
 
-const doc = (frontmatter: string): string => `---\n${frontmatter}\n---\n\nBody text.\n`;
+/** A minimal well-formed concept, so each test mutates ONE field away from it. */
+const concept = (over: Partial<Concept> = {}): Concept => ({
+  path: "knowledge/a.md",
+  id: "a",
+  type: "Document",
+  reserved: false,
+  title: "A",
+  description: "One sentence.",
+  status: "stable",
+  order: null,
+  audience: ["public"],
+  owner: null,
+  generatedAt: null,
+  approval: null,
+  deprecated: null,
+  verified: [],
+  trustTier: "unverified",
+  effectiveFrom: null,
+  staleAfter: null,
+  supersededBy: null,
+  sourceIds: [],
+  frontmatter: {},
+  ...over,
+});
 
-const read = (text: string) => governanceFromFrontmatter(frontmatterMeta(text), text);
+/** The profile's own reader, so the "real path" assertions cannot drift from it. */
+const parsed = (frontmatter: Record<string, unknown>): Concept => {
+  const result = parseConcept("knowledge/a.md", frontmatter);
+  if (!result.ok) throw new Error(`fixture is not a concept: ${JSON.stringify(result.refusals)}`);
+  return result.concept;
+};
 
-describe("governanceFromFrontmatter", () => {
-  it("reads every authored governance key", () => {
-    const text = doc(
-      [
-        "title: Machine rules",
-        "status: approved",
-        "visibility: internal",
-        "owner: safety-team",
-        "superseded_by: knowledge/machine-rules-v2",
-      ].join("\n"),
+const VALID = {
+  type: "Document",
+  title: "A",
+  description: "One sentence.",
+  status: "stable",
+  generated: { by: "claude-code/1.0", at: "2026-08-20T09:00:00Z" },
+  ksor: {
+    audience: ["public"],
+    approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+  },
+} as const;
+
+describe("trustTierNumber", () => {
+  it.each(TRUST_TIERS.map((tier, i) => [tier, i] as const))("%s is %i", (tier, index) => {
+    expect(trustTierNumber(tier)).toBe(index);
+  });
+
+  it("refuses a tier the vocabulary does not hold, rather than storing -1 as a tier", () => {
+    // `TRUST_TIERS.indexOf(...) as 0 | 1 | 2` returned -1 with a valid-looking
+    // type, and -1 reaches `content_nodes.trust_tier` as a number no reader
+    // interprets — below `unverified`, which is already the floor.
+    expect(() => trustTierNumber("reviewed-by-someone" as TrustTier)).toThrow(
+      /reviewed-by-someone/,
     );
-    expect(read(text)).toEqual({
-      visibility: "internal",
-      docStatus: "approved",
-      owner: "safety-team",
-      provenance: null,
-      supersededBy: "knowledge/machine-rules-v2",
+  });
+});
+
+describe("governanceOf — the projection onto the row", () => {
+  it("carries every governance fact the profile parsed", () => {
+    const g = governanceOf(
+      parsed({
+        ...VALID,
+        sources: [{ id: "fin", resource: "https://example.com/h.pdf", title: "Handbook" }],
+        verified: [{ by: "human:kim", at: "2026-08-21T14:00:00Z" }],
+        stale_after: "2027-08-21T00:00:00Z",
+        ksor: {
+          ...VALID.ksor,
+          owner: "team:finance",
+          effective_from: "2026-09-01T00:00:00Z",
+        },
+      }),
+    );
+    expect(g).toEqual({
+      audience: ["public"],
+      docStatus: "stable",
+      owner: "team:finance",
+      sources: [{ id: "fin", resource: "https://example.com/h.pdf", title: "Handbook" }],
+      verified: [{ by: "human:kim", at: "2026-08-21T14:00:00.000Z" }],
+      generated: { by: "claude-code/1.0", at: "2026-08-20T09:00:00.000Z" },
+      approval: { by: "human:cfo", at: "2026-08-21T09:00:00.000Z" },
+      deprecated: null,
+      effectiveFrom: "2026-09-01T00:00:00.000Z",
+      staleAfter: "2027-08-21T00:00:00.000Z",
+      trustTier: 2,
+      supersededBy: null,
     });
   });
 
-  it("is all-null for a document that declares none of them", () => {
-    expect(read(doc("title: Plain\nstatus: draft".replace("\nstatus: draft", "")))).toEqual(
-      NO_GOVERNANCE,
+  it("distinguishes an absent list from an empty one — null is `the document said nothing`", () => {
+    const g = governanceOf(
+      parsed({
+        type: "Document",
+        title: "A",
+        description: "One sentence.",
+        status: "draft",
+        ksor: { audience: ["public"] },
+      }),
+    );
+    expect(g.sources).toBeNull();
+    expect(g.verified).toBeNull();
+    expect(g.approval).toBeNull();
+    expect(g.generated).toBeNull();
+    expect(g.trustTier).toBe(0);
+  });
+
+  it("stamps the supersession pointer as a stable_id, not as a bundle id", () => {
+    const g = governanceOf(
+      parsed({
+        ...VALID,
+        status: "deprecated",
+        ksor: {
+          ...VALID.ksor,
+          superseded_by: "policies/purchase-approval",
+          deprecated: { by: "human:ciso", at: "2026-08-22T10:00:00Z" },
+        },
+      }),
+    );
+    expect(g.supersededBy).toBe("knowledge/policies/purchase-approval");
+    expect(g.deprecated).toEqual({ by: "human:ciso", at: "2026-08-22T10:00:00.000Z" });
+  });
+
+  it("refuses a `generated:` it cannot attribute, rather than naming the producer `undefined`", () => {
+    // `String(record["by"])` on an absent key yields the seven-character string
+    // "undefined" — a producer that does not exist, written into a column that
+    // records WHO (decision 21). The profile makes this unreachable
+    // (`generated.by` is an actor); reaching it means something upstream broke,
+    // and a loud stop is the only honest answer left.
+    expect(() =>
+      governanceOf(concept({ frontmatter: { generated: { at: "2026-08-20T09:00:00Z" } } })),
+    ).toThrow(/generated\.by/);
+    expect(() => governanceOf(concept({ frontmatter: { generated: {} } }))).toThrow(
+      /knowledge\/a\.md/,
+    );
+    // An array is an object to `typeof`, and it carries no `by` either.
+    expect(() => governanceOf(concept({ frontmatter: { generated: [] } }))).toThrow(
+      /generated\.by/,
     );
   });
 
-  it("carries a scalar provenance as a one-element list", () => {
-    expect(read(doc("title: T\nprovenance: ISO 45001 §7.2")).provenance).toEqual([
-      "ISO 45001 §7.2",
-    ]);
-  });
-
-  it("carries a provenance BLOCK LIST, which the scalar reader alone would drop", () => {
-    const text = doc(
-      [
-        "title: T",
-        "provenance:",
-        "  - ISO 45001 §7.2",
-        "  - Internal memo 2026-03",
-        "owner: ops",
-      ].join("\n"),
+  it("a `generated:` that is not a mapping at all is the document saying nothing", () => {
+    // Also unreachable — the profile refuses it — but it is the one shape where
+    // "the key is not there in any readable sense" is the truthful reading.
+    expect(governanceOf(concept({ frontmatter: { generated: "claude-code/1.0" } })).generated).toBe(
+      null,
     );
-    const g = read(text);
-    expect(g.provenance).toEqual(["ISO 45001 §7.2", "Internal memo 2026-03"]);
-    // the scalar keys around the list still read correctly
-    expect(g.owner).toBe("ops");
+    expect(governanceOf(concept({ frontmatter: { generated: null } })).generated).toBe(null);
   });
 
-  it("strips quotes from list items", () => {
-    const text = doc(["title: T", "provenance:", '  - "quoted source"', "  - 'single'"].join("\n"));
-    expect(read(text).provenance).toEqual(["quoted source", "single"]);
-  });
-
-  it("treats a blank non-security value as absent, never as an empty string", () => {
-    expect(read(doc("title: T\nowner:   ")).owner).toBeNull();
-  });
-
-  it("REFUSES a declared-but-unreadable visibility — it is a security control", () => {
-    // Reading it as absent gives the document the DEFAULT tier and serves it,
-    // while the site excludes it entirely. Fail closed instead.
-    expect(() => read(doc("title: T\nvisibility:"))).toThrow(/unreadable tier/i);
-    expect(() => read(doc("title: T\nvisibility:\n  - public"))).toThrow(/exactly one tier/i);
-  });
-
-  it("does NOT close the vocabulary — an unknown audience is carried, not refused", () => {
-    // The instance owns the audience model; refusing here would put it in two places.
-    expect(read(doc("title: T\nvisibility: board-only")).visibility).toBe("board-only");
+  it("carries source entries as authored, unknown keys included (OKF §11)", () => {
+    // The projection reads the RAW frontmatter, so a key the profile's `source`
+    // schema strips still reaches the row. That is the preserve-unknown-keys
+    // rule, not an accident, so it is pinned rather than left to be discovered.
+    const g = governanceOf(
+      parsed({
+        ...VALID,
+        sources: [{ resource: "https://example.com/h.pdf", retrieved: "2026-08-01" }],
+      }),
+    );
+    expect(g.sources).toEqual([{ resource: "https://example.com/h.pdf", retrieved: "2026-08-01" }]);
   });
 });
 
-describe("frontmatterListValues", () => {
-  it("returns null when the key is absent or is a scalar", () => {
-    expect(frontmatterListValues(doc("title: T"), "provenance")).toBeNull();
-    expect(frontmatterListValues(doc("title: T\nprovenance: one"), "provenance")).toBeNull();
-  });
-
-  it("returns null for a document with no frontmatter at all", () => {
-    expect(frontmatterListValues("# Just a heading\n", "provenance")).toBeNull();
-  });
-});
-
-describe("list shapes the site accepts", () => {
-  it("reads an UNINDENTED block sequence — valid YAML, and the site reads it", () => {
-    const text = doc(["title: T", "provenance:", "- ISO 45001", "- Memo 2026-03"].join("\n"));
-    expect(read(text).provenance).toEqual(["ISO 45001", "Memo 2026-03"]);
-  });
-
-  it("still reads an indented one", () => {
-    const text = doc(["title: T", "provenance:", "  - ISO 45001"].join("\n"));
-    expect(read(text).provenance).toEqual(["ISO 45001"]);
-  });
-});
-
-describe("visibility is read from the TEXT, never from a map a sibling can empty", () => {
-  it("READS visibility beside a flow list — the shape that used to drop it", () => {
-    // This case used to REFUSE, and refusing was right at the time: the reader
-    // emptied the WHOLE map on any shape it could not model, so a sibling
-    // `tags: [...]` silently dropped `visibility:` and the document took the
-    // default tier — served while the site still hid it, the leak's third door.
-    //
-    // #78 removed the cause: a flow list is valid YAML, so it no longer empties
-    // anything and `visibility` arrives intact. The guard below still stands for
-    // frontmatter PyYAML would genuinely reject.
-    const text = doc(["title: T", "tags: [hr, payroll]", "visibility: internal"].join("\n"));
-    expect(read(text).visibility).toBe("internal");
-  });
-
-  it("REFUSES for an unquoted value containing a colon-space, the other poison shape", () => {
-    const text = doc(["title: Report: Q3", "visibility: internal"].join("\n"));
-    expect(() => read(text)).toThrow(/could not resolve it/i);
-  });
-
-  it("still reads visibility when the siblings are shapes it CAN read", () => {
-    const text = doc(["title: T", "owner: ops", "visibility: internal"].join("\n"));
-    expect(read(text).visibility).toBe("internal");
-  });
-
-  it("says nothing about a document that declares no visibility at all", () => {
-    expect(read(doc(["title: T", "tags: [hr]"].join("\n"))).visibility).toBeNull();
-  });
-});
-
-describe("one frontmatter grammar, not two", () => {
-  // Two regexes disagreeing about where a block ENDS is how the leak found a
-  // fourth door: a `----` or `--- ` close satisfied the adapter (poisoning its
-  // map) and not this reader (so both guards went silent).
-  // The vehicle is a genuinely-poisoning shape — an unquoted value carrying
-  // ": ", which PyYAML rejects. It used to be a flow list, which #78 established
-  // is valid YAML and no longer empties anything; the point of THIS test is the
-  // block terminator, not the poison, so only the vehicle changed.
-  const poisoned = (close: string): string =>
-    `---\ntitle: Report: Q3\nvisibility: internal\n${close}\n\nBody.\n`;
-
-  for (const close of ["---", "----", "--- "]) {
-    it(`REFUSES a poisoned map whatever closes the block: ${JSON.stringify(close)}`, () => {
-      expect(() => read(poisoned(close))).toThrow(/could not resolve it/i);
+describe("sectionGovernance — a section carries only what its descendants reach", () => {
+  it("unions and sorts the descendants' lists, and declares nothing else", () => {
+    expect(sectionGovernance([["internal", "public"], ["board"], ["public"]])).toEqual({
+      ...NO_GOVERNANCE,
+      audience: ["board", "internal", "public"],
     });
-  }
+  });
+
+  it("a section with no descendant carries an EMPTY list, never a null one", () => {
+    // Null is `ksor-audience-missing` territory — a pre-profile row. An empty
+    // directory is a different fact and both are served to nobody, so the
+    // difference has to survive the projection.
+    expect(sectionGovernance([]).audience).toEqual([]);
+  });
 });

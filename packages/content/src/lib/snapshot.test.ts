@@ -6,6 +6,7 @@ const scope: SnapshotScope = {
   corpusId: "acme-handbook",
   tenantId: "acme",
   instanceDigest: "d1",
+  viewer: ["public"],
 };
 
 const ring = keyRingFromEnv("k1=secret-one,k2=secret-two");
@@ -103,7 +104,12 @@ describe("snapshot tokens", () => {
  * unpinned. These tests make the mechanism visible rather than inferred.
  */
 describe("snapshot tokens across replicas", () => {
-  const SCOPE = { corpusId: "book", tenantId: "t1", instanceDigest: "digest-1" };
+  const SCOPE = {
+    corpusId: "book",
+    tenantId: "t1",
+    instanceDigest: "digest-1",
+    viewer: ["public"],
+  };
 
   it("an ephemeral ring cannot verify ANOTHER process's token", () => {
     // Two processes, each with no KSOR_SNAPSHOT_KEYS: two different keys.
@@ -161,6 +167,35 @@ describe("snapshot tokens across replicas", () => {
     expect(validate(ring, issued.token, { ...SCOPE, instanceDigest: "digest-2" })).toEqual({
       generation: null,
       reason: "foreign_deployment",
+    });
+  });
+});
+
+describe("the token binds the VIEWER LIST, not only the deployment", () => {
+  // A pin re-serves the generation a search answered from. Without the viewer
+  // in the binding, a token minted for a public caller re-serves that pinned
+  // generation to an internal one and vice versa — a caller's own follow-up
+  // read is the one place a wider or narrower audience could be smuggled in
+  // through a value the caller holds.
+  it("a token minted at [public] is refused at [public, internal]", () => {
+    const { token } = mint(ring, scope, 42, NOW);
+    const wider = { ...scope, viewer: ["public", "internal"] };
+    expect(validate(ring, token, wider, NOW).reason).toBe("foreign_deployment");
+    expect(validate(ring, token, wider, NOW).generation).toBeNull();
+  });
+
+  it("…and one minted at [public, internal] is refused at [public]", () => {
+    const wider = { ...scope, viewer: ["public", "internal"] };
+    const { token } = mint(ring, wider, 42, NOW);
+    expect(validate(ring, token, scope, NOW).reason).toBe("foreign_deployment");
+  });
+
+  it("ORDER is not identity — the same list in another order is the same viewer", () => {
+    const a = { ...scope, viewer: ["public", "internal"] };
+    const b = { ...scope, viewer: ["internal", "public"] };
+    expect(validate(ring, mint(ring, a, 9, NOW).token, b, NOW)).toEqual({
+      generation: 9,
+      reason: null,
     });
   });
 });

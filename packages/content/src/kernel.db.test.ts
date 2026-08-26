@@ -20,10 +20,13 @@ import {
 } from "./schema.js";
 import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type SearchScope } from "./lib/search.js";
 import { vectorAbstains } from "./lib/abstain.js";
+import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
 import { keyRingFromEnv, mint, validate } from "./lib/snapshot.js";
 import { readDocument, search, type ServiceContext } from "./service.js";
 import type { ContentInstance } from "./instance.js";
 import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
+import { trustGucs } from "./lib/trust.js";
+import { findDocument, outline, UnknownSlug, type ReadScope } from "./lib/read.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -36,6 +39,8 @@ const scope: SearchScope = {
   kinds: null,
   pinnedGeneration: null,
 };
+
+const readScope: ReadScope = { tenantId: TENANT, corpusId: CORPUS, pinnedGeneration: null };
 
 /** A hand-normalized unit vector: 1 at `hot`, small elsewhere. */
 function unit(hot: number): number[] {
@@ -82,8 +87,12 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         status = "published",
       ): Promise<string> => {
         const r = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status)
-           VALUES ($1, 1, $2, 'document', $3, $4, $5) RETURNING node_id`,
+          // `audience` is what the serving predicate overlaps against; these
+          // rows are about generations, denial and windowing, so they are
+          // public — omitting it would make every one of them invisible to
+          // every viewer, which is the profile's intent, not a serving bug.
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience, doc_status)
+           VALUES ($1, 1, $2, 'document', $3, $4, $5, ARRAY['public'], 'stable') RETURNING node_id`,
           [TENANT, stableId, slug, slug, status],
         );
         return String(r.rows[0].node_id);
@@ -130,6 +139,56 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       const draft = await node("doc/draft", "draft-doc", "draft");
       await source(draft, "draft:prose");
       await chunk("draft:prose", 0, "Draft zebra policy nobody approved yet." + PAD, unit(0));
+
+      // The §2.5 and §2.3 rows, as SERVED content rather than as rows in a
+      // set: each of these is a document whose text a search would otherwise
+      // rank first, so the only thing that can keep it out is the arm.
+      const govern = async (
+        stableId: string,
+        slug: string,
+        text: string,
+        columns: string,
+        values: readonly unknown[],
+      ): Promise<void> => {
+        const r = await c.query(
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status,
+               audience, doc_status${columns === "" ? "" : ", " + columns})
+           VALUES ($1, 1, $2, 'document', $3, $3, 'published', ARRAY['public'], 'stable'
+                   ${values.map((_, i) => `, $${i + 4}`).join("")}) RETURNING node_id`,
+          [TENANT, stableId, slug, ...values],
+        );
+        const id = String(r.rows[0].node_id);
+        await source(id, `${slug}:prose`);
+        await chunk(`${slug}:prose`, 0, text, unit(0));
+      };
+      await govern(
+        "doc/reviewed",
+        "reviewed",
+        "Zebra bands, human reviewed." + PAD,
+        "trust_tier",
+        [2],
+      );
+      await govern(
+        "doc/machine",
+        "machine-doc",
+        "Zebra bands, machine confirmed." + PAD,
+        "trust_tier",
+        [1],
+      );
+      await govern(
+        "doc/future",
+        "future-doc",
+        "Zebra bands from next year." + PAD,
+        "effective_from",
+        [new Date(Date.now() + 86_400_000).toISOString()],
+      );
+      await govern(
+        "doc/stale",
+        "stale-doc",
+        "Zebra bands, review date passed." + PAD,
+        "stale_after",
+        [new Date(Date.now() - 86_400_000).toISOString()],
+      );
     });
   }, 120_000);
 
@@ -155,7 +214,13 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     expect(hits[0]?.generation).toBe(1);
     expect(typeof hits[0]?.score).toBe("number");
     // A calibrated floor between the two arms' separations gates correctly.
-    expect(vectorAbstains(topCosine, { vectorFloor: 0.9, keywordFloor: null })).toBe(false);
+    expect(
+      vectorAbstains(topCosine, {
+        vectorFloor: 0.9,
+        keywordFloor: null,
+        floorDigest: GATE_PREDICATE_DIGEST,
+      }),
+    ).toBe(false);
   });
 
   it("a far query abstains under a calibrated floor — and the draft and pending chunks never surface", async () => {
@@ -172,7 +237,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       expect(hit.content, "pending chunk text must never serve").not.toContain("secret pending");
     }
     expect(
-      vectorAbstains(topCosine, { vectorFloor: 0.9, keywordFloor: null }),
+      vectorAbstains(topCosine, {
+        vectorFloor: 0.9,
+        keywordFloor: null,
+        floorDigest: GATE_PREDICATE_DIGEST,
+      }),
       `topCosine=${topCosine}`,
     ).toBe(true);
   });
@@ -210,8 +279,11 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   });
 
   it("keyword-only degrade path serves without a vector", async () => {
-    const hits = await runRead(pool, TENANT, (c) =>
-      keywordSearch(c, scope, "onboarding checklist", 10),
+    const hits = await runRead(
+      pool,
+      TENANT,
+      (c) => keywordSearch(c, scope, "onboarding checklist", 10),
+      WHOLE_RECORD_SCOPE,
     );
     expect(hits[0]?.slug, JSON.stringify(hits)).toBe("yak");
   });
@@ -223,12 +295,13 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       corpusId: CORPUS,
       tenantId: TENANT,
       dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: 0.9, keywordFloor: null },
+      abstain: { vectorFloor: 0.9, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
-      audiences: [],
-      defaultVisibility: null,
+      title: CORPUS,
+      description: "The kernel test record.",
+      toolchain: null,
       embeddingProvider: "fake",
       embeddingModel: "fake-embed-001",
       embeddingDim: DIM,
@@ -250,6 +323,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
         corpusId: CORPUS,
         tenantId: TENANT,
         instanceDigest: "digest-1",
+        viewer: ["public"],
       });
       expect(verdict, "the snapshot must validate and pin the generation").toEqual({
         generation: 1,
@@ -294,7 +368,10 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     // degrade serves exactly what an uncalibrated corpus always serves.
     const uncalibrated: ServiceContext = {
       ...ctx,
-      instance: { ...instance, abstain: { vectorFloor: null, keywordFloor: null } },
+      instance: {
+        ...instance,
+        abstain: { vectorFloor: null, keywordFloor: null, floorDigest: null },
+      },
       embedQuery: down,
     };
     const kwServed = await search(uncalibrated, "onboarding checklist", 5);
@@ -351,8 +428,8 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   it("a snapshot pinned to a withdrawn generation refreshes instead of serving it", async () => {
     await runIngest(pool, TENANT, async (c) => {
       const r = await c.query(
-        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status)
-         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published') RETURNING node_id`,
+        `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, status, audience, doc_status)
+         VALUES ($1, 2, 'doc/zebra', 'document', 'zebra', 'zebra', 'published', ARRAY['public'], 'stable') RETURNING node_id`,
         [TENANT],
       );
       const nodeId = String(r.rows[0].node_id);
@@ -378,12 +455,13 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       corpusId: CORPUS,
       tenantId: TENANT,
       dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: 0.9, keywordFloor: null },
+      abstain: { vectorFloor: 0.9, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "Answer only from the record.",
-      audiences: [],
-      defaultVisibility: null,
+      title: CORPUS,
+      description: "The kernel test record.",
+      toolchain: null,
       embeddingProvider: "fake",
       embeddingModel: "fake-embed-001",
       embeddingDim: DIM,
@@ -395,7 +473,12 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
       instanceDigest: "digest-1",
       embedQuery: async () => unit(0),
     };
-    const scope = { corpusId: CORPUS, tenantId: TENANT, instanceDigest: "digest-1" };
+    const scope = {
+      corpusId: CORPUS,
+      tenantId: TENANT,
+      instanceDigest: "digest-1",
+      viewer: ["public"],
+    };
 
     // The withdrawn pin: a cryptographically VALID token for generation 2.
     const withdrawn = mint(ring, scope, 2);
@@ -423,6 +506,62 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     // ignores the field entirely.
     expect(active.snapshot_status, "an honoured pin says so").toBe("pinned");
     expect(active.provenance.generation).toBe(1);
+  });
+
+  it("the trust floor is an ARM predicate: `human-reviewed` is never answered from a machine-confirmed document", async () => {
+    const arm = async (floor: number): Promise<string[]> => {
+      const { hits } = await runRead(
+        pool,
+        TENANT,
+        (c) => hybridSearch(c, scope, unit(0), "zebra bands", 10),
+        { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE, ...trustGucs(floor) },
+      );
+      return hits.map((h) => h.slug);
+    };
+    // At the honest default every tier answers, including the unverified ones
+    // — `verified` is never required and a record with none is level 0.
+    const all = await arm(0);
+    expect(all, JSON.stringify(all)).toEqual(expect.arrayContaining(["reviewed", "machine-doc"]));
+    // At human-reviewed the machine-confirmed document is not "ranked lower",
+    // it is not a candidate: a floor applied after ranking has already let a
+    // lower-tier passage decide what the answer was.
+    const reviewed = await arm(2);
+    expect(reviewed, JSON.stringify(reviewed)).toContain("reviewed");
+    expect(reviewed, "a machine-confirmed hit cannot satisfy human-reviewed").not.toContain(
+      "machine-doc",
+    );
+  });
+
+  it("a not-yet-effective and a past-review-date document are absent from search, read and outline", async () => {
+    const { hits } = await runRead(
+      pool,
+      TENANT,
+      (c) => hybridSearch(c, scope, unit(0), "zebra bands", 20),
+      { ...VECTOR_TXN_GUCS, ...WHOLE_RECORD_SCOPE },
+    );
+    const slugs = hits.map((h) => h.slug);
+    expect(slugs, JSON.stringify(slugs)).not.toContain("future-doc");
+    expect(slugs, JSON.stringify(slugs)).not.toContain("stale-doc");
+
+    for (const slug of ["future-doc", "stale-doc", "draft-doc"]) {
+      await expect(
+        runRead(pool, TENANT, (c) => findDocument(c, readScope, slug), WHOLE_RECORD_SCOPE),
+        `read must refuse ${slug}`,
+      ).rejects.toBeInstanceOf(UnknownSlug);
+    }
+
+    const rows = await runRead(
+      pool,
+      TENANT,
+      (c) => outline(c, readScope, { depth: 3, limit: 100 }),
+      WHOLE_RECORD_SCOPE,
+    );
+    const outlined = rows.map((r) => r.slug);
+    expect(outlined, JSON.stringify(outlined)).not.toContain("future-doc");
+    expect(outlined, JSON.stringify(outlined)).not.toContain("stale-doc");
+    expect(outlined, "the control: an effective, in-window document IS outlined").toContain(
+      "reviewed",
+    );
   });
 
   it("ingest without a grant row is refused by the database, not by convention", async () => {

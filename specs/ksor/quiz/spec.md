@@ -1,7 +1,7 @@
 ---
 status: draft
 date: 2026-08-23
-claim: a system of record is only worth what its readers actually absorbed, and a quiz whose questions are governed artifacts of their document — reviewed in a PR, inheriting the parent's tier, withdrawn with it — checks understanding of the record itself rather than of whatever a model happened to generate
+claim: a system of record is only worth what its readers actually absorbed, and a quiz whose questions are governed artifacts of their document — reviewed in a PR, inheriting the parent's audience, withdrawn with it — checks understanding of the record itself rather than of whatever a model happened to generate
 ---
 
 # Quiz attachments
@@ -103,8 +103,15 @@ per file. Its own `findings-2026-04-14.txt` still reports 88% pick-longest in
 one file, which is the argument against an advisory checker — it was written,
 it was run once, and the findings sat.
 
-These checks therefore run in `pnpm check` AND in the build, the way the
-attachment rules already do, and a failure refuses:
+These checks run in the site BUILD, and a failure refuses it:
+
+_Corrected 2026-08-25: this said "in `pnpm check` AND in the build, the way the
+attachment rules already do". `pnpm check` has never run them — the audit lives
+in `system/site/lib/quiz-audit.ts` and no `ksor-quiz-*` slug is in the record
+checker's set — so a bank with every answer at one position prints "ok" from
+`pnpm check` and is refused by `pnpm build`. The intent stands and is the
+smaller half of an unwritten change: the audit belongs in the record module
+beside the other refusals, where the emitted checker and CI would both run it._
 
 | Slug                       | Refuses when                                                  |
 | -------------------------- | ------------------------------------------------------------- |
@@ -150,11 +157,16 @@ every build rather than on request.
    with and without the quiz present.
 4. `ksor ingest` creates no node for a quiz; no `stable_id` resolves to one.
 5. A restricted parent's quiz appears in **0** files of a public build, against
-   a positive control at its own tier.
-6. An orphan quiz refuses `ksor-attachment-orphan`; one declaring frontmatter
-   refuses `ksor-attachment-frontmatter` — the existing class rules, unchanged.
-7. Each audit slug in §5 refuses in `pnpm check` and in `pnpm build`, with a
-   message naming the question numbers.
+   a positive control built for a viewer list that overlaps the parent's
+   audience.
+6. An orphan quiz refuses `ksor-attachment-orphan`. _Corrected 2026-08-25: this
+   clause also claimed `ksor-attachment-frontmatter` applies to a quiz. It
+   does not and never did — the rule is gated on `.summary.md`, and a
+   `.yaml` companion has no frontmatter to declare. The rule is also no longer
+   a class refusal: a summary must carry exactly `type: Summary`._
+7. Each audit slug in §5 refuses in `pnpm build`, with a message naming the
+   question numbers. _Corrected 2026-08-25: was "in `pnpm check` and in
+   `pnpm build`"; only the build runs them._
 8. Answering shows immediate feedback, the explanation, and `source` labelled
    as a location rather than a citation.
 9. A bank at or below `questionsPerRound` shows whole with no new-round offer;

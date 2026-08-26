@@ -60,3 +60,33 @@ describe("the verb vocabulary is documented where it is claimed", () => {
     expect(missing, `${why} — missing: ${missing.join(", ")}`).toEqual([]);
   });
 });
+
+/**
+ * `1` and `2` are different promises, so a doc may not make both about one verb.
+ *
+ * status.md said "`ksor build` and `ksor migrate` are implemented on the
+ * unreleased branch and exit `2` in the published package" — while stating
+ * correctly, 838 lines earlier, that the published package has no `migrate`
+ * verb at all. Verified against @panaversity/ksor@0.0.40: `migrate` prints
+ * `error: unknown-verb` and exits 1, `build` prints the not-implemented notice
+ * and exits 2. Product principle 4 makes those codes a contract, so an agent
+ * probing a verb and reading `2` as "designed, coming" was being told a
+ * refusal for an unknown word was a promise.
+ */
+describe("docs/status.md keeps the two exit codes apart", () => {
+  it("never claims exit 2 for a verb it says the published package does not have", () => {
+    const flat = read("docs/status.md").replace(/\s+/g, " ");
+    const contradictory = verbs.filter((verb) => {
+      const absent = new RegExp(`there is no \`${verb}\` verb`).test(flat);
+      const exitTwo = new RegExp(`\`ksor ${verb}\`[^.]*exits? \`2\` in the published package`).test(
+        flat,
+      );
+      return absent && exitTwo;
+    });
+    expect(
+      contradictory,
+      "a verb the published package does not have is refused with exit 1 and " +
+        "`error: unknown-verb`, never the exit-2 not-implemented notice",
+    ).toEqual([]);
+  });
+});

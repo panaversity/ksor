@@ -23,6 +23,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import {
   applySchema,
   buildShippedProvider,
+  GATE_PREDICATE_DIGEST,
   WHOLE_RECORD_SCOPE,
   contentPool,
   embedInput,
@@ -121,10 +122,23 @@ describe.runIf(adminDsn !== "")("gateway acceptance (HTTP, real MCP client)", ()
         "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1, $1, 1)",
         [TENANT],
       );
+      // The run row this hand-built generation would have had from `ksor
+      // ingest`. Without it the boot gate reads the generation as pre-profile
+      // and refuses to serve (GOVERNANCE_SINCE), which is the correct posture
+      // — the fixture is what was lying, not the gate.
+      await c.query(
+        `INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit,
+                                     instance_bundle_sha256, schema_version, build_id, ledger_ids)
+         VALUES ($1, $1, 1, 'active', 'fixture', 'fixture', '2.5', 'sha256:fixture', ARRAY[]::text[])`,
+        [TENANT],
+      );
       for (const doc of DOCS) {
         const node = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title)
-           VALUES ($1, 1, $2, 'document', $3, $4) RETURNING node_id`,
+          // `audience` and `doc_status` are what the admitted set is computed
+          // from (`lib/admit.ts`): a row carrying neither is served to nobody,
+          // which is the correct posture and would make this fixture invisible.
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, kind, slug, title, audience, doc_status)
+           VALUES ($1, 1, $2, 'document', $3, $4, ARRAY['public'], 'stable') RETURNING node_id`,
           [TENANT, doc.stableId, doc.slug, doc.title],
         );
         await c.query(
@@ -180,8 +194,10 @@ describe.runIf(adminDsn !== "")("gateway acceptance (HTTP, real MCP client)", ()
     writeFileSync(
       instancePath,
       `---
-format: 1
+format: 2
 name: ${TENANT}
+title: Acme Handbook
+description: The governed handbook of Acme.
 database:
   dsn_env: KSOR_TEST_DSN
 embedding:
@@ -190,6 +206,7 @@ embedding:
   dim: ${DIM}
 retrieval:
   vector_floor: ${floor} # calibrated in-test, midpoint method
+  floor_digest: ${GATE_PREDICATE_DIGEST} # the predicate the floor above was measured through
 ---
 
 # Acme Handbook
@@ -798,8 +815,10 @@ Answer ONLY from this record. Abstention is a correct answer.
     writeFileSync(
       geminiInstance,
       `---
-format: 1
+format: 2
 name: ${TENANT}
+title: Acme Handbook
+description: The governed handbook of Acme.
 database:
   dsn_env: KSOR_TEST_DSN
 embedding:

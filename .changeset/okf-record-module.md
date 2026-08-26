@@ -1,0 +1,5 @@
+---
+"@panaversity/ksor": patch
+---
+
+Land the record module (`packages/content/src/record/`) that the OKF-native record (`specs/ksor/record/spec.md`) will be checked and built by: a frontmatter splitter that reads real YAML and refuses anything else as `ksor-frontmatter-invalid`; the concept profile as a zod schema with one refusal slug per rule; the Governance Policy reader with KSP 4.2.5 scope resolution; the takedown ledger reader (unauthorised actor, dangling, re-added, shrank); the OKF §8 index generator; footnote and link reading in both OKF link forms; the overlap, widening and lifecycle rules with their decision tables; and `checkRecord`, one rule set over an in-memory tree. The CLI now carries `yaml` (2.9.0, ISC, zero transitive dependencies; decision 26) as a runtime dependency, because a profile-shaped document's `ksor:` block and the `.ksor/*.yaml` control files are real YAML that no line scanner can read. Everything else in this release reads the record through this one module — `ksor build`, `ksor ingest`, the MCP door, the site's staging and the emitted `pnpm check` — which is what makes one rule set one rule set.

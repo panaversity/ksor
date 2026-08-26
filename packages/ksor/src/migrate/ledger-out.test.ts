@@ -1,0 +1,365 @@
+import { checkLedgerAgainstTree, parseLedger } from "@panaversity/ksor-content/record";
+import { describe, expect, it } from "vitest";
+
+import type { DbDenial } from "./denials.js";
+import {
+  ledgerIdFor,
+  renderLedger,
+  repoint,
+  toLedgerEntries,
+  type ReservedFate,
+} from "./ledger-out.js";
+
+/** The tree shape `renderLedger` and the checker both read: documents, and directories. */
+const TREE_OF = (
+  docs: readonly string[],
+  dirs: readonly string[],
+): { documentIds: ReadonlySet<string>; dirs: ReadonlySet<string> } => ({
+  documentIds: new Set(docs),
+  dirs: new Set(dirs),
+});
+
+const row = (over: Partial<DbDenial> = {}): DbDenial => ({
+  stableId: "knowledge/policies/old",
+  scope: "node",
+  reason: "legal request 2026-08",
+  at: "2026-08-20T09:00:00Z",
+  actor: "human:ciso",
+  ...over,
+});
+
+/** What this run did with each reserved name it walked; see `ReservedFate`. */
+const NONE: ReservedFate = new Map();
+const MOVED: ReservedFate = new Map([["knowledge/policies/index", "moved"]]);
+const MOVED_README: ReservedFate = new Map([["knowledge/policies/README", "moved"]]);
+
+describe("ledgerIdFor", () => {
+  it("is <at>-<6> and stable, so two migrations of one database produce one diff", () => {
+    const id = ledgerIdFor("knowledge/a", "2026-08-20T09:00:00Z");
+    expect(id).toMatch(/^2026-08-20T09:00:00Z-[0-9a-f]{6}$/);
+    expect(ledgerIdFor("knowledge/a", "2026-08-20T09:00:00Z")).toBe(id);
+    expect(ledgerIdFor("knowledge/b", "2026-08-20T09:00:00Z")).not.toBe(id);
+  });
+});
+
+describe("repoint", () => {
+  it("follows the prose for a node denial and the container for a subtree one", () => {
+    expect(repoint("knowledge/policies/index", "node", MOVED)).toBe("knowledge/policies/overview");
+    expect(repoint("knowledge/policies/README", "node", MOVED_README)).toBe(
+      "knowledge/policies/overview",
+    );
+    expect(repoint("knowledge/policies/index", "subtree", MOVED)).toBe(
+      "knowledge/policies#section",
+    );
+  });
+
+  it("leaves an ordinary document alone", () => {
+    expect(repoint("knowledge/policies/old", "node", MOVED)).toBe("knowledge/policies/old");
+    expect(repoint("knowledge/indexes", "node", MOVED)).toBe("knowledge/indexes");
+  });
+});
+
+describe("toLedgerEntries", () => {
+  it("carries the actor the log recorded", () => {
+    const out = toLedgerEntries([row()], new Map(), NONE);
+    expect(out.refusals).toEqual([]);
+    expect(out.entries[0]).toMatchObject({
+      stableId: "knowledge/policies/old",
+      by: "human:ciso",
+      at: "2026-08-20T09:00:00Z",
+      reason: "legal request 2026-08",
+    });
+  });
+
+  it("refuses a denial the log cannot attribute, naming the flag that would", () => {
+    const out = toLedgerEntries([row({ actor: null })], new Map(), NONE);
+    expect(out.entries).toEqual([]);
+    expect(out.refusals).toHaveLength(1);
+    expect(out.refusals[0]!.slug).toBe("ksor-migrate-underivable");
+    expect(out.refusals[0]!.fix).toContain("--attribute knowledge/policies/old=human:<id>");
+  });
+
+  it("lets --attribute answer it, and says in the entry that a human asserted it", () => {
+    const out = toLedgerEntries(
+      [row({ actor: null })],
+      new Map([["knowledge/policies/old", "human:kim"]]),
+      NONE,
+    );
+    expect(out.refusals).toEqual([]);
+    expect(out.entries[0]!.by).toBe("human:kim");
+    expect(out.entries[0]!.reason).toContain("asserted by --attribute");
+  });
+
+  it("--attribute overrides the log, and the entry records that it did", () => {
+    const out = toLedgerEntries([row()], new Map([["knowledge/policies/old", "human:kim"]]), NONE);
+    expect(out.entries[0]!.by).toBe("human:kim");
+    expect(out.entries[0]!.reason).toContain("asserted by --attribute");
+  });
+
+  it("gives a reasonless row a reason that says where it came from", () => {
+    const out = toLedgerEntries([row({ reason: "" })], new Map(), NONE);
+    expect(out.entries[0]!.reason).toBe("migrated from the denylist");
+  });
+});
+
+describe("renderLedger", () => {
+  const TREE = { documentIds: new Set(["policies/old"]), dirs: new Set(["policies"]) };
+  const EMPTY = { documentIds: new Set<string>(), dirs: new Set<string>() };
+
+  it("marks a denial `removed` when the record no longer holds the concept", () => {
+    const entries = toLedgerEntries([row()], new Map(), NONE).entries;
+    expect(renderLedger(entries, TREE)).toContain("expected: present");
+    expect(renderLedger(entries, EMPTY)).toContain("expected: removed");
+  });
+
+  /**
+   * A subtree denial was hardcoded `present`, on the reasoning that it names a
+   * container rather than a concept — but the checker asks the tree the same
+   * question for a container as for a document, so a transcription of a denial
+   * whose DIRECTORY is gone wrote a ledger whose very first `ksor build`
+   * refused `ksor-takedown-dangling`, in a file the adopter may not delete
+   * (append-only). `expected` is derived here for both scopes, from the same
+   * `expectedIn` the checker judges with.
+   */
+  it("derives a subtree denial's expected from whether the directory is there", () => {
+    const entries = toLedgerEntries(
+      [row({ stableId: "knowledge/policies#section", scope: "subtree" })],
+      new Map(),
+      NONE,
+    ).entries;
+    expect(renderLedger(entries, TREE)).toContain("expected: present");
+    expect(renderLedger(entries, EMPTY)).toContain("expected: removed");
+  });
+
+  /** What migrate writes is what the checker accepts — for every scope, both ways. */
+  it.each([
+    {
+      scope: "node",
+      there: true,
+      stableId: "knowledge/policies/old",
+      dirs: [],
+      docs: ["policies/old"],
+    },
+    { scope: "node", there: false, stableId: "knowledge/policies/old", dirs: [], docs: [] },
+    {
+      scope: "subtree",
+      there: true,
+      stableId: "knowledge/policies#section",
+      dirs: ["policies"],
+      docs: [],
+    },
+    { scope: "subtree", there: false, stableId: "knowledge/policies#section", dirs: [], docs: [] },
+  ] as const)("a $scope denial migrate writes builds green (target there=$there)", (c) => {
+    const entries = toLedgerEntries(
+      [row({ stableId: c.stableId, scope: c.scope })],
+      new Map(),
+      NONE,
+    ).entries;
+    const tree = { documentIds: new Set<string>(c.docs), dirs: new Set<string>(c.dirs) };
+    const parsed = parseLedger(renderLedger(entries, tree), ".ksor/takedowns.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+    if (!parsed.ok) return;
+    expect(checkLedgerAgainstTree(parsed.ledger, tree)).toEqual([]);
+  });
+
+  it("writes entries the ledger reader accepts", async () => {
+    const { parseLedger } = await import("@panaversity/ksor-content/record");
+    const entries = toLedgerEntries([row()], new Map(), NONE).entries;
+    const parsed = parseLedger(
+      renderLedger(entries, TREE_OF(["policies/old"], [])),
+      ".ksor/takedowns.yaml",
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.ledger.entries).toHaveLength(1);
+    expect(parsed.ledger.entries[0]).toMatchObject({ kind: "denial", by: "human:ciso" });
+  });
+});
+
+/**
+ * `parseLedger` refuses any `scope: subtree` entry whose `stable_id` does not
+ * end in `#section`, and `repoint` rewrites only `/index` and `/README` — so
+ * every other subtree row was transcribed verbatim into a file migrate's own
+ * checker cannot load, with no refusal of its own. The round trip through
+ * `parseLedger` is what would have caught it, so the test does that.
+ */
+describe("toLedgerEntries — a subtree row must name a container", () => {
+  const dbRow = (stableId: string, scope: "node" | "subtree"): DbDenial => ({
+    stableId,
+    scope,
+    reason: "r",
+    at: "2026-08-01T00:00:00Z",
+    actor: "human:ciso",
+  });
+
+  it("refuses a subtree row that names an ordinary document", () => {
+    const out = toLedgerEntries([dbRow("knowledge/policies/pay", "subtree")], new Map(), NONE);
+    expect(out.entries).toEqual([]);
+    expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-migrate-underivable"]);
+    expect(out.refusals[0]?.why).toContain("knowledge/policies/pay");
+    expect(out.refusals[0]?.why).toContain("#section");
+  });
+
+  it("accepts a subtree row already anchored, and its rendered file parses", () => {
+    const out = toLedgerEntries([dbRow("knowledge/policies#section", "subtree")], new Map(), NONE);
+    expect(out.refusals).toEqual([]);
+    const parsed = parseLedger(renderLedger(out.entries, TREE_OF([], [])), ".ksor/takedowns.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+  });
+
+  it("an /index subtree row is repointed to the container anchor and parses", () => {
+    const out = toLedgerEntries([dbRow("knowledge/policies/index", "subtree")], new Map(), NONE);
+    // Two entries, and both are needed: the hold moves to the container, and
+    // the ROW it came from is recorded under the id it actually carries — the
+    // one `applyLedger` matches on, without which `ksor ingest` refuses the
+    // migrated record as `ksor-takedown-unledgered`.
+    expect(out.entries.map((e) => [e.stableId, e.scope])).toEqual([
+      ["knowledge/policies/index", "node"],
+      ["knowledge/policies#section", "subtree"],
+    ]);
+    const parsed = parseLedger(renderLedger(out.entries, TREE_OF([], [])), ".ksor/takedowns.yaml");
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+  });
+
+  it("every node row it emits round-trips through parseLedger too", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/a", "node"), dbRow("knowledge/b/index", "node")],
+      new Map([]),
+      new Map([["knowledge/b/index", "moved"]]),
+    );
+    const parsed = parseLedger(
+      renderLedger(out.entries, TREE_OF(["a"], [])),
+      ".ksor/takedowns.yaml",
+    );
+    expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
+  });
+});
+
+/**
+ * `repoint` rewrote every denied `<dir>/index` to `<dir>/overview` — but its
+ * whole premise is that migrate MOVED that file's prose there, and migrate
+ * moves nothing when the index is a GENERATED one (`isGeneratedIndex`), or
+ * when the file is not in the record at all. Both cases repointed a real
+ * denial onto a path that would never exist, and `expected: removed` then made
+ * the checker agree with it: a withdrawn document undenied, exit 0, nothing
+ * printed. Which document a denial now covers is a governance decision, so the
+ * one case migrate cannot derive is refused rather than guessed (decision 14,
+ * critical rule 1).
+ */
+describe("repoint — only where migrate actually moved the prose", () => {
+  const dbRow = (stableId: string): DbDenial => ({
+    stableId,
+    scope: "node",
+    reason: "r",
+    at: "2026-08-01T00:00:00Z",
+    actor: "human:ciso",
+  });
+
+  it("follows the prose when this run claimed the overview, and records the row", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/hr/index")],
+      new Map(),
+      new Map([["knowledge/hr/index", "moved"]]),
+    );
+    expect(out.refusals).toEqual([]);
+    expect(out.entries.map((e) => e.stableId)).toEqual([
+      "knowledge/hr/index",
+      "knowledge/hr/overview",
+    ]);
+    // The row's own entry says where the hold went, so the ledger reads as one
+    // act rather than two unrelated denials at the same instant.
+    expect(out.entries[0]?.reason).toContain("knowledge/hr/overview");
+    expect(renderLedger(out.entries, TREE_OF(["hr/overview"], ["hr"]))).toContain(
+      "expected: removed",
+    );
+  });
+
+  /**
+   * The record that already ran the broken version: the hold is in the ledger
+   * under the moved id, and the row it came from is not. `repoint` cannot see
+   * that anything moved by then — `ksor build` has regenerated the index, so
+   * the fate reads `kept` — and re-deciding what the denial covers would
+   * contradict a ledger that has already decided it. Only the row is recorded.
+   */
+  it("records only the row when the ledger already carries the moved hold", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/hr/index")],
+      new Map(),
+      new Map([["knowledge/hr/index", "kept"]]),
+      new Set(["knowledge/hr/overview"]),
+    );
+    expect(out.refusals).toEqual([]);
+    expect(out.entries.map((e) => e.stableId)).toEqual(["knowledge/hr/index"]);
+  });
+
+  it("says nothing about a row the ledger already names", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/hr/index")],
+      new Map(),
+      new Map([["knowledge/hr/index", "moved"]]),
+      new Set(["knowledge/hr/index", "knowledge/hr/overview"]),
+    );
+    expect(out).toEqual({ entries: [], refusals: [] });
+  });
+
+  it("refuses when migrate kept the file, rather than denying a path that will not exist", () => {
+    const out = toLedgerEntries(
+      [dbRow("knowledge/hr/index")],
+      new Map(),
+      new Map([["knowledge/hr/index", "kept"]]),
+    );
+    expect(out.entries).toEqual([]);
+    expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-migrate-underivable"]);
+    expect(out.refusals[0]?.why).toContain("knowledge/hr/index");
+    expect(out.refusals[0]?.fix).toContain("ksor takedown");
+  });
+
+  it("leaves a denial of a document the record no longer holds exactly as it is", () => {
+    const out = toLedgerEntries([dbRow("knowledge/hr/index")], new Map(), new Map());
+    expect(out.refusals).toEqual([]);
+    expect(out.entries[0]?.stableId).toBe("knowledge/hr/index");
+    expect(renderLedger(out.entries, TREE_OF([], []))).toContain("expected: removed");
+  });
+
+  it("still anchors a subtree denial at the container, whatever became of the file", () => {
+    for (const fate of [NONE, new Map([["knowledge/hr/index", "kept"]]) as ReservedFate]) {
+      expect(repoint("knowledge/hr/index", "subtree", fate)).toBe("knowledge/hr#section");
+    }
+  });
+});
+
+/**
+ * `retrieval_log.actor` is free text the database hands back, and `--attribute`
+ * is a string the operator hands over — neither was validated at all, and both
+ * end up in `takedown_authorities` in `.ksor/governance.yaml`. The argument
+ * guard on `--actor` never covered either.
+ */
+describe("toLedgerEntries — an actor from the database is validated too", () => {
+  const dbRow = (actor: string | null): DbDenial => ({
+    stableId: "knowledge/policies/old",
+    scope: "node",
+    reason: "r",
+    at: "2026-08-01T00:00:00Z",
+    actor,
+  });
+
+  it.each(["human:a]", "human:a,b", 'human:"a"', "human:a\nb", `human:${"a".repeat(10240)}`])(
+    "refuses %s, naming the flag that replaces it",
+    (actor) => {
+      const out = toLedgerEntries([dbRow(actor)], new Map(), NONE);
+      expect(out.entries).toEqual([]);
+      expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-migrate-underivable"]);
+      expect(out.refusals[0]?.fix).toContain("--attribute");
+    },
+  );
+
+  it("refuses the same forms when --attribute is what asserted them", () => {
+    const out = toLedgerEntries(
+      [dbRow("human:ciso")],
+      new Map([["knowledge/policies/old", "human:a]"]]),
+      NONE,
+    );
+    expect(out.entries).toEqual([]);
+    expect(out.refusals.map((r) => r.slug)).toEqual(["ksor-migrate-underivable"]);
+  });
+});

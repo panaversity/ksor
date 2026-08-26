@@ -3,15 +3,20 @@ import { recordIndexText } from "@/lib/source";
 export const revalidate = false;
 
 // The agent-facing index of the record: this instance's name, then every
-// document in sidebar order, each link usable as-is on a sub-path host — and
-// each carrying its governance when the governance is a caveat.
+// document a MACHINE surface may carry, in sidebar order, each link usable
+// as-is on a sub-path host.
 //
-// Without that last part a withdrawn document and the one that replaced it are
-// two adjacent entries told apart only by whatever a human happened to type
-// into a title, and an agent picks either (research/site-design.md F1).
+// There is no caveat marker any more, because there is nothing to mark: the
+// §2.5 table admits only stable, effective, unexpired, undenied concepts here,
+// so a draft, a deprecated document and one past its `stale_after` are not
+// entries at all. That replaced marking with exclusion — the older worry was a
+// withdrawn document and its replacement sitting adjacent, told apart only by
+// whatever a human typed into a title (research/site-design.md F1), and an
+// agent picking either.
 //
-// The bytes are built in lib/source (`recordIndexText`) because the home page
-// shows this same index to a reader — one index, one spelling.
+// The set is decided ONCE, by staging, and read back here: the bytes are built
+// in lib/source (`recordIndexText`) because the home page shows this same index
+// to a reader — one index, one spelling.
 export function GET(): Response {
   return new Response(recordIndexText());
 }

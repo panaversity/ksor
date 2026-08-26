@@ -68,21 +68,28 @@ export const WORKSPACE_GLOBS: readonly string[] = [
 /**
  * The root scripts, per manager. pnpm's are the template's own bytes; npm and
  * bun REPLACE the manager-specific bodies and inherit everything else.
+ *
+ * `refresh` builds first in ALL THREE. `ingest` publishes only a tree
+ * `ksor build` has checked, so without it the emitted README's ordered path
+ * (`provision` → `refresh` → `serve`) dies at step two with
+ * `ksor-lock-missing`. Fixing the pnpm template alone left npm and bun broken,
+ * because these bodies REPLACE it rather than extend it — the same shape as
+ * every other divergence this file exists to prevent.
  * npm: `--prefix` is npm's spelling of "run it over there".
  * bun: cd-chains — see the module comment for why not `--cwd`.
  */
 const SCRIPT_BODIES: Record<Exclude<PackageManager, "pnpm">, Record<string, string>> = {
   npm: {
     dev: "npm --prefix system/site run dev",
-    build: "npm run export-denylist && npm --prefix system/site run build",
+    build: "ksor build && npm --prefix system/site run build",
     provision: "npm run schema && npm run grant",
-    refresh: "npm run ingest && npm run gc",
+    refresh: "ksor build && npm run ingest && npm run gc",
   },
   bun: {
     dev: "cd system/site && bun run dev",
-    build: "bun run export-denylist && cd system/site && bun run build",
+    build: "ksor build && cd system/site && bun run build",
     provision: "bun run schema && bun run grant",
-    refresh: "bun run ingest && bun run gc",
+    refresh: "ksor build && bun run ingest && bun run gc",
   },
 };
 
@@ -124,7 +131,6 @@ const SCRIPT_NAMES = [
   "grant",
   "ingest",
   "gc",
-  "export-denylist",
 ] as const;
 
 function spellings(manager: Exclude<PackageManager, "pnpm">): readonly [string, string][] {

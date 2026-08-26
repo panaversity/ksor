@@ -43,7 +43,14 @@ that REFUSES every serve (search and read alike) until a number is pasted —
 a corpus that intends to gate must not serve ungated or on a guess. Floors
 are calibrated per corpus per embedding space by the converted calibrate
 method, human-ratified into instance.md, measurement and door recorded
-beside the number. **The config layer fails closed on the same principle
+beside the number. A floor is a threshold inside ONE retrieval predicate, so
+`ksor calibrate` also writes `retrieval.floor_digest:` — the digest of the
+predicate it measured through. A declared number whose digest is not the
+serving predicate's, ABSENT included, enters the same
+declared-but-uncalibrated refusal, and `gate` on the wire reads
+`uncalibrated` rather than `off`: a number that no longer describes the set
+it gates is not a rung on the ladder, and `off` would tell an agent this
+record cannot abstain. **The config layer fails closed on the same principle
 as the gate**: unknown top-level keys are refused, never dropped, so a
 misspelled `retreival:` cannot silently disable the gate.
 
@@ -80,10 +87,29 @@ revision is not a cutoff for assistants that have not moved. Both eras are
 pinned by acceptance tests — the MCP client alone cannot prove which era is
 served, because it negotiates whichever the server offers.
 
-**Visibility.** Serve reads the staged tier of the audience it is built
-for — the same seam and five guarantees as the site shells
-(`specs/ksor/visibility/spec.md`). Nothing outside the tier is on disk for
-any tool to return.
+**The snapshot token binds the viewer.** A pin re-serves the generation a
+search answered from, so without the viewer in its digest a token minted for a
+public caller would re-serve that generation to an internal one, and back — the
+one route where a value the CALLER holds could widen or narrow what they are
+shown. Proved from the door with two servers differing only in `KSOR_AUDIENCE`.
+
+**Visibility.** _Corrected 2026-08-25 (AGENTS.md decision 27): this clause
+described an architecture serve has never had, and named a model that no longer
+exists. It read "serve reads the staged tier of the audience it is built for …
+nothing outside the tier is on disk". Serve reads POSTGRES; there is no staged
+directory on the door at all, and there is no tier — a concept holds an
+audience LIST and a viewer holds one, and the concept is admitted when they
+overlap._
+
+Serve's viewer list is parsed from `KSOR_AUDIENCE` at boot and validated
+against the registry the ACTIVE generation was ingested with, so a door cannot
+be configured for an audience the published record does not know. Admission is
+one predicate set — audience overlap, lifecycle and trust floor beside the
+denial seam — composed into the SQL of both search arms, `read`, `outline` and
+the calibration sampler, so nothing outside the viewer is RETURNABLE rather
+than merely absent from disk. The rule is the record spec (§2.4, §2.5) and it
+is the same rule the site stages by; `AUDIENCE_CASES` and `LIFECYCLE_CASES`
+assert both halves against each other.
 
 **Errors are documentation.** Refusals exit 1 with a remedied message;
 environment failures exit 3. The kernel is BUNDLED into the one published
@@ -107,8 +133,11 @@ operations `ksor ingest`/`schema`/`calibrate`/`gc` are the same binary.
    test; no code path yields prose without citations.
 4. A public bind with no auth configuration refuses to boot, slugged; the
    deliberate opt-out flag boots and says what it did.
-5. A serve built for audience X returns zero traces of any narrower tier
-   (canary method, positive controls).
+5. A serve configured for a viewer list returns zero traces of any concept
+   whose audience list does not overlap it — through search, read, outline,
+   citations, counts and positions (canary method, positive controls).
+   _Corrected 2026-08-25: this read "any narrower tier", which cannot be
+   evaluated now that audiences are unordered identifiers._
 
 ## Status against acceptance (2026-08-19 — the draft's honest ledger)
 
@@ -120,12 +149,72 @@ probes; oracle-fixture parity for chunking, calibration math, windowing,
 manifest; and the calibrate CLI's synthesized door (`calibrateCommand` builds
 the text generator and passes it into `runCalibration` — corrected 2026-08-20:
 this spec listed it as unwired after the code landed; the code wins). Not yet
-wired: the visibility-staged tier as serve's source (clause above is contract,
-not behavior), behavioural evals as a CI gate, and the `.mcp.json` scaffold
-rung.
+wired: behavioural evals as a CI gate, and the `.mcp.json` scaffold rung.
+_Corrected 2026-08-25: this list also carried "the visibility-staged tier as
+serve's source". That is retired rather than pending — the audience decision IS
+wired and enforced in the serving predicate, and it will never be wired as a
+staged tier, which is not the architecture._
 The "declared-but-uncalibrated refuses" invariant is now REPRESENTABLE and
 enforced (`retrieval.vector_floor: uncalibrated` refuses every serve —
-resolved 2026-08-19), so the grammar is no longer a two-state gap.
+resolved 2026-08-19), so the grammar is no longer a two-state gap. It also
+covers a floor that WAS measured but not through this predicate
+(`retrieval.floor_digest`, 2026-08-25).
+
+**What an arm admits** (record spec §2.4/§2.5, decision 26): the audience
+overlap, the lifecycle window and the trust floor compose into one admitted
+set bound beside the takedown denial in search's two arms, read, outline and
+the calibration sampler. A section declares no governance of its own and is
+admitted iff a descendant is visible, by a recursive `parent_id` walk. The
+caller's trust floor is `ServiceContext.minTrustTier` (0 unverified, 1
+machine-confirmed, 2 human-reviewed; absent = 0), and the door exposes it as
+`search`'s `min_trust_tier`. The deployment's own floor is
+`KSOR_MIN_TRUST_TIER`; the two compose by the higher of the pair, so
+configuration TIGHTENS and a request never loosens. The default and the
+enforcement live in the HANDLER, not in the adopter-owned registration
+(decision 23), so a registration emitted before the parameter existed keeps
+working and the boot inspection NOTICES the absence rather than refusing it.
+
+**Every hit AND every `read` carries its governance**: `status`, `trust_tier`, the latest
+`verified` act (or null), `effective_from`, `stale_after`, and `approval` with
+`checked: "policy"` — honest absence in the envelope's own idiom, exactly as
+`gate: "off"` is: the approver was checked against the Governance Policy's
+authority list and NOT against change control, which is phase B. It travels
+with the PASSAGE, because an agent deciding whether to rely on a sentence is
+deciding about the document it came from, and a per-response summary cannot
+say which of several hits was the reviewed one. `read` carries the same block,
+from the same six columns through the same seam, taken from the LIVE node row
+rather than a pinned one — a snapshot exists so a citation keeps resolving to
+the same bytes, never so the record's position on those bytes is frozen too.
+
+**`read` returns the concept's frontmatter byte-exact** — the author's bytes
+from `sources.frontmatter`, never a re-serialisation of the parsed columns:
+the profile preserves unknown keys, so a re-rendered block would hand an agent
+a document the record does not contain. It is UNTRUSTED corpus text, and it
+sits beside `governance`, which is not: the frontmatter is what the author
+DECLARED, `governance` is what the record STORED — checked per field, not as a
+block: `approval` against the Governance Policy, `trust_tier` only DERIVED from
+`verified` entries the document declares about itself, which no policy family
+gates (record spec §2.3). The floor text says which is which. Offering only the
+authored block on the surface an agent reads documents from would invite it to
+read a declaration as a verification, so both go out and the floor says which
+is which. The in-band injection advisory is computed over BOTH channels.
+
+**`read` and `outline` take no per-call trust floor** — deliberately, for now.
+The deployment's floor binds every arm including theirs, so neither can serve
+past `KSOR_MIN_TRUST_TIER`; what a caller cannot yet do is tighten on those two
+the way `search` lets it. With `governance` on the read reply the agent can see
+the tier it got and decide, which is the honest half; the parameter is
+worth adding when a caller has a reason to make the door refuse instead. An
+`outline` row carries no governance at all — it is a title and a path, not a
+claim — and that is the sharper open question, because an agent choosing what
+to read from an outline has no trust signal to choose by.
+
+**Every serving act's `retrieval_log` row records its scope**: the viewer list,
+the trust floor that applied, whether it abstained, how many results it
+returned (`result_count` — one name for that fact across every action), and the
+generation. Never content and never the query — telemetry
+that accumulated passages would be a second copy of the record with no
+audience predicate over it and no takedown seam bound to it.
 
 ## Out of scope
 

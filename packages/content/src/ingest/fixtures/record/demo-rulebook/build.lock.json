@@ -1,0 +1,70 @@
+{
+  "format": 1,
+  "build_id": "sha256:fixture-demo-rulebook",
+  "as_of": "2026-08-25T12:00:00Z",
+  "instance_sha256": "109017e7aa4989efbb0b39accfc699973e3c5329d194018be589283f16881687",
+  "policy_sha256": "558c48715b0fd5f18e034bf27f5e5c674789ccc72d8a4345a9bd2d942d634ed6",
+  "ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "documents": [
+    {
+      "path": "emergencies/injuries.md",
+      "sha256": "a73e244f68f0b9356a32dcf757bd3398d1439c1f725a3df422a576ab3b5dbe4d"
+    },
+    {
+      "path": "emergencies/overview.md",
+      "sha256": "40ed411b264b29be28cb718c9643f616b3e9b9000a293ff1412aba208d432a4f"
+    },
+    {
+      "path": "emergencies/power-and-fire.md",
+      "sha256": "a13536c1bb884451fc0f2d0cad4addcec22db48ee5dcdd9070a1b246cc220f9e"
+    },
+    {
+      "path": "getting-certified/badges.md",
+      "sha256": "fb62bd16443fa152ea848b6f8606eced016caeede8d5d14a10ff8cd7ba2d06c8"
+    },
+    {
+      "path": "getting-certified/guests.md",
+      "sha256": "b5ba94f8e8a1081812519efbc0755d14b2d9e0c9981ea26ba2185c56bfed05c8"
+    },
+    {
+      "path": "getting-certified/overview.md",
+      "sha256": "599ed49a9e853f3c49a5f2bac736bbd26f627dec7ebb40ceb48aeeacbc910d9b"
+    },
+    {
+      "path": "machine-rules/laser-cutter.md",
+      "sha256": "4d78de43b57434a3e12ee95e82af9f0931844b33ea147b44276380541ba8ffca"
+    },
+    {
+      "path": "machine-rules/overview.md",
+      "sha256": "ee2c889d6254d11d163bfc14018f6c35348f63594639fd418c65372d7f32d5bd"
+    },
+    {
+      "path": "machine-rules/table-saw.md",
+      "sha256": "60395ae1a31015a2843eaa6efa8f0e3862dd779e67b4a8dc4dda619a9a79fe0f"
+    },
+    {
+      "path": "overview.md",
+      "sha256": "03b3cecb8e5371f71ab6825c66dcaecf8ae7f1eeda3f661a5eb9f5ed831c484e"
+    }
+  ],
+  "companions": [],
+  "assets": [],
+  "indexes": [
+    {
+      "path": "emergencies/index.md",
+      "sha256": "fe480e749f8f12889a2f3c736f93533160e1be2a9cd631dc6e16d64e9d635b8d"
+    },
+    {
+      "path": "getting-certified/index.md",
+      "sha256": "179753639f800a16b3d8a12f8b781a5cb7c16b12359824f6adae2d78814cc812"
+    },
+    {
+      "path": "index.md",
+      "sha256": "d61c0db0aa07f1ab6eee306d4fb2ff40fa40c7e15064fc20f0ae9557a25ee84c"
+    },
+    {
+      "path": "machine-rules/index.md",
+      "sha256": "af7307c95a28927472ee51551614958996a7f45391f10d652f93672205ad482c"
+    }
+  ]
+}

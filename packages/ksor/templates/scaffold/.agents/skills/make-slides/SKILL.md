@@ -38,7 +38,8 @@ Read `<doc>.md` completely before writing anything. Note as you go:
 - **the numbers** — thresholds, deadlines, limits, and their units
 - **the cases** — what happens in each situation it names
 - **the boundary** — what it explicitly does NOT cover
-- **its governance** — `owner`, `effective`, `status` from the frontmatter
+- **its governance** — `status`, `ksor.owner` and `ksor.effective_from` from
+  the frontmatter
 
 If the document carries `<doc>.summary.md`, read that too: it is a reviewed
 compression of the same thing, and it tells you what the author thought was
@@ -108,16 +109,17 @@ the session it was made for, because the next presenter trusts it.
 ## 4 · Verify it
 
 ```sh
-pnpm check     # refuses an orphan, frontmatter, or a malformed deck
-pnpm dev       # look at the page — the deck renders at the end
+pnpm check     # refuses an orphan deck
+pnpm dev       # look at the page — the deck renders after the introduction,
+               # immediately before the first `##` section
 ```
 
-`pnpm build` refuses:
+`pnpm build` refuses — the deck's own shape is checked in the site build, not
+by `pnpm check`:
 
 - `ksor-slides-empty` — neither `deck:` nor `slides.url:`; nothing to show
 - `ksor-slides-two-sources` — both, so nothing says which one governs
 - `ksor-attachment-orphan` — no `<doc>.md` beside it
-- `ksor-attachment-frontmatter` — an attachment carries none of its own
 
 ## 5 · Tell the owner what you did
 

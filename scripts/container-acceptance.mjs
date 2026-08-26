@@ -130,9 +130,23 @@ try {
 
   // 4. Publish a generation. This is a DEPLOY step, never something the
   //    container does at boot — the whole point of the serve/ingest split.
+  // `ksor build` FIRST: ingest publishes only a tree the record checker has
+  // passed, and records that build's id on the generation (record spec §1,
+  // build spec §2). Without it ingest refuses `ksor-lock-missing` — which is
+  // the deploy order every adopter's own scripts follow, so the walk follows
+  // it too rather than reaching past it.
+  // The record is used AS EMITTED — no approval step. The starter ships
+  // `status: stable` approved by its producer, so `ksor init` alone gives this
+  // walk a record with something in it, which is the point: the MCP question at
+  // the end asks the container about the knowledge an adopter actually
+  // receives. While the samples were drafts this walk had to approve them first
+  // or the generation published nothing, and the abstention that followed read
+  // as a retrieval failure rather than as an unapproved record (found in CI,
+  // 2026-08-25).
+  ksor(["build"]);
   ksor(["schema", "--instance", "instance.md", "--apply"]);
   ksor(["grant", "--instance", "instance.md"]);
-  ksor(["ingest", "--instance", "instance.md", "--knowledge", "knowledge", "--flip"]);
+  ksor(["ingest", "--instance", "instance.md", "--flip"]);
 
   // 4b. Customize the tool surface, so the walk proves the registration file
   //     actually REACHES the image. It did not once: .dockerignore excluded all

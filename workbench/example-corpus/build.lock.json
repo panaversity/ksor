@@ -1,0 +1,59 @@
+{
+  "format": 1,
+  "build_id": "sha256:22f7f519588e143f3a35e76edb9d0cdddf6cc601c99d152b2f009082af49f030",
+  "ksor_version": "0.0.40",
+  "okf": {
+    "version": "0.2",
+    "commit": "ad30107c31c06aec8a7d5636e0d1058118604e6f",
+    "spec_sha256": "26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101"
+  },
+  "source_commit": "bc320baf308397717a6105ba3626cc6eb5dcdc4b",
+  "dirty": false,
+  "as_of": "2026-08-25T10:38:28.357Z",
+  "drafts": "hidden",
+  "instance_sha256": "04952385a9e0d0350673a13053b815d429d74890528db8910877de566bae231b",
+  "policy_sha256": "41b63d4d203785563e4d821c4f30b11e06f13740ddd4f9a4e84e1ad83a60a3a5",
+  "ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "ledger_entries": [],
+  "audiences": {
+    "registry": [],
+    "viewers": {
+      "public": ["public"]
+    }
+  },
+  "documents": [
+    {
+      "path": "about.md",
+      "sha256": "0cce39631f3ebebe5a3caf8e3fab052d55ad83efea77442ab496db16807992c1",
+      "status": "stable",
+      "audience": ["public"],
+      "admitted": ["public"]
+    },
+    {
+      "path": "policies/purchase-approval.md",
+      "sha256": "dd736269a05ac10891bfd2ab0555ed47859bd530f4682ab19dae12e386f93039",
+      "status": "stable",
+      "audience": ["public"],
+      "admitted": ["public"]
+    },
+    {
+      "path": "policies/purchase-approval-2019.md",
+      "sha256": "51322be0d40ce064d63bf686c9cae783cdf68f9e84aca0cf990c053693b7436e",
+      "status": "deprecated",
+      "audience": ["public"],
+      "admitted": []
+    }
+  ],
+  "companions": [],
+  "assets": [],
+  "indexes": [
+    {
+      "path": "index.md",
+      "sha256": "052d14e7fe7fdd6c6b78d3bfd3db1540dd0bf81adc78dfe2f42426be08c167a2"
+    },
+    {
+      "path": "policies/index.md",
+      "sha256": "6ac8420d116fac886f1d5bd6fd7a516fe9358dd29961f5635045a8a4603ca33f"
+    }
+  ]
+}

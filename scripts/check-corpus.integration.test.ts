@@ -1,50 +1,72 @@
+/**
+ * `check-corpus` is the PRODUCT-DOCS checker: identity, lifecycle and internal
+ * links for the markdown shipped inside the npm package.
+ *
+ * It is not a record checker any more. It carried a second implementation of
+ * the record's rules behind `--corpus <dir>` — `owner`/`provenance` required,
+ * a `draft | review | approved | superseded` status set — which the KSoR
+ * Profile retired, so running that flag against this repository's OWN migrated
+ * record reported `status "stable" is not one of …` and demanded two keys the
+ * profile refuses. These tests hold the docs half and hold the flag gone.
+ *
+ * The script resolves its docs directory from its own location, so the fixture
+ * cases run against a COPY of it in a tmp tree — a test must never write into
+ * the repository it is checking.
+ */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const script = fileURLToPath(new URL("./check-corpus.mjs", import.meta.url));
+const scriptsDir = fileURLToPath(new URL(".", import.meta.url));
+const script = path.join(scriptsDir, "check-corpus.mjs");
 
-function runCheck(args: readonly string[]) {
-  return spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+function runCheck(at: string, args: readonly string[] = []) {
+  return spawnSync(process.execPath, [at, ...args], { encoding: "utf8" });
 }
 
-let tempDir: string | null = null;
+const roots: string[] = [];
 afterEach(() => {
-  if (tempDir !== null) rmSync(tempDir, { recursive: true, force: true });
-  tempDir = null;
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function makeCorpus(): string {
-  tempDir = mkdtempSync(path.join(tmpdir(), "ksor-corpus-"));
-  mkdirSync(path.join(tempDir, "knowledge"), { recursive: true });
-  writeFileSync(path.join(tempDir, "instance.md"), "# Test corpus\n\nFixture instance.\n");
-  return tempDir;
+/**
+ * The script and the one module it imports, in a throwaway repository whose
+ * `packages/ksor/docs` holds exactly `docs`. Returns the path to run.
+ */
+function harness(docs: Readonly<Record<string, string>>): string {
+  const root = mkdtempSync(path.join(tmpdir(), "ksor-check-corpus-"));
+  roots.push(root);
+  mkdirSync(path.join(root, "scripts", "lib"), { recursive: true });
+  copyFileSync(script, path.join(root, "scripts", "check-corpus.mjs"));
+  copyFileSync(
+    path.join(scriptsDir, "lib", "frontmatter.mjs"),
+    path.join(root, "scripts", "lib", "frontmatter.mjs"),
+  );
+  const docsDir = path.join(root, "packages", "ksor", "docs");
+  mkdirSync(docsDir, { recursive: true });
+  for (const [name, text] of Object.entries(docs)) writeFileSync(path.join(docsDir, name), text);
+  return path.join(root, "scripts", "check-corpus.mjs");
 }
 
 describe("check-corpus", () => {
-  it("passes the repository's own corpus roots", () => {
-    const result = runCheck([]);
+  it("passes the product docs this repository ships", () => {
+    const result = runCheck(script);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
   });
 
-  it("accepts a valid governed document", () => {
-    const corpus = makeCorpus();
-    writeFileSync(
-      path.join(corpus, "knowledge", "policy.md"),
-      "---\ntitle: A policy\nstatus: approved\nowner: finance\nprovenance:\n  - board minutes 2026-01\n---\n\n# A policy\n",
-    );
-    expect(runCheck(["--corpus", corpus]).status).toBe(0);
+  it("accepts a well-formed doc", () => {
+    const at = harness({ "a.md": "---\ntitle: A\nstatus: draft\n---\n\n# A\n" });
+    expect(runCheck(at).status).toBe(0);
   });
 
-  it("rejects an ungoverned document and teaches the fix", () => {
-    const corpus = makeCorpus();
-    writeFileSync(path.join(corpus, "knowledge", "rogue.md"), "# No frontmatter at all\n");
-    const result = runCheck(["--corpus", corpus]);
+  it("rejects a doc with no frontmatter and teaches the fix", () => {
+    const at = harness({ "rogue.md": "# No frontmatter at all\n" });
+    const result = runCheck(at);
     expect(result.status).toBe(1);
     // Errors are documentation: the message must carry why + fix.
     expect(result.stderr).toContain("why:");
@@ -53,60 +75,48 @@ describe("check-corpus", () => {
   });
 
   it("rejects a dead relative link", () => {
-    const corpus = makeCorpus();
-    writeFileSync(
-      path.join(corpus, "knowledge", "linked.md"),
-      "---\ntitle: Linked\nstatus: draft\nowner: ops\nprovenance:\n  - somewhere\n---\n\nSee [missing](./nope.md).\n",
-    );
-    const result = runCheck(["--corpus", corpus]);
+    const at = harness({
+      "linked.md": "---\ntitle: Linked\nstatus: draft\n---\n\nSee [missing](./nope.md).\n",
+    });
+    const result = runCheck(at);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("dead relative link");
   });
 
   it("rejects authored id:/name: keys — identity derives from the path", () => {
-    const corpus = makeCorpus();
-    writeFileSync(
-      path.join(corpus, "knowledge", "twin.md"),
-      "---\ntitle: Twin\nid: authored-twin\nstatus: draft\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# Twin\n",
-    );
-    const result = runCheck(["--corpus", corpus]);
+    const at = harness({
+      "twin.md": "---\ntitle: Twin\nid: authored-twin\nstatus: draft\n---\n\n# Twin\n",
+    });
+    const result = runCheck(at);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('authored "id:" frontmatter key');
   });
 
   it("rejects an invalid status and an empty status", () => {
-    const corpus = makeCorpus();
-    writeFileSync(
-      path.join(corpus, "knowledge", "freeform.md"),
-      "---\ntitle: Freeform\nstatus: finished\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# F\n",
+    const invalid = runCheck(
+      harness({ "f.md": "---\ntitle: Freeform\nstatus: finished\n---\n\n# F\n" }),
     );
-    const invalid = runCheck(["--corpus", corpus]);
     expect(invalid.status).toBe(1);
     expect(invalid.stderr).toContain('status "finished" is not one of');
 
-    writeFileSync(
-      path.join(corpus, "knowledge", "freeform.md"),
-      "---\ntitle: Freeform\nstatus:\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# F\n",
-    );
-    const empty = runCheck(["--corpus", corpus]);
+    const empty = runCheck(harness({ "f.md": "---\ntitle: Freeform\nstatus:\n---\n\n# F\n" }));
     expect(empty.status).toBe(1);
     expect(empty.stderr).toContain("status key has no value");
   });
 
   it("accepts a YAML-quoted lifecycle value", () => {
-    const corpus = makeCorpus();
-    writeFileSync(
-      path.join(corpus, "knowledge", "quoted.md"),
-      '---\ntitle: Quoted\nstatus: "approved"\nowner: ops\nprovenance:\n  - somewhere\n---\n\n# Q\n',
-    );
-    expect(runCheck(["--corpus", corpus]).status).toBe(0);
+    const at = harness({ "q.md": '---\ntitle: Quoted\nstatus: "draft"\n---\n\n# Q\n' });
+    expect(runCheck(at).status).toBe(0);
   });
 
-  it("rejects a corpus with no instance.md", () => {
-    const corpus = makeCorpus();
-    rmSync(path.join(corpus, "instance.md"));
-    const result = runCheck(["--corpus", corpus]);
+  /**
+   * The retired flag. Silence would be the wrong answer for an operator who
+   * runs what they were told about, so the refusal names where the rules went.
+   */
+  it("refuses --corpus by name, pointing at the one rule set", () => {
+    const result = runCheck(script, ["--corpus", scriptsDir]);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("missing instance.md");
+    expect(result.stderr).toContain("unknown argument");
+    expect(result.stderr).toContain("ksor build");
   });
 });

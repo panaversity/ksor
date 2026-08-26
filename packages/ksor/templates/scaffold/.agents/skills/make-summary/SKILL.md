@@ -2,7 +2,7 @@
 name: make-summary
 description: Write the summary of a document and attach it, so it renders as a second tab on that document's page. Use when the owner says "summarise X", "make a summary for this", "add summaries to the record", "give me the short version", or asks for a TL;DR, an abstract or a précis of a governed document.
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Writing the summary of a document
@@ -48,17 +48,24 @@ Read `<doc>.md` completely before writing anything. Note as you go:
 - **the numbers** — thresholds, deadlines, limits, and their units
 - **each `##` section** — and the one thing it is there to say
 - **the boundary** — what the document explicitly does NOT cover
-- **its governance** — `owner`, `effective`, `status` from the frontmatter
+- **its governance** — `status`, `ksor.owner` and `ksor.effective_from` from
+  the frontmatter
 
 If the document already carries `<doc>.slides.yaml`, read it: it is a reviewed
 compression of the same thing, and the two must not disagree.
 
 ## 2 · Write the summary
 
-Write `<doc>.summary.md` beside the document. **No frontmatter** — an
-attachment carries none, and the checker refuses one:
+Write `<doc>.summary.md` beside the document. Its frontmatter is exactly one
+key and the checker refuses any other — a summary inherits its parent's
+audience, status and takedown, and a second key there would claim governance a
+non-document cannot carry:
 
 ```markdown
+---
+type: Summary
+---
+
 The lead: what this document settles, in one or two sentences, in the
 document's own words. **Bold the thing a reader must not misremember.**
 
@@ -107,14 +114,14 @@ document, not before it.
 ## 4 · Verify it
 
 ```sh
-pnpm check     # refuses an orphan or an attachment carrying frontmatter
+pnpm check     # refuses an orphan, or frontmatter that is not exactly `type: Summary`
 pnpm dev       # open the page — a Summary tab appears beside Document
 ```
 
 The build refuses:
 
 - `ksor-attachment-orphan` — no `<doc>.md` beside it
-- `ksor-attachment-frontmatter` — an attachment carries none of its own
+- `ksor-attachment-frontmatter` — anything but exactly `type: Summary`
 
 If no Summary tab appears, the file name is wrong: it must be exactly
 `<doc>.summary.md`, matching the document's own name.

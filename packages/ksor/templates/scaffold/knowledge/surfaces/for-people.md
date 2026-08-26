@@ -1,12 +1,13 @@
 ---
+type: Document
 title: The human surface
 description: Pages for reading, reviewing and sharing the record.
-status: approved
-owner: Product
-order: 1
-effective: 2026-08-22
-provenance:
-  - KSoR README, "a human experience for reading, learning, reviewing, and sharing"
+status: stable
+order: 5
+generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ---
 
 A static site renders every governed document at a route derived from its path,

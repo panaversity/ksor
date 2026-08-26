@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import { statusTone } from "@/lib/governance";
+import { badgeLabel, badgeTone } from "@/lib/governance";
+import type { LifecycleBadge } from "@/lib/lifecycle-rule";
 import type { RecordEntry } from "@/lib/source";
 
 /**
@@ -53,7 +54,7 @@ export function RecordStack({
           <span className="font-mono text-[10px] tracking-[0.2em] text-[var(--ksor-cover-muted)] uppercase">
             Opens here
           </span>
-          {lead.status === null ? null : <StatusChip status={lead.status} />}
+          {lead.badge === null ? null : <StatusChip badge={lead.badge} />}
         </div>
 
         <h2 className="mt-4 font-display text-2xl leading-snug font-semibold tracking-[-0.008em] transition-colors group-hover:text-fd-primary">
@@ -99,7 +100,7 @@ export function RecordStack({
               {entry.documents === 0
                 ? null
                 : `${entry.documents} ${entry.documents === 1 ? "doc" : "docs"}`}
-              {entry.status === null ? null : <StatusChip status={entry.status} />}
+              {entry.badge === null ? null : <StatusChip badge={entry.badge} />}
             </span>
           </span>
         </Link>
@@ -116,16 +117,16 @@ export function RecordStack({
 }
 
 /**
- * A caveat status, in the same chip the record's listings use — only ever
- * `draft`, `review` or `superseded`, because a reader already assumes a
- * document in the record is current.
+ * A caveat badge, in the same chip the record's listings use — only ever a
+ * state the machine surfaces decline (record spec §2.5), because a reader
+ * already assumes a document in the record is current and stable.
  */
-function StatusChip({ status }: { status: string }): ReactElement {
+function StatusChip({ badge }: { badge: LifecycleBadge }): ReactElement {
   return (
     <span
-      className={`rounded-sm border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-[var(--ksor-cover-foreground)] uppercase ${statusTone(status)}`}
+      className={`rounded-sm border border-[var(--ksor-cover-rule)] px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-[var(--ksor-cover-foreground)] uppercase ${badgeTone(badge)}`}
     >
-      {status}
+      {badgeLabel(badge)}
     </span>
   );
 }

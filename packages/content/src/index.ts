@@ -4,7 +4,6 @@ export * from "./config.js";
 export {
   parseInstance,
   parseInstanceText,
-  parseFrontmatter,
   InstanceParseError,
   NoDatabaseDeclared,
   SUPPORTED_FORMATS,
@@ -13,10 +12,12 @@ export {
 export {
   contentPool,
   contentPoolMin,
+  runAuditRead,
   runRead,
   runProbe,
   runAudit,
   runIngest,
+  ContentInputError,
   ContentStoreError,
   TENANT_GUC,
   RUNTIME_ROLE,
@@ -37,11 +38,21 @@ export { keywordAbstains, vectorAbstains, type AbstainConfig } from "./lib/absta
 export {
   audienceGucs,
   AudienceError,
-  visibleTiers,
+  parseViewer,
+  validateViewer,
   WHOLE_RECORD_SCOPE,
-  type AudienceModel,
+  type ViewerRefusal,
 } from "./lib/audience.js";
+export { servingPolicy, type ServingPolicy } from "./lib/policy-row.js";
 export {
+  parseTrustFloor,
+  tierOrdinal,
+  tightenTrustFloor,
+  TrustFloorError,
+  trustGucs,
+} from "./lib/trust.js";
+export {
+  GATE_PREDICATE_DIGEST,
   hybridSearch,
   keywordSearch,
   topOneScore,
@@ -124,21 +135,46 @@ export {
 } from "./calibrate/math.js";
 export { GeminiTextGenerator } from "./lib/providers/gemini.js";
 
-export { runContentCli } from "./commands.js";
+export { instancePathOf, runContentCli } from "./commands.js";
+// Provenance sentences, shared with `ksor build` (which cannot import commands'
+// verb dispatch, and must not need to, to say the same thing about a commit).
+export {
+  dirtyNotice,
+  provenanceGap,
+  provenanceNotice,
+  type ProvenanceGap,
+} from "./lib/provenance.js";
 
 export { AUDIENCE_CASES, type AudienceCase } from "./lib/audience-conformance.js";
-export { decideVisible, type AudienceModel as SiteAudienceModel } from "./lib/audience-rule.js";
+// The canonical attachment rule, for the surfaces OUTSIDE this package that
+// must not hand-copy it (decision 18) — the CLI's build lock and migrate.
+export { attachmentKindOf, type AttachmentKind } from "./lib/attachment-rule.js";
 export { withProbeDeadline, ProbeDeadlineError } from "./db.js";
 export {
   assertGovernanceServable,
   GovernanceGateError,
   GOVERNANCE_SINCE,
 } from "./governance-gate.js";
+// The record module (record spec; decision 26): the profile, the control
+// files and the checker `ksor build`, `ksor ingest` and the emitted checker
+// run. Also exported as the `./record` subpath, which is what the emitted
+// checker bundles; `ksor ingest` reads the record through it and `ksor build`
+// writes with it.
+export * from "./record/index.js";
+export { parseInstanceDocument, type InstanceDocument } from "./record/instance.js";
+// The ingest-side seams the record module does not own: the lock gate ingest
+// reads, the manifest it builds, and the ledger it applies.
 export {
-  frontmatterMap,
-  isDenied,
-  scalarLike,
-  stableIdFrom,
-  recordPathFrom,
-  type DenylistManifest as SiteDenylistManifest,
-} from "./lib/denial-rule.js";
+  checkLock,
+  conceptHashes,
+  sha256OfDocument,
+  formatRefusals,
+  LOCK_PATH,
+  type IngestRefusal,
+  type IngestSlug,
+} from "./ingest/lock-gate.js";
+export { RecordRefused, policyRow } from "./ingest/build.js";
+export { buildManifestFromRecord, BUNDLE } from "./ingest/adapters/plain-tree.js";
+export { manifestToJson, type Manifest, type ManifestNode } from "./ingest/manifest.js";
+export { governanceOf, sectionGovernance, type NodeGovernance } from "./ingest/governance.js";
+export { applyLedger, foldLedger, unmergedLines } from "./ingest/ledger-apply.js";

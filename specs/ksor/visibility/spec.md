@@ -7,6 +7,37 @@ evidence: research/visibility.md · panaversity/ksor#10
 
 # Visibility
 
+> **Superseded in part (2026-08-25, the OKF-native change).** The reasoning
+> below still holds and is why the record carries audience at all — staged
+> per-audience builds, the canary sweeps, and "the filter is a directory, not
+> a predicate". The KEY and the MODEL are superseded: audience moved to the
+> KSoR Profile of OKF as `ksor.audience`, a non-empty LIST matched against the
+> viewer's list by OVERLAP, with the registry in `.ksor/governance.yaml`
+> rather than `instance.md`. `visibility:` is now refused by name
+> (`ksor-legacy-key`). The contract is `specs/ksor/record/spec.md` §2.4 (the
+> key, the registry, omission refused) and `specs/ksor/build/spec.md` §3 (the
+> comma-list `KSOR_AUDIENCE`, `ksor-viewer-omits-public`,
+> `ksor-viewer-unregistered`); the evidence that reverses the "never a list"
+> clause is `research/okf-native.md` §2.2. Also superseded: "on both shells" —
+> the second shell was retired by decision 9's 2026-08-24 revision — and
+> "absent `audiences:`, nothing changes": staging is unconditional now.
+>
+> Three more clauses below are superseded and were not covered by the first
+> pass of this banner, so they are named here rather than left to be inferred.
+> **The status vocabulary**: "a document can be `status: approved`" — the
+> statuses are `draft | stable | deprecated`, and `approved` is refused
+> (`ksor-status-unknown`). The orthogonality the sentence was making is
+> unchanged and is now stronger, because audience and lifecycle are separate
+> columns and separate seams. **Checker rules 1–5**: there is no closed
+> top-level key set any more (unknown keys are PRESERVED, record spec §2.7);
+> `visibility` and `default_visibility` do not exist; and `audiences:` in
+> `instance.md` is refused with the hint to move it to the policy
+> (`ksor-instance-format`). **Rule 7**: top-level `superseded_by` is itself
+> refused; the rule now applies to `ksor.superseded_by` and fires as
+> `ksor-supersession-strands`, which also covers a successor that does not
+> exist, is not `stable`, or sits on a concept that is not `deprecated`.
+> Rules 6 and 7's REASONING is untouched and is why the widening rule exists.
+
 Who may read a document is the most consequential fact about it, and until
 now it was the one fact outside governance — answered by whoever configures
 a web server, in a place the record cannot see, diff, or carry to another

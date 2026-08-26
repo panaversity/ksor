@@ -1,8 +1,6 @@
 import { decks, quizzes, slides, summaries } from "collections/server";
 
-import { ATTACHMENT_SUFFIXES } from "./attachment-rule";
 import { cardHash, type Card, type Deck } from "./deck";
-import { newCard, type CardSchedule } from "./srs";
 import { type Question, type Quiz } from "./quiz";
 import { type Slide, type Slides } from "./slides";
 import { embedUrlFor, providerOf } from "./slides-embed";
@@ -162,29 +160,3 @@ export function slidesFor(documentPath: string): SlidesEntry | null {
     path: parsed.info.path,
   };
 }
-
-/** True when a document has ANY attachment — the presence gate for the UI. */
-export function hasAttachments(documentPath: string): boolean {
-  return (
-    summaryFor(documentPath) !== null ||
-    deckFor(documentPath) !== null ||
-    quizFor(documentPath) !== null ||
-    slidesFor(documentPath) !== null
-  );
-}
-
-/**
- * A fresh schedule for every card in a deck, all due now.
- *
- * Exported so the deck's first render and its reset path agree by construction
- * rather than by two similar-looking object literals.
- */
-export function freshSchedules(
-  cards: readonly DeckCard[],
-  now: number,
-): Record<string, CardSchedule> {
-  return Object.fromEntries(cards.map((card) => [card.hash, newCard(card.hash, now)]));
-}
-
-/** Every attachment suffix, for the surfaces that need the list rather than the rule. */
-export const ATTACHMENT_SUFFIX_LIST: readonly string[] = ATTACHMENT_SUFFIXES.map((e) => e.suffix);

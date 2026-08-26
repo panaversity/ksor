@@ -9,7 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { NO_GOVERNANCE, type NodeGovernance } from "./governance.js";
+import { NO_GOVERNANCE, type Act, type NodeGovernance } from "./governance.js";
 
 export const SUPPORTED_FORMATS: readonly number[] = [1];
 
@@ -31,9 +31,9 @@ export interface ManifestNode {
    */
   readonly permalink: string | null;
   /**
-   * What the document declares ABOUT ITSELF — audience, authored status, owner,
-   * provenance, supersession. Carried onto the record (schema 2.2) so every
-   * surface reads one source instead of re-deriving governance from markdown.
+   * What the document declares ABOUT ITSELF — the profile's governance keys
+   * (record spec §2). Carried onto the record (schema 2.5) so every surface
+   * reads one source instead of re-deriving governance from markdown.
    */
   readonly governance: NodeGovernance;
 }
@@ -76,8 +76,30 @@ export interface ManifestNodeInit {
   readonly governance?: NodeGovernance;
 }
 
+/**
+ * An EMPTY list of sources (or of verifications) makes the same claim as no
+ * list at all — none — so it becomes the same value here, once, for every node
+ * in the system: both adapters, `parseManifest`, and every hand-built fixture
+ * pass through this constructor.
+ *
+ * Without it the two differed only in a way nothing could act on and one thing
+ * could lose: the emitter omits an empty list, the parser reads an absent key
+ * as null, so a round trip turned `[]` into `null` and the manifest's sha256 —
+ * which fills `instance_bundle_sha256`, the provenance digest of a generation —
+ * could not tell the two apart. `governanceOf` already normalises `verified`
+ * this way; this makes it true of `sources` and true wherever a node is built
+ * rather than only where one is read (review 2026-08-25).
+ *
+ * `audience` is deliberately NOT normalised: an empty audience list is served
+ * to nobody and `governanceToJson` already emits it, so it round-trips and it
+ * carries meaning a null does not.
+ */
+const orNullIfEmpty = <T>(list: readonly T[] | null | undefined): readonly T[] | null =>
+  list === undefined || list === null || list.length === 0 ? null : list;
+
 /** Mirrors the oracle dataclass defaults (parent/summary/permalink None, position 0, keywords ()). */
 export function manifestNode(init: ManifestNodeInit): ManifestNode {
+  const governance = init.governance ?? NO_GOVERNANCE;
   return {
     stable_id: init.stable_id,
     slug: init.slug,
@@ -88,7 +110,11 @@ export function manifestNode(init: ManifestNodeInit): ManifestNode {
     summary: init.summary ?? null,
     keywords: init.keywords ?? [],
     permalink: init.permalink ?? null,
-    governance: init.governance ?? NO_GOVERNANCE,
+    governance: {
+      ...governance,
+      sources: orNullIfEmpty(governance.sources),
+      verified: orNullIfEmpty(governance.verified),
+    },
   };
 }
 
@@ -150,10 +176,9 @@ export function parseManifest(text: string): Manifest {
 
 /**
  * The inverse of `governanceToJson`. Absent → NO_GOVERNANCE, which is what a
- * corpus that declares nothing has always meant. A present-but-wrong shape is
- * REFUSED rather than silently dropped: dropping it would serve a document at
- * the instance default, and for a `visibility:` that means serving a restricted
- * document to everyone.
+ * section that has no descendants carries. A present-but-wrong shape is
+ * REFUSED rather than silently dropped: dropping an `audience` would serve a
+ * document to nobody or — under an older reading — to everyone.
  */
 function toGovernance(raw: unknown, index: number): NodeGovernance {
   if (raw === undefined || raw === null) return NO_GOVERNANCE;
@@ -161,27 +186,81 @@ function toGovernance(raw: unknown, index: number): NodeGovernance {
     throw new ManifestError(`entry ${index}: 'governance' must be an object`);
   }
   const g = raw as Record<string, unknown>;
+  const bad = (key: string, what: string): never => {
+    throw new ManifestError(`entry ${index}: 'governance.${key}' must be ${what}`);
+  };
   const str = (key: string): string | null => {
     const val = g[key];
     if (val === undefined || val === null) return null;
-    if (typeof val !== "string" || val === "") {
-      throw new ManifestError(`entry ${index}: 'governance.${key}' must be a non-empty string`);
-    }
-    return val;
+    if (typeof val !== "string" || val === "") bad(key, "a non-empty string");
+    return val as string;
   };
-  const provenanceRaw = g["provenance"];
-  let provenance: readonly string[] | null = null;
-  if (provenanceRaw !== undefined && provenanceRaw !== null) {
-    if (!Array.isArray(provenanceRaw) || provenanceRaw.some((v) => typeof v !== "string")) {
-      throw new ManifestError(`entry ${index}: 'governance.provenance' must be a list of strings`);
+  const strings = (key: string): readonly string[] | null => {
+    const val = g[key];
+    if (val === undefined || val === null) return null;
+    if (!Array.isArray(val) || val.some((v) => typeof v !== "string" || v === "")) {
+      bad(key, "a list of non-empty strings");
     }
-    provenance = provenanceRaw as string[];
+    return val as string[];
+  };
+  const actOf = (key: string, val: unknown): Act => {
+    if (typeof val !== "object" || val === null || Array.isArray(val)) bad(key, "{ by, at }");
+    const o = val as Record<string, unknown>;
+    if (typeof o["by"] !== "string" || typeof o["at"] !== "string") bad(key, "{ by, at }");
+    return { by: o["by"] as string, at: o["at"] as string };
+  };
+  const act = (key: string): Act | null => {
+    const val = g[key];
+    return val === undefined || val === null ? null : actOf(key, val);
+  };
+  const status = str("doc_status");
+  if (status !== null && !["draft", "stable", "deprecated"].includes(status)) {
+    bad("doc_status", "draft | stable | deprecated");
   }
+  const verifiedRaw = g["verified"];
+  const verified =
+    verifiedRaw === undefined || verifiedRaw === null
+      ? null
+      : Array.isArray(verifiedRaw)
+        ? verifiedRaw.map((v) => actOf("verified", v))
+        : bad("verified", "a list of { by, at }");
+  const sourcesRaw = g["sources"];
+  const sources =
+    sourcesRaw === undefined || sourcesRaw === null
+      ? null
+      : Array.isArray(sourcesRaw) &&
+          sourcesRaw.every((x) => typeof x === "object" && x !== null && !Array.isArray(x))
+        ? (sourcesRaw as Readonly<Record<string, unknown>>[])
+        : bad("sources", "a list of objects");
+  const generatedRaw = g["generated"];
+  let generated: NodeGovernance["generated"] = null;
+  if (generatedRaw !== undefined && generatedRaw !== null) {
+    if (typeof generatedRaw !== "object" || Array.isArray(generatedRaw)) {
+      bad("generated", "{ by, at? }");
+    }
+    const o = generatedRaw as Record<string, unknown>;
+    if (typeof o["by"] !== "string") bad("generated", "{ by, at? }");
+    generated = { by: o["by"] as string, at: typeof o["at"] === "string" ? o["at"] : null };
+  }
+  const tierRaw = g["trust_tier"];
+  const trustTier =
+    tierRaw === undefined || tierRaw === null
+      ? null
+      : tierRaw === 0 || tierRaw === 1 || tierRaw === 2
+        ? tierRaw
+        : bad("trust_tier", "0, 1 or 2");
   return {
-    visibility: str("visibility"),
-    docStatus: str("doc_status"),
+    audience: strings("audience"),
+    docStatus: status as NodeGovernance["docStatus"],
     owner: str("owner"),
-    provenance,
+    sources,
+    verified,
+    generated,
+    approval: act("approval"),
+    deprecated: act("deprecated"),
+    effectiveFrom: str("effective_from"),
+    staleAfter: str("stale_after"),
+    trustTier,
     supersededBy: str("superseded_by"),
   };
 }
@@ -373,10 +452,23 @@ function nodeToJson(n: ManifestNode): Record<string, unknown> {
 
 function governanceToJson(g: NodeGovernance): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (g.visibility !== null) out["visibility"] = g.visibility;
+  if (g.audience !== null) out["audience"] = g.audience;
   if (g.docStatus !== null) out["doc_status"] = g.docStatus;
   if (g.owner !== null) out["owner"] = g.owner;
-  if (g.provenance !== null && g.provenance.length > 0) out["provenance"] = g.provenance;
+  // `!== null` alone: an empty list never reaches here (manifestNode normalises
+  // it), so a length test could only ever drop a value the parser would read
+  // back differently.
+  if (g.sources !== null) out["sources"] = g.sources;
+  if (g.verified !== null) out["verified"] = g.verified;
+  if (g.generated !== null) {
+    out["generated"] =
+      g.generated.at === null ? { by: g.generated.by } : { by: g.generated.by, at: g.generated.at };
+  }
+  if (g.approval !== null) out["approval"] = g.approval;
+  if (g.deprecated !== null) out["deprecated"] = g.deprecated;
+  if (g.effectiveFrom !== null) out["effective_from"] = g.effectiveFrom;
+  if (g.staleAfter !== null) out["stale_after"] = g.staleAfter;
+  if (g.trustTier !== null) out["trust_tier"] = g.trustTier;
   if (g.supersededBy !== null) out["superseded_by"] = g.supersededBy;
   return out;
 }

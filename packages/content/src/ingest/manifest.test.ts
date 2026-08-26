@@ -180,20 +180,28 @@ describe("governance is part of the manifest's fingerprint", () => {
       .update(JSON.stringify(manifestToJson(m)), "utf8")
       .digest("hex");
 
-  it("a visibility change CHANGES the hash", () => {
-    const pub = sha(withGovernance({ ...NO_GOVERNANCE, visibility: "public" }));
-    const internal = sha(withGovernance({ ...NO_GOVERNANCE, visibility: "internal" }));
+  it("an audience change CHANGES the hash", () => {
+    const pub = sha(withGovernance({ ...NO_GOVERNANCE, audience: ["public"] }));
+    const internal = sha(withGovernance({ ...NO_GOVERNANCE, audience: ["internal"] }));
     expect(pub, `public and internal hashed alike: ${pub}`).not.toBe(internal);
   });
 
   it("every governance field reaches the hash", () => {
     const base = sha(withGovernance(NO_GOVERNANCE));
+    const act = { by: "human:cfo", at: "2026-08-21T09:00:00Z" };
     const variants: NodeGovernance[] = [
-      { ...NO_GOVERNANCE, visibility: "internal" },
+      { ...NO_GOVERNANCE, audience: ["internal"] },
       { ...NO_GOVERNANCE, docStatus: "draft" },
-      { ...NO_GOVERNANCE, owner: "legal@acme.test" },
-      { ...NO_GOVERNANCE, provenance: ["board minute 2026-01"] },
-      { ...NO_GOVERNANCE, supersededBy: "knowledge/policy-v2.md" },
+      { ...NO_GOVERNANCE, owner: "team:legal" },
+      { ...NO_GOVERNANCE, sources: [{ id: "s", resource: "https://x" }] },
+      { ...NO_GOVERNANCE, verified: [act] },
+      { ...NO_GOVERNANCE, generated: { by: "x/1", at: null } },
+      { ...NO_GOVERNANCE, approval: act },
+      { ...NO_GOVERNANCE, deprecated: act },
+      { ...NO_GOVERNANCE, effectiveFrom: "2026-09-01T00:00:00Z" },
+      { ...NO_GOVERNANCE, staleAfter: "2027-09-01T00:00:00Z" },
+      { ...NO_GOVERNANCE, trustTier: 2 },
+      { ...NO_GOVERNANCE, supersededBy: "knowledge/policy-v2" },
     ];
     for (const v of variants) {
       expect(sha(withGovernance(v)), `${JSON.stringify(v)} did not change the hash`).not.toBe(base);
@@ -208,11 +216,15 @@ describe("governance is part of the manifest's fingerprint", () => {
 
   it("round-trips through parseManifest byte-for-byte", () => {
     const m = withGovernance({
-      visibility: "internal",
-      docStatus: "approved",
-      owner: "legal@acme.test",
-      provenance: ["board minute 2026-01", "policy handbook §4"],
-      supersededBy: null,
+      ...NO_GOVERNANCE,
+      audience: ["internal", "board"],
+      docStatus: "stable",
+      owner: "team:legal",
+      sources: [{ id: "bm", resource: "board minute 2026-01", title: "Board minute" }],
+      verified: [{ by: "human:kim", at: "2026-08-22T10:00:00Z" }],
+      generated: { by: "x/1", at: "2026-08-20T09:00:00Z" },
+      approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+      trustTier: 2,
     });
     const once = JSON.stringify(manifestToJson(m));
     const parsed = parseManifest(once);
@@ -220,9 +232,47 @@ describe("governance is part of the manifest's fingerprint", () => {
     expect(JSON.stringify(manifestToJson(parsed)), "the emitter is a fixed point").toBe(once);
   });
 
+  /**
+   * `sources: []` used to survive a round trip as `null`: the emitter omitted an
+   * empty list and the parser read an absent key as null, so
+   * `parseManifest(manifestToJson(m))` was not `m`. Two consequences, and the
+   * second is the one that matters — the manifest's sha256 fills
+   * `instance_bundle_sha256`, the provenance digest of a generation, and it
+   * could not tell `sources: []` from no `sources:` at all. That is the same
+   * class of blind spot as the governance-less manifest this file already
+   * guards against (review 2026-08-25).
+   *
+   * Closed at the CONSTRUCTOR rather than in the emitter, because that is the
+   * one gate every node passes through — both adapters, `parseManifest`, and a
+   * hand-built fixture. An empty list of sources and no list of sources make
+   * the same claim (none), so the constructor makes them the same VALUE, the
+   * way `governanceOf` already normalises `verified`.
+   */
+  it("an empty sources / verified list is the same value as no list, all the way through", () => {
+    const empty = manifestNode({
+      stable_id: "knowledge/x",
+      slug: "x",
+      title: "X",
+      kind: "document",
+      governance: { ...NO_GOVERNANCE, sources: [], verified: [] },
+    });
+    expect(empty.governance.sources, "normalised at the constructor").toBeNull();
+    expect(empty.governance.verified).toBeNull();
+
+    const m = withGovernance({ ...NO_GOVERNANCE, sources: [], verified: [] });
+    expect(
+      JSON.stringify(manifestToJson(m)),
+      "and so it hashes identically to a node that declared neither",
+    ).toBe(JSON.stringify(manifestToJson(withGovernance(NO_GOVERNANCE))));
+    expect(
+      parseManifest(JSON.stringify(manifestToJson(m))).nodes[0]!.governance,
+      "the round trip is now lossless — it is a fixed point, not a one-way trim",
+    ).toEqual(m.nodes[0]!.governance);
+  });
+
   it("REFUSES a malformed governance block rather than dropping it", () => {
-    // Dropping a `visibility:` serves the document at the instance default —
-    // for a restricted document, to everyone.
+    // Dropping an `audience` would serve the document to nobody — or, under an
+    // older reading, to everyone.
     const bad = (gov: unknown): string =>
       JSON.stringify({
         format: 1,
@@ -241,7 +291,11 @@ describe("governance is part of the manifest's fingerprint", () => {
         files: [{ path: "knowledge/policy.md", node: "knowledge/policy.md" }],
       });
     expect(() => parseManifest(bad("internal"))).toThrow(/must be an object/);
-    expect(() => parseManifest(bad({ visibility: 7 }))).toThrow(/non-empty string/);
-    expect(() => parseManifest(bad({ provenance: "a source" }))).toThrow(/list of strings/);
+    expect(() => parseManifest(bad({ audience: "internal" }))).toThrow(/list of non-empty strings/);
+    expect(() => parseManifest(bad({ doc_status: "approved" }))).toThrow(
+      /draft \| stable \| deprecated/,
+    );
+    expect(() => parseManifest(bad({ approval: { by: "human:cfo" } }))).toThrow(/\{ by, at \}/);
+    expect(() => parseManifest(bad({ trust_tier: 3 }))).toThrow(/0, 1 or 2/);
   });
 });

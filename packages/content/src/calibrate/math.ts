@@ -401,7 +401,38 @@ export function buildReport(
  * paste line (a machine-checked format; the provenance comment beside the
  * number implements "record the measurement beside the number").
  */
-export function renderReport(report: CalibrationReport): string {
+/**
+ * The one instruction this report gives, and the block under it is a PASTE
+ * TARGET rather than a quotation — so both halves have to be right.
+ *
+ * `vector_floor:` and `floor_digest:` are keys of the instance's `retrieval:`
+ * block, and the report printed them at the top level; an adopter pasted them
+ * verbatim and `ksor build` refused the file (first-hour walkthrough,
+ * 2026-08-26). The block is written at COLUMN 0 for the same reason: two spaces
+ * reads well in a terminal and lands inside a frontmatter as a nested mapping
+ * under whatever key precedes it, which `yaml` refuses outright ("Nested
+ * mappings are not allowed in compact mappings", measured). A record that
+ * already declares `retrieval:` gets told to merge, because a second one is a
+ * duplicate key — refused, loudly, but refused.
+ */
+const PASTE_INSTRUCTION =
+  "paste this into instance.md's frontmatter (merge it into `retrieval:` if the file already has one):";
+
+export function renderReport(
+  report: CalibrationReport,
+  /**
+   * The digest of the retrieval predicate this measurement ran under
+   * (`GATE_PREDICATE_DIGEST`), written beside the floor so the door can tell a
+   * floor measured on ITS candidate set from one measured on another's.
+   *
+   * REQUIRED and not defaulted: the caller that renders for an operator must
+   * name the predicate, and a default would let the one caller that matters
+   * silently omit it. `null` is the oracle-parity rendering — used by the
+   * fixture comparison, whose bytes come from a Python run that had no such
+   * concept.
+   */
+  predicateDigest: string | null,
+): string {
   const lines: string[] = [];
   const z = report.zero_fa;
   const how = report.pinned ? "PINNED" : "served";
@@ -458,15 +489,18 @@ export function renderReport(report: CalibrationReport): string {
     lines.push(
       "NOT pasting a floor: this measurement did not separate, so any number here " +
         "would be one that is known to leak.\n" +
-        "Put the record in the fail-closed state and fix the measurement:\n" +
-        "  retrieval:\n    vector_floor: uncalibrated\n" +
-        "Then widen the probe set (scope-adjacent near-misses, not only far-domain " +
-        "questions), add in-corpus questions, and re-run.",
+        "Widen the probe set (scope-adjacent near-misses, not only far-domain " +
+        "questions), add in-corpus questions, and re-run. Until then, put the record in " +
+        "the fail-closed state — " +
+        PASTE_INSTRUCTION +
+        "\nretrieval:\n  vector_floor: uncalibrated",
     );
     return lines.join("\n") + "\n";
   }
   lines.push(
-    `Paste into instance.md:\n  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated ${report.measured_at} on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}`,
+    `${PASTE_INSTRUCTION[0]!.toUpperCase()}${PASTE_INSTRUCTION.slice(1)}\nretrieval:\n` +
+      `  vector_floor: ${pythonFormatFixed(report.paste, 3)}   # calibrated ${report.measured_at} on generation ${gen}, model ${report.model}/d${report.dim}, door: ${report.door}` +
+      (predicateDigest === null ? "" : `\n  floor_digest: ${predicateDigest}`),
   );
   return lines.join("\n") + "\n";
 }

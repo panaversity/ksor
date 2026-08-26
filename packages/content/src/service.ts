@@ -16,7 +16,17 @@ import type { ContentInstance } from "./instance.js";
 import { runRead } from "./db.js";
 import { keywordAbstains, vectorAbstains } from "./lib/abstain.js";
 import { audienceGucs } from "./lib/audience.js";
-import { hybridSearch, keywordSearch, VECTOR_TXN_GUCS, type Hit } from "./lib/search.js";
+import { tierOrdinal, trustGucs } from "./lib/trust.js";
+import { TRUST_TIERS, type TrustTier } from "./record/profile.js";
+import {
+  GATE_PREDICATE_DIGEST,
+  hybridSearch,
+  keywordSearch,
+  VECTOR_TXN_GUCS,
+  type Hit,
+  type HitAct,
+  type NodeGovernance,
+} from "./lib/search.js";
 import {
   mint,
   validate as validateToken,
@@ -26,6 +36,7 @@ import {
 import { logRead } from "./lib/rlog.js";
 import {
   documentChunks,
+  documentFrontmatter,
   findDocument,
   MAX_OUTLINE_LIMIT,
   outline as outlineQuery,
@@ -86,25 +97,105 @@ export interface ServiceContext {
   /** The verified caller, or null → audited as "anonymous". */
   readonly actor?: () => string | null;
   /**
-   * The audience tier this door serves. null = the record's least-privileged
-   * tier, which is the safe default: a door that cannot establish who is asking
-   * must not hand out the restricted half of the record. Ignored entirely when
-   * the instance declares no `audiences:` model.
+   * The viewer list this door serves (record spec §2.4) — validated against the
+   * ingested policy's registry at boot (`validateViewer`), always including
+   * `public`. Absent = `[public]`, the safe default: a door that cannot
+   * establish who is asking must not hand out the restricted half of the record.
    */
-  readonly audience?: string | null;
+  readonly viewer?: readonly string[];
+  /**
+   * The lowest trust tier this door will answer from (record spec §2.3):
+   * 0 unverified, 1 machine-confirmed, 2 human-reviewed. Absent = 0, which
+   * admits every tier — the honest default, since `verified` is never required
+   * and a record with no verifications is a legitimate level-0 state.
+   *
+   * Bound as an ARM predicate, never applied to the hits afterwards: a floor
+   * enforced after ranking has already let a lower-tier passage decide what
+   * the answer was.
+   */
+  readonly minTrustTier?: TrustTier | number;
 }
 
 /**
- * The audience GUCs every serving statement's predicate reads. Computed per
- * call from the instance's model and the door's tier, and folded into the same
- * transaction-local `set_config` round trip as the tenant wall — so a path
- * cannot serve without them the way it could not serve without the tenant id.
+ * The GUCs every serving statement's predicates read — the viewer list and the
+ * trust floor, together, because `lib/admit.ts` composes them into one set and
+ * a path that bound one without the other would be admitting on half a rule.
+ * Folded into the same transaction-local `set_config` round trip as the tenant
+ * wall, so a path cannot serve without them the way it could not serve without
+ * the tenant.
  */
-function audienceScope(ctx: ServiceContext): Readonly<Record<string, string>> {
-  return audienceGucs(
-    { audiences: ctx.instance.audiences, defaultVisibility: ctx.instance.defaultVisibility },
-    ctx.audience ?? null,
-  );
+function servingScope(ctx: ServiceContext): Readonly<Record<string, string>> {
+  return { ...audienceGucs(viewerOf(ctx)), ...trustGucs(ctx.minTrustTier ?? 0) };
+}
+
+/** The viewer this door serves; absent is `[public]`, the safe default. */
+function viewerOf(ctx: ServiceContext): readonly string[] {
+  return ctx.viewer ?? ["public"];
+}
+
+/**
+ * The SCOPE every §7 audit row carries: what this act was allowed to see.
+ *
+ * Without it a row proves an act happened and not what it was permitted to
+ * return, so an auditor cannot tell a public answer from an internal one after
+ * the fact — and a leak found later has no trail saying which requests could
+ * have carried it.
+ *
+ * What it deliberately does NOT carry is content, or the query. A trail that
+ * accumulated passages would be a SECOND copy of the record, with no audience
+ * predicate over it, no takedown seam bound to it and no generation pointer —
+ * exactly the shadow store the governance argument exists to prevent. The
+ * query is the caller's, and its LENGTH is what an operator needs.
+ */
+function actScope(
+  ctx: ServiceContext,
+  floor: TrustTier | number | undefined = ctx.minTrustTier,
+): Record<string, unknown> {
+  const tier = floor === undefined ? 0 : typeof floor === "number" ? floor : tierOrdinal(floor);
+  return {
+    audience: [...viewerOf(ctx)],
+    // The floor that APPLIED, never the one that was asked for: a row naming
+    // the request's floor would misreport every act on a door configured
+    // tighter than its caller.
+    min_trust_tier: TRUST_TIERS[tier] ?? TRUST_TIERS[0],
+  };
+}
+
+/**
+ * What the record says about the DOCUMENT a passage came from — beside the
+ * provenance that says where it came from.
+ *
+ * The two answer different questions and neither substitutes for the other:
+ * provenance proves who-said-when, governance says what this record has done
+ * about it. An agent weighing whether to rely on a sentence is weighing the
+ * document, so the answer travels with the passage rather than on the envelope
+ * — a per-response summary cannot say which of several hits was the reviewed
+ * one.
+ */
+export interface HitGovernance {
+  /** The authored lifecycle status — `stable` for anything served. */
+  readonly status: string | null;
+  /** `unverified` · `machine-confirmed` · `human-reviewed`, derived from `verified`, never authored. */
+  readonly trust_tier: TrustTier;
+  /** The LATEST verification act, or null when nobody has reviewed this — a real state, not a missing one. */
+  readonly verified: { readonly by: string; readonly at: string } | null;
+  readonly effective_from: string | null;
+  readonly stale_after: string | null;
+  /**
+   * Who approved publication, and WHAT THAT WAS CHECKED AGAINST.
+   *
+   * `checked: "policy"` means the approver was checked against the Governance
+   * Policy's authority list and nothing more: whether the approval commit
+   * actually followed review is change-control verification, and it is not
+   * built yet. Saying so in the envelope is the same honesty `gate: "off"`
+   * carries — a claim about what was verified must never be inflated by
+   * silence.
+   */
+  readonly approval: {
+    readonly by: string;
+    readonly at: string;
+    readonly checked: "policy";
+  } | null;
 }
 
 export interface SearchHit {
@@ -119,6 +210,47 @@ export interface SearchHit {
     readonly slug: string;
     readonly generation: number;
     readonly retrieved_at: string;
+  };
+  readonly governance: HitGovernance;
+}
+
+/**
+ * The newest act in a `verified` list — pure, so the "which one is latest"
+ * decision is testable without a database.
+ *
+ * Authored order is not chronological order; the newest review is the one that
+ * says how current the checking is. An unparseable instant sorts last rather
+ * than throwing: a malformed date in one entry must not empty the whole signal.
+ */
+export function latestAct(acts: readonly HitAct[] | null): HitAct | null {
+  if (acts === null || acts.length === 0) return null;
+  const at = (a: HitAct): number => {
+    const ms = Date.parse(a.at);
+    return Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+  };
+  return acts.reduce((best, act) => (at(act) >= at(best) ? act : best));
+}
+
+/**
+ * A hit's governance, as the wire carries it.
+ *
+ * A NULL tier reads as `unverified` for the same reason the SQL predicate
+ * COALESCEs it: NULL is what a pre-2.5 carried row holds, such a generation is
+ * refused at boot, and a three-valued answer here would put `null` on a wire
+ * whose schema says the field is a tier.
+ */
+export function hitGovernance(node: NodeGovernance): HitGovernance {
+  const verified = latestAct(node.verified);
+  return {
+    status: node.docStatus,
+    trust_tier: TRUST_TIERS[node.trustTier ?? 0] ?? "unverified",
+    verified: verified === null ? null : { by: verified.by, at: verified.at },
+    effective_from: node.effectiveFrom,
+    stale_after: node.staleAfter,
+    approval:
+      node.approval === null
+        ? null
+        : { by: node.approval.by, at: node.approval.at, checked: "policy" },
   };
 }
 
@@ -139,7 +271,11 @@ export type GateState = "off" | "uncalibrated" | { readonly floor: number };
 export function gateState(instance: ContentInstance): GateState {
   const floor = instance.abstain.vectorFloor;
   if (floor === "uncalibrated") return "uncalibrated";
-  if (floor !== null) return { floor };
+  // A floor measured under a different predicate is reported as UNCALIBRATED
+  // and never as `off`: `off` is the honest level-0 rung and would tell an
+  // agent this record cannot abstain, when what is true is that its gate is
+  // armed with a number that no longer describes the set it gates.
+  if (floor !== null) return staleFloor(instance) === null ? { floor } : "uncalibrated";
   // A keyword floor gates ONLY the degraded (embed-outage) path, so the healthy
   // path really cannot abstain and "off" is the honest answer for it. Saying
   // {floor} here would claim a gate that is not armed — the inverse error of
@@ -233,6 +369,7 @@ function snapshotEnvelope(ctx: ServiceContext, generation: number): SnapshotEnve
     corpusId: ctx.instance.corpusId,
     tenantId: ctx.instance.tenantId,
     instanceDigest: ctx.instanceDigest,
+    viewer: viewerOf(ctx),
   };
   const minted: SnapshotToken = mint(ctx.ring, scope, generation);
   return {
@@ -257,18 +394,57 @@ export class EmptyQueryError extends Error {
  * The remedy is to run calibration and paste the floor.
  */
 export class UncalibratedFloorError extends Error {
-  constructor() {
+  constructor(message?: string) {
     super(
-      "ksor-uncalibrated: retrieval.vector_floor is declared 'uncalibrated' — the abstention gate " +
-        "is not measured yet, so this corpus refuses to serve. Run `ksor calibrate` and " +
-        "paste the recommended vector_floor into instance.md.",
+      message ??
+        "ksor-uncalibrated: retrieval.vector_floor is declared 'uncalibrated' — the abstention gate " +
+          "is not measured yet, so this corpus refuses to serve. Run `ksor calibrate` and " +
+          "paste the recommended vector_floor into instance.md.",
     );
     this.name = "UncalibratedFloorError";
   }
 }
 
+/**
+ * The digest a declared numeric floor was measured under, when it is NOT the
+ * predicate this door serves through — otherwise null.
+ *
+ * Absent counts as stale. Every floor calibrated before the digest existed was
+ * measured without the lifecycle window and the trust arm, which is precisely
+ * the drift this compares for; treating "no digest" as "fine" would exempt the
+ * only floors known to be stale.
+ */
+function staleFloor(instance: ContentInstance): string | null {
+  const floor = instance.abstain.vectorFloor;
+  if (typeof floor !== "number") return null;
+  const declared = instance.abstain.floorDigest;
+  return declared === GATE_PREDICATE_DIGEST ? null : (declared ?? "(none recorded)");
+}
+
+/**
+ * Every serve passes through here: an unmeasured floor and a floor measured
+ * under a predicate this door no longer has are the SAME state — a gate that
+ * cannot be trusted to abstain — and get the same refusal, because inventing a
+ * second one would invite a second remedy and there is only one.
+ */
+export function assertGateMeasured(instance: ContentInstance): void {
+  if (instance.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  const stale = staleFloor(instance);
+  if (stale === null) return;
+  throw new UncalibratedFloorError(
+    `ksor-uncalibrated: retrieval.vector_floor is ${String(instance.abstain.vectorFloor)}, measured under ` +
+      `retrieval predicate ${stale} — this door serves through ${GATE_PREDICATE_DIGEST}.\n` +
+      "  why: a floor is a threshold inside ONE candidate set. The predicate changed (audience " +
+      "overlap, the lifecycle window, the trust floor, the denial scope), so the separation this " +
+      "number encodes is not the separation this door has — it would keep gating, plausibly, on a " +
+      "measurement of something else\n" +
+      "  fix: re-measure and paste both lines:\n" +
+      "    ksor calibrate --instance instance.md",
+  );
+}
+
 export async function search(ctx: ServiceContext, query: string, k = 10): Promise<SearchResult> {
-  if (ctx.instance.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  assertGateMeasured(ctx.instance);
   if (query.trim() === "") throw new EmptyQueryError();
   // Code points, Python len parity — the two planes must read the same
   // budget contract (review finding, 2026-08-19).
@@ -326,7 +502,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ctx.pool,
       inst.tenantId,
       (client) => hybridSearch(client, scope, vec, query, kb),
-      { ...VECTOR_TXN_GUCS, ...audienceScope(ctx) },
+      { ...VECTOR_TXN_GUCS, ...servingScope(ctx) },
     );
     hits = result.hits;
     topCosine = result.topCosine;
@@ -350,7 +526,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       ctx.pool,
       inst.tenantId,
       (client) => keywordSearch(client, scope, query, kb),
-      audienceScope(ctx),
+      servingScope(ctx),
     );
     const topKw = hits[0]?.score ?? null;
     abstained = keywordAbstains(topKw, inst.abstain);
@@ -372,6 +548,9 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       // (review 2026-08-19).
       ...(generation === undefined ? {} : { generation }),
       detail: {
+        ...actScope(ctx),
+        abstained: true,
+        result_count: 0,
         query_chars: queryChars,
         k,
         k_effective: kb,
@@ -400,7 +579,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
           );
           return Number(r.rows[0]?.active_generation ?? 0) === 0;
         },
-        audienceScope(ctx),
+        servingScope(ctx),
       ));
 
     // "The record does not cover this" and "I could not look properly" are
@@ -469,6 +648,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         generation: hit.generation,
         retrieved_at: retrievedAt,
       },
+      governance: hitGovernance(hit),
     });
   }
 
@@ -483,10 +663,16 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     chunkPolicyVersion: CHUNK_POLICY,
     embeddingModel: inst.embeddingModel,
     detail: {
+      ...actScope(ctx),
+      abstained: false,
+      // ONE name for how many rows an act returned, across every action in the
+      // trail. This row carried `result_count` and `returned` — the same value
+      // twice, on the table that is the audit trail — and outline used the
+      // second name for the same fact.
+      result_count: shaped.length,
       query_chars: queryChars,
       k,
       k_effective: kb,
-      returned: shaped.length,
       slugs: [...new Set(shaped.map((h) => h.slug))],
       truncated,
       degraded: degradedReason !== undefined,
@@ -523,6 +709,34 @@ export interface ReadResult {
   /** Chunks concatenated — byte-exact reconstruction (the invariant's serve side). */
   readonly text: string;
   readonly sections: string[];
+  /**
+   * The document's frontmatter block, byte-exact as its author wrote it —
+   * comments and keys no ksor reader knows included (OKF §11) — or null when
+   * the file carried none.
+   *
+   * The bytes, never a re-serialisation of the parsed columns: a record whose
+   * `read` handed back a re-rendered block would be handing an agent a
+   * document it does not contain, under the name of the system of record.
+   */
+  readonly frontmatter: string | null;
+  /**
+   * What the RECORD has done about this document — the stored governance, from
+   * the same columns a search hit carries and through the same seam.
+   *
+   * It is beside `frontmatter` on purpose, and the two are not the same claim:
+   * frontmatter is what the author DECLARED, untrusted corpus text like the
+   * prose under it, while this is what the record STORED. A read surface that
+   * offered only the authored block would be inviting an agent to read a
+   * declaration as a verification (review finding).
+   *
+   * "Stored", not "checked": the two are different per field, and saying
+   * "checked" of the whole block is the claim this door is not entitled to
+   * make. `approval` was checked against the Governance Policy;
+   * `trust_tier` was DERIVED from `verified` entries the document declares
+   * about itself, which the policy has no family to gate (record spec §2.3).
+   * The floor text says so to the agent; this says so to whoever edits it.
+   */
+  readonly governance: HitGovernance;
   readonly provenance: SearchHit["provenance"];
   readonly window_from?: string;
   readonly window_to?: string;
@@ -589,7 +803,7 @@ export async function readDocument(
   options: ReadOptions = {},
 ): Promise<ReadResult> {
   const inst = ctx.instance;
-  if (inst.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  assertGateMeasured(inst);
   const actor = ctx.actor?.() ?? "anonymous";
   // An invalid or expired snapshot NEVER errors: serve active and say why.
   let pinned: number | null = null;
@@ -599,6 +813,7 @@ export async function readDocument(
       corpusId: inst.corpusId,
       tenantId: inst.tenantId,
       instanceDigest: ctx.instanceDigest,
+      viewer: viewerOf(ctx),
     });
     if (verdict.generation !== null) pinned = verdict.generation;
     else refreshed = `refreshed (${verdict.reason ?? "invalid"})`;
@@ -625,7 +840,7 @@ export async function readDocument(
       ctx.pool,
       inst.tenantId,
       (client) => servableGenerations(client, inst.corpusId),
-      audienceScope(ctx),
+      servingScope(ctx),
     );
     if (!servable.includes(pinned)) {
       refreshed = "refreshed (withdrawn)";
@@ -634,7 +849,7 @@ export async function readDocument(
   }
   const scope = { tenantId: inst.tenantId, corpusId: inst.corpusId, pinnedGeneration: pinned };
 
-  const { node, chunks } = await runRead(
+  const { node, chunks, frontmatter } = await runRead(
     ctx.pool,
     inst.tenantId,
     async (client) => {
@@ -642,9 +857,15 @@ export async function readDocument(
       // Chunks pin to the generation the resolve saw — a mid-flip re-resolve
       // against active would find nothing (oracle rule, carried).
       const pinnedScope = { ...scope, pinnedGeneration: found.generation };
-      return { node: found, chunks: await documentChunks(client, pinnedScope, found.nodeId) };
+      return {
+        node: found,
+        chunks: await documentChunks(client, pinnedScope, found.nodeId),
+        // In the SAME transaction as the chunks, so the frontmatter an agent
+        // reads is the frontmatter of the bytes it was handed.
+        frontmatter: await documentFrontmatter(client, pinnedScope, found.nodeId),
+      };
     },
-    audienceScope(ctx),
+    servingScope(ctx),
   );
   if (chunks.length === 0) {
     throw new Error(`document ${JSON.stringify(slug)} has no readable content`);
@@ -710,7 +931,7 @@ export async function readDocument(
     action: "content_served",
     instanceDigest: ctx.instanceDigest,
     generation: node.generation,
-    detail: { slug: node.slug, chars: textChars, windowed },
+    detail: { ...actScope(ctx), slug: node.slug, chars: textChars, windowed },
   });
 
   return {
@@ -718,6 +939,8 @@ export async function readDocument(
     title: node.title,
     text,
     sections,
+    frontmatter,
+    governance: hitGovernance(node),
     provenance: {
       corpus_id: inst.corpusId,
       stable_id: node.stableId,
@@ -739,7 +962,15 @@ export async function readDocument(
               : "windowed — continue with from_heading set to this response's next (it carries its own scope; do not also resend heading)",
         }
       : {}),
-    ...(instructionLike(text) ? { content_advisory: CONTENT_ADVISORY } : {}),
+    // Both untrusted channels, not just the prose. The frontmatter is a second
+    // one — the profile is loose (record/profile.ts), so any key an author
+    // invents rides out with the document — and an advisory computed over
+    // `text` alone flagged a directive in the body while staying silent on the
+    // identical sentence one line above it, in the block a RAG consumer reads
+    // in the same payload (review finding).
+    ...(instructionLike(text) || instructionLike(frontmatter ?? "")
+      ? { content_advisory: CONTENT_ADVISORY }
+      : {}),
     // Always stated: "pinned" when the caller's token was honoured, "unpinned"
     // when they sent none, and the refresh reason when one was sent and could
     // not be used.
@@ -787,7 +1018,7 @@ export async function outlineDocuments(
   // absolute heading paths). search and readDocument already refuse; outline
   // must too, or an uncalibrated corpus that says REFUSING still leaks its
   // shape (review 2026-08-19).
-  if (inst.abstain.vectorFloor === "uncalibrated") throw new UncalibratedFloorError();
+  assertGateMeasured(inst);
   const actor = ctx.actor?.() ?? "anonymous";
   const root = options.node ?? null;
   // Drill-down default: a named node with no explicit depth gets depth=1. An
@@ -808,7 +1039,7 @@ export async function outlineDocuments(
     ctx.pool,
     inst.tenantId,
     (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1, offset }),
-    audienceScope(ctx),
+    servingScope(ctx),
   );
   const has_more = rows.length > limit;
   if (has_more) rows.length = limit;
@@ -818,7 +1049,7 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    detail: { node: root, returned: rows.length, has_more, offset },
+    detail: { ...actScope(ctx), node: root, result_count: rows.length, has_more, offset },
   });
   // Titles and heading paths are corpus-authored text and reach the agent
   // exactly as passage content does. `search` and `read` both flag directive-

@@ -59,6 +59,13 @@ export async function allocateRun(
     corpusId: string;
     sourceCommit: string;
     manifestSha256: string;
+    /** build.lock.json's build_id — the publication this generation is ingested from (2.5). */
+    buildId: string;
+    /** The Governance Policy as a row, and its digest — what the door binds to (2.5). */
+    policy: Record<string, unknown>;
+    policySha256: string;
+    /** The ledger's id set in file order — the next ingest's shrink baseline (2.5). */
+    ledgerIds: readonly string[];
   },
 ): Promise<RunAllocation> {
   await client.query(LOCK_SQL, [opts.tenantId]);
@@ -79,7 +86,8 @@ export async function allocateRun(
   // every NULL as the widest tier (round-5 review of #43).
   const run = await client.query(
     "INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit," +
-      " instance_bundle_sha256, schema_version) VALUES ($1, $2, $3, 'building', $4, $5, $6) " +
+      " instance_bundle_sha256, schema_version, build_id, policy, policy_sha256, ledger_ids)" +
+      " VALUES ($1, $2, $3, 'building', $4, $5, $6, $7, $8::jsonb, $9, $10::text[]) " +
       "RETURNING run_id",
     [
       opts.tenantId,
@@ -88,6 +96,10 @@ export async function allocateRun(
       opts.sourceCommit,
       opts.manifestSha256,
       schemaVersion(),
+      opts.buildId,
+      JSON.stringify(opts.policy),
+      opts.policySha256,
+      [...opts.ledgerIds],
     ],
   );
   return { runId: Number(run.rows[0].run_id), generation };

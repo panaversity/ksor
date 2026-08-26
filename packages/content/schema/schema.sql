@@ -49,6 +49,15 @@ CREATE TABLE ingestion_runs (
     -- record with an audience model must refuse to serve such a generation
     -- rather than quietly publish restricted documents (2.4).
     schema_version         TEXT,
+    -- 2.5: the publication this generation was ingested from (build.lock.json's
+    -- build_id), the Governance Policy it was checked against — registry and
+    -- authorities as a row, with its digest, so the door binds to the row and
+    -- the served container never needs the file — and the ledger's id set, the
+    -- baseline the next ingest's ksor-ledger-shrank compares against.
+    build_id               TEXT,
+    policy                 JSONB,
+    policy_sha256          TEXT,
+    ledger_ids             TEXT[],
     UNIQUE (tenant_id, corpus_id, generation)
 );
 
@@ -71,11 +80,33 @@ CREATE TABLE content_nodes (
     -- surface reads one source instead of re-deriving it from markdown. `status`
     -- above is the SERVING state of the row; `doc_status` is what the document says.
     corpus_id     TEXT,                               -- which record this node belongs to
-    visibility    TEXT,                               -- audience tier; NULL = instance default_visibility
-    doc_status    TEXT,                               -- draft / approved / superseded, as authored
+    -- The KSoR Profile of OKF (2.5, record spec §2): `ksor.audience` as a LIST
+    -- with overlap semantics — a section carries the union of its descendants'
+    -- lists, so `audience && viewer` admits it iff a descendant is visible;
+    -- the authored lifecycle status, closed to the profile's set; the trust
+    -- vocabulary as JSONB; effectivity and staleness as instants; and the trust
+    -- tier derived from `verified` at ingest (0 unverified, 1 machine-confirmed,
+    -- 2 human-reviewed). `provenance` (2.2) stays for a carried row; a 2.5
+    -- ingest writes `sources`.
+    audience      TEXT[],
+    -- Named, not auto-named: the 2.4 -> 2.5 migration adds this same CHECK by
+    -- name, and an unnamed inline constraint is auto-named after the column, so a
+    -- migrated database and a fresh one carried the SAME rule under two different
+    -- names — one schema nobody could diff (schema-parity.db.test.ts).
+    doc_status    TEXT CONSTRAINT nodes_doc_status_profile
+                    CHECK (doc_status IS NULL OR doc_status IN ('draft','stable','deprecated')),
     owner         TEXT,
-    provenance    JSONB,                              -- where the claims come from, as authored
-    superseded_by TEXT,                               -- stable_id of the replacement
+    provenance    JSONB,                              -- pre-profile `provenance:`, carried rows only
+    superseded_by TEXT,                               -- ksor.superseded_by, as a stable_id
+    sources       JSONB,
+    verified      JSONB,
+    generated     JSONB,
+    approval      JSONB,
+    deprecated    JSONB,
+    effective_from TIMESTAMPTZ,
+    stale_after   TIMESTAMPTZ,
+    trust_tier    SMALLINT CONSTRAINT nodes_trust_tier_range
+                    CHECK (trust_tier IS NULL OR trust_tier BETWEEN 0 AND 2),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT nodes_stable_uniq  UNIQUE (tenant_id, generation, stable_id),
@@ -88,12 +119,10 @@ CREATE TABLE content_nodes (
 CREATE INDEX idx_nodes_gen      ON content_nodes (tenant_id, generation, kind);
 CREATE INDEX idx_nodes_parent   ON content_nodes (parent_id);
 CREATE INDEX idx_nodes_keywords ON content_nodes USING gin (keywords);
--- NO index on visibility. The serving predicate is
--- `coalesce(n.visibility, <runtime GUC>) = ANY(...)`, and a plain btree cannot
--- serve a coalesce over a value that is only known per transaction — the index
--- would be built and maintained and never read, which is exactly the defect
--- the HNSW arm was just fixed for. The audience filter rides the
--- (tenant_id, generation, kind) index that every serving arm already uses.
+-- The overlap predicate (`audience && viewer`) is an array-overlap, which a GIN
+-- serves and a btree cannot; the ranked predicate it replaces rode the
+-- (tenant_id, generation, kind) index through a coalesce no index could read.
+CREATE INDEX idx_nodes_audience ON content_nodes USING gin (audience);
 CREATE UNIQUE INDEX nodes_root_slug_uniq ON content_nodes (tenant_id, generation, slug) WHERE parent_id IS NULL;
 
 CREATE TABLE slug_aliases (
@@ -117,6 +146,12 @@ CREATE TABLE sources (
     embedding_model TEXT NOT NULL,
     chunk_policy    TEXT NOT NULL,
     source_commit   TEXT,
+    -- 2.5: the file's frontmatter block, byte-exact as the author wrote it —
+    -- comments and unknown keys included (OKF §11). `read` serves it back
+    -- verbatim; a re-serialisation from the parsed columns would be a
+    -- DIFFERENT document wearing the record's name. NULL for a source with no
+    -- frontmatter, and for a pre-2.5 carried row.
+    frontmatter     TEXT,
     seeded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, generation, source_id),
@@ -187,6 +222,31 @@ CREATE TABLE takedown_denylist (
     scope      TEXT NOT NULL DEFAULT 'node' CHECK (scope IN ('node','subtree')),
     reason     TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- 2.5: the row is the STATE, the ledger (.ksor/takedowns.yaml) is the
+    -- history. `ledger_id` names the entry that wrote the row (NULL = written
+    -- before the ledger existed — the boot gate refuses it until an ingest
+    -- attaches one by stable_id); a revocation sets `revoked_ledger_id` /
+    -- `revoked_at`, and the DENIED seam denies only `revoked_at IS NULL`; a
+    -- re-denial clears them. Rows are never deleted.
+    ledger_id         TEXT,
+    actor             TEXT,
+    applied_at        TIMESTAMPTZ,
+    revoked_ledger_id TEXT,
+    revoked_at        TIMESTAMPTZ,
+    -- What the ledger expects of the FILE, as the latest amendment left it
+    -- (record spec §5). `present` is the ordinary case. `removed` says the
+    -- document was withdrawn and then deliberately deleted — a state the boot
+    -- gate must not read as an orphaned denial, because the honest answer to
+    -- "is there still a node with this id?" is no, forever. Without this column
+    -- every such denial refused `ksor ingest` and `ksor serve` permanently, and
+    -- the remedy the refusal printed (`--removed`) moves no row, so the only
+    -- escape was to un-withdraw the document (review 2026-08-25).
+    --
+    -- It does NOT weaken the denial: `removed` rows stay in force and the
+    -- DENIED seam never reads this column. It records what happened to the
+    -- FILE, not whether the withdrawal still stands.
+    expected   TEXT NOT NULL DEFAULT 'present'
+                 CONSTRAINT takedown_expected_values CHECK (expected IN ('present','removed')),
     PRIMARY KEY (tenant_id, corpus_id, stable_id)
 );
 
@@ -227,10 +287,13 @@ CREATE TABLE schema_meta (
 -- 2.4 stamps each generation with the schema it was built against, so a
 -- generation predating the governance columns can be REFUSED rather than served
 -- at default_visibility.
--- Both are additive and nullable, so a 2.0 reader still reads a 2.2 database —
--- compatible_from stays 2.0. Existing databases move forward through
--- schema/migrations/; schema.sql provisions a FRESH one at the current version.
-INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.4', '2.0');
+-- 2.5 puts the KSoR Profile on the node row (audience list, closed status set,
+-- trust vocabulary, effectivity, trust tier), the policy and the lock on the
+-- run, and the ledger on the denylist row; it DROPS `visibility`, so a 2.4
+-- reader's predicate no longer resolves — compatible_from moves to 2.5.
+-- Existing databases move forward through schema/migrations/; schema.sql
+-- provisions a FRESH one at the current version.
+INSERT INTO schema_meta (schema_version, compatible_from) VALUES ('2.5', '2.5');
 
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;

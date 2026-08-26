@@ -30,6 +30,7 @@ import path from "node:path";
 import { ContentStoreError } from "@panaversity/ksor-content";
 import { AuthConfigError, RequiredEnvError } from "@panaversity/ksor-gateway-kit";
 
+import { BindError } from "./bind.js";
 import { compose } from "./compose.js";
 import { runHttp } from "./http.js";
 
@@ -48,6 +49,25 @@ import { runHttp } from "./http.js";
  */
 export const GATEWAY_VERSION = "0.0.0";
 
+/**
+ * The first stderr line a refused boot prints: the machine-readable slug,
+ * ALONE — the contract `packages/ksor/docs/index.md` states and `ksor build`
+ * already kept.
+ *
+ * Two conventions exist in this codebase for carrying a slug on an exception —
+ * at the head of the message (the gateway loader) and beside it as a field (the
+ * instance reader) — and this prints it ONCE either way. Printing it twice is
+ * the same defect this change removed from serve's instance refusals: a second
+ * line that costs a reader a comparison and never says anything new.
+ */
+export function bootErrorLines(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const slug = (error as { slug?: unknown } | null)?.slug;
+  if (typeof slug !== "string" || slug === "") return `error: ${message}`;
+  const detail = message.startsWith(`${slug}: `) ? message.slice(slug.length + 2) : message;
+  return `error: ${slug}\n${detail}`;
+}
+
 export async function main(version: string = GATEWAY_VERSION): Promise<void> {
   try {
     const composition = await compose(
@@ -56,8 +76,7 @@ export async function main(version: string = GATEWAY_VERSION): Promise<void> {
     );
     await runHttp(composition);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`error: ${message}`);
+    console.error(bootErrorLines(error));
     // ksor's exit contract: 1 refused (auth misconfiguration included —
     // the oracle used 2 there, but 2 means "not implemented" here), 3
     // environment (store unreachable, missing env). A hard exit: the pool
@@ -67,11 +86,16 @@ export async function main(version: string = GATEWAY_VERSION): Promise<void> {
     // A listen/bind failure (EADDRINUSE, EACCES, EADDRNOTAVAIL) is an
     // ENVIRONMENT failure (exit 3), not a refusal — the port/permission is
     // the operator's environment, not a bad config (review, 2026-08-19).
+    // `BindError` preserves the errno it wrapped, so adding the remedy did not
+    // move the exit code: a held port is still the environment (3). Any bind
+    // failure is, whatever the errno — the port and the permission are the
+    // operator's machine, never a bad configuration.
     const bindFailure =
-      error !== null &&
-      typeof error === "object" &&
-      typeof (error as { code?: unknown }).code === "string" &&
-      /^E(ADDRINUSE|ACCES|ADDRNOTAVAIL)$/.test((error as { code: string }).code);
+      error instanceof BindError ||
+      (error !== null &&
+        typeof error === "object" &&
+        typeof (error as { code?: unknown }).code === "string" &&
+        /^E(ADDRINUSE|ACCES|ADDRNOTAVAIL)$/.test((error as { code: string }).code));
     const environment =
       error instanceof ContentStoreError || error instanceof RequiredEnvError || bindFailure;
     process.exit(error instanceof AuthConfigError ? 1 : environment ? 3 : 1);

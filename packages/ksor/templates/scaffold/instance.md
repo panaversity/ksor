@@ -1,7 +1,9 @@
 ---
-format: 1
+format: 2
 name: KSOR-STAMP-NAME
-ksor:
+title: KSoR
+description: What a Knowledge System of Record is, how a project climbs the governance ladder, and which surfaces publish the same governed knowledge.
+toolchain:
   requires: ">=KSOR-STAMP-VERSION"
   scaffolded: "KSOR-STAMP-VERSION"
 # The served MCP rung needs ONE required block: the NAME of the environment
@@ -23,8 +25,6 @@ ksor:
 # version: 0.1.0
 ---
 
-# KSoR
-
 This record is authoritative for what a Knowledge System of Record is, how a
 project climbs the governance ladder, and which surfaces the same governed
 knowledge is published through. It does not cover the CLI's release history or
@@ -37,23 +37,27 @@ record wins.
 ## This is a starter, and it is yours to replace
 
 Everything above describes KSoR itself. It ships filled in so that a fresh
-project has a real governed corpus on the first `pnpm dev` — statuses, owners,
-provenance, a folder and a draft — instead of an empty shelf and a placeholder.
+project has a real governed corpus on the first `pnpm dev` — five approved
+documents, three of them inside a folder, and one carrying all four study
+attachments (a summary, slides, flashcards and a quiz) — instead of an empty
+shelf and a placeholder.
 The documents live in `knowledge/`; delete them as your own knowledge arrives.
 
 Be deliberate about replacing it, because a starter that describes the wrong
-thing describes it _everywhere_. Two lines here are read by every surface:
+thing describes it _everywhere_. Three things here are read by every surface:
 
-- **The heading** is the display title — the human name every page leads with.
-  The machine identity stays `KSOR-STAMP-NAME` in the frontmatter, and that is
-  what citations and `llms.txt` use.
-- **The first paragraph** is this record's scope. The site publishes it, and
-  `ksor serve` hands it to a connecting agent as the MCP server's instructions.
-  A record published with this paragraph unchanged will tell an agent — quite
-  accurately, and quite uselessly for you — that it is authoritative for what a
-  Knowledge System of Record is.
+- **`title:`** is the display title — the human name every page leads with and
+  the heading of the record's root index. The machine identity stays
+  `KSOR-STAMP-NAME` in `name:`, and that is what citations and `llms.txt` use.
+- **`description:`** is one sentence that seeds `llms.txt` and the MCP
+  discovery document.
+- **This body** is the MCP server's instructions, handed in full to every
+  connecting agent; its first paragraph is this record's scope, which the site
+  publishes. A record published with it unchanged will tell an agent — quite
+  accurately, and quite uselessly for you — that it is authoritative for what
+  a Knowledge System of Record is.
 
 Ask your coding agent to run the **intake interview** (it knows how — see
 `.agents/skills/intake-interview/`), answer its questions, and let it write
-this document with you. Replace those two lines and every surface follows,
+this document with you. Replace those three and every surface follows,
 because every surface reads them from here.

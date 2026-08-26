@@ -69,6 +69,15 @@ export function hostOf(value: string): string | null {
  * per document, named freely, staged only when a published document links to
  * it. It is deliberately NOT an attachment — an attachment is named after its
  * parent (`<doc>.quiz.yaml`), and seven sims cannot all be `index.sim.html`.
+ *
+ * CANONICAL in `packages/content/src/lib/sim-rule.ts`, because the record's
+ * checker decides which files are admitted at all and this file only decides
+ * which links become a frame — one rule, two readers. The definition is
+ * repeated here rather than imported to keep this file a LEAF (above), which
+ * is not a preference: a relative import here needs `./sim-rule.js` under the
+ * package's node16 typecheck and `./sim-rule` under the site's bundler, and
+ * no one spelling satisfies both. So the two copies are PINNED to each other
+ * in `embed-rule.test.ts` instead — decision 18's shape, on a smaller rule.
  */
 export const SIM_SUFFIX = ".sim.html";
 

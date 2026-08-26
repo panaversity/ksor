@@ -1,13 +1,21 @@
 ---
+type: Document
 title: Purchase approval thresholds
-status: approved
-owner: finance
-provenance:
-  - Finance policy manual §4.2, approved 2025-11-03
-  - Board resolution 2025-19
+description: Which approval a purchase needs, by total contract value.
+status: stable
+generated: { by: ksor-migrate/0.0.39, at: 2026-08-25T03:25:45+05:00 }
+sources:
+  - id: finance-policy-manual-4-2-approved-2025-11-03
+    title: Finance policy manual §4.2, approved 2025-11-03
+    resource: Finance policy manual §4.2, approved 2025-11-03
+  - id: board-resolution-2025-19
+    title: Board resolution 2025-19
+    resource: Board resolution 2025-19
+ksor:
+  audience: [public]
+  owner: finance
+  approval: { by: human:mjunaidca, at: 2026-08-24T22:36:57Z }
 ---
-
-# Purchase approval thresholds
 
 Purchases are approved according to total contract value:
 

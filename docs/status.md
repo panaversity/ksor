@@ -6,15 +6,27 @@ updated: 2026-08-25.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.35** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.40** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
-`ksor calibrate` and `ksor gc` all run from the one `ksor` binary. Only `dev`
-and `build` still report "designed but not implemented" and exit `2`; an
-unknown verb is refused with exit `1` and a stable `error: unknown-verb` stderr
-slug. The package root exports `exitCodes`, `verbs`, and `resolveCommand`, and
-docs ship inside the tarball under `docs/`.
+`ksor calibrate` and `ksor gc` all run from the one `ksor` binary. In the
+PUBLISHED package `dev` and `build` both report "designed but not implemented"
+and exit `2`, and there is no `migrate` verb; an unknown verb is refused with
+exit `1` and a stable `error: unknown-verb` stderr slug. The package root
+exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the
+tarball under `docs/`.
+
+0.0.36 emitted the invoking package manager's scaffold (decision 25); 0.0.37
+stated the KSoR architecture in the package README; 0.0.38 added the
+`make-summary` skill, put the breadcrumb on every page and moved the teaching
+aid after a document's introduction; 0.0.39 stopped a malformed
+`KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal; 0.0.40 made
+a document's page more readable — an overflowing code block can be unwrapped,
+table rows alternate, and a callout carries a rule down its left edge.
+
+**Everything under the next heading is UNRELEASED** — it is the
+`okf-native-spec` branch, and no adopter has any of it yet.
 
 Verified end to end against each published version. The full KERNEL walk was
 last run against **0.0.18** (2026-08-22: fresh `npm install` into a bare
@@ -32,6 +44,172 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 `read` is byte-faithful and carries provenance pinned to the serving generation
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
+
+### The record, the CLI and the kernel on the profile (unreleased, branch `okf-native-spec`)
+
+`packages/content/src/record/` holds the OKF-native record's foundation
+(`specs/ksor/record/spec.md`; decision 26): the YAML frontmatter splitter,
+the concept profile as a zod schema, the Governance Policy reader with KSP
+4.2.5 scope resolution, the takedown ledger reader with its four rules, the
+OKF §8 index generator with a golden, footnote and link reading, the overlap,
+widening and lifecycle rules with their decision tables, the hygiene rules
+ported from the scaffold's hand-written checker (portable names, file types,
+PNG integrity, dead and escaping links, the instance's closed key set), the
+`build.lock.json` schema with `build_id` composition, and `checkRecord`,
+which composes them over an in-memory tree. Exported from the kernel package
+and as the `@panaversity/ksor-content/record` subpath.
+
+**`ksor build` runs** (`specs/ksor/build/spec.md`): `--instance`, `--as-of`,
+`--strict`, `--allow-unverifiable-ledger`; generates every index in memory,
+checks, refuses with the slug first and nothing written, else writes the
+changed indexes and the lock — `source_commit` from the last commit touching
+an input, `dirty` from git status, the ledger checked for shrinkage against
+every historic version and the committed lock, a shallow clone refused.
+`--bundles` exits `2`. **The emitted `check.mjs` is generated** from the
+record module at package-build time into both skill trees (gitignored in the
+templates), read-only, refusing a stale index; a conformance fixture is judged
+identically by it and by `checkRecord`. **The starter is in the profile**:
+`instance.md` format 2, `.ksor/governance.yaml`, five `type: Document`
+concepts, generated indexes, `surfaces/overview.md`; every manager's `build`
+script is `ksor build` then the site build, `export-denylist` gone. **The
+starter PUBLISHES on the first build** (owner, 2026-08-25): all five ship
+`status: stable` with `ksor.approval` naming `ksor-starter/<cli version>`, a
+PRODUCER actor the emitted policy authorises, so `ksor init` then `ksor build`
+reports `5 admitted to a machine surface` instead of `0`. This replaces
+decision 27's day-one cost, whose real price was the whole first surface — an
+empty `llms.txt`, empty `/md/` twins and a door that answered nothing. The new
+cost is that a non-human actor holds approval authority in the adopter's own
+policy and five documents they did not write are published: the emitted README,
+AGENTS.md, `.ksor/governance.yaml` and the intake-interview skill all say so,
+and all four say to delete the producer once the samples are replaced. What the
+owner writes is unaffected — a new document is `draft` and reaches no machine
+surface until they approve it.
+
+**`ksor migrate` runs** (research/okf-native.md §1.8): `--write`,
+`--instance`, `--actor`, `--approve-by`, `--attribute`, `--generated-at`,
+`--write-site`. It rewrites a pre-profile record into the profile — `visibility`
+expanded UPWARD through the old ordered model, `provenance` into `sources`,
+`effective` widened to midnight UTC, `review` into `draft`, `superseded` into
+`deprecated` with an attributed `ksor.deprecated` and a resolved
+`ksor.superseded_by`, `approved` into `draft` unless `--approve-by`, the
+instance into format 2 with authority moved into `.ksor/governance.yaml`, a
+reserved `index.md`/`README.md` carrying prose into `overview.md`, every
+summary companion marked `type: Summary`, and every denylist row in the
+database into the committed ledger. A row whose denial the ledger already
+names is left alone and an existing ledger is never regenerated — `ksor
+takedown` may have appended to it — but a row nothing accounts for is
+APPENDED, including the one a repointed denial leaves behind, which is the
+state `ksor ingest` and `ksor serve` refuse as `ksor-takedown-unledgered` and
+name this command as the remedy for. Without `--write` it prints a
+unified diff and changes nothing. `--write-site` UPDATES the byte-copied rule
+modules where a `system/site` exists; it never creates one. It refuses by name (`ksor-migrate-underivable`) rather
+than author a title, a description, a `generated.at` or the actor behind a
+takedown — and rather than DERIVE either of the two values a re-run can no
+longer know: an audience, once the `audiences:` model it deleted is gone (it
+writes `instance.md` last so an interrupted run keeps one), and a
+`ksor.superseded_by` resolving to no concept, which `ksor build` would refuse as
+`ksor-supersession-strands`. `workbench/example-corpus` is migrated and builds green;
+`scripts/check-corpus.mjs` no longer applies the pre-profile rules to it.
+
+**The kernel reads the record through it, and stores what it finds.** Schema
+2.5 puts the profile on the row — `content_nodes.audience TEXT[]` with a GIN
+index (the ranked `visibility` is mapped and dropped), the authored status
+CHECKed onto `draft | stable | deprecated`, the OKF trust vocabulary as JSONB,
+`effective_from`/`stale_after` and a derived `trust_tier`; the run carries
+`build_id`, the policy as a row with its digest, and the ledger's id set; the
+denylist row carries the ledger entry that wrote it and the one that revoked
+it, and the `DENIED` seam denies only rows still in force. Existing databases
+walk 2.4 → 2.5 (decision 16). `ksor ingest` runs `checkRecord`, refuses
+without a fresh `build.lock.json` (`ksor-lock-missing` / `ksor-lock-stale`),
+applies the ledger in file order, and records the `build_id` it published;
+`GOVERNANCE_SINCE` is 2.5, so a carried-forward generation refuses to serve
+until it is re-ingested. `ksor takedown` is ledger-first (record spec §5):
+the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
+`--apply`, and `--export` and `.ksor-denylist.json` are gone. `--list` and
+`--ledger` read without a database too, from the committed ledger — the rung
+`ksor init` emits, and the only place `--revoke`'s entry id can be found there.
+The write is serialised and APPEND-ONLY: the read, the decision and the write
+happen under `.ksor/takedowns.yaml.lock` (a holder still there after 30s is
+`ksor-ledger-locked`, exit `3`, nothing written), and the entry is appended
+with `O_APPEND` rather than the file rewritten — so N concurrent runs record N
+acts, and the ledger has no state in which it is shorter than it was. A file
+that exists and holds nothing is `ksor-ledger-empty`, never "no denials".
+
+**And serving now reads all of it.** `lib/lifecycle.ts` and `lib/trust.ts`
+join the audience overlap in ONE admitted set (`lib/admit.ts`), bound beside
+`DENY` in search's two arms, read, outline and the calibration sampler: a
+draft, a document before its `effective_from`, one past its `stale_after` and
+a deprecated one are absent from every machine surface (record spec §2.5),
+and a caller may name a `min_trust_tier` the arm enforces before ranking. A
+SECTION carries no governance of its own and is admitted iff an UNDENIED
+descendant is visible, by a recursive `parent_id` walk — so a section whose
+every document has been withdrawn leaves the outline instead of advertising
+`child_count: 0`. `AUDIENCE_CASES` is the overlap
+table and every row of it — sections and refusals included — runs through
+real Postgres, as does every line of `LIFECYCLE_CASES`. A calibrated floor
+carries the digest of the predicate it was measured under, and one measured
+under another (or under none) enters the declared-but-uncalibrated refusal
+rather than reading as `gate: off`. The snapshot token binds the viewer list.
+
+**And the door says what it knows.** `search` accepts `min_trust_tier`
+(`unverified` | `machine-confirmed` | `human-reviewed`), and
+`KSOR_MIN_TRUST_TIER` sets the deployment's own floor; the two compose by one
+rule — the higher of the pair — so configuration tightens and an argument
+never loosens, asserted through real Postgres across every configuration.
+The default and the enforcement live in the HANDLER, so a registration
+scaffolded before the parameter existed keeps working and the boot inspection
+NOTICES its absence instead of refusing it. Every hit carries its
+`governance` — `status`, `trust_tier`, the latest `verified` act,
+`effective_from`, `stale_after`, and `approval` with `checked: "policy"`,
+which is honest absence in the envelope's own idiom: policy-checked, not yet
+change-control-verified. `read` carries the same `governance` block, from the
+same columns through the same seam, and returns the concept's frontmatter
+byte-exact beside it (`sources.frontmatter`, the author's own bytes, never a
+re-serialisation) — the frontmatter is what the author DECLARED and is
+untrusted corpus text, `governance` is what the record stored, and the tool
+description says which is which. The in-band injection advisory reads both.
+Every serving act's `retrieval_log` row records the viewer list, the trust
+floor that applied, whether it abstained and how many results it returned —
+and never content or the query.
+
+**And the site publishes the same record.** Staging runs for EVERY build — the
+level-0 fast path that served `knowledge/` unstaged is gone, because no record
+is safe to serve raw once every one of them has drafts, a ledger and generated
+indexes. `KSOR_AUDIENCE` is a comma list validated against the lock's registry
+and required to include `public`; admission is the overlap rule and the §2.5
+lifecycle table, decided once at the lock's `as_of`. Each directory's
+`index.md` is REGENERATED from the staged tree rather than the committed one
+copied, so a public folder page cannot list an internal title, and `index.md`
+is excluded from the docs collection. Denials come from `.ksor/takedowns.yaml`
+in ledger order — the `.ksor-denylist.json` reader is gone, and a stray one
+changes nothing. `llms.txt`, `llms-full.txt`, every `/md/` twin and
+`/.well-known/mcp/server.json` carry `build_id`, `source_commit` and
+`ksor_version`; the build refuses `ksor-lock-missing` / `ksor-lock-stale`
+without a fresh lock outside development, and `ksor-site-outdated` when the
+lock was written by a newer `ksor` than the site's rule modules carry. The
+display title is `instance.md`'s `title:` key; there is no body H1 to read.
+
+**What is NOT built, on this branch or anywhere** — phase B of
+`research/okf-native.md` §4.2, none of it started:
+
+- **`ksor build --bundles`** parses and exits `2` with the honest notice. One
+  OKF bundle per registered audience, for exchange, is designed and unwritten.
+- **Change-control verification of approvals and ledger actors** (KSP R22–R25
+  against repository history). Until it exists an approval is POLICY-checked,
+  and every envelope says so in its own idiom: `approval.checked: "policy"`.
+  Whether an edit to a stable concept bumped `generated.at` is likewise
+  unverified — the checker compares two authored instants and no more.
+- **`llms.txt` v2 URL forms and path-scoped files.** The site emits the form
+  it emitted before.
+- **OKF import** (R26) — reading a foreign bundle INTO a record. Demand-gated:
+  it needs a second ingest adapter and a verb, and nobody has asked yet.
+
+The ranked audience rule is GONE. `decideVisible` and `RANKED_AUDIENCE_CASES`
+were dead code asserted only against each other — and the suite doing the
+asserting was the site's half of decision 18's decision table, so the site's
+real staging rule (`overlaps`) had no conformance run against it at all. Both
+are deleted; the site's half now runs the site's own copy of `overlaps`
+against `AUDIENCE_CASES`.
 
 ### Deployed live, both surfaces, with auth (0.0.23–0.0.35)
 
@@ -148,7 +326,19 @@ the file is supported and asserted: the compiled default serves the identical
 surface, compared over the protocol. The measurement that motivated it: three
 tool definitions cost ~2,990 always-resident tokens and one default `search`
 call ~3,541 — an agent pays for a record's tool surface out of its context
-window, so the record's owner decides what it says.
+window, so the record's owner decides what it says. Re-measured 2026-08-25
+after the trust floor, the per-hit governance and the trust-tier provenance
+sentences landed: the definitions are
+**16,734 chars / ~4,184 tokens** as transmitted — exact, they depend on the
+code alone — which is `search` 7,932 + `outline` 3,332 + `read` 5,466 =
+**16,730**, plus the four characters the `tools` array itself carries;
+the per-call figures were NOT re-measured against that record, and
+`packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
+measurement plus the governance block's exactly-measured 262 chars a hit. The
+same block rides on every `read` reply, beside the authored frontmatter — and
+both floors now say which of its fields were CHECKED (`approval`, against the
+governance policy) and which were only derived from what the document declares
+about itself (`trust_tier`).
 
 ### One auth switch, spelled like what it does (0.0.29)
 
@@ -367,50 +557,68 @@ either stops being true.
   keeps its `.each(SHELLS)` shape; `ksor init` emits Fumadocs, always.
 
 - **Visibility** (`specs/ksor/visibility/spec.md`, evidence in
-  `research/visibility.md` and issue #10) — the record declares its
-  audience: a `visibility:` key against an `audiences:` model in
-  instance.md; per-audience **staged** builds on both shells carry no
-  trace of a document below its tier (page, search, llms, sidebar, asset
-  name or bytes — raw or base64); the filter itself never reaches the
-  client bundle; non-public builds label themselves; seven checker rules
-  including the cross-audience link no single build can catch. Absent
-  `audiences:`, nothing changes. Conformance-tested with canary sweeps
-  and positive controls in CI. Hardened by two adversarial review rounds
-  (16 findings fixed): one canonical frontmatter grammar across the
-  checker and both shells, and every malformed shape fails closed —
-  including the two that once failed open (a block-list `visibility:`,
-  a `----`-closed frontmatter block).
+  `research/visibility.md` and issue #10; **rewritten onto the KSoR Profile
+  of OKF in the OKF-native change** — the contract is now
+  `specs/ksor/record/spec.md` §2.4 and `specs/ksor/build/spec.md` §3) — the
+  record declares its audience, and the model is now OVERLAP, not rank:
+  `ksor.audience` is a non-empty LIST on every concept (omission is refused,
+  never defaulted), the registry lives in `.ksor/governance.yaml`, and a
+  viewer is a comma list in `KSOR_AUDIENCE` that must include `public`
+  (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`). A document is
+  admitted when the two lists overlap. `visibility:` is a pre-profile key and
+  is refused by name (`ksor-legacy-key`). Staging is UNCONDITIONAL — every
+  build stages, there is no `audiences:` precondition and no level-0 fast
+  path, because no record is safe to serve raw now that every one has drafts,
+  a ledger and generated indexes. One shell (decision 9's 2026-08-24
+  revision). What has not changed is what the staged build guarantees: no
+  trace of a document outside the viewer (page, search, llms, sidebar, asset
+  name or bytes — raw or base64), the filter never in the client bundle,
+  non-public builds labelled, canary sweeps and positive controls in CI, and
+  the two adversarial rounds' 16 findings closed by one canonical frontmatter
+  grammar with every malformed shape failing closed.
 
 - **Governance rendering on the site**
-  (`specs/ksor/site-governance/spec.md`, issue #29) — the record enforces
-  `status` / `owner` / `provenance` / `effective` / `superseded_by` on every
-  document, and the site rendered none of them. Now each document shows the
-  governance it declares: owner and effective date under the title, one entry
-  per `provenance` source at the foot, a status chip **only when the status is
-  a caveat** (`draft` / `review` / `superseded` — an `approved` document shows
-  none, because that is what a reader already assumes and a label that never
-  varies stops being read), and — above the title,
-  where it cannot be missed — a supersession notice naming the successor and
-  linking to its route. This closed a correctness gap, not only a cosmetic
-  one: a `status: superseded` document was served looking identical to an
-  approved one, with the successor pointer the checker demands swallowed.
-  Nothing is inferred — an undeclared key renders nothing, never a placeholder
-  that would read as governed. All server-rendered, so it survives print, a
-  failed bundle and JavaScript off (verified live in both themes). The
+  (`specs/ksor/site-governance/spec.md`, issue #29; rewritten onto the KSoR
+  Profile of OKF, `specs/ksor/record/spec.md` §2, in the OKF-native change) —
+  the record carries a governance vocabulary on every concept and the site
+  rendered none of it. Now each document's page shows what the record says
+  about it and who said it: a **status chip on every page** (`draft` /
+  `stable` / `deprecated` — including `stable`, because a reader who cannot
+  see it cannot tell a governed record from a site that never said), the
+  **trust tier** OKF names (`unverified` / `machine-confirmed` /
+  `human-reviewed`) with the verification that set it, the **approver** and
+  date that make a `stable` document stable, the **owner**, the **withdrawal**
+  and date on a deprecated one, `Replaces` derived from the record in the
+  other direction, `Effective from` / `Review by`, one entry per `sources`
+  entry at the foot with a URL followable and a scope descriptor left as text,
+  and — above the title, where it cannot be missed — a deprecation notice
+  naming the successor and linking to its route. Where the calendar keeps an
+  otherwise current document off the machine surfaces, a second chip carries
+  record spec §2.5's own words: `effective from <date>` and `past its review
+date`. The same badge marks the row in the sidebar, in every listing and in
+  the search results, where the snippet would otherwise quote a withdrawn
+  figure. Nothing is inferred — an undeclared key renders nothing, never a
+  placeholder that would read as governed. All server-rendered, so it survives
+  print, a failed bundle and JavaScript off (verified live in both themes).
   Publication is the owner's call: `site: governance: false` in instance.md
-  leaves the pages plain while the record keeps every key for the agent
-  surface and the audit trail — and it never hides the supersession notice.
-  `pnpm check` and the build both refuse a value that is not `true`/`false`.
-  The **agent files carry the same governance**: `llms.txt` marks a caveat
-  status and names the route that replaced a superseded document, and
-  `llms-full.txt` restores each document's keys as frontmatter above its body.
-  Without that half, a build warned a reader about a withdrawn policy and handed
-  an agent the same policy as clean prose — one source, two truths (measured on
-  shipped bytes, `research/site-design.md` F1). `site: governance: false` is a
-  decision about the PAGES and never reaches those files.
+  leaves the pages plain while the record keeps every key for the agent surface
+  and the audit trail — and it hides no CAVEAT: neither the deprecation notice
+  nor the lifecycle badge, which the sidebar, the listings and the search
+  results carry whatever the key says. The build refuses a value that is not
+  `true`/`false`.
+  The **agent files carry the same record**: `llms.txt`, `llms-full.txt`, every
+  `/md/` twin and `/.well-known/mcp/server.json` carry the build's `build_id`,
+  `source_commit` and `ksor_version`, and each twin serves the concept's own
+  frontmatter INTACT — nested `ksor:` and all — under the derived `trust_tier`
+  and those stamps, so an OKF consumer parses the profile's grammar rather than
+  this shell's summary of it. A deprecated, not-yet-effective or stale concept
+  is on none of those files at all (record spec §2.5), which is the profile's
+  answer to the one-source-two-truths defect the caveat markers used to patch
+  (`research/site-design.md` F1). `site: governance: false` is a decision about
+  the PAGES and never reaches those files.
   Fumadocs shell only: bound there rather than as a surface-contract clause
   (owner, 2026-08-20), so a project that swaps shells loses it until its shell
-  adds it. Released in 0.0.21.
+  adds it. First released in 0.0.21, on the ranked model.
 
 - **The deploy story** — the scaffold ships `vercel.json` answering
   Vercel's setup interview (repo root, static export), and the scaffolded
@@ -520,18 +728,24 @@ either stops being true.
   shipped bytes of a scaffold built from the packed CLI: **no route, no `/md/`
   twin, no `llms.txt` or `llms-full.txt` line, no search-index entry**, and the
   parent's own `/md/` and both llms files are **byte-identical** (sha-256) with
-  and without attachments present. Governance inherits: with the parent set to
-  `visibility: internal`, a public build contains the summary and deck text in
-  **0** files against a positive control of 26. `ksor ingest` creates no node
+  and without attachments present. Governance inherits: with the parent's
+  `ksor.audience` set to `[internal]` (measured before the profile landed, when
+  the key was `visibility: internal`), a public build contains the summary and
+  deck text in **0** files against a positive control of 26. `ksor ingest` creates no node
   for either, so neither is independently citable — previously `isDoc` accepted
   `x.summary.md` and gave it its own `stable_id`, which is the one cause behind
-  four cross-surface leaks (decision 24).
+  four cross-surface leaks (decision 24). Since the profile landed a
+  `<doc>.summary.md` carries exactly `type: Summary` and nothing else
+  (decision 27): the class refusal became a one-key allow-list, because the
+  bundle needs a marker to tell a companion from a concept. The other four
+  kinds still declare nothing.
 
   Refusals carry remedies and fire in both `pnpm check` and `pnpm build`:
   `ksor-attachment-orphan` (an attachment whose document is missing) and
-  `ksor-attachment-frontmatter` (an attachment declaring any frontmatter — the
-  rule that closes `visibility:` widening, `sor_id:` takedown escape, and
-  claimed governance a non-node cannot carry). `.yml` is refused by name.
+  `ksor-attachment-frontmatter` (a `<doc>.summary.md` whose frontmatter is
+  anything but exactly `type: Summary`, absence included — the rule that closes
+  `visibility:` widening, takedown escape, and claimed governance a non-node
+  cannot carry). `.yml` is refused by name.
 
   Each document also reports how long it takes to read, counted at build
   time from its own markdown — so the figure is in the shipped HTML rather than
@@ -641,7 +855,7 @@ either stops being true.
   for the swap.
 
 - **Schema migrations — DONE.** `schema.sql` provisions a FRESH database at the
-  current version (2.4); an existing one moves forward through
+  current version (2.5); an existing one moves forward through
   `schema/migrations/<from>-<to>__<slug>.sql`, applied by a runner keyed on
   `schema_meta`. The chain is WALKED, not sorted, so a missing step refuses
   rather than being skipped, and each step commits with the `schema_meta` row
@@ -650,33 +864,51 @@ either stops being true.
   destroyed `retrieval_log` and `takedown_denylist` — the only two tables that
   cannot be rebuilt from markdown.
 
-- **The governance boot gate — DONE.** `ksor serve` refuses two states the SITE
+- **The governance boot gate — DONE.** `ksor serve` refuses the states the SITE
   already refuses to build in, because a door that serves where the site stops
-  is the two surfaces reading different truths. A generation built before
-  schema 2.2 carries no `visibility` at all — the 2.1 → 2.2 migration added the
-  column and cannot backfill frontmatter — and the serving predicate reads a
-  NULL as `default_visibility`, the WIDEST tier; 2.4 stamps each generation
-  with the schema it was built against, so that state is detectable and
-  refused. A document declaring `visibility:` in a record that declares no
-  `audiences:` is refused too, matching the site's
-  `ksor-visibility-without-audiences`.
+  is the two surfaces reading different truths. Each generation is stamped with
+  the schema it was built against, so a generation older than the governance it
+  needs is detectable and refused rather than served at the widest tier — the
+  floor is 2.5, the version that put the audience LIST on the node row. Since
+  schema 2.5 the gate also refuses a denylist row that no ledger entry accounts
+  for (`ksor-takedown-unledgered`) and REPORTS one whose entry the ingested
+  ledger does not contain (`ksor-takedown-unmerged`: the verb wrote the row,
+  the pull request never merged).
 
-- **Subtree takedowns reach the site — DONE.** The exported manifest carries
-  the DIRECTORIES a `--subtree` denial governs alongside the expanded id list,
-  derived from the descendants' `sources.origin_path`. The id list can only
-  name what the active generation holds, and the site builds from disk: a
-  document added under a withdrawn section after the last ingest was published
-  to `/docs` and `llms.txt` with no warning.
+- **Subtree takedowns reach the site — DONE, then replaced.** The database
+  export that carried a denial to the site is gone with `--export`: the ledger
+  `.ksor/takedowns.yaml` is committed, so the site reads the denial from the
+  repository and needs no database to ask. The finding the export existed for
+  stands and is now structural — a document added under a withdrawn section
+  after the last ingest is covered because the ledger names the section, not a
+  list of ids the active generation happened to hold.
 
 ## Designed, not implemented
 
-- `ksor dev` / `build` — still exit `2` with an honest notice; the scaffold's
-  own `pnpm dev` / `pnpm build` work today without them.
-  `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
-  `ksor calibrate` and `ksor gc` ARE implemented and released — the bundled
-  kernel provides them from the one `ksor` binary. `serve` runs the MCP server in-process (reads `./instance.md`; exits
-  `3` with a remedy when it is missing).
-- Build provenance records (`build.lock.json`) — designed with `ksor build`.
+- `ksor dev` — still exits `2` with an honest notice; the scaffold's own
+  `pnpm dev` works today without it. `ksor serve`, `ksor ingest`,
+  `ksor schema`, `ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc`
+  ARE implemented and released — the bundled kernel provides them from the one
+  `ksor` binary. `serve` runs the MCP server in-process (reads
+  `./instance.md`; exits `3` with a remedy when it is missing). `ksor build`
+  and `ksor migrate` are both implemented on the unreleased branch, and the
+  published package answers them DIFFERENTLY: `ksor build` reports "designed
+  but not implemented" and exits `2`, while `migrate` is not in the published
+  vocabulary at all, so it is refused with exit `1` under the stable
+  `error: unknown-verb` slug. The two codes are a contract (product
+  principle 4) — `2` says designed and coming, `1` says this is not a ksor
+  verb — so they are worth stating apart rather than together.
+- `ksor build --bundles` — parses, prints the honest notice, exits `2`. It is
+  phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
+  its contract: one OKF bundle per registered audience under
+  `.ksor/out/bundles/<audience>/`, for exchange.
+- Change-control verification (KSP R22–R25) against repository history, which
+  is what would let an approval say `checked: "change-control"` instead of
+  `checked: "policy"`, and what would verify that an edit to a stable concept
+  bumped its `generated.at`. Phase B.
+- `llms.txt` v2 URL forms and path-scoped files. Phase B.
+- OKF import (R26) — reading a foreign bundle into a record. Demand-gated: a
+  second ingest adapter plus a verb, when someone asks for it.
 - Governed directives (`:::quiz` etc.) — no grammar ratified yet; shells
   pass them through as readable text (spec, deferred 2026-08-18).
 - The agent-eval harness's RELEVANCE and CORRECTNESS classes. The

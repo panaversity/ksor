@@ -42,8 +42,8 @@ export default function HomePage(): ReactElement {
   // entries standing behind it. The lead is looked up among the top-level
   // entries so a folder keeps the count of what it holds, and falls back to
   // building an entry directly — the first document in governed order can sit
-  // BELOW the top level, where `entriesUnder(null)` would never return it.
-  const entries = entriesUnder(null);
+  // BELOW the top level, where the root's own listing would never return it.
+  const entries = entriesUnder("");
   const lead = entries.find((entry) => entry.url === first.url) ?? entryFor(first);
   const behind = entries.filter((entry) => entry.url !== lead.url).slice(0, 3);
 

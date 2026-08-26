@@ -115,6 +115,31 @@ describe("ksor init meets the invoking package manager", () => {
     }
   });
 
+  /**
+   * One rule, three shapes, asserted on the EMITTED manifest rather than a
+   * fixture. `ingest` publishes only a tree `ksor build` has checked, so a
+   * `refresh` that does not build dies at step two of the README's own ordered
+   * path (`provision` → `refresh` → `serve`) with `ksor-lock-missing` — walked
+   * live on a real scaffold, 2026-08-25.
+   *
+   * It was fixed in the pnpm template first, and npm and bun stayed broken:
+   * `SCRIPT_BODIES` REPLACES the manager-owned scripts rather than extending
+   * them, so a fix to the template reaches exactly one of the three. That is
+   * the divergence `manager.ts` exists to prevent, and it is why this asserts
+   * every manager instead of the one that was reported.
+   *
+   * The ORDER is the assertion: a build after the ingest would not have helped.
+   */
+  it.each([
+    ["pnpm", AGENTS.pnpm],
+    ["npm", AGENTS.npm],
+    ["bun", AGENTS.bun],
+  ] as const)("%s: the emitted refresh builds before it ingests", (name, agent) => {
+    const { root } = scaffold(agent);
+    const refresh = manifest(root).scripts["refresh"] ?? "";
+    expect(refresh, `${name} refresh: ${refresh}`).toMatch(/ksor build[\s\S]*ingest/);
+  });
+
   it("emits an npm scaffold under npx: workspaces field, script denial, no pnpm anywhere", () => {
     const { root, stdout } = scaffold(AGENTS.npm);
 
@@ -126,7 +151,7 @@ describe("ksor init meets the invoking package manager", () => {
     expect(m.workspaces).toEqual(["system/site", "system/gateways/*", "system/packages/*"]);
     expect(m.packageManager).toBeUndefined();
     expect(m.scripts.dev).toBe("npm --prefix system/site run dev");
-    expect(m.scripts.build).toBe("npm run export-denylist && npm --prefix system/site run build");
+    expect(m.scripts.build).toBe("ksor build && npm --prefix system/site run build");
     expect(m.scripts.provision).toBe("npm run schema && npm run grant");
 
     // The denial half of the supply-chain posture translates; the emitted file
@@ -162,7 +187,7 @@ describe("ksor init meets the invoking package manager", () => {
     // (observed live on bun 1.3.6: `run build` executed `dev`), so bun scripts
     // are cd-chains, which bun's own cross-platform shell executes on Windows.
     expect(m.scripts.dev).toBe("cd system/site && bun run dev");
-    expect(m.scripts.build).toBe("bun run export-denylist && cd system/site && bun run build");
+    expect(m.scripts.build).toBe("ksor build && cd system/site && bun run build");
 
     assertNoForeignManager(root);
     // The quarantine disclosure must survive into the bun README too — bun has

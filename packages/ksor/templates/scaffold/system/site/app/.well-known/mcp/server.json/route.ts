@@ -1,4 +1,5 @@
 import { appName, mcpEndpoint, mcpNamespace, recordDescription, recordVersion } from "@/lib/shared";
+import { readStageManifest } from "@/lib/stage-manifest";
 
 /**
  * `/.well-known/mcp/server.json` — how an agent DISCOVERS this record's MCP
@@ -16,6 +17,10 @@ import { appName, mcpEndpoint, mcpNamespace, recordDescription, recordVersion } 
  *                `name:` has no slash, so it was rejected outright.
  *   version      REQUIRED. Absent, the document failed validation on its own.
  *   capabilities NOT a field in the schema; it was invented here.
+ *   _meta        the schema's extension point, namespaced by reverse DNS —
+ *                where the build's stamps go (build spec §3, R14), so a
+ *                validating client still accepts the document and a consumer
+ *                can connect it to the publication it describes.
  *
  * (Checked against the 2025-12-11 schema, round-6 review of #43, which built
  * the scaffold and validated the emitted file.)
@@ -27,11 +32,16 @@ export const dynamic = "force-static";
 
 const SCHEMA = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json";
 
+/** The `_meta` key the stamps live under: a namespace this project controls. */
+const META_KEY = "com.panaversity.ksor/build";
+
 export function GET(): Response {
   const endpoint = mcpEndpoint();
+  const { build_id, source_commit, dirty, ksor_version, unstamped } = readStageManifest().stamps;
   return Response.json(
     {
       $schema: SCHEMA,
+      _meta: { [META_KEY]: { build_id, source_commit, dirty, ksor_version, unstamped } },
       name: `${mcpNamespace()}/${appName}`,
       // The record's OWN account of itself — see recordDescription. A
       // description identical in every ksor record cannot help an agent choose

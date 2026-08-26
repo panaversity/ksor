@@ -12,7 +12,7 @@ authorization server and pointing the door at it.
 This page is four worked recipes, all executed against real servers rather than
 written from their documentation, plus what an agent does to obtain a token. The
 mechanism is standard OAuth 2.0 — nothing here is specific to any one product,
-and that is the point: three different implementations are shown because a
+and that is the point: four different implementations are shown because a
 single one proves nothing about neutrality. Two are self-hosted (one `docker
 run` each, no account), one is a hosted commercial provider with a free tier,
 and one is an organization's own SSO — which is the case that matters most,
@@ -41,9 +41,11 @@ per-request case needs a decision first.
 **It is one gate, not per-user rules.** The door checks that a token was signed
 by the issuer you named and audienced at this record. It reads no scopes, no
 roles, no groups. **Any caller holding a valid token gets the whole record**, to
-the extent the audience tier allows. If different readers must see different
-documents, that is the record's `audiences:` / `visibility:` model, and it is a
-different mechanism from this page — see the scaffold's AGENTS.md.
+the extent its audience list allows. If different readers must see different
+documents, that is the record's audience model — the registry in
+`.ksor/governance.yaml`, each concept's `ksor.audience` list, and the viewer
+list the door is configured for — and it is a different mechanism from this
+page. See the scaffold's AGENTS.md.
 
 So: this page answers _"can a stranger read my record over MCP?"_ It does not
 answer _"can Alice read what Bob can."_
@@ -67,7 +69,7 @@ works, not while you are trying to make it work.
 to anyone who can reach the port — and it wins over everything below. A scaffold
 ships with `KSOR_AUTH=disabled-local` in its `.env.example`, so a deployment
 that copied that file has it set and will stay unauthenticated no matter how
-carefully you configure the four variables above. Configuring the SSO door is
+carefully you configure the variables above. Configuring the SSO door is
 what turns auth **on**; removing `KSOR_AUTH` is what stops it being off.
 
 Every variable here is read from the environment of the `ksor serve` process —
@@ -190,7 +192,7 @@ opaque by default, no OAuth token endpoint taking a custom audience, no metadata
 document. That is a coherent design; it is simply a different one, and adapting
 it means writing the verification layer ksor already is.
 
-The three recipes below all pass. If yours does too, they will read as the same
+The four recipes below all pass. If yours does too, they will read as the same
 recipe with different button names — because underneath they are.
 
 ## Recipe: Keycloak

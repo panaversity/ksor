@@ -4,7 +4,14 @@
 # tree, and the transient output of working inside the template is listed
 # here — one directory up, where the scaffold never copies it (found live:
 # npm pack --dry-run listed scaffold/system/site/out/, 2026-08-18).
-scaffold/.ksor/
+# `.ksor/` holds ksor's scratch AND two governance files that are the record
+# (record spec §1); the directory form cannot be negated, so the glob is
+# `.ksor/*` with the two un-ignored — the same shape the emitted .gitignore
+# carries. npm-packlist honours this file, so an ignored `.ksor/` would also
+# drop the policy from the tarball (found live 2026-08-25).
+scaffold/.ksor/*
+!scaffold/.ksor/governance.yaml
+!scaffold/.ksor/takedowns.yaml
 scaffold/**/node_modules/
 scaffold/system/site/.next/
 scaffold/system/site/.source/

@@ -2,7 +2,8 @@ import { RootProvider } from "fumadocs-ui/provider/next";
 import "./global.css";
 import type { Metadata } from "next";
 import { appTitle } from "@/lib/shared";
-import { basePath, caveatStatusByUrl } from "@/lib/source";
+import { basePath, badgeByUrl } from "@/lib/source";
+import { readStageManifest } from "@/lib/stage-manifest";
 import KsorSearchDialog from "@/components/search-dialog";
 
 // No next/font/google: it fetches the face from Google at BUILD time, so a
@@ -17,13 +18,17 @@ export const metadata: Metadata = {
     template: `%s | ${appTitle}`,
   },
   description: "The Knowledge System of Record for humans and AI agents.",
+  // A build that shows drafts (`KSOR_DRAFTS=show`) is a preview, and a static
+  // site's pages are open-web artefacts: it says so to every crawler rather
+  // than letting a draft be indexed under the record's name (build spec §3).
+  ...(readStageManifest().drafts === "shown" ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default function Layout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
-        {/* Which documents carry a caveat status, for the search dialog — it
+        {/* Which documents carry a badge, for the search dialog — it
             runs in the browser over a static index that has no field for it.
             Delivered in the document rather than as a dialog prop because
             RootProvider types `options` against the SHIPPED dialog's props, and
@@ -34,7 +39,7 @@ export default function Layout({ children }: LayoutProps<"/">) {
           type="application/json"
           id="ksor-statuses"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(caveatStatusByUrl()).replaceAll("<", "\\u003c"),
+            __html: JSON.stringify(badgeByUrl()).replaceAll("<", "\\u003c"),
           }}
         />
         <RootProvider
