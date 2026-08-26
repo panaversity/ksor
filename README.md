@@ -26,6 +26,8 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 > **KSoR is an open knowledge infrastructure framework for the AI-native organization.**
 
+**New to the idea?** [**KSoR in eight concepts**](https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing) is a 17-slide walkthrough that follows a single hospital through the eight ideas behind a Knowledge System of Record: one authoritative record, what belongs in it, provenance, the governance boundary, abstention, citation, how new knowledge gets approved, and the many open projections that read it. Plain language, no code — the deck to open when you are introducing KSoR to a team.
+
 ---
 
 ## Start here
