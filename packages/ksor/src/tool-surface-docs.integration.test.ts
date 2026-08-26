@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { releaseNote } from "./release-note.js";
+
 import {
   buildDefaultGateway,
   buildServer,
@@ -77,7 +79,10 @@ describe("the documented tool-definition sizes", () => {
       ".changeset/okf-door-on-the-profile.md",
     ];
     for (const rel of documents) {
-      const text = readFileSync(path.join(ROOT, rel), "utf8");
+      // A changeset is consumed at release; its prose lives on in CHANGELOG.md.
+      const text = rel.startsWith(".changeset/")
+        ? releaseNote(ROOT, rel)
+        : readFileSync(path.join(ROOT, rel), "utf8");
       expect(text, `${rel} prints the transmitted figure`).toContain(grouped(transmitted));
       expect(text, `${rel} reconciles it with the per-tool sum`).toContain(grouped(sum));
     }
