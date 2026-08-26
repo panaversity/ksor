@@ -1,6 +1,6 @@
 ---
 type: Document
-title: Surfaces
+title: Overview
 description: One source, published through several synchronized projections.
 status: stable
 order: 4
