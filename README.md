@@ -2,9 +2,7 @@
   <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — open, vendor-neutral knowledge infrastructure for AI-native organizations" width="100%">
 </p>
 
-https://www.youtube.com/watch?v=EeTGuQJbHCg&t=46s
-
-[![Watch the video: KSoR Introduction](https://img.youtube.com/vi/<EeTGuQJbHCg&t>/hqdefault.jpg)](https://www.youtube.com/embed/EeTGuQJbHCg&t)
+![Watch the video: KSoR Introduction](https://www.youtube.com/watch?v=EeTGuQJbHCg&t)
 
 # KSoR
 
