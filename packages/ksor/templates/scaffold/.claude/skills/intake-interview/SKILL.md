@@ -14,32 +14,55 @@ question at a time, and write down what they actually say.
 
 ## Ask THREE questions, one at a time
 
-Seven questions is where this skill used to start, and it did not survive
-contact: an agent running it decided five were too many, defaulted them, and
-reported "answered: all seven" — including the one that decides who may
-approve a document. A process the tool executing it shortcuts is too long.
+Ask them in the OWNER's words, not this project's. The vocabulary on this page
+— record, corpus, abstention, governance act — is precise and it is ours; an
+owner meeting it for the first time in a question cannot answer, and says so
+(reported 2026-08-26, against the wording these replaced: "the corpus wins
+about ___" asked them to complete a sentence that is not English unless you
+already know the ledger analogy).
 
-So three are asked, and they are the three that cannot be defaulted:
+Ask exactly this much. Do not explain what the answer will be used for inside
+the question — that is what made the last version unanswerable.
 
-1. **Scope** — "What should this record be the _final word_ on? Finish the
-   sentence: when someone here disagrees with this corpus, the corpus wins
-   about ___."
-2. **Boundary** — "What is just _outside_ that — the near-miss topics people
-   will ask about here that the record should refuse rather than guess at?"
-3. **Authority** — "Who may approve a document for publication, and who may
-   withdraw one?"
+---
 
-Scope and Boundary are asked because the abstention gate is meaningless
-without an edge: a record authoritative for everything has no outside, so an
-agent asked something the owner never wrote about reaches for its training
-instead of declining. Authority is asked because a governance act names its
-actor and the tool never guesses one — the scaffold ships `human:you` in
-both authority lists, and a placeholder that survives this conversation is a
-person who was never there.
+**1 of 3 — What is this knowledge base about?**
 
-Follow up until each is concrete. "Our engineering docs" is not yet an
-answer; "our leave, expense and conduct policies — the current ones, not
-historical versions" is.
+> Be specific enough that I would know what does NOT belong in it.
+>
+> Too vague: "our engineering docs" — I still could not tell what to leave out.
+> Specific enough: "our leave, expense and conduct policies, current versions
+> only."
+
+---
+
+**2 of 3 — What is close to that, but not part of it?**
+
+> Things people will ask this and it should NOT answer. A confident wrong
+> answer is worse than "I do not cover that."
+>
+> For the policies example: "not salaries, not individual HR cases, not last
+> year's versions."
+
+---
+
+**3 of 3 — Who signs off on a document, and who can take one down?**
+
+> Names or handles, not job titles. If it is just you, say so.
+
+---
+
+Follow up until each is concrete, but follow up in their words too: "what would
+someone actually ask this?" gets further than "name the boundary".
+
+**Why these three and no others.** The first two give the record an EDGE, and
+the abstention gate is meaningless without one: a knowledge base that is
+authoritative for everything has no outside, so an agent asked something the
+owner never wrote about reaches for its training instead of declining. The
+third cannot be guessed at all — the scaffold ships `human:you` in both
+authority lists, and a placeholder that survives this conversation is a person
+who was never there. Everything else has a sane default, and defaults are
+stated rather than asked.
 
 ## Then STATE the defaults; do not ask them
 
