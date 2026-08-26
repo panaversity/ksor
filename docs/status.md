@@ -6,7 +6,7 @@ updated: 2026-08-26.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.42** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.47** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor build`, `ksor migrate`, `ksor serve`, `ksor ingest`, `ksor schema`,
@@ -27,7 +27,16 @@ table rows alternate, and a callout carries a rule down its left edge; **0.0.41
 released the OKF-native record** — the profile, `ksor build`, `ksor migrate`,
 schema 2.5 and the governed door described below; **0.0.42** filled in
 `database.dsn_env` in the emitted `instance.md` so climbing to the served rung
-needs no edit, and recorded decision 29.
+needs no edit, and recorded decision 29; 0.0.43 repaired a 0.0.41 regression
+where `pnpm dev` stopped picking up a document added to `knowledge/` while it
+ran, and retitled the starter's `surfaces/overview.md` from `Surfaces` to
+`Overview`; 0.0.44 lightened the starter — the flashcards, quiz and slides
+companions are gone and `knowledge/` drops from 11 files to 8, leaving
+`what-is-a-ksor.summary.md` as the one companion that carries a profile rule;
+0.0.45 added `pnpm preview` for serving the static `system/site/out` build and
+cut the intake interview from seven questions to three; 0.0.46 expanded the
+Auth0 recipe in `docs/authorization.md`; **0.0.47** reworded the intake
+interview's three questions in the owner's own words.
 
 Everything under the next heading is RELEASED and in adopters' hands as of
 0.0.41. It was developed on the `okf-native-spec` branch, which merged in
