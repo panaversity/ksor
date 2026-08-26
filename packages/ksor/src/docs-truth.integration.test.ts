@@ -21,10 +21,15 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { releaseNote } from "./release-note.js";
+
 import { verbs } from "./index.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
-const read = (rel: string): string => readFileSync(path.join(repoRoot, rel), "utf8");
+const read = (rel: string): string =>
+  rel.startsWith(".changeset/")
+    ? releaseNote(repoRoot, rel)
+    : readFileSync(path.join(repoRoot, rel), "utf8");
 
 const SCAFFOLD = "packages/ksor/templates/scaffold";
 
