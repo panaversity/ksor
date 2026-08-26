@@ -1,5 +1,68 @@
 # @panaversity/ksor
 
+## 0.0.42
+
+### Patch Changes
+
+- d55097c: **Document what a deploy actually does to your lock.** `vercel.json` builds the
+  site with `pnpm build`, which runs `ksor build` first — so the host regenerates
+  every `index.md` and `build.lock.json` before building. That has two
+  consequences worth knowing, and neither was written down: you can deploy
+  without ever running `ksor build` yourself, and the `build.lock.json` in your
+  repository is not necessarily the one that shipped.
+
+  Nothing changes in behaviour. The record checker still runs on the deploy, so a
+  record that breaks the profile still fails there, and the `build_id` that did
+  ship is stamped into the deployed `llms.txt`.
+
+  `docs/deploying.md` now also shows the stricter posture for adopters who want
+  the deployed build reviewed before it ships — `buildCommand: "pnpm -C
+system/site build"`, which refuses `ksor-lock-missing` or `ksor-lock-stale`
+  until someone runs `ksor build` and commits it. That is one line in your own
+  `vercel.json`; ksor ships no flag for it.
+
+- abef414: **Fix the release-note lookup, properly this time.** The previous release added
+  `releaseNote()` so doc-truth assertions could survive a changeset being folded
+  into the changelog. It resolved a consumed note to the NEWEST changelog
+  section, which is only correct for the release that consumes it: a note
+  consumed in 0.0.41 lives in the 0.0.41 section forever, so by 0.0.42 the lookup
+  returned a different release entirely.
+
+  Two failures came out of that, and the second was worse than the bug it
+  replaced: presence assertions went red, and a fenced-block scan went VACUOUS —
+  passing because the section handed to it contained no code blocks at all.
+
+  `releaseNote()` now returns the whole changelog once a note is consumed, plus
+  whether the note is still `pending`. Assertions about the PRESENCE of prose use
+  the text (finding it anywhere in the changelog proves it shipped); assertions
+  about STRUCTURE gate on `pending`, because "every fenced block must show
+  `--approve-by`" is a rule about a note still under review, not one to apply to
+  the whole published history.
+
+  Verified in both states and mutation-tested against the released tree: removing
+  `--approve-by` or changing the tool-size figure in the changelog turns the
+  assertions red.
+
+- bfcf900: **A new record already names its DSN variable.** `instance.md`'s
+  `database.dsn_env` shipped commented out, so climbing to the served rung began
+  with an edit whose only purpose was to delete two `#` characters — and the
+  instruction to do it was repeated in four places, one of which (`.env.example`)
+  sat right beside a `KSOR_DB_URL=` line that was NOT commented. A first-time
+  reader had to notice that one file names the variable and another defines it,
+  and that only one of the two needed uncommenting.
+
+  It is filled in now. Naming an environment variable costs nothing and requires
+  no database: `pnpm dev` and `pnpm build` never read it, and the value only has
+  to exist when you run `provision`, `refresh` or `serve`. Verified on a real
+  scaffold from the published package with the block live and `KSOR_DB_URL`
+  unset — `check`, `ksor build` and a full static site build all succeed, and the
+  record publishes.
+
+  So the served rung is now: set `KSOR_DB_URL` in `.env`, then `provision`,
+  `refresh`, `serve`. The step that was pure ceremony is gone, and `ksor init`'s
+  own next-steps, the scaffold's `AGENTS.md`, `.env.example` and
+  `docs/ingesting.md` all say the same thing.
+
 ## 0.0.41
 
 ### Patch Changes
