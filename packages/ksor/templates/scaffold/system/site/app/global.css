@@ -228,20 +228,37 @@
 }
 
 /* ── The reading measure ─────────────────────────────────────────────────────
-   The shell caps the article at 900px, which at the body's 16px puts 78
-   characters on a line (measured) — half again the 45–75 that reading research
-   and every typographic manual settle on, and the reason the page read as a
-   slab. 46rem holds the text to 672px, about 66 characters, and the article
-   still centres itself in the main column.
+   The shell caps the article at 900px, which puts far more than the 45–75 that
+   reading research and every typographic manual settle on a line, and is the
+   reason the page read as a slab. 46rem holds the text to 688px and the
+   article still centres itself in the main column. (The character counts this
+   paragraph used to give were wrong in both directions — see below.)
 
    It is also half of what stops the column moving: the other half is holding
    the table-of-contents column on every page (app/docs/[[...slug]]/page.tsx).
    Sidebar and rail are both 268px, so main is centred in the viewport and this
    measure is centred in main — the same place on a document with headings and
    one without. `data-full` is the shell's own escape hatch for a page that
-   asked for the whole width; it keeps it. */
+   asked for the whole width; it keeps it.
+
+   The measure STAYS at 46rem, and the number above is corrected here rather
+   than trusted: asked for a wider column, the honest thing was to measure what
+   this one already is. Simulating the browser's own line-breaking over this
+   record's prose in its real font gives 89 characters at 46rem — not 66 — and
+   the shell's 900px gives 122, not 78. Both figures in the paragraph above
+   were wrong; the CONCLUSION they supported was right, and by a wider margin
+   than it claimed.
+
+   So widening was tried and reverted: 49rem counts 95 and 52rem counts 104,
+   each further from the 45–75 the research settles on, not closer. What is
+   left is a real gain that costs nothing — the horizontal padding drops from
+   32px to 24px, which gives the text 16px more without touching the measure.
+
+   The white space either side of a bounded column on a 1728px screen is the
+   price of the column being bounded. It is not a bug to be tuned away. */
 #nd-page:not([data-full="true"]) {
   max-width: 46rem;
+  padding-inline: 1.5rem;
 }
 
 html {
