@@ -38,3 +38,13 @@ STATED as defaults in one block — read by both, declines firmly, one `public`
 audience, no sources yet — written only if the owner does not object, and the
 write-back must name which were answered and which were defaulted. Reporting a
 default as an answer is now called out in the skill as the thing not to do.
+
+**The scaffold README no longer tells you to uncomment something that ships
+uncommented.** 0.0.42 filled in `instance.md`'s `database:` block; the README
+kept instructing the adopter to uncomment it, and named a refusal
+(`instance.md declares no database: block`) they could no longer reach. The
+emitted `AGENTS.md` had already been corrected and the README had not — two
+documents describing one file, and only one of them updated. Vercel is three
+steps ending in the Root Directory fix, `preview` sits beside `build`, and a
+"When something refuses you" table maps every refusal an adopter meets to what
+to do about it.

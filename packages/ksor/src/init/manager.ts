@@ -123,6 +123,7 @@ export function transformManifest(source: string, manager: PackageManager): stri
 const SCRIPT_NAMES = [
   "dev",
   "build",
+  "preview",
   "check",
   "serve",
   "provision",

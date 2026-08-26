@@ -11,17 +11,23 @@ Two worlds live here:
 - **`system/` — the system.** The site (and later, services) that serve the
   record. Replaceable machinery.
 
+**Contents** — [Working here](#working-here) · [Serving to agents](#serving-to-agents) · [The files](#the-files-explained) · [When something refuses you](#when-something-refuses-you) · [Deploying](#deploying) · [Ownership](#ownership)
+
 ## Working here
 
 ```sh
 pnpm install
 pnpm dev        # browse the knowledge at http://localhost:3000
+pnpm build      # the static site, into system/site/out/
+pnpm preview    # serve what you just built — there is no `start`, see below
 ```
 
 <!-- ksor:pm pnpm -->
+
 No pnpm? Run `npm install -g pnpm` — or `corepack enable pnpm` on Node
 versions that bundle corepack.
 <!-- /ksor:pm -->
+
 The first `pnpm install` also fetches the
 `ksor` tool (pinned in `package.json`) and writes it into your lockfile —
 commit the updated lockfile.
@@ -121,19 +127,18 @@ part of `pnpm dev`. Three steps, and the order is load-bearing: the command
 block is last because it needs both of the things above it. Skip ahead to it
 and `pnpm provision` refuses, naming the config step 1 writes.
 
-**1. Uncomment the `database:` block already in `instance.md`.** It names the
-VARIABLE holding your DSN, never the DSN itself:
+**1. Nothing to configure.** `instance.md` already names the VARIABLE holding
+your DSN — never the DSN itself:
 
 ```yaml
 database:
   dsn_env: KSOR_DB_URL
 ```
 
-Nothing below works until it is there — `pnpm provision` refuses with
-`instance.md declares no database: block`. That is also the whole required
-config: `embedding:` already defaults to Gemini at 1536 dimensions, and leaving
-`retrieval:` out starts you with the abstention gate off and honest about it
-(turn it on afterwards with `ksor calibrate`, once the record is serving).
+That is the whole required config. `embedding:` defaults to Gemini at 1536
+dimensions, and leaving `retrieval:` out starts you with the abstention gate
+off and honest about it — turn it on with `ksor calibrate` once the record is
+serving. Change the variable name here only if you want a different one.
 
 **2. Copy the environment file**, then fill in `KSOR_DB_URL`, `GEMINI_API_KEY`
 and `KSOR_AUTH=disabled-local`:
@@ -212,6 +217,7 @@ the record well-formed (`format-checker`, also `pnpm check`).
 ### A note on the lockfile
 
 <!-- ksor:pm pnpm -->
+
 The committed `pnpm-lock.yaml` covers the site. It cannot cover
 `@panaversity/ksor` itself, because the version pinned in `package.json` is
 stamped by the CLI that scaffolded this project and could not be resolved before
@@ -224,6 +230,7 @@ add CI of your own, note that pnpm turns on `--frozen-lockfile` automatically
 whenever `CI` is set.
 <!-- /ksor:pm -->
 <!-- ksor:pm npm -->
+
 No lockfile ships with this scaffold: npm keeps ONE lock for the whole
 workspace, and the `@panaversity/ksor` version pinned in `package.json` was
 stamped by the CLI that scaffolded this project — it could not be resolved
@@ -238,6 +245,7 @@ equivalent — `.npmrc` here carries the install-script denial half of that
 posture, and this sentence is the disclosure of the half it cannot.
 <!-- /ksor:pm -->
 <!-- ksor:pm bun -->
+
 No lockfile ships with this scaffold: the `@panaversity/ksor` version pinned
 in `package.json` was stamped by the CLI that scaffolded this project — it
 could not be resolved into a lock before it existed. Your FIRST
@@ -257,14 +265,17 @@ An audit of this scaffold reports vulnerabilities in `next`, and will keep
 doing so: a framework that large always has open advisories against whatever
 version you have pinned.
 <!-- ksor:pm npm -->
+
 `npm install` prints the count at the end of every install, so you meet it
 before you have run anything, next to an invitation to run
 `npm audit fix --force`.
 <!-- /ksor:pm -->
 <!-- ksor:pm pnpm -->
+
 pnpm reports it only when you run `pnpm audit`.
 <!-- /ksor:pm -->
 <!-- ksor:pm bun -->
+
 bun reports it only when you run `bun audit`.
 <!-- /ksor:pm -->
 
@@ -285,41 +296,65 @@ machine and in your CI; and any advisory at all if you later add a served route
 and stop exporting. Read what an advisory affects before deciding it is inert —
 the static export is a reason, not a blanket.
 
+## When something refuses you
+
+This project refuses loudly and on purpose. Most of what looks like a failure
+is a rule doing its job — and every refusal names the fix, so the table is a
+map rather than a substitute.
+
+| What you see                                                         | What it means                                                                                                   | What to do                                                                |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `pnpm check` refuses a document                                      | `status: stable` without both `generated` and `ksor.approval`, or an approval earlier than the text it approves | add both keys; approval cannot precede what it approves                   |
+| `pnpm preview` exits `3`                                             | there is no `system/site/out/` yet                                                                              | run the build first                                                       |
+| `start` — missing script | there is none: the site is a static export, so nothing serves it at runtime                                     | `pnpm preview`, or upload the folder                                      |
+| `pnpm serve` refuses to boot                                         | it will not run unauthenticated by accident                                                                     | `KSOR_AUTH=disabled-local` in `.env` for a loopback run                   |
+| a deployed or containerised door refuses `disabled-local`            | it binds `0.0.0.0` — a public bind                                                                              | set `KSOR_AUTH=disabled-public` in the host environment, or configure SSO |
+| the agent answers a question it should decline                       | the abstention gate is off on a fresh record (`abstain OFF`, `gate: "off"`)                                     | `pnpm exec ksor calibrate --instance instance.md`                         |
+| a deployed door serves an empty record                               | deploying does not publish — and a laptop DSN is unreachable from a host                                        | point both at one hosted Postgres, then `pnpm refresh`                    |
+| the home page and `/llms.txt` are empty                              | every document is still a draft — correct, not broken                                                           | approve one and rebuild                                                   |
+| a new document never appears on the built site                       | drafts reach no built surface at all                                                                            | publish it: `status: stable` plus both governance keys                    |
+| an expired document still shows on the site but not through the door | the static build evaluated `stale_after` at build time                                                          | rebuild and redeploy; schedule a rebuild if you use it                    |
+| Vercel: `no services are declared`                                   | Root Directory was auto-filled with `system/site`                                                               | set it to `./`                                                            |
+
 ## The files, explained
 
 Nothing here is decoration, and the dotfiles are not ceremony — each one is a
 different coding agent's way of finding the same working contract.
 
-| Entry                            | What it is                                                                                                                                                                                                                       |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `knowledge/`                     | **the record** — your governed markdown. The product; everything else serves it.                                                                                                                                                 |
-| `system/`                        | the code that serves the record: the site today, more as you need it.                                                                                                                                                            |
+| Entry                            | What it is                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `knowledge/`                     | **the record** — your governed markdown. The product; everything else serves it.                                                                                                                                                                                                                                                            |
+| `system/`                        | the code that serves the record: the site today, more as you need it.                                                                                                                                                                                                                                                                       |
 | `instance.md`                    | what this record is authoritative for; its `name:` is the identity every surface publishes and its `title:` the display title every page leads with (both read at server/build start — restart `pnpm dev` after changing either). Its BODY is the agent surface's system prompt — `ksor serve` wires it into the MCP server's instructions. |
-| `.ksor/governance.yaml`          | **the root of authority** — which audiences exist, who may approve a document, who may take one down. Committed; every governance act is checked against it. |
-| `.ksor/takedowns.yaml`           | the takedown ledger: every withdrawal and every lift, append-only and committed, so the site honours a takedown with no database in the loop. It appears at your first `ksor takedown` — an empty ledger would assert an act nobody performed. |
-| `build.lock.json`                | what the last `ksor build` published — the corpus, the commit, the toolchain — and what every machine surface stamps. Committed; written by `ksor build`, never by hand. |
-| `Dockerfile`, `.dockerignore`    | how the agent surface reaches a host. The Dockerfile names no host; `vercel.json` points at it rather than replacing it, so moving hosts is a redeploy. |
-| `vercel.json`                    | one domain, two services — the static site and the MCP door — for the host this scaffold answers the setup interview for. Delete it if you deploy elsewhere. |
-| `AGENTS.md`                      | the working contract every coding agent reads first — the rules for writing knowledge here.                                                                                                                                      |
-| `CLAUDE.md`                      | one line, pointing at `AGENTS.md`. Claude Code looks for this filename, not that one.                                                                                                                                            |
-| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `make-slides` (generate a presentation from a document and attach it), `make-summary` (write a document's summary and attach it), `format-checker` (the rules, as a program).                                                        |
-| `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                                                                             |
-| `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                                                 |
-| `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                           |
-| `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                            |
-| `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in. |
-| `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history — and negates two paths inside `.ksor/`, because the policy and the ledger ARE the record.                                                          |
-| `package.json`                   | the surface commands — `pnpm dev` (the site) and `pnpm provision` / `pnpm refresh` / `pnpm serve` (the agent surface: set up once, publish, then serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool and the workspace layout the manifest declares.                                                |
+| `.ksor/governance.yaml`          | **the root of authority** — which audiences exist, who may approve a document, who may take one down. Committed; every governance act is checked against it.                                                                                                                                                                                |
+| `.ksor/takedowns.yaml`           | the takedown ledger: every withdrawal and every lift, append-only and committed, so the site honours a takedown with no database in the loop. It appears at your first `ksor takedown` — an empty ledger would assert an act nobody performed.                                                                                              |
+| `build.lock.json`                | what the last `ksor build` published — the corpus, the commit, the toolchain — and what every machine surface stamps. Committed; written by `ksor build`, never by hand.                                                                                                                                                                    |
+| `Dockerfile`, `.dockerignore`    | how the agent surface reaches a host. The Dockerfile names no host; `vercel.json` points at it rather than replacing it, so moving hosts is a redeploy.                                                                                                                                                                                     |
+| `vercel.json`                    | one domain, two services — the static site and the MCP door — for the host this scaffold answers the setup interview for. Delete it if you deploy elsewhere.                                                                                                                                                                                |
+| `AGENTS.md`                      | the working contract every coding agent reads first — the rules for writing knowledge here.                                                                                                                                                                                                                                                 |
+| `CLAUDE.md`                      | one line, pointing at `AGENTS.md`. Claude Code looks for this filename, not that one.                                                                                                                                                                                                                                                       |
+| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `make-slides` (generate a presentation from a document and attach it), `make-summary` (write a document's summary and attach it), `format-checker` (the rules, as a program).                                 |
+| `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                                                                                                                                                                                        |
+| `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                                                                                                                                                            |
+| `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                                                                                                                                                      |
+| `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                                                                                                                                                       |
+| `.env.example`                   | the variables the served rung needs; copy to `.env` (gitignored) and fill in.                                                                                                                                                                                                                                                               |
+| `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history — and negates two paths inside `.ksor/`, because the policy and the ledger ARE the record.                                                                                                                                                                      |
+| `package.json`                   | the surface commands — `pnpm dev` (the site) and `pnpm provision` / `pnpm refresh` / `pnpm serve` (the agent surface: set up once, publish, then serve) — plus `pnpm build` / `pnpm check`, the pinned `@panaversity/ksor` tool and the workspace layout the manifest declares.                                                             |
+
 <!-- ksor:pm pnpm -->
-| `pnpm-workspace.yaml`            | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs.                                                                         |
-| `pnpm-lock.yaml`                 | the exact dependency versions — the reason two machines build the same site.                                                                                                                                                     |
+
+| `pnpm-workspace.yaml` | where the workspace looks for code (`system/site`, plus reserved `system/gateways/*` and `system/packages/*`), and the supply-chain policy for installs. |
+| `pnpm-lock.yaml` | the exact dependency versions — the reason two machines build the same site. |
 <!-- /ksor:pm -->
 <!-- ksor:pm npm -->
-| `.npmrc`                         | dependency install scripts are denied; the comment inside discloses the one protection this scaffold lacks (a 48-hour quarantine on new releases). |
-| `package-lock.json`              | the exact dependency versions — written by your FIRST install; commit it, it is the reason two machines build the same site. |
+
+| `.npmrc` | dependency install scripts are denied; the comment inside discloses the one protection this scaffold lacks (a 48-hour quarantine on new releases). |
+| `package-lock.json` | the exact dependency versions — written by your FIRST install; commit it, it is the reason two machines build the same site. |
 <!-- /ksor:pm -->
 <!-- ksor:pm bun -->
-| `bun.lock`                       | the exact dependency versions — written by your FIRST install; commit it, it is the reason two machines build the same site. |
+
+| `bun.lock` | the exact dependency versions — written by your FIRST install; commit it, it is the reason two machines build the same site. |
 <!-- /ksor:pm -->
 
 `format-checker` deliberately contains a program, `check.mjs`, and not only
@@ -336,16 +371,29 @@ The built site is a folder of files — 2 MB of HTML, JS and CSS with zero
 host-specific dependencies. `pnpm build` writes it to `system/site/out/`,
 and anything that can serve files can serve it.
 
-- **Vercel** — connect the repository (or run `vercel`); the shipped
-  `vercel.json` answers the setup interview: deploy from the repo root
-  (never pin `system/site` as the root directory — the record lives
-  outside it), build with `pnpm build`, serve `system/site/out/`. It also
-  declares the MCP **door** as a second service built from the shipped
-  `Dockerfile`, so `/mcp` and the site share one domain.
+- **Vercel — push, import, and fix one field.**
+
+  1. Push the repository to GitHub.
+  2. Import it in Vercel.
+  3. **Set Root Directory to `./`.** Vercel auto-fills it with `system/site`,
+     because that is where it finds a framework — and then the build reads
+     `system/site/vercel.json`, which does not exist, and fails with
+     `Project framework is set to "services", but no services are declared`.
+     The services ARE declared, in `vercel.json` at the repo root, which is
+     the only place they can be: one builds the site, the other builds a
+     container from the root `Dockerfile`.
+
+  That is the whole setup — the shipped `vercel.json` answers the rest, and
+  `/mcp` and the site end up on one domain. The door additionally needs
+  `KSOR_DB_URL`, `GEMINI_API_KEY` and `KSOR_AUTH=disabled-public` in Vercel's
+  environment; the site alone needs none of them.
+
 <!-- ksor:pm pnpm -->
-  If the build image's pnpm predates the `packageManager` pin, set the
-  `ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
+
+If the build image's pnpm predates the `packageManager` pin, set the
+`ENABLE_EXPERIMENTAL_COREPACK=1` build environment variable.
 <!-- /ksor:pm -->
+
 **`pnpm build` runs `ksor build` first.** It generates every `index.md`,
 runs the record checker, and writes `build.lock.json` — the committed record
 of what was published, from which commit, with which toolchain — and only
