@@ -2,20 +2,20 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-25.
+updated: 2026-08-26.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.40** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.42** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
-`ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`, `ksor takedown`,
-`ksor calibrate` and `ksor gc` all run from the one `ksor` binary. In the
-PUBLISHED package `dev` and `build` both report "designed but not implemented"
-and exit `2`, and there is no `migrate` verb; an unknown verb is refused with
-exit `1` and a stable `error: unknown-verb` stderr slug. The package root
-exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the
-tarball under `docs/`.
+`ksor build`, `ksor migrate`, `ksor serve`, `ksor ingest`, `ksor schema`,
+`ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc` all run from the
+one `ksor` binary. **`ksor dev` is the only verb still unimplemented**: it
+reports "designed but not implemented" and exits `2`. An unknown verb is
+refused with exit `1` and a stable `error: unknown-verb` stderr slug. The
+package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship
+inside the tarball under `docs/`.
 
 0.0.36 emitted the invoking package manager's scaffold (decision 25); 0.0.37
 stated the KSoR architecture in the package README; 0.0.38 added the
@@ -23,10 +23,15 @@ stated the KSoR architecture in the package README; 0.0.38 added the
 aid after a document's introduction; 0.0.39 stopped a malformed
 `KSOR_SNAPSHOT_KEYS` entry echoing its own text into the refusal; 0.0.40 made
 a document's page more readable — an overflowing code block can be unwrapped,
-table rows alternate, and a callout carries a rule down its left edge.
+table rows alternate, and a callout carries a rule down its left edge; **0.0.41
+released the OKF-native record** — the profile, `ksor build`, `ksor migrate`,
+schema 2.5 and the governed door described below; **0.0.42** filled in
+`database.dsn_env` in the emitted `instance.md` so climbing to the served rung
+needs no edit, and recorded decision 29.
 
-**Everything under the next heading is UNRELEASED** — it is the
-`okf-native-spec` branch, and no adopter has any of it yet.
+Everything under the next heading is RELEASED and in adopters' hands as of
+0.0.41. It was developed on the `okf-native-spec` branch, which merged in
+PR #161.
 
 Verified end to end against each published version. The full KERNEL walk was
 last run against **0.0.18** (2026-08-22: fresh `npm install` into a bare
@@ -45,7 +50,7 @@ MCP tools answer · `search` returns cited passages carrying their generation ·
 · snapshot pinning survives a generation flip · both surfaces refuse a
 withdrawn document.
 
-### The record, the CLI and the kernel on the profile (unreleased, branch `okf-native-spec`)
+### The record, the CLI and the kernel on the profile (released in 0.0.41)
 
 `packages/content/src/record/` holds the OKF-native record's foundation
 (`specs/ksor/record/spec.md`; decision 26): the YAML frontmatter splitter,
@@ -256,7 +261,7 @@ deployment:
   and email in the navbar, sign out returning the control. Two different
   identity providers on one deployment, neither named in framework code.
 
-### A record can raise its voice, and a reader can unwrap a line (unreleased)
+### A record can raise its voice, and a reader can unwrap a line (released in 0.0.40)
 
 The document page gains the affordances a written record actually needs, all
 of them defaults in the scaffold rather than things to configure.
@@ -891,13 +896,12 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   ARE implemented and released — the bundled kernel provides them from the one
   `ksor` binary. `serve` runs the MCP server in-process (reads
   `./instance.md`; exits `3` with a remedy when it is missing). `ksor build`
-  and `ksor migrate` are both implemented on the unreleased branch, and the
-  published package answers them DIFFERENTLY: `ksor build` reports "designed
-  but not implemented" and exits `2`, while `migrate` is not in the published
-  vocabulary at all, so it is refused with exit `1` under the stable
-  `error: unknown-verb` slug. The two codes are a contract (product
-  principle 4) — `2` says designed and coming, `1` says this is not a ksor
-  verb — so they are worth stating apart rather than together.
+  and `ksor migrate` are both implemented and released (0.0.41); run outside a
+  record they refuse with exit `1` and `error: ksor-instance-missing`, which is
+  a real verb declining a real state. `ksor dev` is the one verb that still
+  answers "designed but not implemented" with exit `2`. The two codes are a
+  contract (product principle 4) — `2` says designed and coming, `1` says
+  refused — so they are worth stating apart rather than together.
 - `ksor build --bundles` — parses, prints the honest notice, exits `2`. It is
   phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
   its contract: one OKF bundle per registered audience under

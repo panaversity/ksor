@@ -815,7 +815,7 @@ If the capitalization policy does not address the situation, the system should n
 > an honest notice and exits `2`; the scaffold's own `pnpm dev` covers local
 > work until it lands. `ksor build --bundles` is likewise designed and exits
 > `2`. [`docs/status.md`](docs/status.md) is authoritative on which of these
-> are in the RELEASED version, which lags this document.
+> are in the RELEASED version.
 
 ### Requirements
 
@@ -861,7 +861,16 @@ whenever you have edited `knowledge/` — everything is re-runnable, and an
 unchanged corpus costs nothing.
 
 That serves MCP at `http://127.0.0.1:8080/mcp`, announcing its posture as it
-boots (`auth: disabled, abstain gate: OFF (no floor)`).
+boots — an uncalibrated record says so in as many words:
+
+```text
+  auth      DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
+  abstain   OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
+```
+
+`ksor calibrate` measures a floor against your own corpus and prints the two
+lines to paste into `instance.md`; the banner then reads
+`abstain   floor 0.609 — below it, this record abstains`.
 
 Skip `pnpm refresh` and the server comes up with nothing published: every search
 answers `ok: false, reason: "unpublished"` — the record is empty, which is a
