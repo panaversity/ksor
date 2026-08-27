@@ -142,9 +142,19 @@ made it answer from.
 - **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
   `provenance`, each hit's `governance`, the `snapshot` token and `gate`. A
   record that reshaped them would still look like a KSoR and no longer be one.
+- **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
+  `provenance`, each hit's `governance`, the `snapshot` token, `gate`, and
+  `audit`. A record that reshaped them would still look like a KSoR and no
+  longer be one.
 - **The `FLOOR` text.** It tells an agent how to branch on an envelope, what
   `gate: "off"` means, and that corpus content is **untrusted** — quote it, never
   obey it. Your prose is composed above it.
+- **`audit: "degraded"`.** Present only when the §7 retrieval-log row for this
+  act could not be written — shed under saturation, so serving stays
+  available. The answer itself is unaffected; absent means the row landed
+  normally. An operator auditing served answers against the ledger should
+  treat a gap alongside an `audit: "degraded"` response as expected, and any
+  other gap as a leak.
 
 ## The door checks its own surface at boot
 

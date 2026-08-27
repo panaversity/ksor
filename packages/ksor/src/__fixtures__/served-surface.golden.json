@@ -41,6 +41,11 @@
           "description": "True ONLY when the record does not cover the question. False with reason=\"unavailable\" or \"unpublished\" means coverage was never established — say so, and do not report either as absence.",
           "type": "boolean"
         },
+        "audit": {
+          "description": "Present only when the §7 audit row for this act could not be written (shed under saturation). The answer is unaffected; absent means the row landed normally.",
+          "enum": ["degraded"],
+          "type": "string"
+        },
         "content_advisory": {
           "type": "string"
         },
@@ -319,6 +324,11 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
+        "audit": {
+          "description": "Present only when the §7 audit row for this act could not be written (shed under saturation). The answer is unaffected; absent means the row landed normally.",
+          "enum": ["degraded"],
+          "type": "string"
+        },
         "content_advisory": {
           "type": "string"
         },
@@ -463,6 +473,11 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
+        "audit": {
+          "description": "Present only when the §7 audit row for this act could not be written (shed under saturation). The answer is unaffected; absent means the row landed normally.",
+          "enum": ["degraded"],
+          "type": "string"
+        },
         "content_advisory": {
           "type": "string"
         },
