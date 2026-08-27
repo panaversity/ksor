@@ -27,6 +27,12 @@ import process from "node:process";
 
 const ROOT = path.resolve(import.meta.dirname, "out");
 const PORT = Number(process.env.PORT ?? 3000);
+if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
+  // `Number("abc")` is NaN, and `listen(NaN)` binds an arbitrary free port
+  // while the log prints `http://localhost:NaN` — a server you cannot find.
+  console.error(`preview: PORT must be a port number, got ${JSON.stringify(process.env.PORT)}`);
+  process.exit(3);
+}
 
 const TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -64,16 +70,23 @@ function resolve(urlPath) {
     // cannot parse is a request that resolves to nothing.
     return null;
   }
-  // Contain every request inside the export: a `..` that resolves outside it
-  // is refused rather than served, even in a preview.
+  // Contain every request inside the export: a `..` that resolves outside it —
+  // raw or percent-encoded — is refused rather than served, even in a preview.
+  // The check is LEXICAL, so it bounds paths and not the filesystem: a symlink
+  // INSIDE `out/` still leads wherever it points, because `statSync` follows it
+  // and these are strings. A Next export authors no symlinks, so that is a
+  // stated limit rather than a known hole; `realpathSync` on the winner is what
+  // would close it if an export ever carries one.
   const target = path.resolve(ROOT, `.${decoded}`);
   if (target !== ROOT && !target.startsWith(ROOT + path.sep)) return null;
 
   for (const candidate of [target, path.join(target, "index.html"), `${target}.html`]) {
-    // `${target}.html` is the ONE candidate that can sit outside the check
-    // above: for `/`, target IS the root and the sibling `out.html` would be
-    // read. Containment is asserted per candidate rather than once, so the
-    // shapes we try can never outrun the rule they are tried under.
+    // `${target}.html` is the one candidate that can sit outside the check
+    // above: whenever the target IS the root — `/`, `/.`, `/x/..` — it names
+    // the sibling `out.html`. Reachable only when the export has no
+    // `index.html` (candidate 2 wins otherwise), which is why the test builds
+    // an export without one. Containment is asserted per candidate rather than
+    // once, so the shapes we try can never outrun the rule they are tried under.
     if (candidate !== ROOT && !candidate.startsWith(ROOT + path.sep)) continue;
     try {
       if (statSync(candidate).isFile()) return candidate;
@@ -84,14 +97,40 @@ function resolve(urlPath) {
   return null;
 }
 
+/**
+ * Stream a file, and survive it failing to open.
+ *
+ * `pipe()` attaches an 'error' listener to the DESTINATION, never to the
+ * source — so an error on the read stream has no listener and becomes an
+ * uncaught exception, which is the same way a malformed URL used to end this
+ * process. `statSync().isFile()` above does not make the later `open()` safe:
+ * the file can go between the two, and it does, in the ordinary loop this
+ * command exists for — the adopter leaves `preview` running and rebuilds in
+ * another pane, the export is torn down and rewritten, and an asset the open
+ * page re-requests is gone (`ENOENT`). A mode-000 file anywhere in the export
+ * is the same crash with no timing at all (`EACCES`, reproduced).
+ */
+function send(res, file, status, type) {
+  const stream = createReadStream(file);
+  stream.on("error", (error) => {
+    // The headers are already out, so there is no status left to send: end the
+    // body and keep serving. A preview that dies mid-asset is worse than one
+    // that serves a short page — but a silently truncated page is its own kind
+    // of lie, so the reason goes to the console where the adopter is watching.
+    console.error(`preview: could not read ${path.relative(ROOT, file)} — ${error.message}`);
+    res.end();
+  });
+  res.writeHead(status, { "content-type": type });
+  stream.pipe(res);
+}
+
 createServer((req, res) => {
   const file = resolve(req.url ?? "/");
   if (file === null) {
     const notFound = path.join(ROOT, "404.html");
     try {
       statSync(notFound);
-      res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
-      createReadStream(notFound).pipe(res);
+      send(res, notFound, 404, "text/html; charset=utf-8");
       return;
     } catch {
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
@@ -99,11 +138,28 @@ createServer((req, res) => {
       return;
     }
   }
-  res.writeHead(200, {
-    "content-type": TYPES.get(path.extname(file)) ?? "application/octet-stream",
+  send(res, file, 200, TYPES.get(path.extname(file)) ?? "application/octet-stream");
+})
+  .on("error", (error) => {
+    // Errors are documentation. Without this an occupied port is a raw
+    // `EADDRINUSE` stack trace — and the port most likely to be occupied is
+    // 3000, which `dev` also defaults to, so "I ran preview after dev" is the
+    // common case rather than an edge one.
+    if (error.code === "EADDRINUSE") {
+      console.error(`preview: port ${PORT} is already in use — set PORT to a free one.`);
+      console.error("  `dev` uses 3000 too, so stop it first or run `PORT=3001 preview`.");
+    } else {
+      console.error(`preview: could not listen on ${PORT} — ${error.message}`);
+    }
+    process.exit(3);
+  })
+  // Loopback explicitly. The line below has always said `localhost`, and an
+  // omitted host binds every interface — so the export, and any draft in it,
+  // was reachable from the whole network while the log promised otherwise.
+  // This is a preview; it binds where it says it binds.
+  .listen(PORT, "127.0.0.1", () => {
+    console.log(
+      `preview: serving ${path.relative(process.cwd(), ROOT)} on http://localhost:${PORT}`,
+    );
+    console.log("  this is the STATIC EXPORT — the same bytes a host would serve.");
   });
-  createReadStream(file).pipe(res);
-}).listen(PORT, () => {
-  console.log(`preview: serving ${path.relative(process.cwd(), ROOT)} on http://localhost:${PORT}`);
-  console.log("  this is the STATIC EXPORT — the same bytes a host would serve.");
-});
