@@ -78,3 +78,54 @@ describe("renderSchema against the shipped DDL", () => {
     expect(() => renderSchemaText(drifted, 768)).toThrowError(/expected the vector\(1536\)/);
   });
 });
+
+/**
+ * Role creation must survive two applies at once — asserted on the DDL's SHAPE,
+ * because the live race is unreachable wherever the roles already exist.
+ *
+ * Roles are CLUSTER-GLOBAL, so `IF NOT EXISTS ... THEN CREATE ROLE` is
+ * check-then-act across every database on the instance. Measured on Postgres
+ * 17.7 against an empty cluster: six concurrent applies, FIVE failed. Two
+ * `ksor schema --apply` runs, or two `pnpm test:db` runs, are all it takes
+ * (issue #166).
+ *
+ * `schema-concurrency.db.test.ts` races it for real, and SKIPS wherever the
+ * roles cannot be dropped — which is most developer machines. So this is the
+ * guard that always runs: it pins the two properties the fix depends on, and
+ * both are easy to undo by tidying.
+ */
+describe("concurrent applies cannot lose a role", () => {
+  const roleBlocks = (): string[] =>
+    [...readFileSync(schemaSqlPath(), "utf8").matchAll(/DO \$\$[\s\S]*?END \$\$;/g)]
+      .map((m) => m[0])
+      .filter((block) => /CREATE ROLE/.test(block));
+
+  it("creates each role in its OWN block", () => {
+    // One block per role, because a `DO` block is a single statement: an
+    // exception anywhere in it rolls the whole block back, so a loser on the
+    // first role would never create the other two — and the GRANTs below would
+    // then name roles that do not exist.
+    const blocks = roleBlocks();
+    for (const block of blocks) {
+      const created = [...block.matchAll(/CREATE ROLE/g)].length;
+      expect(created, `a block creates ${created} roles:\n${block}`).toBe(1);
+    }
+    expect(blocks.length, "one block per role the DDL grants against").toBe(3);
+  });
+
+  it("tolerates BOTH SQLSTATEs a lost race raises", () => {
+    // `unique_violation` (23505) on pg_authid_rolname_index is what Postgres
+    // 17.7 actually raised in the measured run — NOT `duplicate_object`
+    // (42710), which is the intuitive one to catch and is not sufficient on its
+    // own. Which surfaces depends on where the loser lands, so both are named.
+    for (const block of roleBlocks()) {
+      expect(block, `role block without an exception handler:\n${block}`).toMatch(/EXCEPTION/);
+      expect(block, `role block does not tolerate unique_violation:\n${block}`).toMatch(
+        /unique_violation/,
+      );
+      expect(block, `role block does not tolerate duplicate_object:\n${block}`).toMatch(
+        /duplicate_object/,
+      );
+    }
+  });
+});
