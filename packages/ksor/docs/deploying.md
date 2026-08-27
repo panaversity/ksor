@@ -133,54 +133,51 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > every dashboard import until Vercel's detection changes — the layout that
 > triggers it, code under `system/`, is decision 8 and is not moving.
 >
-> **A deployment can report Ready and serve nothing.** This is the failure to
-> know about, and — stated plainly because a wrong cause is worse than none —
-> **its cause is not established.**
+> ---
 >
-> **That failure is silent, and it is worse than a missing `/mcp`.** The install
-> runs, `ksor build` runs, every route prerenders, and then Vercel collects
-> nothing: the deployment reports **Ready**, takes the production alias, and
-> serves `404: NOT_FOUND` at every path — `llms.txt` included. The only signal
-> anywhere is one line in the build log:
+> **The emitted `vercel.json` is verified working on the Git path.** Measured on
+> two live Git-linked projects, 2026-08-27: both built the `services` block's
+> `site` and `door`, and both serve — `/` 200, `/llms.txt` 200, and `/mcp` 405,
+> which is the door answering "Method Not Allowed" to a GET rather than a static
+> 404, and is how you tell the door is routed at all.
 >
-> ```
-> WARNING! Build output contains no "functions" or "static" directory;
-> the build may not have produced any deployable output.
-> ```
->
-> If you are reading that line, this is what you have. Observed on a 205-document
-> record, 2026-08-26 (issue #197).
->
-> **The Application Preset is NOT the cause, and it is worth saying so because
-> it is the first thing everyone suspects.** Measured on two live Git-linked
-> projects, 2026-08-27:
+> **It does not depend on the Application Preset**, which is the first thing
+> everyone suspects and the reason to say so:
 >
 > | project's preset | `services` block built | serves                                 |
 > | ---------------- | ---------------------- | -------------------------------------- |
 > | `Services`       | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
 > | `Other`          | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
 >
-> A project whose preset reads `Other` honoured the `services` block and built
-> both services. (`405` on a GET to `/mcp` is the door answering "Method Not
-> Allowed", not a static 404 — it is how you tell the door is routed.) So do not
-> spend an evening on the preset field.
+> **One failure has been seen that none of this explains.** On a 205-document
+> record (2026-08-26, issue #197) the install ran, `ksor build` ran, every route
+> prerendered — and Vercel collected nothing. The deployment reported **Ready**,
+> took the production alias, and served `404: NOT_FOUND` at every path,
+> `llms.txt` included. The only signal anywhere was one build-log line:
 >
-> **Setting the project's own build fields does not fix it either.** Patching
-> `outputDirectory`, `buildCommand` and `installCommand`, confirming the values
-> read back, then creating a fresh Git-sourced production deployment — not a
-> redeploy, which reuses the original settings snapshot and proves nothing —
-> produced the same warning, the same empty output and the same 404. For those
-> three keys, `vercel.json` wins over the project's fields.
+> ```
+> WARNING! Build output contains no "functions" or "static" directory;
+> the build may not have produced any deployable output.
+> ```
 >
-> **What to check first, in order:** the **Root Directory** (above — an import
-> auto-fills `system/site`, and the build then reads a `vercel.json` that does
-> not exist), then whether the repository root really is what the builder
-> received. If neither explains it, the classic-keys form below is the fallback
-> that is known to work, and please add what you found to issue #197 — the
-> reported case has not been reproduced.
+> **Its cause is not established**, and that is written here rather than guessed
+> at, because a wrong cause costs the reader the evening the right one would
+> have saved. What is ruled out: the preset (above), and the project's own
+> `outputDirectory` / `buildCommand` / `installCommand` — patching all three,
+> confirming they read back, and taking a fresh Git-sourced production
+> deployment (not a redeploy, which reuses the original settings snapshot)
+> produced the same warning and the same 404.
 >
-> **If it still argues, deploy the site alone** — replace the `services` block in
-> `vercel.json` with the classic top-level keys, which need no preset:
+> If you hit it, the one thing worth checking is the **Root Directory** above,
+> because it is the one mechanism known to make a build read a `vercel.json`
+> that is not there — though it normally fails LOUDLY, so it would be a
+> different shape of the same cause rather than a match. Then please add what
+> you saw to issue #197, with the deployment's `services` array from the API if
+> you can: empty means the block genuinely was not read, populated moves the
+> search elsewhere.
+>
+> **The fallback, if you need to ship before that is answered:** replace the
+> `services` block with the classic top-level keys.
 >
 > ```json
 > {
@@ -194,7 +191,7 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > Verified live on the same repository and machine: root `200`, `llms.txt` with
 > every entry, deep pages `200`, `source_commit` stamped.
 >
-> **This moves the door off your domain, and two values have to move with it.**
+> **It moves the door off your domain, and two values have to move with it.**
 > The classic keys cannot express two services — which is the whole reason the
 > emitted file uses `services` — so dropping the block also drops the rewrites
 > for `/mcp`, `/health`, `/ready` and `/.well-known/oauth-protected-resource`.

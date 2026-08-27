@@ -24,9 +24,9 @@ so it is searchable, and record two things verified live on a 205-document recor
 `installCommand` and taking a fresh Git-sourced deployment does **not** fix it —
 `vercel.json` is what Vercel reads — and replacing the `services` block with the
 classic top-level keys does. Two earlier sentences were corrected rather than
-extended: the docs said a wrong preset meant "`/mcp` never exists" (it means the
-whole site is empty), and offered a site-only fallback as project settings (which
-cannot override `vercel.json`).
+extended: the docs said a wrong preset meant "`/mcp` never exists", which asserted a
+mechanism now measured false, and offered a site-only fallback as project
+settings, which cannot override `vercel.json`.
 
 **And `source: unspecified` now names both of its causes.** Only one is "you
 never made a repository"; the other is a record that IS committed and pushed, on

@@ -280,14 +280,14 @@ is not, and it is the one that fails without saying so:
 - **A deployment can report Ready and serve nothing.** The build succeeds,
   Vercel collects nothing, and the deployment takes your domain and answers
   `404: NOT_FOUND` everywhere — with one build-log line as the only signal:
-  `WARNING! Build output contains no "functions" or "static" directory`. It has
-  been seen once, on a large record, and **the cause is not established** — so
-  check the **Root Directory** first (an import auto-fills `system/site`, and
-  the build then reads a `vercel.json` that is not there). It is *not* the
-  Application Preset: a Git-linked project reading `Other` was measured building
-  both services and serving them. The full diagnosis, and the classic-keys
-  `vercel.json` that is known to work, are in
-  `node_modules/@panaversity/ksor/docs/deploying.md`.
+  `WARNING! Build output contains no "functions" or "static" directory`. Seen
+  once, on a large record, and **the cause is not established**; it is *not* the
+  Application Preset, which was measured. The emitted `vercel.json` itself is
+  verified working on the Git path. If you hit this, the fallback is the
+  classic-keys form in `node_modules/@panaversity/ksor/docs/deploying.md` — read
+  it there rather than guessing, because it **moves the door off your domain**
+  and `KSOR_MCP_RESOURCE_URL` and your SSO API Identifier both have to move with
+  it.
 - **`disabled-local` will not deploy.** The container sets `$PORT`, so the door
   binds `0.0.0.0` — a PUBLIC bind — and refuses that value by design, saying so
   in as many words. `disabled-public` is you saying you know the door is

@@ -245,7 +245,9 @@ ${body}
       for (const candidate of [target, path.join(target, "index.html"), `${target}.html`]) {
         // Per CANDIDATE, not once per request: `${target}.html` for `/` is the
         // sibling `out.html`, outside the export, and a single check on
-        // `target` would have waved it through.
+        // `target` would have waved it through. The shipped `preview.mjs` still
+        // checks once; #202 brings it here, along with surviving a decode that
+        // throws — so this stand-in is briefly STRICTER than its reference.
         if (candidate !== root && !candidate.startsWith(root + path.sep)) continue;
         try {
           const body = readFileSync(candidate);
