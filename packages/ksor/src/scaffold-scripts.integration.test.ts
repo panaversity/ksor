@@ -191,3 +191,50 @@ describe("the scaffold's npm scripts are all reachable", () => {
     }
   });
 });
+
+/**
+ * The site's PRODUCTION build compiles with webpack, not Turbopack.
+ *
+ * Under the pinned Next 16.2.9, a bare `next build` means Turbopack, which
+ * evaluates the Tailwind PostCSS transform in a separate process and waits on
+ * a deadline for the reply. On Vercel's DEFAULT build machine (4 cores, 8 GB)
+ * that process stops answering once a record is large enough to prerender a
+ * few hundred routes: measured on a real 205-document record — 435 routes —
+ * the build ran ~7 minutes and died with `FATAL: An unexpected Turbopack
+ * error occurred … timeout while receiving message from process`, blaming
+ * `/icon.png/route`, which is not the problem. `next build --webpack` — a
+ * supported Next 16 flag, not a workaround — compiled the same record on the
+ * same machine class in 86s (issue #196).
+ *
+ * Nothing else goes red when this regresses: the 5-document starter every
+ * suite here builds is far under the size that triggers it, so the failure
+ * ships and surfaces only in an adopter's deploy. That is what this assertion
+ * is for.
+ *
+ * `dev` stays on Turbopack deliberately — the failure is production-only,
+ * where every route is prerendered at once, and `next.config.mjs` keeps its
+ * `turbopack.root` for that path.
+ */
+describe("the emitted site builds with webpack, never Turbopack", () => {
+  const site = JSON.parse(
+    readFileSync(
+      path.join(here, "..", "templates", "scaffold", "system", "site", "package.json"),
+      "utf8",
+    ),
+  ) as { scripts: Record<string, string> };
+
+  it("the production build passes --webpack", () => {
+    expect(
+      site.scripts["build"],
+      "a bare `next build` is Turbopack under Next 16, which dies on Vercel's " +
+        "default machine once a record prerenders a few hundred routes (#196)",
+    ).toContain("--webpack");
+  });
+
+  it("dev is left on Turbopack", () => {
+    expect(
+      site.scripts["dev"],
+      "the deadline failure is production-only; dev keeps the faster compiler",
+    ).not.toContain("--webpack");
+  });
+});

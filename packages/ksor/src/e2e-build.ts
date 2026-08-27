@@ -1,25 +1,21 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 
 /**
- * `pnpm build` for a scaffolded site, with ONE retry on a known upstream
- * Turbopack flake and nothing else.
+ * `pnpm build` for a scaffolded site. One spawn, no retry.
  *
- * Turbopack's static-image metadata pipeline intermittently fails a production
- * build with `TurbopackInternalError: Input image not found` — the scaffold's
- * home page imports `app/icon.png` as its mark, and that `StructuredImageFileSource`
- * read is nondeterministic under the conformance suites' repeated builds (the
- * same scaffold builds clean on a retry; observed 2026-08-19). The retry fires
- * ONLY on that exact signature, so a real build break still fails on the first
- * try. The DURABLE fix is scaffold-side (drop the static image import) and is
- * an owner call — this keeps the browser CI job reliable meanwhile.
+ * This carried a retry on `TurbopackInternalError: Input image not found` —
+ * Turbopack's static-image metadata pipeline intermittently failing to read
+ * the scaffold's `app/icon.png` mark under the conformance suites' repeated
+ * builds (observed 2026-08-19) — and the comment beside it said the durable
+ * fix was scaffold-side and an owner call. It is now taken: the emitted site
+ * builds with `next build --webpack` (issue #196), so that pipeline is not on
+ * this path at all and the retry could never fire again.
+ *
+ * The retry goes with it rather than staying as a harmless leftover, because
+ * a retry is only harmless while it is the thing that fires. If Turbopack ever
+ * returns to the production build, this suite going red on the first attempt is
+ * what says so; a shim retrying quietly is what stopped it saying so before.
  */
-const TURBOPACK_IMAGE_FLAKE = /TurbopackInternalError|Input image not found/;
-
 export function buildScaffold(cwd: string, env?: Record<string, string>): SpawnSyncReturns<string> {
-  const once = (): SpawnSyncReturns<string> =>
-    spawnSync("pnpm", ["build"], { cwd, encoding: "utf8", env: { ...process.env, ...env } });
-  const first = once();
-  if (first.status === 0) return first;
-  const output = `${first.stdout ?? ""}\n${first.stderr ?? ""}`;
-  return TURBOPACK_IMAGE_FLAKE.test(output) ? once() : first;
+  return spawnSync("pnpm", ["build"], { cwd, encoding: "utf8", env: { ...process.env, ...env } });
 }
