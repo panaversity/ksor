@@ -49,6 +49,11 @@ the question — that is what made the last version unanswerable.
 **3 of 3 — Who signs off on a document, and who can take one down?**
 
 > Names or handles, not job titles. If it is just you, say so.
+>
+> Ask for the NATURAL NAME — "Bashir Aziz", not "bashiraziz". The handle is
+> derived by stripping whitespace and lowercasing ("Bashir Aziz" → `bashiraziz`),
+> and the natural name is written to `.ksor/people.yaml` so the site can print
+> it in place of the handle on every page.
 
 ---
 
@@ -120,7 +125,7 @@ never an email address.
   climb, not part of this interview). The strictness answer from question 5
   is the intent behind the `retrieval.vector_floor` on that climb, measured
   by `ksor calibrate` — capture it in the prose now so it is ready.
-- Write `.ksor/governance.yaml` from questions 6 and 7: `version: "0.1"`,
+- Write `.ksor/governance.yaml` from question 3: `version: "0.1"`,
   the `audiences:` registry if there is one, and the two authority sets with
   real actors. That file is the root of authority — every approval, every
   deprecation and every ledger entry is checked against it. **Keep
@@ -128,6 +133,15 @@ never an email address.
   document is still in `knowledge/`.** Those five are approved by it, so a
   policy rewritten without it refuses the next build by name
   (`ksor-approver-unauthorised`). It leaves when the last sample does.
+- Write `.ksor/people.yaml` from question 3: `version: "0.1"` and every
+  natural name the owner named, one per line under `people:`. Nothing else —
+  the handle for each entry is derived (`name.replace(/\s+/g, "").toLowerCase()`),
+  and the site looks it up at render time so pages read "Owner · Bashir Aziz"
+  instead of "Owner · human:bashiraziz". Every skill that records a governance
+  act (this one, add-sources for `verified:` entries, `ksor takedown` for
+  withdrawals) asks the owner for a natural name whenever it is about to write
+  a handle that isn't in `people.yaml` yet — the owner is the only source of a
+  display name, never a convention-based guess.
 - **Offer to start replacing the starter documents — they are already
   published.** All five ship `status: stable`, approved by
   `ksor-starter/KSOR-STAMP-VERSION`, so the site and `llms.txt` carry them from

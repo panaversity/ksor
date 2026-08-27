@@ -4,6 +4,7 @@
 # cannot be negated, so the glob is `.ksor/*`.
 .ksor/*
 !.ksor/governance.yaml
+!.ksor/people.yaml
 !.ksor/takedowns.yaml
 
 node_modules/

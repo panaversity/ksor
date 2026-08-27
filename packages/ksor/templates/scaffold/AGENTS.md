@@ -33,6 +33,14 @@ written by `ksor takedown` — every entry's actor is checked against the
 policy, so a line appended by hand is refused exactly as the verb would refuse
 it, and a deleted line is refused by `ksor build` against the file's history.
 
+Display names for those actors live in `.ksor/people.yaml`, a small phone
+book: one natural name per line, and the site looks it up at render time so a
+page reads "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz". The
+rule is one-way — names go in, handles come out (`name.replace(/\s+/g, "").toLowerCase()`),
+never the reverse — so the intake and add-sources skills write to it and the
+owner never edits it by hand. A handle with no entry renders unchanged, and
+the next governance skill asks the owner for a name to add.
+
 ## Critical rules
 
 1. **The site never contains authored content.** Knowledge goes in

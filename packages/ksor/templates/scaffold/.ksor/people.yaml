@@ -1,0 +1,18 @@
+# Natural names for the handles this record cites. The site looks a handle up
+# here at render time and shows the natural name in its place — so a page reads
+# "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz".
+#
+# ONE-WAY RULE. Names go in, handles come out. Never the reverse. The intake
+# and add-sources skills write to this file; the owner never edits it by hand.
+# If a handle appears anywhere in the record and no entry here matches it, the
+# site prints the raw handle unchanged and the next governance skill asks the
+# owner what name to display.
+#
+# The handle for each entry is derived from the natural name: strip whitespace,
+# lowercase. "Bashir Aziz" → `bashiraziz`; "Tariq Abdul Wadood" → `tariqabdulwadood`.
+#
+# This file is optional. An owner who prefers not to publish a natural name can
+# leave `people:` empty — the site renders the raw handle exactly as it did
+# before this file existed.
+version: "0.1"
+people: []
