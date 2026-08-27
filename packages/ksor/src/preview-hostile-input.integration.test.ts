@@ -19,7 +19,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import net from "node:net";
-import { tmpdir } from "node:os";
+import os, { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +34,9 @@ const roots: string[] = [];
 afterAll(() => {
   for (const child of started.splice(0)) child.kill();
   for (const root of roots.splice(0)) {
-    // A mode-000 fixture file cannot be removed until it is readable again.
+    // Restore the mode-000 fixture. NOT because `unlink` needs it — that wants
+    // write+execute on the PARENT directory and ignores the file's own mode —
+    // but so a developer poking at a leftover tmpdir is not blocked by it.
     try {
       chmodSync(path.join(root, "out", "locked.txt"), 0o644);
     } catch {
@@ -71,6 +73,8 @@ async function freePort(): Promise<number> {
 interface Fixture {
   readonly base: string;
   readonly child: ChildProcess;
+  /** Everything the child has written to stderr so far. */
+  readonly errText: () => string;
 }
 
 /** A preview server over an export built to order. `index` false omits `out/index.html`. */
@@ -102,7 +106,6 @@ async function preview(opts: { index: boolean; locked?: boolean }): Promise<Fixt
   // assert the server EXPLAINED itself rather than merely surviving.
   let errText = "";
   child.stderr?.on("data", (b: Buffer) => (errText += b.toString()));
-  Object.defineProperty(child, "errText", { get: () => errText });
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`preview did not start: ${errText}`)), 15_000);
     child.stdout?.on("data", (b: Buffer) => {
@@ -116,7 +119,7 @@ async function preview(opts: { index: boolean; locked?: boolean }): Promise<Fixt
       reject(new Error(`preview exited before it served (${String(code)}): ${errText}`));
     });
   });
-  return { base: `http://127.0.0.1:${port}`, child };
+  return { base: `http://127.0.0.1:${port}`, child, errText: () => errText };
 }
 
 /** The status, or null when the connection failed — which is what a dead server looks like. */
@@ -168,20 +171,29 @@ describe("the preview server survives what a browser and a scanner send it", () 
     }
   }, 60_000);
 
-  it("survives a file it cannot READ, and says why", async () => {
-    // The other half of the same crash: `pipe()` never listens on the source,
-    // so `EACCES` on open was an uncaught exception. Reproduced before the fix.
-    const { base, child } = await preview({ index: true, locked: true });
-    expect(
-      await status(base, "/locked.txt"),
-      "an unreadable file must not be fatal",
-    ).not.toBeNull();
-    expect(await status(base, "/"), "the server is still answering after it").toBe(200);
-    expect(
-      (child as unknown as { errText: string }).errText,
-      "a truncated response must explain itself rather than arrive silently",
-    ).toContain("could not read");
-  }, 60_000);
+  // Root holds CAP_DAC_OVERRIDE, so `open()` on a mode-000 file succeeds and no
+  // EACCES is raised — the fixture would not apply and the suite would go red
+  // for a reason that reads as "the fix is broken". CI runs as `runner`, not
+  // root; this is for a developer inside a root dev container.
+  it.skipIf(process.getuid?.() === 0)(
+    "survives a file it cannot READ, and says why",
+    async () => {
+      // The other half of the same crash: `pipe()` never listens on the source,
+      // so `EACCES` on open was an uncaught exception. Reproduced before the fix.
+      const { base, errText } = await preview({ index: true, locked: true });
+      // 500, NOT 200-with-an-empty-body: the head is written on the stream's
+      // 'open', so a file that never opens can still answer honestly. Writing it
+      // first produced a complete, valid, EMPTY 200 — the same silent lie one
+      // layer down.
+      expect(await status(base, "/locked.txt"), "an unreadable file answers 500").toBe(500);
+      expect(await status(base, "/"), "the server is still answering after it").toBe(200);
+      expect(
+        errText(),
+        "a truncated response must explain itself rather than arrive silently",
+      ).toContain("could not read");
+    },
+    60_000,
+  );
 
   it("refuses a percent-encoded traversal, written raw onto the socket", async () => {
     const { base } = await preview({ index: true });
@@ -210,5 +222,87 @@ describe("the preview server survives what a browser and a scanner send it", () 
     // The export itself is still reachable, so "refused" cannot be confused
     // with "broken".
     expect(await status(base, "/marker.txt"), "the export is still served").toBe(200);
+  }, 60_000);
+});
+
+/**
+ * The three refusals and the bind — advertised in the changeset, and until now
+ * asserted nowhere. Each spawns the shipped file directly rather than through
+ * `preview()`, because what is under test is that it never reaches "serving".
+ */
+describe("the preview server refuses a bad environment, and says which", () => {
+  /** Spawn the shipped preview against a throwaway export and collect its ending. */
+  async function spawnPreview(env: Record<string, string>): Promise<{
+    code: number | null;
+    err: string;
+  }> {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-preview-env-"));
+    roots.push(root);
+    copyFileSync(PREVIEW, path.join(root, "preview.mjs"));
+    mkdirSync(path.join(root, "out"), { recursive: true });
+    writeFileSync(path.join(root, "out", "index.html"), "<!doctype html>\n");
+    const child = spawn(process.execPath, [path.join(root, "preview.mjs")], {
+      cwd: root,
+      env: { ...process.env, ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    started.push(child);
+    let err = "";
+    child.stderr?.on("data", (b: Buffer) => (err += b.toString()));
+    const code = await new Promise<number | null>((resolve) => child.on("exit", resolve));
+    return { code, err };
+  }
+
+  // `Number("")` and `Number(" ")` are 0, and `Number("abc")` is NaN. All three
+  // used to reach `listen()`, bind an arbitrary port, and print a URL that
+  // cannot connect — which is the defect the guard exists for, so the guard has
+  // to cover them and not just the obvious one.
+  it.each(["abc", "", " ", "0", "70000", "-1"])(
+    "refuses PORT=%j with exit 3 and names the value",
+    async (port) => {
+      const { code, err } = await spawnPreview({ PORT: port });
+      expect(code, `PORT=${JSON.stringify(port)}: ${err}`).toBe(3);
+      expect(err, "the refusal quotes what it was given").toContain("PORT must be a port number");
+    },
+    30_000,
+  );
+
+  it("refuses an occupied port with exit 3, and names the dev collision", async () => {
+    const holder = createServer();
+    const port = await new Promise<number>((resolve) =>
+      holder.listen(0, "127.0.0.1", () => {
+        const a = holder.address();
+        resolve(typeof a === "object" && a !== null ? a.port : 0);
+      }),
+    );
+    try {
+      const { code, err } = await spawnPreview({ PORT: String(port) });
+      expect(code, err).toBe(3);
+      expect(err, "an occupied port must not be a raw EADDRINUSE trace").toContain(
+        "already in use",
+      );
+      expect(err, "and it names why 3000 is the one you hit").toContain("dev");
+    } finally {
+      await new Promise<void>((resolve) => holder.close(() => resolve()));
+    }
+  }, 30_000);
+
+  it("binds loopback by default, and HOST is the way out", async () => {
+    // The bind is a behaviour change to a shipped file: it was every interface
+    // while the log said `localhost`. Asserted from a non-internal address so
+    // "refused" cannot be confused with "not running".
+    const external = Object.values(os.networkInterfaces())
+      .flatMap((entries) => entries ?? [])
+      .find((entry) => entry.family === "IPv4" && !entry.internal);
+    const { base } = await preview({ index: true });
+    expect(await status(base, "/"), "loopback still serves").toBe(200);
+    if (external === undefined) return; // nothing to reach it from
+    const port = new URL(base).port;
+    const reachable = await fetch(`http://${external.address}:${port}/`)
+      .then(() => true)
+      .catch(() => false);
+    expect(reachable, `${external.address}:${port} must NOT answer — the log says localhost`).toBe(
+      false,
+    );
   }, 60_000);
 });

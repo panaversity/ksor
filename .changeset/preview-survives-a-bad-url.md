@@ -21,18 +21,35 @@ instead of a page.
   export is torn down and a page re-requests an asset that has gone.
 
 A request that cannot be parsed now resolves to nothing, which is what the 404
-path is for. A file that fails to open ends the response and **says why on the
-console**, because a silently truncated page is its own kind of lie.
+path is for. And a file that fails to open answers **500 with a reason**, not a
+blank page: the response head is written on the read stream's `open` event
+rather than before it, so a file that never opens can still be answered
+honestly. Writing it first would have produced a complete, valid, EMPTY `200` —
+which a browser renders as a blank page and `fetch().text()` reports as `""` —
+and that is the same silent lie this change exists to stop telling, one layer
+down. A failure PART WAY through, where the head is already out and no status
+is left to send, destroys the connection instead of ending it cleanly, so the
+client sees a truncated response because that is what happened. Either way the
+reason goes to the console.
 
 **Two more failures now explain themselves** instead of arriving as stack
 traces: an occupied port names the collision — `dev` defaults to 3000 as well —
-and a `PORT` that is not a number is refused, where before it became `NaN`,
-bound an arbitrary free port, and printed `http://localhost:NaN`.
+and a `PORT` that is not a port number is refused. That covers more than the
+obvious case: `Number("")` and `Number(" ")` are `0`, so an unset `PORT=` in a
+shell or a compose file used to bind an arbitrary port and print
+`http://localhost:0`, exactly as `PORT=abc` printed `:NaN`.
 
 **And the server binds where it says it binds.** `listen(PORT)` with no host
-binds every interface while the log has always printed `localhost`, so the
-export — drafts included — was reachable from the whole network. It is loopback
-now.
+binds every interface while the log has always printed `localhost`, so the built
+export was reachable from the whole network. It is loopback now, with `HOST` as
+the way out for the cases where reaching it from elsewhere is the point — a
+container published with `-p`, a cloud dev box, or the built site on a phone.
+
+Stated precisely, because a governance claim is the one thing not to overstate:
+a DEFAULT build carries no drafts at all (record spec §2.5 admits them to no
+surface of a build), so what was exposed is the published record, and drafts
+only where someone had built with `KSOR_DRAFTS=show`. `pnpm dev`, which is where
+drafts do live, is `next dev` and unchanged by this.
 
 Alongside this, the containment check moved from once-per-request to
 per-candidate. `resolve()` tries three filename shapes, and the third,
