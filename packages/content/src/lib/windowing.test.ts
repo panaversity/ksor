@@ -8,13 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  cleanCut,
-  codePointLength,
-  estTokens,
-  windowDocument,
-  type DocumentChunk,
-} from "./windowing.js";
+import { codePointLength, estTokens, windowDocument, type DocumentChunk } from "./windowing.js";
 
 const mk = (ordinal: number, headingPath: string, content: string): DocumentChunk => ({
   ordinal,
@@ -229,22 +223,6 @@ const GOLDENS: Record<string, GoldenCase> = {
 
 // clean_cut goldens from the same extraction — outputs are the oracle's,
 // with CODE-POINT indices (the unicode rows shift under code-unit slicing).
-const CLEAN_CUT_GOLDENS: readonly { text: string; limit: number; out: string }[] = [
-  { text: "para one\n\npara two\n\npara three is long", limit: 25, out: "para one\n\npara two" },
-  { text: "short", limit: 100, out: "short" },
-  {
-    text: "\u{1f389}\u{1f389}\u{1f389} alpha\n\nbeta gamma delta\n\nepsilon zeta",
-    limit: 30,
-    out: "\u{1f389}\u{1f389}\u{1f389} alpha\n\nbeta gamma delta",
-  },
-  { text: "x".repeat(50), limit: 30, out: "x".repeat(30) },
-  { text: "ab\n\n" + "c".repeat(40), limit: 30, out: "ab\n\n" + "c".repeat(26) },
-  {
-    text: "\u{1f409}".repeat(20) + "\n\n" + "\u{1f409}".repeat(20),
-    limit: 25,
-    out: "\u{1f409}".repeat(20),
-  },
-];
 
 /** Walk a document to exhaustion via next cursors, mirroring the extraction script. */
 function walk(
@@ -282,12 +260,6 @@ describe("golden fixtures (oracle byte-parity)", () => {
       expect(concat).toBe(golden.chunks.map((c) => c.content).join(""));
     });
   }
-
-  it("replays the oracle clean_cut outputs, code-point indexed", () => {
-    for (const { text, limit, out } of CLEAN_CUT_GOLDENS) {
-      expect(cleanCut(text, limit), `limit=${limit} text=${JSON.stringify(text)}`).toBe(out);
-    }
-  });
 });
 
 describe("carried invariants (oracle test_windowing.py)", () => {

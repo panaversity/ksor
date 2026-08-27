@@ -673,6 +673,12 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       query_chars: queryChars,
       k,
       k_effective: kb,
+      // The score that DECIDED this answer. The abstained row has always
+      // carried it, so the ledger held the deciding score only for queries the
+      // gate refused — precisely the half that cannot show a floor drifting as
+      // a record grows (#182). Symmetric now: every act records what it was
+      // decided on, whichever way it went.
+      top_cosine: topCosine,
       slugs: [...new Set(shaped.map((h) => h.slug))],
       truncated,
       degraded: degradedReason !== undefined,
@@ -1049,6 +1055,10 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
+    // An EMPTY outline served no row from any generation, so it records NULL
+    // deliberately — the same spread-conditional `search_abstained` uses for
+    // the same reason.
+    ...(rows[0] === undefined ? {} : { generation: rows[0].generation }),
     detail: { ...actScope(ctx), node: root, result_count: rows.length, has_more, offset },
   });
   // Titles and heading paths are corpus-authored text and reach the agent

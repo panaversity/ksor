@@ -262,7 +262,8 @@ SELECT w.slug, w.kind, w.title, w.heading_path,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
                   AND s.node_id = w.node_id) AS has_content,
-       w.permalink
+       w.permalink,
+       w.generation
 FROM walk w
 JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
@@ -497,9 +498,17 @@ export interface OutlineRow {
    * re-base copies whole rows so a new column cannot be lost in one branch.
    */
   readonly permalink: string | null;
+  /**
+   * Column index 9. The act's own generation, so the §7 audit row can pin what
+   * it served from — `similarity_searched` and `content_served` both did and
+   * `outline_served` wrote NULL, leaving the one act that hands an agent the
+   * SHAPE of the record unjoinable to the publication it described (#19).
+   * Carried on the row rather than re-queried: `walk` already selects it.
+   */
+  readonly generation: number;
 }
 
-export const OUTLINE_COLUMNS = 9;
+export const OUTLINE_COLUMNS = 10;
 
 export function outlineRows(result: pg.QueryArrayResult): OutlineRow[] {
   if (result.fields.length !== OUTLINE_COLUMNS) {
@@ -518,6 +527,7 @@ export function outlineRows(result: pg.QueryArrayResult): OutlineRow[] {
     childCount: toNumber(row[6], "child_count"),
     hasContent: Boolean(row[7]),
     permalink: row[8] === null ? null : String(row[8]),
+    generation: toNumber(row[9], "generation"),
   }));
 }
 

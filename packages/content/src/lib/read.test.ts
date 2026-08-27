@@ -123,6 +123,7 @@ describe("rebaseOutlineRows (pure re-base)", () => {
     childCount: 1,
     hasContent: false,
     permalink: null,
+    generation: 1,
   };
   const childRow: OutlineRow = {
     slug: "lesson-a",
@@ -134,6 +135,7 @@ describe("rebaseOutlineRows (pure re-base)", () => {
     childCount: 0,
     hasContent: true,
     permalink: "/docs/lesson-a",
+    generation: 1,
   };
 
   it("prefixes from the anchor's OWN absolute path and skips the anchor row", () => {
@@ -219,6 +221,7 @@ const OUTLINE_FIELDS = [
   "child_count",
   "has_content",
   "permalink",
+  "generation",
 ];
 
 // NODE_BY_SLUG_SQL candidate: SEVEN columns. The oracle's six-wide fixture
@@ -239,8 +242,9 @@ const CANDIDATE = [
   null,
   null,
 ];
-// OUTLINE_SQL rows are NINE wide — the last is w.permalink (the prod scar).
-const ANCHOR = ["phase-3", "section", "Phase 3", "phase-3", 0, 0, "1", false, null];
+// OUTLINE_SQL rows are TEN wide — index 8 is w.permalink (the prod scar) and
+// index 9 is w.generation, which the §7 audit row pins.
+const ANCHOR = ["phase-3", "section", "Phase 3", "phase-3", 0, 0, "1", false, null, 1];
 const CHILD = [
   "lesson-a",
   "document",
@@ -251,6 +255,7 @@ const CHILD = [
   "0",
   true,
   "/docs/lesson-a",
+  1,
 ];
 const UP = ["getting-started/mode-2/phase-3", 2];
 
@@ -276,6 +281,7 @@ describe("outline() against a fake client", () => {
         childCount: 0,
         hasContent: true,
         permalink: "/docs/lesson-a",
+        generation: 1,
       },
     ]);
   });
@@ -404,7 +410,9 @@ describe("projection width contracts (the prod-crash class, made loud)", () => {
     expect(() => nodeRows(short)).toThrowError(
       new RegExp(`node projection drift: expected ${NODE_COLUMNS}`),
     );
-    expect(() => outlineRows(short)).toThrowError(/outline projection drift: expected 9/);
+    expect(() => outlineRows(short)).toThrowError(
+      new RegExp(`outline projection drift: expected ${OUTLINE_COLUMNS}`),
+    );
   });
 
   it("every read arm carries the v2 predicates", () => {

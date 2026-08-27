@@ -174,25 +174,3 @@ export function windowDocument(
     remainingSections: remaining,
   };
 }
-
-/**
- * Back off to the last blank-line boundary in the second half; used by the
- * search response budget when a hit overflows (the caller stamps
- * `truncated` + a note — loud, never silent). Indices are CODE POINTS,
- * matching the oracle's Python slicing.
- */
-export function cleanCut(text: string, limit: number): string {
-  const points = Array.from(text);
-  if (points.length <= limit) return text;
-  // Python str.rfind("\n\n", limit // 2, limit): the whole "\n\n" must lie
-  // within [limit//2, limit), so the highest legal start index is limit - 2.
-  let cut = -1;
-  const floor = Math.floor(limit / 2);
-  for (let i = Math.min(limit, points.length) - 2; i >= floor; i -= 1) {
-    if (points[i] === "\n" && points[i + 1] === "\n") {
-      cut = i;
-      break;
-    }
-  }
-  return points.slice(0, cut !== -1 ? cut : limit).join("");
-}

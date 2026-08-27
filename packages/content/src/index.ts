@@ -119,7 +119,7 @@ export {
   documentChunks,
   MAX_OUTLINE_LIMIT,
 } from "./lib/read.js";
-export { windowDocument, codePointLength, cleanCut, estTokens } from "./lib/windowing.js";
+export { windowDocument, codePointLength, estTokens } from "./lib/windowing.js";
 export {
   normalizeQueries,
   parseQueriesFile,

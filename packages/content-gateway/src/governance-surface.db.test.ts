@@ -38,7 +38,7 @@ import {
   type TrustTier,
 } from "@panaversity/ksor-content";
 
-import { readHandler, searchHandler, type SearchArgs } from "./tools.js";
+import { outlineHandler, readHandler, searchHandler, type SearchArgs } from "./tools.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -334,6 +334,51 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     // The query text and the passages, by the two things they would contain.
     expect(serialized).not.toContain("compensation");
     expect(serialized).not.toContain(QUERY);
+  });
+
+  it("an outline records the generation it served from, as its siblings do", async () => {
+    // R20 / working rule 10: the trail exists so an auditor can say WHAT an act
+    // was allowed to see. `similarity_searched` and `content_served` both pin a
+    // generation; `outline_served` wrote NULL, so the one act that hands an
+    // agent the shape of the record could not be joined to the publication it
+    // described. The projection carried no generation to write — `OutlineRow`
+    // is a fixed width with a guard — so this is a column, not a call.
+    await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+    const reply = await outlineHandler(doorAt(undefined))({ limit: 50 });
+    expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
+
+    const rows = await pool.query<{ action: string; generation: string | null }>(
+      "SELECT action, generation FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+      [TENANT],
+    );
+    expect(rows.rows.length, JSON.stringify(rows.rows)).toBe(1);
+    expect(rows.rows[0]!.action).toBe("outline_served");
+    expect(
+      rows.rows[0]!.generation,
+      `outline_served wrote generation=${String(rows.rows[0]!.generation)}`,
+    ).toBe("1");
+  });
+
+  it("an ANSWERED search records the score that decided it, as the abstention does", async () => {
+    // The abstained row carries `top_cosine`; the answered row did not — so the
+    // ledger held the deciding score only for queries the gate REFUSED. That is
+    // exactly the half that cannot show a floor drifting as a record grows
+    // (issue #182): every answer above the floor was unrecorded, so nothing in
+    // the trail says how close to it the record has been running.
+    await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+    await searchAs(doorAt(undefined));
+
+    const rows = await pool.query<{ action: string; detail: Record<string, unknown> }>(
+      "SELECT action, detail FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+      [TENANT],
+    );
+    const row = rows.rows[0]!;
+    expect(row.action).toBe("similarity_searched");
+    expect(row.detail["abstained"]).toBe(false);
+    expect(
+      typeof row.detail["top_cosine"],
+      `answered row detail: ${JSON.stringify(row.detail)}`,
+    ).toBe("number");
   });
 
   it("an abstention records the same scope, and says it abstained", async () => {
