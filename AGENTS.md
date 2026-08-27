@@ -1331,68 +1331,46 @@ gateway` package, serve-by-spawn) is superseded._
 30. **The shipped DEFAULT stays `gemini-embedding-001` at 1536 dimensions**
     (2026-08-27, from the evidence in issue #49). Serves the claim that a
     surface offers "a measured floor under which it declines": that floor is a
-    threshold INSIDE one embedding space, so which space is the default decides
-    what every adopter must re-measure when it changes.
+    threshold INSIDE one embedding space, so which space ships decides what
+    every adopter must re-measure when it changes.
 
-    It binds `EMBED_MODEL` and `EMBED_DIM` in `packages/content/src/config.ts`
-    and nothing else. `embedding.model` and `embedding.dim` remain per-instance
-    keys an adopter may override, and raising the ceiling is a change this entry
-    PRICES rather than forbids — `instance.test.ts` holds the two
-    `EMBED_DIM_MAX` declarations equal, so it says where they are and this entry
-    does not have to.
+    Binds `EMBED_MODEL` and `EMBED_DIM` in `packages/content/src/config.ts` and
+    nothing else — `embedding.model` and `embedding.dim` stay per-instance keys,
+    and raising `EMBED_DIM_MAX` is priced here, not forbidden
+    (`instance.test.ts` holds its two declarations equal). The measurement
+    behind it lives beside the constant it constrains, in
+    `packages/content/src/schema.ts`, with its source and retrieval date; this
+    entry does not restate it.
 
-    **The measurement lives beside the constant it constrains**, in
-    `packages/content/src/schema.ts`, with its source URL and retrieval date:
-    the dimensionality table's flat top, the absence of a 3072 row, and the
-    halfvec-to-4000 lead with its one live check and no test. Repeating those
-    figures here would be two hand-kept copies with nothing holding them equal,
-    which is what a drift test exists to prevent and prose cannot.
-
-    **What staying costs.** `-001` accepts 2048 input tokens, and
-    `HARD_MAX_CHARS = 4000` can exceed that for CJK, surfacing as failed chunks
-    rather than an error. Bounded, not silent: `MAX_FAILED_FRACTION = 0.02`
-    withholds readiness above 2%, so a genuinely CJK-heavy record trips the loud
-    path and only a marginal one stays quiet — that band is visible in
-    `chunks.embed_error` and in the run's failed count, which is where to look.
-    (The mechanism is described in `research/i18n.md`, whose own frontmatter
-    says nothing in it is implemented or decided; the failure has not been
-    reproduced here.) `-001` also makes the unconditional `l2Normalize` in
-    `lib/embedding.ts` necessary rather than merely harmless — every embed pays
-    it, and a natively normalized model would make it a no-op it still runs.
-
-    **What moving would cost**, because a model bump reads cheaper than it is. A
-    different model is a different embedding space: a re-embed of the whole
-    corpus, and the invalidation of every calibrated `vector_floor` — ours and
-    every adopter's — by the same argument the product invariant makes about
-    copying a constant between corpora. Going to 3072 on halfvec would further
-    put float16 rounding under the score the abstention gate reads, and this
-    record's gold has no margin to spend: the near-miss at 0.683 outscores the
-    weaker in-corpus question at 0.671 (`behavioural.db.test.ts`), the
-    NOT-separable shape `ksor calibrate` refuses to emit a floor for
-    (`calibrate/math.test.ts`). Rounding into a set with no separation cannot be
-    bounded in advance.
+    **Moving is not a version bump.** A different model is a different embedding
+    space: a re-embed of the whole corpus, and every calibrated `vector_floor`
+    invalidated — ours and every adopter's — by the same argument the product
+    invariant makes about copying a constant between corpora. And this record's
+    gold has no margin to spend on quantisation: the near-miss at 0.683
+    outscores the weaker in-corpus question at 0.671
+    (`evals/behavioural.db.test.ts`), the NOT-separable shape `ksor calibrate`
+    refuses to emit a floor for (`calibrate/math.test.ts`).
 
     **Reversed by either of two things.**
 
-    1. **A quality measurement of 0.1 MTEB points or more** — ten times the 0.01
-       that separates 1536 from 2048, so the trigger is a difference rather than
-       the noise this entry rests on. Both numbers must come from ONE table or
-       one benchmark revision: differencing a successor model's published score
-       against a truncation table's row is not a comparison at this resolution.
-       Stated in MTEB and never in cosine, because decision 20 uses a hundredth
-       of a cosine to mean something load-bearing and the two must not be
-       confused.
-    2. **A reproduced CJK failure** — failed chunks on a non-Latin record, in
-       the column named above. This route needs no quality measurement, and it
-       does NOT pre-authorise a model migration: the failure is a chunk-size
-       failure, and `HARD_MAX_CHARS` is a constant with a `CHUNK_POLICY` bump
-       behind it, costing one record's re-ingest rather than every adopter's
-       recalibration. `-2`'s 8192-token window is the answer only once lowering
-       the chunk ceiling has been tried and found insufficient.
+    1. **0.1 MTEB points or more**, with both numbers from ONE table or one
+       benchmark revision — differencing a successor's published score against a
+       truncation table's row is not a comparison at this resolution. Ten times
+       the 0.01 the default rests on. Stated in MTEB and never in cosine:
+       decision 20 uses a hundredth of a cosine to mean something load-bearing.
+    2. **A reproduced CJK failure.** `-001` takes 2048 input tokens and
+       `HARD_MAX_CHARS = 4000` can exceed that, surfacing as failed chunks
+       rather than an error — bounded by `MAX_FAILED_FRACTION = 0.02`, and
+       visible below that in `chunks.embed_error` and the run's failed count.
+       Reproduce it before choosing a remedy: `HARD_MAX_CHARS` and `MAX_CHARS`
+       bound different paths, both are eval-locked globals rather than
+       per-instance knobs, so re-chunking is not the cheap local fix it looks
+       like — and `-2`'s 8192-token window is a different embedding space with
+       the price above.
 
     A successor model shipping is not, by itself, evidence for either. The `-2`
-    figures this entry cites come from `research/i18n.md` and have not been
-    checked against Google's documentation by anyone here; check them first.
+    figures cited above come from `research/i18n.md`, whose own frontmatter says
+    nothing in it is implemented or decided; check them before acting.
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,

@@ -76,10 +76,10 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    later means re-embedding the whole corpus. Keep `dim` at or below 2000 — the
    schema indexes a `vector` column directly and pgvector's HNSW takes a
    `vector` to 2000. `gemini-embedding-001` emits 3072 by default, so ksor asks
-   it for 1536. Google's published MTEB table runs 128–2048 and is flat at the
-   top of it — 1536 scores 68.17 against 2048's 68.16 — so there is no gradient
-   to climb toward the ceiling; going the other way, 768 costs 0.18 if you want
-   the storage back.
+   it for 1536, which the provider's own dimensionality table shows costs
+   nothing measurable against the ceiling — going the other way trades a little
+   quality for storage. Whether to move is priced in ksor's decision 30, which
+   carries the figures and their source.
 
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
