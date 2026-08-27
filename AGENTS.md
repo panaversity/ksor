@@ -1328,48 +1328,65 @@ gateway` package, serve-by-spawn) is superseded._
     not a forecast, and when it arrives the change is a default flip plus a
     migration note, not new machinery.
 
-30. **We stay on `gemini-embedding-001` at 1536 dimensions** (owner,
-    2026-08-27, closing issue #49). Two questions arrived together — the model
-    has a successor, and the 2000-dimension ceiling turned out not to be a wall
-    — and they resolve the same way: nothing measured argues for moving.
+30. **The shipped DEFAULT stays `gemini-embedding-001` at 1536 dimensions**
+    (2026-08-27, closing issue #49). Recorded from the evidence in #49 rather
+    than by owner direction — **merging this entry is what adopts it**, and it
+    is written to be edited or rejected rather than ratified by inattention.
+    It binds the defaults in `packages/content/src/config.ts` and nothing else:
+    `embedding.model` and `embedding.dim` remain per-instance keys an adopter
+    may override, and raising `EMBED_DIM_MAX` is a change this entry costs
+    rather than forbids.
 
-    **The quality curve is flat where we sit.** Google's published MTEB table
-    for this model runs 128–2048 and scores **1536 at 68.17 against 2048's
-    68.16** — 1536 is fractionally HIGHER, which is not a real difference but is
-    proof there is no gradient to climb between them. The table carries no 3072
-    row, so the cost of the truncation itself is unpublished and must not be
-    inferred. MRL is why 1536 was chosen and the table is why it stays.
+    **The quality curve is flat where we sit.** Google's dimensionality table
+    for this model — <https://ai.google.dev/gemini-api/docs/embeddings>,
+    retrieved 2026-08-27 — scores **1536 at 68.17 against 2048's 68.16**, and
+    its highest row IS 2048: there is no 3072 row, so the cost of the
+    truncation itself is unpublished and cannot be read off the table either
+    way. 1536 being fractionally higher is not a real difference; it is proof
+    there is no gradient to climb between them.
 
-    **The ceiling is ours, not pgvector's, and the code already says so.**
-    `EMBED_DIM_MAX = 2000` is the limit of the shape we USE: `schema.sql`
-    declares `VECTOR(dim)` columns and indexes one directly, and pgvector takes
-    a `vector` to 2000. It takes a `halfvec` to **4000** through an expression
-    index on the cast, verified live against a real database (2026-08-21:
-    `hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)` plans an Index Scan).
-    That correction shipped in 0.0.x as its own change and is pinned by
-    `schema.integration.test.ts`; this entry records the DECISION the corrected
-    message left open.
+    **The 2000 ceiling is ours, not pgvector's.** `EMBED_DIM_MAX` limits the
+    shape we USE: `schema.sql` declares `VECTOR(dim)` columns and indexes one
+    directly, and pgvector takes a `vector` to 2000. That correction shipped in
+    **0.0.12** (`1dd6211`), and `schema.integration.test.ts` pins the refusal at
+    2000 and pins its WORDING. What no test covers is the halfvec claim — that
+    pgvector reaches 4000 through an expression index on the cast — which rests
+    on one manual check against a real database (2026-08-21,
+    `hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)` planning an Index
+    Scan) and has no artifact in the tree. Treat it as a lead, not a guarantee.
 
-    **What moving would actually cost**, recorded because "just bump the model"
-    is the reading to prevent. `gemini-embedding-2`'s space is incompatible with
-    `-001`'s, so it is a re-embed of the whole corpus rather than a version bump
-    — and because a floor is a threshold INSIDE one space, it invalidates every
-    calibrated `vector_floor`, on our records and on every adopter's. The
-    product invariant already says so ("never copy a calibrated constant between
-    corpora"); across embedding spaces is the same argument. Going to 3072 on
-    halfvec additionally puts float16 rounding under the score the abstention
-    gate reads, on a gold set whose in-corpus/near-miss decision turns on about
-    one hundredth (0.730 / 0.671 against 0.683 — decision 20 cites the same
-    numbers). The rounding is probably far under that margin, and "probably" is
-    not the standard for the number that decides whether a record abstains.
+    **What staying costs, recorded rather than argued away.** `-001` accepts
+    2048 input tokens, and `HARD_MAX_CHARS = 4000` at `CHARS_PER_TOKEN = 4` can
+    exceed that for CJK — surfacing as failed chunks rather than an error
+    (`research/i18n.md`). So for a non-Latin record chunk sizing is **already**
+    binding and already silent, and `-2`'s 8192-token window addresses it
+    directly. `-001` also requires the manual L2 normalization `lib/embedding.ts`
+    exists for, which `-2` makes a no-op. And staying on a superseded model
+    means the eventual re-embed happens on Google's retirement timetable rather
+    than on ours.
 
-    **Reversed by a measurement, not by a release announcement**: MTEB or our
-    own gold showing a real gain at a higher dimension or on `-2`, taken
-    BEFORE the migration, with the re-embed and recalibration costs stated. A
-    successor model shipping is not, by itself, evidence. `-2`'s 8192-token
-    input is the one property that would force the question on different
-    grounds, and only if chunk sizing ever becomes the binding constraint
-    (`HARD_MAX_CHARS` is sized against `-001`'s 2048).
+    **What moving would cost**, because "just bump the model" is the reading to
+    prevent: `-2`'s space is incompatible with `-001`'s, so it is a re-embed of
+    the whole corpus, and because a floor is a threshold INSIDE one space it
+    invalidates every calibrated `vector_floor` — ours and every adopter's. The
+    product invariant already says never to copy a calibrated constant between
+    corpora; across embedding spaces is the same argument. Going to 3072 on
+    halfvec would additionally put float16 rounding under the score the
+    abstention gate reads, and this record's gold has no margin to spend: the
+    near-miss at 0.683 OUTSCORES the weaker in-corpus question at 0.671, so no
+    single cosine floor separates them and `ksor calibrate` reports "NOT
+    separable" and refuses to emit one (`behavioural.db.test.ts`; decision 20
+    cites the same numbers for a different argument). Rounding into a set with
+    no separation is not a risk anyone can bound in advance.
+
+    **Reversed by a measurement taken BEFORE any migration** — on this record's
+    own gold or a published table — showing a higher dimension or `-2` beating
+    the current default **by more than the 0.01 this entry calls noise**, with
+    the re-embed and recalibration costs stated. A successor model shipping is
+    not evidence. The CJK case above is the one route that reverses this without
+    a quality measurement at all: if failed chunks on a non-Latin record are
+    reproduced, `-2` is the fix and this entry should not be read as deferring
+    it.
 
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
