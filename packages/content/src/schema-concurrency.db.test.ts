@@ -19,14 +19,20 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { randomBytes } from "node:crypto";
 import pg from "pg";
 
 import { applySchema } from "./schema.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 
-/** Scratch databases for this suite, named so a leaked one is obviously ours. */
-const SCRATCH_PREFIX = "ksor_role_race_";
+/**
+ * Scratch databases for this suite: named so a leaked one is obviously ours,
+ * and UNIQUE per run. Fixed names would have made this suite the thing it is
+ * testing for — two concurrent `pnpm test:db` runs force-dropping each other's
+ * databases mid-apply, which is issue #166's own symptom.
+ */
+const SCRATCH_PREFIX = `ksor_role_race_${randomBytes(4).toString("hex")}_`;
 
 /** The admin DSN with its database swapped — `pg` has no API for this. */
 function dsnFor(dsn: string, database: string): string {
@@ -74,10 +80,11 @@ describe.runIf(adminDsn !== "")("applying the schema concurrently (db)", () => {
     // Six SEPARATE DATABASES, one apply each — which is the real shape: two
     // `pnpm test:db` runs, or two operators provisioning, each own their
     // database and share only the cluster-global roles. Racing six applies
-    // against ONE database instead would collide on `pg_type_typname_nsp_index`
-    // (every CREATE TABLE makes a row type), which is a different race and not
-    // one `applySchema` promises to survive — its contract is "a fresh
-    // database".
+    // against ONE database instead races too — on `pg_extension_name_index`
+    // first (`CREATE EXTENSION IF NOT EXISTS vector` is check-then-act as well),
+    // then on `pg_type_typname_nsp_index`, since every CREATE TABLE makes a row
+    // type. Those are different races and not ones `applySchema` promises to
+    // survive: its contract is "a fresh database".
     const names = Array.from({ length: 6 }, (_unused, i) => `${SCRATCH_PREFIX}${i}`);
     for (const name of names) {
       await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
@@ -112,7 +119,11 @@ describe.runIf(adminDsn !== "")("applying the schema concurrently (db)", () => {
       ).toEqual([...ROLES].sort());
     } finally {
       await Promise.all(pools.map((pool) => pool.end()));
-      for (const name of names) await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      for (const name of names) {
+        // Guarded like every other drop in this tier: a failed cleanup must not
+        // replace the assertion's own failure with its own.
+        await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`).catch(() => undefined);
+      }
     }
   }, 120_000);
 });

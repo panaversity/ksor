@@ -12,9 +12,14 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 180_000,
     // Suites get their own DATABASE, but Postgres ROLES are cluster-global:
-    // two suites applying schema.sql concurrently raced its idempotent
+    // two suites applying schema.sql concurrently raced its check-then-act
     // CREATE ROLE into a pg_authid duplicate-key error (found live in CI,
-    // 2026-08-19). The tier runs files serially.
+    // 2026-08-19). That cause is GONE — the DDL tolerates the race now, on
+    // both paths that create a role (issue #166) — and the setting stays,
+    // because it was never the only reason: 27 of these suites still bootstrap
+    // a scratch database under a FIXED name and drop it `WITH (FORCE)`, so two
+    // files running at once still terminate each other's connections. Removing
+    // this is that half of #166, not this one.
     fileParallelism: false,
   },
 });

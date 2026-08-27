@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -80,50 +81,95 @@ describe("renderSchema against the shipped DDL", () => {
 });
 
 /**
- * Role creation must survive two applies at once — asserted on the DDL's SHAPE,
- * because the live race is unreachable wherever the roles already exist.
+ * Role creation must survive two applies at once — on EVERY path that creates a
+ * role, asserted on the DDL's shape because the live race is unreachable
+ * wherever the roles already exist.
  *
  * Roles are CLUSTER-GLOBAL, so `IF NOT EXISTS ... THEN CREATE ROLE` is
  * check-then-act across every database on the instance. Measured on Postgres
- * 17.7 against an empty cluster: six concurrent applies, FIVE failed. Two
- * `ksor schema --apply` runs, or two `pnpm test:db` runs, are all it takes
- * (issue #166).
+ * 17.7 against an empty cluster: six concurrent applies, FIVE failed, raising
+ * `unique_violation` (23505) on pg_authid_rolname_index — NOT
+ * `duplicate_object` (42710), which is the intuitive one to catch and is not
+ * sufficient alone (issue #166).
  *
- * `schema-concurrency.db.test.ts` races it for real, and SKIPS wherever the
- * roles cannot be dropped — which is most developer machines. So this is the
- * guard that always runs: it pins the two properties the fix depends on, and
- * both are easy to undo by tidying.
+ * It scans `schema.sql` AND `schema/migrations/`, because the first version of
+ * this guard read only the fresh DDL and the identical race survived in the
+ * 2.2 -> 2.3 migration — `ksor schema --apply` reaches both.
+ *
+ * `schema-concurrency.db.test.ts` races it for real and SKIPS wherever the roles
+ * cannot be dropped, which is most developer machines. This is the guard that
+ * always runs.
  */
 describe("concurrent applies cannot lose a role", () => {
-  const roleBlocks = (): string[] =>
-    [...readFileSync(schemaSqlPath(), "utf8").matchAll(/DO \$\$[\s\S]*?END \$\$;/g)]
-      .map((m) => m[0])
-      .filter((block) => /CREATE ROLE/.test(block));
+  /** Every DDL file that can create a role, by path. */
+  const ddlFiles = (): { path: string; text: string }[] => {
+    const schema = schemaSqlPath();
+    const migrations = path.join(path.dirname(schema), "migrations");
+    return [
+      { path: schema, text: readFileSync(schema, "utf8") },
+      ...readdirSync(migrations)
+        .filter((name) => name.endsWith(".sql"))
+        .map((name) => ({
+          path: path.join(migrations, name),
+          text: readFileSync(path.join(migrations, name), "utf8"),
+        })),
+    ];
+  };
+
+  /** Every `DO $$ ... END $$;` block that creates a role, with its file. */
+  const roleBlocks = (): { path: string; block: string }[] =>
+    ddlFiles().flatMap(({ path: file, text }) =>
+      [...text.matchAll(/DO \$\$[\s\S]*?END \$\$;/g)]
+        .map((m) => m[0])
+        .filter((block) => /CREATE ROLE/.test(block))
+        .map((block) => ({ path: file, block })),
+    );
+
+  /**
+   * Every CREATE ROLE in the tree must be INSIDE one of those blocks. Without
+   * this, a role created by a bare statement — or inside a block shaped so the
+   * regex misses it — is simply not seen, and the two assertions below pass
+   * over an empty list.
+   */
+  it("every CREATE ROLE is inside a block this guard can see", () => {
+    const declared = ddlFiles().flatMap(({ path: file, text }) =>
+      [...text.matchAll(/CREATE ROLE/g)].map(() => file),
+    );
+    const covered = roleBlocks().flatMap(({ path: file, block }) =>
+      [...block.matchAll(/CREATE ROLE/g)].map(() => file),
+    );
+    expect(
+      covered.length,
+      `${declared.length} CREATE ROLE statements exist, ${covered.length} are inside a matched ` +
+        `DO block — unmatched files: ${[...new Set(declared)].join(", ")}`,
+    ).toBe(declared.length);
+    // ...and there is at least one, so a refactor that moves role creation out
+    // of SQL entirely fails loudly here rather than making this suite vacuous.
+    expect(declared.length, "no CREATE ROLE found at all").toBeGreaterThan(0);
+  });
 
   it("creates each role in its OWN block", () => {
     // One block per role, because a `DO` block is a single statement: an
     // exception anywhere in it rolls the whole block back, so a loser on the
-    // first role would never create the other two — and the GRANTs below would
-    // then name roles that do not exist.
-    const blocks = roleBlocks();
-    for (const block of blocks) {
+    // first role would never create the other two — and the GRANTs that follow
+    // would then name roles that do not exist. Verified live: with one role
+    // pre-existing, the one-block form created ONLY that role.
+    for (const { path: file, block } of roleBlocks()) {
       const created = [...block.matchAll(/CREATE ROLE/g)].length;
-      expect(created, `a block creates ${created} roles:\n${block}`).toBe(1);
+      expect(created, `${file}: a block creates ${created} roles:\n${block}`).toBe(1);
     }
-    expect(blocks.length, "one block per role the DDL grants against").toBe(3);
   });
 
-  it("tolerates BOTH SQLSTATEs a lost race raises", () => {
-    // `unique_violation` (23505) on pg_authid_rolname_index is what Postgres
-    // 17.7 actually raised in the measured run — NOT `duplicate_object`
-    // (42710), which is the intuitive one to catch and is not sufficient on its
-    // own. Which surfaces depends on where the loser lands, so both are named.
-    for (const block of roleBlocks()) {
-      expect(block, `role block without an exception handler:\n${block}`).toMatch(/EXCEPTION/);
-      expect(block, `role block does not tolerate unique_violation:\n${block}`).toMatch(
+  it("tolerates BOTH SQLSTATEs a lost race raises, in the handler itself", () => {
+    // Asserted on the EXCEPTION clause rather than on the block, so the words
+    // cannot be satisfied by a comment mentioning them.
+    for (const { path: file, block } of roleBlocks()) {
+      const handler = /EXCEPTION\s+WHEN([\s\S]*?)THEN/.exec(block)?.[1] ?? "";
+      expect(handler, `${file}: role block has no EXCEPTION handler:\n${block}`).not.toBe("");
+      expect(handler, `${file}: handler does not tolerate unique_violation: ${handler}`).toMatch(
         /unique_violation/,
       );
-      expect(block, `role block does not tolerate duplicate_object:\n${block}`).toMatch(
+      expect(handler, `${file}: handler does not tolerate duplicate_object: ${handler}`).toMatch(
         /duplicate_object/,
       );
     }
