@@ -73,18 +73,12 @@ async function freePort(): Promise<number> {
 interface Fixture {
   readonly base: string;
   readonly child: ChildProcess;
-  /** The tmp root, so a test can remove a file out from under the server. */
-  readonly root: string;
   /** Everything the child has written to stderr so far. */
   readonly errText: () => string;
 }
 
 /** A preview server over an export built to order. `index` false omits `out/index.html`. */
-async function preview(opts: {
-  index: boolean;
-  locked?: boolean;
-  vanishing?: boolean;
-}): Promise<Fixture> {
+async function preview(opts: { index: boolean; locked?: boolean }): Promise<Fixture> {
   const root = mkdtempSync(path.join(tmpdir(), "ksor-preview-"));
   roots.push(root);
   // `preview.mjs` resolves its ROOT as `out/` beside ITSELF, so the copy and the
@@ -94,7 +88,6 @@ async function preview(opts: {
   mkdirSync(out, { recursive: true });
   writeFileSync(path.join(out, "marker.txt"), "inside-the-export\n");
   if (opts.index) writeFileSync(path.join(out, "index.html"), "<!doctype html><title>ok</title>\n");
-  if (opts.vanishing === true) writeFileSync(path.join(out, "vanishes.txt"), "gone soon\n");
   if (opts.locked === true) {
     writeFileSync(path.join(out, "locked.txt"), "unreadable\n");
     chmodSync(path.join(out, "locked.txt"), 0o000);
@@ -126,7 +119,7 @@ async function preview(opts: {
       reject(new Error(`preview exited before it served (${String(code)}): ${errText}`));
     });
   });
-  return { base: `http://127.0.0.1:${port}`, child, root, errText: () => errText };
+  return { base: `http://127.0.0.1:${port}`, child, errText: () => errText };
 }
 
 /** The status, or null when the connection failed — which is what a dead server looks like. */
@@ -361,7 +354,11 @@ describe("the preview server refuses a bad environment, and says which", () => {
     // is guarded against and the same way to reach it.
     const wide = await spawnPreviewServing({ KSOR_PREVIEW_HOST: "0.0.0.0" });
     expect(wide.log, "an explicit host is honoured AND printed").toContain("http://0.0.0.0:");
-    const blank = await spawnPreviewServing({ KSOR_PREVIEW_HOST: "  " });
+    // "" — the shape `KSOR_PREVIEW_HOST=` in a shell or compose file produces,
+    // and the ONLY one that reaches Node's falsy-host branch and binds
+    // everything. Whitespace fails DNS instead, which would go red for the
+    // wrong reason.
+    const blank = await spawnPreviewServing({ KSOR_PREVIEW_HOST: "" });
     expect(blank.log, "a blank host falls back to loopback rather than widening").toContain(
       "http://localhost:",
     );
@@ -369,20 +366,15 @@ describe("the preview server refuses a bad environment, and says which", () => {
 
   it("refuses a host nothing here can bind, naming the variable", async () => {
     // 203.0.113.0/24 is TEST-NET-3 — reserved for documentation, never local.
-    const { code, err } = await spawnPreview({ KSOR_PREVIEW_HOST: "203.0.113.1" });
+    // Pin the port: without it this is the only test in the file that binds
+    // the default 3000, which `freePort`'s own note records as a review finding
+    // here — and under a revert it would bind successfully, never exit, and die
+    // at the timeout printing nothing.
+    const { code, err } = await spawnPreview({
+      KSOR_PREVIEW_HOST: "203.0.113.1",
+      PORT: String(await freePort()),
+    });
     expect(code, err).toBe(3);
     expect(err, "the refusal names the knob to turn").toContain("KSOR_PREVIEW_HOST");
   }, 30_000);
-
-  it("answers 404 for a file that VANISHED and 500 for one it cannot read", async () => {
-    // The two open failures are different facts and had one message. ENOENT is
-    // the ordinary case — the export was rebuilt under an open page — and "500,
-    // the file is there" states the opposite of what happened.
-    const { base, root } = await preview({ index: true, locked: true, vanishing: true });
-    rmSync(path.join(root, "out", "vanishes.txt"), { force: true });
-    expect(await status(base, "/vanishes.txt"), "a resource that has gone is 404").toBe(404);
-    expect(await status(base, "/locked.txt"), "a file that is there and unreadable is 500").toBe(
-      500,
-    );
-  }, 60_000);
 });

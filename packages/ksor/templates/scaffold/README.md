@@ -134,6 +134,15 @@ export, so nothing serves it at runtime. `pnpm preview` is `node:http` and
 nothing else — no dependency, no network fetch — so it works offline and behind
 a firewall, like the build itself.
 
+It binds loopback, so it is reachable from this machine only. To open the built
+site from a container published with `-p`, a cloud dev box, or a phone on the
+same wifi, name the address on the command line — `preview` is plain `node` and
+does not read `.env`:
+
+```sh
+KSOR_PREVIEW_HOST=0.0.0.0 pnpm preview
+```
+
 ---
 
 ## Serving to agents

@@ -24,7 +24,9 @@ A request that cannot be parsed now resolves to nothing, which is what the 404
 path is for. And a file that fails to open answers **500 with a reason**, not a
 blank page: the response head is written on the read stream's `open` event
 rather than before it, so a file that never opens can still be answered
-honestly. Writing it first would have produced a complete, valid, EMPTY `200` —
+honestly. (A file that vanished BEFORE the request was already a 404 — the
+resolver stats every candidate — so this is the file that is there and will not
+open.) Writing it first would have produced a complete, valid, EMPTY `200` —
 which a browser renders as a blank page and `fetch().text()` reports as `""` —
 and that is the same silent lie this change exists to stop telling, one layer
 down. A failure PART WAY through, where the head is already out and no status
@@ -41,18 +43,20 @@ shell or a compose file used to bind an arbitrary port and print
 
 **And the server binds where it says it binds.** `listen(PORT)` with no host
 binds every interface while the log has always printed `localhost`, so the built
-export was reachable from the whole network. It is loopback now, with `HOST` as
-the way out for the cases where reaching it from elsewhere is the point — a
-container published with `-p`, a cloud dev box, or the built site on a phone.
+export was reachable from the whole network. It is loopback now, with
+`KSOR_PREVIEW_HOST` as the way out for the cases where reaching it from
+elsewhere is the point — a container published with `-p`, a cloud dev box, or
+the built site on a phone. Set it on the command line: `preview` is plain `node`
+and does not read `.env`.
 
 Stated precisely, because a governance claim is the one thing to get exactly
 right in both directions. A DEFAULT build carries no drafts at all (record spec
 §2.5 admits them to no surface of a build), so what a default `out/` exposed is
 the published record. The case that mattered is the one this first missed:
 `KSOR_AUDIENCE=public,<audience> pnpm build`, whose output holds
-audience-restricted documents and which the scaffold README says "belongs behind
-that audience's own access control, never on a public host" — that `out/` was
-network-reachable from a preview. `KSOR_DRAFTS=show` is the other. `pnpm dev`,
+audience-restricted documents and which the scaffold's AGENTS.md says "belongs
+behind that audience's own access control, never on a public host" — that `out/`
+was network-reachable from a preview. `KSOR_DRAFTS=show` is the other. `pnpm dev`,
 where drafts live, is `next dev` and unchanged by this.
 
 Alongside this, the containment check moved from once-per-request to

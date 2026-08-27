@@ -136,18 +136,15 @@ function send(res, file, status, type) {
       res.destroy();
       return;
     }
-    // ENOENT is the ORDINARY case, not the exotic one: the export was rebuilt
-    // while a page was open and a hashed asset it re-requests has gone. That is
-    // a resource that no longer exists — 404 — and answering 500 "the file is
-    // there" would state the opposite of what happened. Anything else (EACCES,
-    // EISDIR, EMFILE) is the server failing on a file that IS there.
-    const gone = error.code === "ENOENT";
-    res.writeHead(gone ? 404 : 500, { "content-type": "text/plain; charset=utf-8" });
-    res.end(
-      gone
-        ? "404 — that file is no longer in the export; rebuild finished? reload\n"
-        : "500 — the file is there and could not be read; see the preview log\n",
-    );
+    // ONE message, and it does not claim the file is still there. `resolve()`
+    // has already stat'd every candidate, so a file that vanished before the
+    // request is answered 404 by the 404 path and never reaches here; what does
+    // reach here is EACCES, EISDIR, EMFILE, or an ENOENT that landed in the
+    // window between that stat and this open. A split by errno was tried and
+    // removed: the window cannot be raced by a test, so it was a branch nothing
+    // could show working.
+    res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+    res.end("500 — could not read that file; the preview log says why\n");
   });
   // A client that navigates away leaves the source with no consumer: `pipe()`
   // unpipes on the destination's close but never destroys the readable, so
@@ -190,8 +187,8 @@ const server = createServer((req, res) => {
 // nobody set on purpose.
 //
 // An EMPTY value binds every interface, because `listen(port, "")` takes
-// Node's falsy-host branch — the same shape `PORT` is guarded against three
-// dozen lines up, and the same way to reach it (`KSOR_PREVIEW_HOST=` in a
+// Node's falsy-host branch — the same shape `PORT` is guarded against, the
+// same as `PORT` above, and the same way to reach it (`KSOR_PREVIEW_HOST=` in a
 // shell or a compose file). So blank falls back to loopback rather than
 // silently widening what this file just narrowed.
 const HOST = (process.env.KSOR_PREVIEW_HOST ?? "").trim() || "127.0.0.1";
@@ -210,7 +207,7 @@ server.on("error", (error) => {
       console.error(`preview: nothing here can bind ${HOST} — check KSOR_PREVIEW_HOST.`);
     } else if (error.code === "EACCES") {
       console.error(`preview: not allowed to bind ${HOST}:${PORT}.`);
-      console.error("  ports below 1024 need privileges — use PORT=3000 or another high one.");
+      console.error("  usually a port below 1024 — try PORT=3000 or another high one.");
     } else {
       console.error(`preview: could not listen on ${HOST}:${PORT} — ${error.message}`);
     }
@@ -219,9 +216,9 @@ server.on("error", (error) => {
   // AFTER it is up, an error is an accept-path condition (EMFILE and friends),
   // and exiting on it would be the very thing this file exists to stop: one
   // transient ending the session.
-  console.error(
-    `preview: ${error.message}${server.listening ? " — still serving." : " — no longer listening."}`,
-  );
+  // Still serving, because reaching here at all means `listening` fired and
+  // nothing closes this server — an accept-path error does not.
+  console.error(`preview: ${error.message} — still serving.`);
 });
 
 server.listen(PORT, HOST, () => {
