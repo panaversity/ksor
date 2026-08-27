@@ -259,9 +259,14 @@ export async function applySchema(
   dim: number,
   textSearchConfig?: string,
 ): Promise<void> {
-  // Bare `pool.query` too, and for the same reasons as `storedTextSearchConfig`
-  // below — declared rather than left to be inferred. This one applies DDL, so
-  // it must not run inside `scopedTxn`'s transaction anyway.
+  // Bare `pool.query`, declared rather than left to be inferred — the same
+  // reason as `storedTextSearchConfig` below, and ONLY that one: this is not on
+  // the boot path, so nothing here is wrapped by `withPgRetry` and that
+  // paragraph's retry reasoning does not transfer. A fourth invented
+  // justification stood here briefly ("DDL must not run inside a transaction"),
+  // which is false — Postgres has transactional DDL, `schema.sql` contains
+  // nothing that refuses a transaction block, and the simple query protocol
+  // wraps this multi-statement string in one regardless.
   await pool.query(renderSchema(dim, undefined, textSearchConfig));
 }
 
