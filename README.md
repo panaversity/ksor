@@ -347,7 +347,8 @@ it:
 | Publication integrity | SLSA / Sigstore _(package only)_    | proof of which source and build produced a published artifact                 |
 | Observability         | OpenTelemetry _(not yet emitted)_   | what the infrastructure did, without becoming another knowledge store         |
 
-**Two of the nine are bindings, not behaviour, and both say so.** `ksor build`
+**One of the nine is a binding with nothing behind it yet, and one is half
+built — both say so here.** `ksor build`
 writes `build.lock.json` but signs nothing — SLSA/Sigstore attestation of that
 lock is out of scope in `specs/ksor/build/spec.md` §5 and will land separately.
 **No telemetry is emitted today either**: there is no OpenTelemetry code in the

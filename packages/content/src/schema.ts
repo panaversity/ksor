@@ -259,6 +259,9 @@ export async function applySchema(
   dim: number,
   textSearchConfig?: string,
 ): Promise<void> {
+  // Bare `pool.query` too, and for the same reasons as `storedTextSearchConfig`
+  // below — declared rather than left to be inferred. This one applies DDL, so
+  // it must not run inside `scopedTxn`'s transaction anyway.
   await pool.query(renderSchema(dim, undefined, textSearchConfig));
 }
 
@@ -289,6 +292,16 @@ export async function storedTextSearchConfig(pool: pg.Pool): Promise<string | nu
   // `connection terminated`. The one shape it would not match, "timeout
   // exceeded when trying to connect", needs a saturated pool, and the boot
   // checks run sequentially from one caller.
+  //
+  // What IS given up, since three versions of this comment have now claimed to
+  // name the cost: `search_path`. `'chunks'::regclass` is unqualified, and the
+  // binding to `public` is applied by `scopedTxn`, which this bypasses. Behind
+  // a transaction pooler carrying another session's `search_path`, this either
+  // raises 42P01 on a healthy database or resolves a DIFFERENT schema's
+  // `chunks` and reports a stemming config that is not this record's. Unlikely
+  // — and `db.ts` calls that binding unconditional "even a health probe",
+  // because a leaked `search_path` once took a serving surface dark while
+  // /health stayed green.
   const r = await pool.query(
     "SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attrdef d " +
       "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum " +

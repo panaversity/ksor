@@ -36,6 +36,10 @@ minimumReleaseAgeExclude:
 # Dependency install scripts are denied by default; decisions are recorded
 # here with a why-comment. (found live 2026-08-18: pnpm 11 ignores the v10
 # onlyBuiltDependencies key and hard-fails on undecided build scripts.)
-# All three arrived with the kernel conversion (decision 11), all three
-# verified safe to deny 2026-08-19:
+# These arrived with the kernel conversion (decision 11), verified safe to deny
+# 2026-08-19. It read "all three" until 2026-08-27: decision 12's 2026-08-22
+# revision dropped `@google/genai`, and `protobufjs` — which was only ever its
+# transitive dep — went uninstalled with it, so that denial now describes
+# nothing. Left in place because a denial costs nothing and the package returns
+# if the SDK ever does; the COUNT is what was wrong.
 allowBuilds: { esbuild: false, protobufjs: false }

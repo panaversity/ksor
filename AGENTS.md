@@ -400,7 +400,7 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     vendor, is the contract. `jose` for the gateway kit's public-door JWT
     verification. `@modelcontextprotocol/server` (SDK v2, the 2026-07-28 revision; `@modelcontextprotocol/client` is a devDep for the acceptance walk) for the MCP surface. Guard
     rule 5 now scans every workspace package against this list; install
-    scripts stay denied (three denials recorded in `pnpm-workspace.yaml`
+    scripts stay denied (recorded in `pnpm-workspace.yaml`
     with verified why-comments). _Revision 2026-08-20 (ONE package, owner):
     the kernel is BUNDLED INTO the published CLI — `@panaversity/ksor` inlines
     `postgres` + `content` + `gateway-kit` + `content-gateway` (workspace
@@ -1258,8 +1258,8 @@ gateway` package, serve-by-spawn) is superseded._
 
 28. **A retired surface is REMOVED, never deprecated** (owner, 2026-08-26).
     Pre-1.0, and the whole population of built records is ours — `migrate` has
-    never shipped at all (`docs/status.md`), and the owner confirmed there are
-    no external adopters. A deprecation window therefore buys nobody anything
+    never shipped at all (`docs/status.md`) — **false; see the 2026-08-27
+    revision** — and the owner confirmed there are no external adopters. A deprecation window therefore buys nobody anything
     and costs everybody the second code path coding principle 4 forbids. So a
     surface this project retires is gone in the release that retires it, and
     what replaces it is a REFUSAL naming the fix, never a fallback that keeps
@@ -1303,20 +1303,22 @@ gateway` package, serve-by-spawn) is superseded._
     adopter might" is not an adopter, and the reversal condition is an event
     that can be observed rather than forecast.
 
-    _Note 2026-08-27 (found by the #151/#180 sweep, NOT a reversal — this is a
-    correction of the evidence, and what to do about it is the owner's).
-    This entry's premise reads "`migrate` has never shipped at all
-    (`docs/status.md`)", and it cites the document that contradicts it:
-    `docs/status.md` records `ksor migrate` as implemented and RELEASED in
-    0.0.41, and lists it among the verbs shipping in the published package. So
-    that half of the justification is false, and by authority rule 3
-    `docs/status.md` is the authority on what is built. What survives is the
-    other half — the owner's confirmation that there are no external adopters —
-    which is a real basis but a weaker one, because it is a statement about
-    today rather than about what the tool makes possible. The decision is left
-    STANDING and unaltered: its reversal condition is a record we do not operate
-    being built by a published release, and migrate having shipped is not that
-    event. It is recorded here so the next removal made under this rule is made
+    _Revision 2026-08-27 (found by the #151/#180 sweep; a correction of the
+    EVIDENCE, not a reversal — what to do about it is the owner's). The premise
+    cited the document that contradicts it: `docs/status.md` records
+    `ksor migrate` as implemented and RELEASED in 0.0.41 and lists it among the
+    published verbs, and by authority rule 3 that file is the authority on what
+    is built. **The correction cuts both ways.** It removes half the
+    justification — what survives there is the owner's confirmation that there
+    are no external adopters, a real basis but a statement about today rather
+    than about what the tool now makes possible. It also REPAIRS the safety
+    clause: "what makes this safe rather than merely fast is that removal is
+    paired with a MIGRATION" requires `ksor migrate` to exist and ship, so the
+    entry had been leaning on a shipped migrate while asserting it had never
+    shipped. That clause is true now rather than aspirational. The decision is
+    left STANDING and unaltered — its reversal condition is a record we do not
+    operate being built by a published release, and migrate shipping is not that
+    event — and this is recorded so the next removal under this rule is made
     knowing what actually backs it._
 
 29. **The deploy REGENERATES the lock; it does not verify it** (owner,
