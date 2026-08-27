@@ -269,7 +269,10 @@ describe("outline() against a fake client", () => {
       "walk AS": { rows: [ANCHOR, CHILD], fields: OUTLINE_FIELDS },
       "up AS": { rows: [UP], fields: ["path", "climbed"] },
     });
-    const rows = await outline(client, SCOPE, { root: "getting-started/mode-2/phase-3", depth: 1 });
+    const { rows } = await outline(client, SCOPE, {
+      root: "getting-started/mode-2/phase-3",
+      depth: 1,
+    });
     expect(rows).toEqual([
       {
         slug: "lesson-a",
@@ -292,7 +295,7 @@ describe("outline() against a fake client", () => {
       "walk AS": { rows: [ANCHOR, CHILD], fields: OUTLINE_FIELDS },
       "up AS": { rows: [UP], fields: ["path", "climbed"] },
     });
-    const rows = await outline(client, SCOPE, { root: "phase-3", depth: 1 });
+    const { rows } = await outline(client, SCOPE, { root: "phase-3", depth: 1 });
     expect(rows[0]?.headingPath).toBe("getting-started/mode-2/phase-3/lesson-a");
     expect(rows[0]?.permalink, "width contract holds on the bare-slug path too").toBe(
       "/docs/lesson-a",
@@ -339,7 +342,7 @@ describe("outline() against a fake client", () => {
   it("browse (no root) returns the walk rows untouched", async () => {
     const log = { values: [] as unknown[][] };
     const client = fakeClient({ "walk AS": { rows: [ANCHOR], fields: OUTLINE_FIELDS } }, log);
-    const rows = await outline(client, SCOPE, {});
+    const { rows } = await outline(client, SCOPE, {});
     expect(rows.length).toBe(1);
     expect(rows[0]?.depth).toBe(0);
     // depth/limit clamps: defaults 0 and 200

@@ -553,7 +553,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const rows = await runRead(
       pool,
       TENANT,
-      (c) => outline(c, readScope, { depth: 3, limit: 100 }),
+      async (c) => (await outline(c, readScope, { depth: 3, limit: 100 })).rows,
       WHOLE_RECORD_SCOPE,
     );
     const outlined = rows.map((r) => r.slug);

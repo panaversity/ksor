@@ -249,7 +249,7 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("outline browse walks the published tree in position order, draft hidden", async () => {
-    const rows = await readWhole(TENANT, (c) => outline(c, scope, { depth: 2 }));
+    const rows = await readWhole(TENANT, async (c) => (await outline(c, scope, { depth: 2 })).rows);
     expect(
       rows.map((r) => r.headingPath),
       JSON.stringify(rows),
@@ -268,8 +268,9 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("outline drill-down re-bases to root-absolute and carries the permalink (column 8)", async () => {
-    const rows = await readWhole(TENANT, (c) =>
-      outline(c, scope, { root: "onboarding", depth: 1 }),
+    const rows = await readWhole(
+      TENANT,
+      async (c) => (await outline(c, scope, { root: "onboarding", depth: 1 })).rows,
     );
     expect(rows.length, JSON.stringify(rows)).toBe(1); // children only; draft hidden
     expect(rows[0]).toMatchObject({
@@ -281,25 +282,27 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
   });
 
   it("outline accepts the very path addresses it emits", async () => {
-    const rows = await readWhole(TENANT, (c) =>
-      outline(c, scope, { root: "handbook/onboarding", depth: 1 }),
+    const rows = await readWhole(
+      TENANT,
+      async (c) => (await outline(c, scope, { root: "handbook/onboarding", depth: 1 })).rows,
     );
     expect(rows[0]?.headingPath).toBe("handbook/onboarding/setup");
   });
 
   it("outline of a leaf yields []; an unknown node is loud", async () => {
-    const rows = await readWhole(TENANT, (c) =>
-      outline(c, scope, { root: "onboarding/setup", depth: 1 }),
+    const rows = await readWhole(
+      TENANT,
+      async (c) => (await outline(c, scope, { root: "onboarding/setup", depth: 1 })).rows,
     );
     expect(rows).toEqual([]);
     await expect(
-      readWhole(TENANT, (c) => outline(c, scope, { root: "no-such-node" })),
+      readWhole(TENANT, async (c) => (await outline(c, scope, { root: "no-such-node" })).rows),
     ).rejects.toThrowError(/no node with slug/);
   });
 
   it("an ambiguous outline anchor is refused, never silently merged", async () => {
     await expect(
-      readWhole(TENANT, (c) => outline(c, scope, { root: "setup" })),
+      readWhole(TENANT, async (c) => (await outline(c, scope, { root: "setup" })).rows),
     ).rejects.toThrowError(/ambiguous/);
   });
 
@@ -316,7 +319,10 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
         "handbook/security/setup",
       );
       // outline arm
-      const rows = await readWhole(TENANT, (c) => outline(c, scope, { depth: 2 }));
+      const rows = await readWhole(
+        TENANT,
+        async (c) => (await outline(c, scope, { depth: 2 })).rows,
+      );
       expect(rows.map((r) => r.headingPath)).not.toContain("handbook/onboarding/setup");
     } finally {
       await undeny();
@@ -329,8 +335,9 @@ describe.runIf(adminDsn !== "")("read db acceptance", () => {
         findDocument(c, { ...scope, tenantId: "globex" }, "onboarding/setup"),
       ),
     ).rejects.toBeInstanceOf(UnknownSlug);
-    const rows = await readWhole("globex", (c) =>
-      outline(c, { ...scope, tenantId: "globex" }, { depth: 2 }),
+    const rows = await readWhole(
+      "globex",
+      async (c) => (await outline(c, { ...scope, tenantId: "globex" }, { depth: 2 })).rows,
     );
     expect(rows).toEqual([]);
   });

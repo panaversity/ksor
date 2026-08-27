@@ -1041,7 +1041,7 @@ export async function outlineDocuments(
   // A silently cut outline manufactures a false "not in the record" — the
   // agent asks for the structure, gets a partial list with no signal, and
   // concludes the document is absent (review 2026-08-20).
-  const rows = await runRead(
+  const { rows, generation } = await runRead(
     ctx.pool,
     inst.tenantId,
     (client) => outlineQuery(client, scope, { root, depth, limit: limit + 1, offset }),
@@ -1055,10 +1055,13 @@ export async function outlineDocuments(
     actor,
     action: "outline_served",
     instanceDigest: ctx.instanceDigest,
-    // An EMPTY outline served no row from any generation, so it records NULL
-    // deliberately — the same spread-conditional `search_abstained` uses for
-    // the same reason.
-    ...(rows[0] === undefined ? {} : { generation: rows[0].generation }),
+    // The generation the WALK was pinned to, not the first row's — a leaf
+    // drill-down resolves its anchor, pins that generation and returns [], and
+    // reading it off `rows[0]` recorded NULL for the commonest empty outline
+    // there is. `content_served` sets the precedent: pin what was resolved,
+    // however little came back. NULL survives for exactly one state — nothing
+    // has ever been published, so there is no generation to name.
+    ...(generation === null ? {} : { generation }),
     detail: { ...actScope(ctx), node: root, result_count: rows.length, has_more, offset },
   });
   // Titles and heading paths are corpus-authored text and reach the agent

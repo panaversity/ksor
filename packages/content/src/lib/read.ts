@@ -510,6 +510,13 @@ export interface OutlineRow {
 
 export const OUTLINE_COLUMNS = 10;
 
+/** An outline, with the generation it was served from — which [] cannot carry. */
+export interface OutlineResult {
+  readonly rows: OutlineRow[];
+  /** Null only when nothing was ever published: no generation exists to pin. */
+  readonly generation: number | null;
+}
+
 export function outlineRows(result: pg.QueryArrayResult): OutlineRow[] {
   if (result.fields.length !== OUTLINE_COLUMNS) {
     throw new TypeError(
@@ -592,12 +599,19 @@ export interface OutlineOptions {
  * ROOT-ABSOLUTE depth + breadcrumb (the wire contract: rows are
  * self-locating; a leaf with no children returns an empty list — the
  * anchor itself is never echoed back).
+ *
+ * Returns the GENERATION it served from alongside the rows, because [] cannot
+ * carry one. A drill-down onto a leaf resolves its anchor and pins that
+ * generation, then returns no rows — and the tool description tells an agent to
+ * drill in, so that is a routine call, not an edge case. Reading the generation
+ * off `rows[0]` recorded NULL for every one of them. `content_served` sets the
+ * precedent: pin what was RESOLVED, however little came back.
  */
 export async function outline(
   client: pg.PoolClient,
   scope: ReadScope,
   options: OutlineOptions = {},
-): Promise<OutlineRow[]> {
+): Promise<OutlineResult> {
   const root = options.root ?? null;
   const depth = Math.max(0, options.depth ?? 0);
   const limit = Math.max(1, Math.min(options.limit ?? 200, OUTLINE_CEILING));
@@ -641,7 +655,11 @@ export async function outline(
     values: [scope.tenantId, scope.corpusId, pinned, anchor, depth, limit, offset],
   });
   const rows = outlineRows(result);
-  if (root === null) return rows;
+  // A BROWSE carries no pin — `OUTLINE_SQL` resolves the active generation
+  // itself from the `g` CTE, so the rows are where it surfaces. A DRILL-DOWN
+  // has `pinned` set from the resolved anchor and needs it, because a leaf
+  // returns no rows to read it off. Null only when neither exists.
+  if (root === null) return { rows, generation: pinned ?? rows[0]?.generation ?? null };
 
   const up = await arrayQuery(client, {
     text: UP_WALK_SQL,
@@ -656,5 +674,8 @@ export async function outline(
       `no node with slug ${JSON.stringify(root)} — browse from the root with outline() (omit node=)`,
     );
   }
-  return rebaseOutlineRows(rows, String(anchorRow[0]), toNumber(anchorRow[1], "climbed"));
+  return {
+    rows: rebaseOutlineRows(rows, String(anchorRow[0]), toNumber(anchorRow[1], "climbed")),
+    generation: pinned ?? rows[0]?.generation ?? null,
+  };
 }

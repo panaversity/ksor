@@ -221,9 +221,6 @@ const GOLDENS: Record<string, GoldenCase> = {
   },
 };
 
-// clean_cut goldens from the same extraction — outputs are the oracle's,
-// with CODE-POINT indices (the unicode rows shift under code-unit slicing).
-
 /** Walk a document to exhaustion via next cursors, mirroring the extraction script. */
 function walk(
   chunks: readonly DocumentChunk[],
