@@ -29,10 +29,6 @@
     },
     "./package.json": "./package.json"
   },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "scripts": {
     "build": "tsdown && node copy-schema.mjs",
     "typecheck": "tsc -p tsconfig.json"

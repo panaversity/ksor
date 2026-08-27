@@ -457,10 +457,10 @@ gateway` package, serve-by-spawn) is superseded._
     `WebStandardStreamableHTTPServerTransport` (`Request → Response`,
     stateless) behind Hono, with Host validation as middleware (the shape the
     SDK's deprecation of its transport-level option points to) and
-    `secureHeaders` / `bodyLimit` middleware replacing the hand-rolled
-    hardening. `hono` and `@hono/node-server` are declared runtime deps of
-    the content-gateway — already the MCP SDK's own transitive deps, so zero
-    new install bytes. What stays ours because it is good: `buildAuth` and the
+    `bodyLimit` middleware replacing the hand-rolled hardening (`secureHeaders`
+    was proposed here and never adopted — see the 2026-08-27 revision).
+    `hono` and `@hono/node-server` are declared runtime deps of
+    the content-gateway. What stays ours because it is good: `buildAuth` and the
     fail-closed boot posture, the three probes, and the whole content kernel.
     Reversed only if the SDK drops the Web-standard transport. _Revision
     2026-08-20: the transport choice stands unchanged. The packaging
@@ -488,6 +488,24 @@ gateway` package, serve-by-spawn) is superseded._
     external middleware — which is what this door already does. Dependency
     weight falls (`server` → `zod` + `core`; the Node middleware is
     `@hono/node-server`, already carried) rather than rising._
+
+    _Revision 2026-08-27 (issue #151): two sentences above describe a door that
+    was never built, and one of them was still being repeated in a guard
+    comment. **`bodyLimit` is real** — imported and applied at
+    `content-gateway/src/http.ts:26,522` — but **`secureHeaders` was never
+    adopted**: nothing in the tree imports it, and the door sets its own pair by
+    hand (`http.ts:330-331`, HSTS + `x-content-type-options: nosniff`, "nothing
+    else"). The CODE is right and this entry was wrong, so the entry is
+    corrected rather than the code. **And hono is not free.** "Already the MCP
+    SDK's own transitive deps, so zero new install bytes" was true of the 1.x
+    monolith and false from the moment the same revision above moved to v2,
+    which depends on `zod` and `@modelcontextprotocol/core` and nothing else
+    (checked against the installed tree, 2026-08-27); `@hono/node-server` is
+    likewise carried by nothing but the door itself. The reason that survives is
+    the one this decision already gives — the SDK's only HTTP shape is
+    Web-standard, and hono is the shape that needs no bridge to it — so the
+    weight is a cost paid deliberately, not an absence of cost. Guard rule 5's
+    why-comment carried the same false sentence and is corrected with it._
 
 14. **Takedown denial is scoped — per-node by default, subtree by explicit
     opt-in** (owner, 2026-08-19). A review found the ported denial was

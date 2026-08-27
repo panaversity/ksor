@@ -273,6 +273,12 @@ export async function applySchema(
  * (audit finding 20).
  */
 export async function storedTextSearchConfig(pool: pg.Pool): Promise<string | null> {
+  // Queried with the pool's OWN role and outside `withGuardedClient`, the same
+  // declaration `assertSchemaCompatible` carries and for the same reason: this
+  // reads the catalog (`pg_attrdef`/`pg_attribute`), which carries no RLS and
+  // no tenant GUC to scope, and it runs at boot before any serving role is
+  // assumed. Declared rather than left to be inferred — an undeclared bypass of
+  // the guarded path is indistinguishable from an oversight.
   const r = await pool.query(
     "SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attrdef d " +
       "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum " +

@@ -193,10 +193,17 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
       `${P}ksor-content-gateway`,
       new Set([
         "@modelcontextprotocol/server",
-        // hono + node-server: the SDK's own Web-standard transport shape, and
-        // both are ALREADY the SDK's transitive deps (zero new install bytes)
-        // — declared directly so the door composes them instead of
-        // hand-rolling the HTTP layer three findings landed in (decision 13).
+        // hono + node-server: the SDK's only HTTP shape is Web-standard
+        // (`Request` -> `Response`), and hono is the shape that needs no bridge
+        // to it — so the door composes them instead of hand-rolling the HTTP
+        // layer three security findings landed in (decision 13).
+        //
+        // They are NOT free, and this comment used to say they were: "already
+        // the SDK's transitive deps (zero new install bytes)" was true of the
+        // 1.x monolith and false since v2, which depends on `zod` and
+        // `@modelcontextprotocol/core` and nothing else (checked against the
+        // installed tree). The reason above is the one that survives the
+        // upgrade; the weight is a real cost, paid deliberately.
         "hono",
         "@hono/node-server",
         "zod",

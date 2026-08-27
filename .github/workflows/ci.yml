@@ -131,8 +131,12 @@ jobs:
   scaffold-e2e:
     name: Scaffold walkthrough (browser)
     runs-on: ubuntu-latest
-    # ~5 min normally (playwright install + 3 browser suites). A generous cap
-    # so a hung dev-server or browser launch FAILS fast (red, actionable)
+    # 8-10 min normally (playwright install + 3 browser suites) — measured
+    # 8.3 and 10.2 min on main and 8.5 on a branch, 2026-08-27. The comment
+    # here said "~5 min" and had been wrong for a while; the cap is the thing
+    # it justifies, so a stale number quietly makes 25 look like 5x headroom
+    # when it is closer to 2.5x. Still a generous cap, and generous is the
+    # point: a hung dev-server or browser launch FAILS fast (red, actionable)
     # instead of running to GitHub's 6-hour default and reading as "stuck".
     timeout-minutes: 25
     steps:
