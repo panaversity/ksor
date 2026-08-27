@@ -35,18 +35,28 @@ import { execFileSync } from "node:child_process";
  * nothing is there. The reader was sent to `git init`, which they had already
  * done, in the one message that governs provenance.
  */
-export type ProvenanceGap =
-  | "no-repo"
-  | "no-commit"
-  | "no-git"
-  /**
-   * A repository with commits, none of which touch the record's inputs. Only
-   * `ksor build` can reach it — it resolves the commit SCOPED to the four
-   * inputs, where ingest asks for HEAD — and it is a real state: a repository
-   * that holds the record beside other things, none of the record committed.
-   */
-  | "no-input-commit"
-  | "not-asked";
+/**
+ * The gaps, as a VALUE — the type is derived from it (coding principle 2).
+ * A hand-written union plus a hand-written list in the test meant adding a
+ * sixth member type-checked while the test that says it covers "EVERY gap"
+ * silently kept covering five. Exported so that test enumerates the real set
+ * rather than a copy of it.
+ *
+ * `no-input-commit`: a repository with commits, none of which touch the
+ * record's inputs. Only `ksor build` can reach it — it resolves the commit
+ * SCOPED to the four inputs, where ingest asks for HEAD — and it is a real
+ * state: a repository that holds the record beside other things, none of the
+ * record committed.
+ */
+export const PROVENANCE_GAPS = [
+  "no-repo",
+  "no-commit",
+  "no-git",
+  "no-input-commit",
+  "not-asked",
+] as const;
+
+export type ProvenanceGap = (typeof PROVENANCE_GAPS)[number];
 
 export function provenanceGap(knowledgeDir: string | undefined): ProvenanceGap {
   if (knowledgeDir === undefined) return "not-asked";
@@ -84,15 +94,12 @@ export function provenanceGap(knowledgeDir: string | undefined): ProvenanceGap {
  * message product principle 4 asks to be documentation. Both are parameterised
  * now, and a verb that gains the flag renders the escape by declaring so here.
  */
-const escapeFor = (subject: "generation" | "build"): string =>
-  subject === "generation" ? " or pass --source-commit <sha>" : "";
-
 export function provenanceNotice(
   gap: ProvenanceGap,
   subject: "generation" | "build" = "generation",
 ): string {
   const why = `so this ${subject} cannot be traced back to a reviewed commit`;
-  const escape = escapeFor(subject);
+  const offersSourceCommit = subject === "generation";
   switch (gap) {
     case "no-commit":
       return (
@@ -115,12 +122,18 @@ export function provenanceNotice(
         `source: unspecified — knowledge/ is not in a git repository, ${why}.\n` +
         "  fix: git init, commit the record, and re-run\n" +
         "  if it IS committed: .git did not reach this machine — an upload-based deploy\n" +
-        `    excludes it (Vercel's CLI does). Deploy from the Git connection instead${escape}`
+        `    excludes it (Vercel's CLI does). Deploy from the Git connection instead` +
+        // Its own line, not appended to the sentence: the ingest reader's
+        // remedy used to break here and the shape is part of the message.
+        (offersSourceCommit ? ",\n    or pass --source-commit <sha>" : "")
       );
     case "no-git":
       return (
         `source: unspecified — git is not installed, ${why}.\n` +
-        `  fix: install git${escape ? `,${escape} if the record is versioned elsewhere` : ""}`
+        `  fix: install git` +
+        (offersSourceCommit
+          ? ", or pass --source-commit <sha> if the record is versioned elsewhere"
+          : "")
       );
     case "no-input-commit":
       return (
@@ -165,10 +178,18 @@ export function detectSourceCommit(knowledgeDir: string | undefined): string {
  * this record that looks like provenance and is not.
  */
 export function dirtyNotice(commit: string, subject: "generation" | "build" = "build"): string {
+  // `--strict` is a `ksor build` flag, and this function takes the same
+  // `subject` its sibling does — so a `generation` caller would have printed an
+  // ingest reader a build command, or invited them to try `ksor ingest
+  // --strict` and get `error: bad-args`. Latent today (only `build` calls it),
+  // and named here rather than left for whoever adds the second caller: the
+  // same defect in `provenanceNotice` was NOT latent and reached a shipped
+  // message.
+  const strict =
+    subject === "build" ? "; `ksor build --strict` refuses this state instead of stamping it" : "";
   return (
     `source: ${commit} (dirty) — an input differs from that commit, so it does not contain ` +
     `the bytes this ${subject} published.\n` +
-    "  fix: commit the inputs (git add -A && git commit) and re-run; `ksor build --strict` " +
-    "refuses this state instead of stamping it"
+    `  fix: commit the inputs (git add -A && git commit) and re-run${strict}`
   );
 }

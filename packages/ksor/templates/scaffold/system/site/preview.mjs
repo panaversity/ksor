@@ -52,13 +52,29 @@ try {
 
 /** The file a request resolves to, or null when it escapes the export. */
 function resolve(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split("?")[0]);
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPath.split("?")[0]);
+  } catch {
+    // `decodeURIComponent` THROWS on a malformed escape — `/%`, `/%zz`, a
+    // truncated multi-byte sequence. Thrown from a request listener that is an
+    // uncaught exception, and the whole preview server exits: one `curl
+    // http://localhost:3000/%` took it down mid-review, leaving the adopter
+    // with a dead port and a stack trace instead of a page. A request we
+    // cannot parse is a request that resolves to nothing.
+    return null;
+  }
   // Contain every request inside the export: a `..` that resolves outside it
   // is refused rather than served, even in a preview.
   const target = path.resolve(ROOT, `.${decoded}`);
   if (target !== ROOT && !target.startsWith(ROOT + path.sep)) return null;
 
   for (const candidate of [target, path.join(target, "index.html"), `${target}.html`]) {
+    // `${target}.html` is the ONE candidate that can sit outside the check
+    // above: for `/`, target IS the root and the sibling `out.html` would be
+    // read. Containment is asserted per candidate rather than once, so the
+    // shapes we try can never outrun the rule they are tried under.
+    if (candidate !== ROOT && !candidate.startsWith(ROOT + path.sep)) continue;
     try {
       if (statSync(candidate).isFile()) return candidate;
     } catch {

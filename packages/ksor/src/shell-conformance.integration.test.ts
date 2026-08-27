@@ -137,14 +137,28 @@ const MIME: Readonly<Record<string, string>> = {
 // An ephemeral port per serve: fixed ports leaked EADDRINUSE flakes on a
 // busy machine (review finding, 2026-08-18).
 function serveStatic(outDir: string): Promise<{ server: Server; port: number }> {
+  // DECODE and CONTAIN, the pair the shipped `preview.mjs` uses — see the note
+  // in `scaffold-e2e.integration.test.ts` for why they belong together. A
+  // stand-in weaker than the server adopters run fails builds every real host
+  // serves; one that decodes without containing is weaker still.
+  const root = path.resolve(outDir);
   const server = createServer((req, res) => {
-    // DECODE, like the shipped `preview.mjs` does — see the same note in
-    // `scaffold-e2e.integration.test.ts`. A stand-in weaker than the server
-    // adopters run fails builds every real host serves.
-    const url = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
-    for (const candidate of [url, `${url}/index.html`, `${url}index.html`, `${url}.html`]) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
+    } catch {
+      // See the note in `scaffold-e2e.integration.test.ts`: a malformed escape
+      // makes `decodeURIComponent` throw, and a throw here kills the worker.
+      res.writeHead(400);
+      res.end("bad request");
+      return;
+    }
+    const target = path.resolve(root, `.${decoded}`);
+    for (const candidate of [target, path.join(target, "index.html"), `${target}.html`]) {
+      // Per candidate — `${target}.html` for `/` is the sibling `out.html`.
+      if (candidate !== root && !candidate.startsWith(root + path.sep)) continue;
       try {
-        const body = readFileSync(path.join(outDir, candidate));
+        const body = readFileSync(candidate);
         res.writeHead(200, {
           "content-type": MIME[path.extname(candidate)] ?? "application/octet-stream",
         });

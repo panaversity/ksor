@@ -20,7 +20,7 @@ import path from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { provenanceGap, provenanceNotice } from "./commands.js";
+import { dirtyNotice, PROVENANCE_GAPS, provenanceGap, provenanceNotice } from "./commands.js";
 
 const made: string[] = [];
 const dir = (prefix: string): string => {
@@ -97,12 +97,24 @@ describe("provenanceNotice", () => {
    * next remedy someone adds is the one that would repeat it.
    */
   it("never offers a `build` reader a flag `ksor build` refuses", () => {
-    for (const gap of ["no-commit", "no-repo", "no-git", "no-input-commit", "not-asked"] as const) {
+    // Enumerated from the exported VALUE, never a copy of it: a hand-written
+    // list here would keep passing while a sixth gap shipped uncovered, which
+    // is the drift this repo derives types from values to prevent.
+    for (const gap of PROVENANCE_GAPS) {
       expect(
         provenanceNotice(gap, "build"),
         `${gap}: ${JSON.stringify(provenanceNotice(gap, "build"))}`,
       ).not.toContain("--source-commit");
     }
+    expect(PROVENANCE_GAPS.length, "every gap was actually visited").toBeGreaterThan(0);
+  });
+
+  it("…and `dirtyNotice` does not offer an ingest reader a build-only flag either", () => {
+    expect(dirtyNotice("abc123", "build")).toContain("--strict");
+    expect(
+      dirtyNotice("abc123", "generation"),
+      "`--strict` is a `ksor build` flag; `ksor ingest --strict` is `error: bad-args`",
+    ).not.toContain("--strict");
   });
 
   it("…and still offers it to `ingest`, which does accept it", () => {

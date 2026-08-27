@@ -269,6 +269,8 @@ function composeProvider(instance: ContentInstance): EmbeddingProvider | number 
  */
 export {
   detectSourceCommit,
+  dirtyNotice,
+  PROVENANCE_GAPS,
   provenanceGap,
   provenanceNotice,
   type ProvenanceGap,

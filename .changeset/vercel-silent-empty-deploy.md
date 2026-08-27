@@ -32,11 +32,13 @@ for the reader who has, and who was previously being told to redo work they had
 already done in the one message that governs provenance.
 
 **A remedy also stops naming a flag the verb refuses.** `--source-commit` is an
-`ingest` flag; `ksor build` rejects it as an unknown argument and exits 1. Every
-notice printed by `build` therefore offered an escape hatch that would have
-turned a provenance warning into a failed build for whoever followed it —
-including the reader this change is for, whose upload stripped `.git` on the
-deploy path. The flag is now offered only by the verb that accepts it, and a test
-asserts that across every gap rather than only the one that had the bug.
+`ingest` flag; `ksor build` rejects it as an unknown argument and exits 1. Two of
+the five provenance notices offered it regardless of which verb was printing —
+including the one this change is for, read by someone whose upload stripped
+`.git` on the deploy path, for whom it would have turned a provenance warning
+into a failed build. The flag is now offered only by the verb that accepts it,
+and the same correction is applied to the `(dirty)` notice's `ksor build
+--strict`, which had the defect latently. Both are asserted across every gap,
+enumerated from the exported list rather than a copy of it.
 
 The emitted `vercel.json` is unchanged.

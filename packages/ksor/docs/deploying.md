@@ -194,10 +194,12 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > **Prefer the Git connection over `vercel deploy` while you work this out.** A
 > CLI upload excludes `.git`, so `ksor build` cannot resolve a commit and every
 > deploy publishes a record whose `build.lock.json` carries
-> `"source_commit": null` — on a product whose claim is governed provenance. It
-> is not labelled `unspecified` in the artefact; that word appears only in the
-> build's own stderr summary, so `null` is what to look for. The Git path is the
-> one that keeps the commit.
+> `"source_commit": null` — on a product whose claim is governed provenance.
+> `build.lock.json` never spells it `unspecified`: that word is what the build
+> prints, on **stdout** with the rest of its summary, so a step that inspects
+> only stderr sees nothing at all. (`ksor ingest` is the other way round — a
+> generation stores the literal string `unspecified` in `ingestion_runs`.) The
+> Git path is the one that keeps the commit.
 
 The emitted `vercel.json` declares both services and routes between them:
 
