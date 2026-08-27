@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  EMBED_DIM_MAX,
   renderSchema,
   renderSchemaText,
   schemaCompatibleFrom,
@@ -62,7 +63,7 @@ describe("renderSchema against the shipped DDL", () => {
     // The refusal must say WHICH shape 2000 applies to. It used to read
     // "(pgvector vector + HNSW ceiling)", which reads as pgvector's own limit —
     // and pgvector indexes a `halfvec` to 4000 via an expression index on the
-    // cast, verified live against a real database (2026-08-21, issue #49). An
+    // cast, verified live against a real database (2026-08-21; decision 30). An
     // adopter reading the old wording could conclude their model was
     // unusable over a wall that is not one.
     expect(message, `the ceiling must be scoped to the vector column: ${message}`).toMatch(
@@ -76,5 +77,29 @@ describe("renderSchema against the shipped DDL", () => {
   it("refuses a drifted template, naming the counts it saw", () => {
     const drifted = readFileSync(schemaSqlPath(), "utf8") + "\nembedding vector(1536)";
     expect(() => renderSchemaText(drifted, 768)).toThrowError(/expected the vector\(1536\)/);
+  });
+});
+
+/**
+ * The dimension ceiling is declared TWICE — `schema.ts` and `instance.ts` — and
+ * the comment beside the second says it "mirrors" the first. Nothing held them
+ * equal: before this, `EMBED_DIM_MAX` appeared in no test in the repository.
+ *
+ * The split is deliberate and worth keeping, because the two refuse at
+ * different moments on purpose: the parser rejects a bad `dim:` when
+ * `instance.md` is READ, so an adopter hears about it before any DDL is
+ * rendered. But two constants that must agree with no assertion between them is
+ * how decision 18's failure mode starts. Whoever raises the ceiling — decision
+ * 30 prices that and does not forbid it — has to move both, and this is what
+ * says so.
+ */
+describe("the embedding dimension ceiling", () => {
+  it("is the same number in the instance parser and in the DDL renderer", async () => {
+    const instance = await import("./instance.js");
+    expect(
+      instance.EMBED_DIM_MAX,
+      `instance.ts declares ${instance.EMBED_DIM_MAX}, schema.ts declares ${EMBED_DIM_MAX} — ` +
+        "the parser and the DDL renderer would refuse at different dims",
+    ).toBe(EMBED_DIM_MAX);
   });
 });

@@ -27,7 +27,9 @@ table rows alternate, and a callout carries a rule down its left edge; **0.0.41
 released the OKF-native record** — the profile, `ksor build`, `ksor migrate`,
 schema 2.5 and the governed door described below; **0.0.42** filled in
 `database.dsn_env` in the emitted `instance.md` so climbing to the served rung
-needs no edit, and recorded decision 29.
+needs no edit, and recorded decision 29. Decision 30 records the shipped
+embedding default staying at `gemini-embedding-001`/1536, with the two ways it
+reverses.
 
 Everything under the next heading is RELEASED and in adopters' hands as of
 0.0.41. It was developed on the `okf-native-spec` branch, which merged in
