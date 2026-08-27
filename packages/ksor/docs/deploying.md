@@ -133,10 +133,9 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > every dashboard import until Vercel's detection changes — the layout that
 > triggers it, code under `system/`, is decision 8 and is not moving.
 >
-> Also confirm **Application Preset is `Services`**. Vercel Services is in Beta,
-> and a project imported from Git comes back `Other` with `outputDirectory`,
-> `buildCommand` and `installCommand` all `null` — which **ignores the
-> `services` block entirely**.
+> **A deployment can report Ready and serve nothing.** This is the failure to
+> know about, and — stated plainly because a wrong cause is worse than none —
+> **its cause is not established.**
 >
 > **That failure is silent, and it is worse than a missing `/mcp`.** The install
 > runs, `ksor build` runs, every route prerenders, and then Vercel collects
@@ -152,14 +151,33 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > If you are reading that line, this is what you have. Observed on a 205-document
 > record, 2026-08-26 (issue #197).
 >
-> **Setting the project's fields does not fix it.** Patching `outputDirectory`,
-> `buildCommand` and `installCommand` on the imported project, confirming the
-> values read back, and then creating a fresh Git-sourced production deployment
-> — not a redeploy, which reuses the original settings snapshot and proves
-> nothing — produced the same warning, the same empty output and the same 404.
-> **For those three keys, `vercel.json` wins over the project's own fields**, so
-> the fix has to be in that file. (What the preset governs is different and is
-> not contradicted by this: it decides whether the `services` key is read at all.)
+> **The Application Preset is NOT the cause, and it is worth saying so because
+> it is the first thing everyone suspects.** Measured on two live Git-linked
+> projects, 2026-08-27:
+>
+> | project's preset | `services` block built | serves                                 |
+> | ---------------- | ---------------------- | -------------------------------------- |
+> | `Services`       | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
+> | `Other`          | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
+>
+> A project whose preset reads `Other` honoured the `services` block and built
+> both services. (`405` on a GET to `/mcp` is the door answering "Method Not
+> Allowed", not a static 404 — it is how you tell the door is routed.) So do not
+> spend an evening on the preset field.
+>
+> **Setting the project's own build fields does not fix it either.** Patching
+> `outputDirectory`, `buildCommand` and `installCommand`, confirming the values
+> read back, then creating a fresh Git-sourced production deployment — not a
+> redeploy, which reuses the original settings snapshot and proves nothing —
+> produced the same warning, the same empty output and the same 404. For those
+> three keys, `vercel.json` wins over the project's fields.
+>
+> **What to check first, in order:** the **Root Directory** (above — an import
+> auto-fills `system/site`, and the build then reads a `vercel.json` that does
+> not exist), then whether the repository root really is what the builder
+> received. If neither explains it, the classic-keys form below is the fallback
+> that is known to work, and please add what you found to issue #197 — the
+> reported case has not been reproduced.
 >
 > **If it still argues, deploy the site alone** — replace the `services` block in
 > `vercel.json` with the classic top-level keys, which need no preset:

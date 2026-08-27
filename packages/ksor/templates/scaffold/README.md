@@ -277,17 +277,16 @@ declared`. The services ARE declared, in `vercel.json` at the repo root,
 Three things catch people here. Two are the system being deliberate; the first
 is not, and it is the one that fails without saying so:
 
-- **A green deployment that 404s at every path means Vercel ignored the
-  `services` block.** A project imported from Git can come back with Application
-  Preset `Other`, which reads that block not at all: the build succeeds, Vercel
-  collects nothing, and the deployment reports **Ready**, takes your domain and
-  serves `404: NOT_FOUND` everywhere. The only signal is one build-log line —
-  `WARNING! Build output contains no "functions" or "static" directory`. Check
-  the preset first. What is *verified* to fix it is replacing the `services`
-  block with the classic top-level keys, which need no preset and which also move
-  the door off your domain — patching the project's own `outputDirectory`,
-  `buildCommand` and `installCommand` does not, because `vercel.json` wins for
-  those. Both, and what has to move with the door, are in
+- **A deployment can report Ready and serve nothing.** The build succeeds,
+  Vercel collects nothing, and the deployment takes your domain and answers
+  `404: NOT_FOUND` everywhere — with one build-log line as the only signal:
+  `WARNING! Build output contains no "functions" or "static" directory`. It has
+  been seen once, on a large record, and **the cause is not established** — so
+  check the **Root Directory** first (an import auto-fills `system/site`, and
+  the build then reads a `vercel.json` that is not there). It is *not* the
+  Application Preset: a Git-linked project reading `Other` was measured building
+  both services and serving them. The full diagnosis, and the classic-keys
+  `vercel.json` that is known to work, are in
   `node_modules/@panaversity/ksor/docs/deploying.md`.
 - **`disabled-local` will not deploy.** The container sets `$PORT`, so the door
   binds `0.0.0.0` — a PUBLIC bind — and refuses that value by design, saying so
