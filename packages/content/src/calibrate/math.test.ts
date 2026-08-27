@@ -100,7 +100,8 @@ describe("report assembly and the printed recommendation block", () => {
         new Date("2026-08-21T00:00:00Z"),
       );
       expect(report).toEqual(c.expected);
-      expect(renderReport(report)).toBe(c.rendered);
+      // `null`: these bytes come from the Python oracle, which had no predicate digest.
+      expect(renderReport(report, null)).toBe(c.rendered);
     });
   }
 

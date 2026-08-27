@@ -16,7 +16,7 @@ import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { contentPool, runIngest, runRead } from "../db.js";
+import { contentPool, runIngest, runRead, type DbOp } from "../db.js";
 import { WHOLE_RECORD_SCOPE } from "../lib/audience.js";
 import { applySchema } from "../schema.js";
 import { embedIntent } from "./embedding.js";
@@ -49,6 +49,21 @@ const BODY: Record<string, string> = {
 describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
   let admin: pg.Pool;
   let pool: pg.Pool;
+
+  /**
+   * Every read in this file is entitled to the WHOLE record — these suites test
+   * resolution and denial, not audience — so the scope is STATED once here rather
+   * than on every call site. `runRead` binds no audience of its own: a read that
+   * names no viewer is served nothing (db.ts, review 2026-08-25), which is why
+   * the sentinel has to appear somewhere for these reads to see anything at all.
+   */
+  function readWhole<T>(
+    tenant: string,
+    op: DbOp<T>,
+    extra: Readonly<Record<string, string>> = {},
+  ): Promise<T> {
+    return runRead(pool, tenant, op, { ...WHOLE_RECORD_SCOPE, ...extra });
+  }
   let dbName: string;
 
   beforeAll(async () => {
@@ -78,8 +93,13 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
         position: number,
       ): Promise<string> => {
         const r = await c.query(
-          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, status)
-           VALUES ($1, 1, $2, $3, $4, $5, $5, $6, 'published') RETURNING node_id`,
+          // A SECTION carries no governance of its own (record spec §1) — it is
+          // admitted through a visible descendant — so only the leaves get an
+          // audience and a lifecycle status here.
+          `INSERT INTO content_nodes (tenant_id, generation, stable_id, parent_id, kind, slug, title, position, status, audience, doc_status)
+           VALUES ($1, 1, $2, $3, $4, $5, $5, $6, 'published',
+                   CASE WHEN $4 = 'section' THEN NULL ELSE ARRAY['public'] END,
+                   CASE WHEN $4 = 'section' THEN NULL ELSE 'stable' END) RETURNING node_id`,
           [TENANT, stableId, parent, kind, slug, position],
         );
         return String(r.rows[0].node_id);
@@ -155,26 +175,25 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
     try {
       // findDocument — both the path-form and the sor_id-override descendant vanish
       await expect(
-        runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/legal/policy")),
+        readWhole(TENANT, (c) => findDocument(c, rscope, "docs/legal/policy")),
       ).rejects.toBeInstanceOf(UnknownSlug);
       await expect(
-        runRead(pool, TENANT, (c) => findDocument(c, rscope, "LGL-9931")),
+        readWhole(TENANT, (c) => findDocument(c, rscope, "LGL-9931")),
       ).rejects.toBeInstanceOf(UnknownSlug);
       // the container itself
       await expect(
-        runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/legal")),
+        readWhole(TENANT, (c) => findDocument(c, rscope, "docs/legal")),
       ).rejects.toBeInstanceOf(UnknownSlug);
       // the prefix-SIBLING decoy and the unrelated doc SURVIVE
       expect(
-        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/legal-archive")))
-          .stableId,
+        (await readWhole(TENANT, (c) => findDocument(c, rscope, "docs/legal-archive"))).stableId,
       ).toBe("docs/legal-archive");
-      expect(
-        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/guide"))).stableId,
-      ).toBe("docs/guide");
+      expect((await readWhole(TENANT, (c) => findDocument(c, rscope, "docs/guide"))).stableId).toBe(
+        "docs/guide",
+      );
 
       // outline browse: docs' children exclude legal; child_count drops it
-      const rows = await runRead(pool, TENANT, (c) => outline(c, rscope, { depth: 3 }));
+      const rows = await readWhole(TENANT, (c) => outline(c, rscope, { depth: 3 }));
       const paths = rows.map((r) => r.headingPath);
       expect(paths, JSON.stringify(paths)).not.toContain("docs/legal");
       expect(paths).not.toContain("docs/legal/policy");
@@ -200,21 +219,57 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
     try {
       // the listed leaf is gone
       await expect(
-        runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/legal/policy")),
+        readWhole(TENANT, (c) => findDocument(c, rscope, "docs/legal/policy")),
       ).rejects.toBeInstanceOf(UnknownSlug);
       // its sibling under the same container SURVIVES (no cascade)
-      expect(
-        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "LGL-9931"))).stableId,
-      ).toBe("LGL-9931");
+      expect((await readWhole(TENANT, (c) => findDocument(c, rscope, "LGL-9931"))).stableId).toBe(
+        "LGL-9931",
+      );
       // the container itself SURVIVES
-      expect(
-        (await runRead(pool, TENANT, (c) => findDocument(c, rscope, "docs/legal"))).stableId,
-      ).toBe("docs/legal");
+      expect((await readWhole(TENANT, (c) => findDocument(c, rscope, "docs/legal"))).stableId).toBe(
+        "docs/legal",
+      );
       // search: the leaf cannot rank; the sibling still can
       expect(stableIds(await search(BODY["docs/legal/policy"]!))).not.toContain(
         "docs/legal/policy",
       );
       expect(stableIds(await search(BODY["LGL-9931"]!))).toContain("LGL-9931");
+    } finally {
+      await undeny();
+    }
+  });
+
+  it("a REVOKED denial serves again — the row is the state, the ledger is the history", async () => {
+    // Record spec §5: a revocation sets `revoked_ledger_id`/`revoked_at` on the
+    // row rather than deleting it, so the ledger keeps the whole history and
+    // the DENIED seam must read only rows still in force. Without this the
+    // revocation entry lands, the row stays, and the door refuses forever while
+    // the site (which reads the ledger) publishes — the two surfaces disagreeing
+    // is the state decision 19 exists to prevent.
+    await deny("docs/legal", "subtree");
+    await deny("docs/guide", "node");
+    try {
+      await expect(
+        readWhole(TENANT, (c) => findDocument(c, rscope, "docs/guide")),
+      ).rejects.toBeInstanceOf(UnknownSlug);
+      await pool.query(
+        "UPDATE takedown_denylist SET revoked_ledger_id = 'r1', revoked_at = now()" +
+          " WHERE tenant_id = $1 AND stable_id IN ('docs/guide', 'docs/legal')",
+        [TENANT],
+      );
+      // the revoked node denial
+      expect((await readWhole(TENANT, (c) => findDocument(c, rscope, "docs/guide"))).stableId).toBe(
+        "docs/guide",
+      );
+      expect(stableIds(await search(BODY["docs/guide"]!))).toContain("docs/guide");
+      // and the revoked SUBTREE denial: the cascade must stop cascading too,
+      // which is a second EXISTS in the same CTE and drifts independently
+      expect(
+        (await readWhole(TENANT, (c) => findDocument(c, rscope, "docs/legal/policy"))).stableId,
+      ).toBe("docs/legal/policy");
+      expect((await readWhole(TENANT, (c) => findDocument(c, rscope, "LGL-9931"))).stableId).toBe(
+        "LGL-9931",
+      );
     } finally {
       await undeny();
     }

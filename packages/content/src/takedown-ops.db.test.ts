@@ -1,25 +1,22 @@
 /**
- * The takedown write plane, and the manifest that carries a denial to the site.
+ * The takedown READ plane: what is denied, and the §7 acts that made it so.
  *
- * Two halves of one finding. The denial mechanism was complete on the serving
- * side and had no door: the only way to impose one was a superuser psql prompt,
- * with no row proving who did it. And because it lived only in the database,
- * the site kept publishing a withdrawn document — `llms.txt` included.
+ * The write half moved to the ledger (record spec §5) and is walked through the
+ * verb in `takedown-verb.db.test.ts`. What stays here is the pair that has to
+ * hold whoever wrote the row: the acts are READABLE (before schema 2.3
+ * `retrieval_log` had FORCE row-level security, an INSERT policy and no reader
+ * at all — written forever, readable by nobody), and both readers are scoped to
+ * ONE RECORD, not merely to the tenant.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runIngest } from "./db.js";
 import { grantIngest } from "./grant.js";
-import {
-  applyTakedown,
-  deniedStableIds,
-  deniedSubtreeDirs,
-  denylistManifest,
-  listTakedowns,
-  readLedger,
-  revokeTakedown,
-} from "./takedown-ops.js";
+import { instanceOf } from "./ingest/fixtures/record-fixture.js";
+import { applyLedger } from "./ingest/ledger-apply.js";
+import { parseLedger } from "./record/ledger.js";
+import { listTakedowns, readLedger } from "./takedown-ops.js";
 import { applySchema } from "./schema.js";
 import type { ContentInstance } from "./instance.js";
 import type pg from "pg";
@@ -28,23 +25,33 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_takedown_ops_test";
 const TENANT = "takedown-corp";
 
-const instance: ContentInstance = {
-  name: TENANT,
-  corpusId: TENANT,
-  tenantId: TENANT,
-  dsnEnv: "KSOR_DB_URL",
-  abstain: { vectorFloor: null, keywordFloor: null },
-  textSearchConfig: "english",
-  maximumResponseCharacters: 120_000,
-  instructions: "",
-  audiences: [],
-  defaultVisibility: null,
-  embeddingProvider: "fake",
-  embeddingModel: "fake-embed-001",
-  embeddingDim: 1536,
-};
+const instance: ContentInstance = instanceOf(TENANT, TENANT);
 
-describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
+const LEDGER = `- id: "2026-08-25T10:00:00Z-aaa111"
+  stable_id: "knowledge/withdrawn"
+  scope: node
+  expected: present
+  by: "human:ciso"
+  at: "2026-08-25T10:00:00Z"
+  reason: "legal request 2026-08"
+`;
+
+/**
+ * The revocation is signed by a DIFFERENT person from the denial, deliberately.
+ *
+ * `ledger-apply` picks the §7 actor with `revoked ? state.revokedBy.by : d.by`
+ * — one expression deciding both the actor and the action — and with one name
+ * in the fixture, changing it to `d.by` produces an identical row. So the
+ * inversion this file exists to catch would be invisible to it (review
+ * finding 7).
+ */
+const REVOKER = "human:dpo";
+const REVOKED_LEDGER =
+  LEDGER +
+  `- id: "2026-08-25T11:00:00Z-bbb222"\n  revokes: "2026-08-25T10:00:00Z-aaa111"\n` +
+  `  by: "${REVOKER}"\n  at: "2026-08-25T11:00:00Z"\n`;
+
+describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
   let pool: pg.Pool;
   let admin: pg.Pool;
 
@@ -62,6 +69,9 @@ describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
       "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1, $1, 1)",
       [TENANT],
     );
+    const parsed = parseLedger(LEDGER, ".ksor/takedowns.yaml");
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.refusals));
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, parsed.ledger));
   }, 180_000);
 
   afterAll(async () => {
@@ -70,252 +80,93 @@ describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
     await admin?.end().catch(() => undefined);
   });
 
-  it("denies a node through the ingest role — no superuser psql required", async () => {
-    const out = await applyTakedown(pool, instance, {
-      stableId: "knowledge/withdrawn",
-      scope: "node",
-      reason: "legal request 2026-08",
-      actor: "ops@example.com",
-    });
-    expect(out.changed).toBe(true);
-    expect((await listTakedowns(pool, instance)).map((r) => r.stableId)).toEqual([
-      "knowledge/withdrawn",
+  it("lists what is denied, with the scope the ledger recorded", async () => {
+    expect(await listTakedowns(pool, instance)).toMatchObject([
+      { stableId: "knowledge/withdrawn", scope: "node", reason: "legal request 2026-08" },
     ]);
   });
 
-  it("writes the §7 row that proves WHO denied it, and the ledger can be READ", async () => {
-    // Both halves matter: the row exists, and a shipped role can read it back.
-    // Before schema 2.3 retrieval_log had FORCE RLS, an INSERT policy, and no
-    // SELECT policy or grant — write-only under every credential ksor ships.
+  /**
+   * `--list` is the operator's own check on what is denied, so it must read the
+   * SAME state the serving predicate does: a row whose `revoked_at` is set is
+   * not denied anywhere else, and reporting it here made the duplicate-denial
+   * leak look like correct behaviour instead of surfacing it.
+   */
+  it("a revoked row is not listed — the list is what is IN FORCE", async () => {
+    const revoked = parseLedger(REVOKED_LEDGER, ".ksor/takedowns.yaml");
+    if (!revoked.ok) throw new Error(JSON.stringify(revoked.refusals));
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, revoked.ledger));
+    expect(await listTakedowns(pool, instance)).toEqual([]);
+    const row = await pool.query(
+      "SELECT revoked_at FROM takedown_denylist WHERE tenant_id = $1 AND stable_id = $2",
+      [TENANT, "knowledge/withdrawn"],
+    );
+    expect(row.rows[0]?.revoked_at, "the row stays — only the denial lifts").not.toBeNull();
+    // Put the record back the way the rest of this file expects it.
+    const again = parseLedger(LEDGER, ".ksor/takedowns.yaml");
+    if (!again.ok) throw new Error(JSON.stringify(again.refusals));
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, again.ledger));
+  });
+
+  it("the §7 act is readable, and names the LEDGER's actor rather than whoever ran the apply", async () => {
     const rows = await readLedger(pool, instance, 10);
     const act = rows.find((r) => r.action === "takedown_applied");
     expect(act, "the act left a row").toBeDefined();
-    expect(act?.actor).toBe("ops@example.com");
-    expect(act?.detail.stable_id).toBe("knowledge/withdrawn");
-    expect(act?.detail.reason).toBe("legal request 2026-08");
-  });
-
-  it("is idempotent, and says so rather than pretending it changed something", async () => {
-    const again = await applyTakedown(pool, instance, {
-      stableId: "knowledge/withdrawn",
-      scope: "node",
-      reason: "legal request 2026-08",
-      actor: "ops@example.com",
-    });
-    expect(again.changed).toBe(false);
-  });
-
-  it("widening a denial to a subtree is a change, not a no-op", async () => {
-    const widened = await applyTakedown(pool, instance, {
-      stableId: "knowledge/withdrawn",
-      scope: "subtree",
-      reason: "legal request 2026-08",
-      actor: "ops@example.com",
-    });
-    expect(widened.changed).toBe(true);
-    expect((await listTakedowns(pool, instance))[0]?.scope).toBe("subtree");
-  });
-
-  it("exports a manifest of EXACT ids, with subtree denials already expanded", async () => {
-    // The site has no tree to walk, so the expansion happens here. Handing it a
-    // scope to interpret meant prefix-matching, and a section's stable_id ends
-    // in /index — so its children never matched and kept publishing.
-    const ids = await deniedStableIds(pool, instance);
-    const manifest = denylistManifest(TENANT, ids, new Date("2026-08-21T00:00:00Z"));
-    expect(manifest.source).toBe("database");
-    expect(manifest.denied.map((d) => d.stable_id)).toContain("knowledge/withdrawn");
-    expect(
-      manifest.denied.every((d) => d.scope === "node"),
-      "every entry is an outright denial, nothing left to interpret",
-    ).toBe(true);
-  });
-
-  it("exports the subtree's DIRECTORY, so a document added later is covered too", async () => {
-    // The expanded id list can only name what the ACTIVE GENERATION contains,
-    // and the site builds from DISK. A document added under a withdrawn
-    // section after the last ingest is on disk and not in the database, so it
-    // published to /docs and llms.txt under a section that had been explicitly
-    // withdrawn — while decision 14 states outright that a subtree deny must
-    // cover descendants a FUTURE re-ingest adds (round-5 review of #43).
-    //
-    // Walked live 2026-08-21: `knowledge/policies/2026-layoffs.md`, created
-    // after the takedown and never ingested, is absent from the id list and
-    // covered by the directory.
-    const tree = [
-      // A SECTION — the ordinary target of --subtree, and synthetic: it has no
-      // source row at all, so deriving the directory from the denied node's own
-      // file finds nothing.
-      { stable: "knowledge/policies#section", slug: "policies", kind: "section", path: null },
-      {
-        stable: "knowledge/policies/purchase-approval",
-        slug: "purchase-approval",
-        kind: "document",
-        path: "knowledge/policies/purchase-approval.md",
+    expect(act?.actor).toBe("human:ciso");
+    expect(act).toMatchObject({
+      actor: "human:ciso",
+      action: "takedown_applied",
+      detail: {
+        stable_id: "knowledge/withdrawn",
+        ledger_id: "2026-08-25T10:00:00Z-aaa111",
+        // WHY it was withdrawn is half of what a governance trail is for, and
+        // the check for it was dropped when this file replaced an older one
+        // (review finding 8).
+        reason: "legal request 2026-08",
       },
-      {
-        stable: "knowledge/policies/nested/detail",
-        slug: "detail",
-        kind: "document",
-        path: "knowledge/policies/nested/detail.md",
-      },
-      // Outside the section, and it must stay servable.
-      { stable: "knowledge/about", slug: "about", kind: "document", path: "knowledge/about.md" },
-    ];
-    const ids = new Map<string, string>();
-    await runIngest(pool, TENANT, async (client) => {
-      for (const node of tree) {
-        const parent = node.stable.startsWith("knowledge/policies/")
-          ? ids.get("knowledge/policies#section")
-          : null;
-        const r = await client.query(
-          "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, parent_id)" +
-            " VALUES ($1, $1, 1, $2, $3, $4, $5, 0, $6) RETURNING node_id",
-          [TENANT, node.stable, node.slug, node.slug, node.kind, parent ?? null],
-        );
-        const nodeId = String(r.rows[0].node_id);
-        ids.set(node.stable, nodeId);
-        if (node.path !== null) {
-          await client.query(
-            "INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path," +
-              " content_hash, embedding_model, chunk_policy) VALUES ($1, 1, $2, $3, $4, $5, 'h', 'fake-embed-001', 'p')",
-            [TENANT, `${node.path}:prose`, nodeId, node.slug, node.path],
-          );
-        }
-      }
-    });
-    await applyTakedown(pool, instance, {
-      stableId: "knowledge/policies#section",
-      scope: "subtree",
-      reason: "legal hold",
-      actor: "ops@example.com",
-    });
-
-    const dirs = await deniedSubtreeDirs(pool, instance);
-    expect(dirs, "the section's directory, derived from its DESCENDANTS' files").toEqual([
-      "knowledge/policies/",
-    ]);
-
-    // A file that does not exist in the database is still covered.
-    const later = "knowledge/policies/2026-layoffs.md";
-    expect(
-      dirs.some((d) => later.startsWith(d)),
-      `a document added after the takedown must be covered: ${JSON.stringify(dirs)}`,
-    ).toBe(true);
-    // And a document OUTSIDE the section is not.
-    expect(dirs.some((d) => "knowledge/about.md".startsWith(d))).toBe(false);
-
-    const manifest = denylistManifest(
-      TENANT,
-      await deniedStableIds(pool, instance),
-      new Date("2026-08-21T00:00:00Z"),
-      "database",
-      dirs,
-    );
-    expect(manifest.denied_subtrees).toEqual(["knowledge/policies/"]);
-    expect(
-      manifest.denied.map((d) => d.stable_id),
-      "the later document is NOT in the id list — the database has never seen it",
-    ).not.toContain("knowledge/policies/2026-layoffs");
-
-    // These cases share one database in order, so this one puts back what it
-    // changed rather than leaving a denial for the next test to trip over.
-    await revokeTakedown(pool, instance, {
-      stableId: "knowledge/policies#section",
-      actor: "ops@example.com",
     });
   });
 
-  it("a section whose children are all SUBSECTIONS still yields its own directory", async () => {
-    // The residual hole in the round-5 fix. The seed's own source was excluded
-    // wholesale, to stop a LEAF denial emitting its parent directory and
-    // denying every sibling. But a section's own index.md is the file that
-    // names the section's directory — so a section whose other descendants all
-    // live one level down contributed only the SUBdirectory, and a document
-    // written directly under the withdrawn section published to /docs and
-    // llms.txt (round-10 review of #43).
-    const tree = [
-      {
-        stable: "knowledge/handbook/index",
-        slug: "handbook",
-        kind: "section",
-        path: "knowledge/handbook/index.md",
-        parent: null as string | null,
-      },
-      {
-        stable: "knowledge/handbook/2024/index",
-        slug: "2024",
-        kind: "section",
-        path: "knowledge/handbook/2024/index.md",
-        parent: "knowledge/handbook/index",
-      },
-      {
-        stable: "knowledge/handbook/2024/a",
-        slug: "a",
-        kind: "document",
-        path: "knowledge/handbook/2024/a.md",
-        parent: "knowledge/handbook/2024/index",
-      },
-    ];
-    const ids = new Map<string, string>();
-    await runIngest(pool, TENANT, async (client) => {
-      for (const node of tree) {
-        const r = await client.query(
-          "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, parent_id)" +
-            " VALUES ($1, $1, 1, $2, $3, $4, $5, 0, $6) RETURNING node_id",
-          [
-            TENANT,
-            node.stable,
-            node.slug,
-            node.slug,
-            node.kind,
-            ids.get(node.parent ?? "") ?? null,
-          ],
-        );
-        const nodeId = String(r.rows[0].node_id);
-        ids.set(node.stable, nodeId);
-        await client.query(
-          "INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path," +
-            " content_hash, embedding_model, chunk_policy) VALUES ($1, 1, $2, $3, $4, $5, 'h', 'fake-embed-001', 'p')",
-          [TENANT, `${node.path}:prose`, nodeId, node.slug, node.path],
-        );
-      }
-    });
-    await applyTakedown(pool, instance, {
-      stableId: "knowledge/handbook/index",
-      scope: "subtree",
-      reason: "legal hold",
-      actor: "ops@example.com",
-    });
-
-    const dirs = await deniedSubtreeDirs(pool, instance);
-    expect(
-      dirs,
-      "the withdrawn section's OWN directory must be denied, not just the subsection's",
-    ).toEqual(["knowledge/handbook/"]);
-    // The document an author writes next, under the withdrawn section.
-    expect(
-      dirs.some((d) => "knowledge/handbook/newpolicy.md".startsWith(d)),
-      `a document added directly under the withdrawn section must be covered: ${JSON.stringify(dirs)}`,
-    ).toBe(true);
-
-    await revokeTakedown(pool, instance, {
-      stableId: "knowledge/handbook/index",
-      actor: "ops@example.com",
-    });
-  });
-
-  it("a --subtree denial on a LEAF contributes no directory — its subtree is itself", async () => {
-    // Otherwise the leaf's own directory would be emitted and every sibling in
-    // it would be denied.
-    await applyTakedown(pool, instance, {
-      stableId: "knowledge/about",
-      scope: "subtree",
-      reason: "leaf",
-      actor: "ops@example.com",
-    });
-    const dirs = await deniedSubtreeDirs(pool, instance);
-    expect(dirs, "a leaf must not deny its siblings").not.toContain("knowledge/");
-    await revokeTakedown(pool, instance, { stableId: "knowledge/about", actor: "ops@example.com" });
+  /**
+   * A REVOCATION is a governance act in its own right, and it was asserted
+   * nowhere that runs.
+   *
+   * `ledger-apply.ts` chooses the actor and the action in a single expression;
+   * the only `takedown_revoked` assertion in the repository is over `ledgerActs`
+   * — a pure function on a parsed file, a different code path that never reaches
+   * `applyLedger` or a database. So changing the actor back to the DENIER left
+   * every test green: a lifted denial would have been attributed, in the audit
+   * trail, to the person who imposed it (review finding 7).
+   */
+  it("a revocation's §7 row names the REVOKER, not the person who imposed the denial", async () => {
+    const revoked = parseLedger(REVOKED_LEDGER, ".ksor/takedowns.yaml");
+    if (!revoked.ok) throw new Error(JSON.stringify(revoked.refusals));
+    // Parsed BEFORE the try, so the restore in `finally` cannot throw: a throw
+    // there replaces whichever assertion actually failed, which is the one
+    // thing this test exists to report.
+    const restore = parseLedger(LEDGER, ".ksor/takedowns.yaml");
+    if (!restore.ok) throw new Error(JSON.stringify(restore.refusals));
+    const restored = restore.ledger;
+    await runIngest(pool, TENANT, (c) => applyLedger(c, instance, revoked.ledger));
+    try {
+      const rows = await readLedger(pool, instance, 50);
+      const act = rows.find((r) => r.action === "takedown_revoked");
+      expect(act, "the revocation left a row of its own").toBeDefined();
+      expect(act).toMatchObject({
+        actor: REVOKER,
+        action: "takedown_revoked",
+        detail: {
+          stable_id: "knowledge/withdrawn",
+          revoked_ledger_id: "2026-08-25T11:00:00Z-bbb222",
+          change: "revoked",
+        },
+      });
+      // The two acts are distinguishable by actor, which is the whole point of
+      // recording one: they must not both name the denier.
+      expect(act?.actor, "the revoker is not the denier").not.toBe("human:ciso");
+    } finally {
+      await runIngest(pool, TENANT, (c) => applyLedger(c, instance, restored));
+    }
   });
 
   it("the ledger is scoped to THIS record, not just the tenant", async () => {
@@ -349,141 +200,10 @@ describe.runIf(adminDsn !== "")("takedown write plane (db)", () => {
       "…and it IS in its own",
     ).toContain("someone-else");
   });
-
-  it("lifts a denial and records THAT act too", async () => {
-    const lifted = await revokeTakedown(pool, instance, {
-      stableId: "knowledge/withdrawn",
-      actor: "ops@example.com",
-    });
-    expect(lifted.changed).toBe(true);
-    expect(await listTakedowns(pool, instance)).toEqual([]);
-    const rows = await readLedger(pool, instance, 20);
-    expect(
-      rows.some((r) => r.detail.change === "revoked"),
-      "the lift is on the record",
-    ).toBe(true);
-  });
-
-  it("lifting something that was never denied is honest about it", async () => {
-    const none = await revokeTakedown(pool, instance, {
-      stableId: "knowledge/never",
-      actor: "ops@example.com",
-    });
-    expect(none.changed).toBe(false);
-  });
 });
 
-describe.runIf(adminDsn === "")("takedown write plane (db) — gated", () => {
+describe.runIf(adminDsn === "")("takedown read plane (db) — gated", () => {
   it("skips without KSOR_DB_URL", () => {
     expect(adminDsn).toBe("");
   });
 });
-
-/**
- * Issue #86 — the shape where the withdrawn container contributes no path at all.
- *
- * The round-10 fix made a container's OWN file count when it has children,
- * because a section's `index.md` names the section's directory. But an
- * index-less section has no `sources` row to contribute, and the walk inner-joins
- * `sources` — so a section whose every file descendant lives one level down
- * emitted only the SUBdirectory. A document written directly under the withdrawn
- * section then staged and published, in exactly the window `denied_subtrees`
- * exists to cover.
- *
- * The existing cases both miss it: the index-less container at :133 has a direct
- * file child (which supplies its directory), and the container at :228 has an
- * index. This is index-less AND descendants-only-below.
- */
-describe.runIf(adminDsn !== "")(
-  "a withdrawn container with no index and no direct files (db)",
-  () => {
-    const T2 = "tdnoidx";
-    let pool2: pg.Pool;
-    let admin2: pg.Pool;
-    const DB2 = "ksor_td_noindex";
-
-    const inst = (): ContentInstance =>
-      ({
-        name: T2,
-        corpusId: T2,
-        tenantId: T2,
-        dsnEnv: "KSOR_DB_URL",
-        abstain: { vectorFloor: null, keywordFloor: null },
-        textSearchConfig: "english",
-        maximumResponseCharacters: 120_000,
-        instructions: "",
-        audiences: [],
-        defaultVisibility: null,
-        embeddingProvider: "fake",
-        embeddingModel: "fake-embed-001",
-        embeddingDim: 1536,
-      }) as ContentInstance;
-
-    beforeAll(async () => {
-      const { Pool } = (await import("pg")).default;
-      admin2 = new Pool({ connectionString: adminDsn });
-      await admin2.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
-      await admin2.query(`CREATE DATABASE ${DB2}`);
-      const url = new URL(adminDsn);
-      url.pathname = `/${DB2}`;
-      pool2 = contentPool(url.toString(), 4);
-      await applySchema(pool2, 1536);
-      await grantIngest(pool2, T2);
-
-      // legal/ (no index) -> legal/2024/ (no index) -> legal/2024/notice.md
-      await runIngest(pool2, T2, async (client) => {
-        await client.query(
-          "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1,$1,1)",
-          [T2],
-        );
-        const mk = async (stable: string, slug: string, kind: string, parent: string | null) => {
-          const r = await client.query(
-            "INSERT INTO content_nodes (tenant_id, corpus_id, generation, stable_id, slug, title, kind, position, parent_id)" +
-              " VALUES ($1,$1,1,$2,$3,$3,$4,0,$5) RETURNING node_id",
-            [T2, stable, slug, kind, parent],
-          );
-          return String(r.rows[0].node_id);
-        };
-        const legal = await mk("knowledge/legal#section", "legal", "section", null);
-        const y2024 = await mk("knowledge/legal/2024#section", "2024", "section", legal);
-        const notice = await mk("knowledge/legal/2024/notice", "notice", "document", y2024);
-        await client.query(
-          "INSERT INTO sources (tenant_id, generation, source_id, node_id, title, origin_path," +
-            " content_hash, embedding_model, chunk_policy) VALUES ($1,1,$2,$3,'Notice',$4,'h','fake-embed-001','p')",
-          [T2, "knowledge/legal/2024/notice.md:prose", notice, "knowledge/legal/2024/notice.md"],
-        );
-      });
-      await applyTakedown(pool2, inst(), {
-        stableId: "knowledge/legal#section",
-        scope: "subtree",
-        reason: "legal hold",
-        actor: "ops@example.com",
-      });
-    }, 300_000);
-
-    afterAll(async () => {
-      await pool2?.end().catch(() => undefined);
-      await admin2?.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
-      await admin2?.end().catch(() => undefined);
-    });
-
-    it("emits the WITHDRAWN container's directory, not just the subdirectory", async () => {
-      const dirs = await deniedSubtreeDirs(pool2, inst());
-      expect(
-        dirs,
-        "knowledge/legal/ is the subtree root; the 2024/ below it is covered by it",
-      ).toEqual(["knowledge/legal/"]);
-    }, 60_000);
-
-    it("so a file written DIRECTLY under the withdrawn section is denied", async () => {
-      // The exact leak: on disk, not in the database, published by the next build.
-      const dirs = await deniedSubtreeDirs(pool2, inst());
-      const covered = (p: string): boolean => dirs.some((d) => p.startsWith(d));
-      expect(covered("knowledge/legal/urgent.md"), "directly under the withdrawn section").toBe(
-        true,
-      );
-      expect(covered("knowledge/legal/2024/late.md"), "and deeper still").toBe(true);
-      expect(covered("knowledge/about.md"), "but nothing outside it").toBe(false);
-    }, 60_000);
-  },
-);

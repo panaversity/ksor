@@ -1,5 +1,10 @@
-# scratch space for ksor verbs — everything transient lives under one roof
-.ksor/
+# ksor's working directory — build output and scratch, never the record.
+# The two governance files inside it ARE the record (the policy and the
+# takedown ledger) and are un-ignored by name: the directory form `.ksor/`
+# cannot be negated, so the glob is `.ksor/*`.
+.ksor/*
+!.ksor/governance.yaml
+!.ksor/takedowns.yaml
 
 node_modules/
 system/site/.next/
@@ -8,11 +13,15 @@ system/site/out/
 # the per-audience copy of the record a build stages — a filtered derivative,
 # never a second record; committing it would publish what a build excluded
 system/site/.staged-knowledge/
+# and its manifest, which names this build's viewer and every concept it
+# staged — committing it publishes the restricted viewer's page list
+system/site/.staged-knowledge.json
 # and the lock that keeps one evaluation of a build staging at a time; it only
 # outlives a build that was killed mid-stage, and the next build clears it
 system/site/.staged-knowledge.lock
-# a build's copy of every `.sim.html` in the record, put where it can be
-# SERVED; the record owns the sim, this is only where the site publishes it
+# where this build SERVES the sims it published — copied out of the staged
+# record, so it holds one viewer's sims and the next build prunes the rest;
+# the record owns the sim, this is only the copy that gets a url
 system/site/public/sims/
 *.tsbuildinfo
 
@@ -21,7 +30,3 @@ system/site/public/sims/
 !.env.example
 
 .DS_Store
-
-# The takedown manifest the site build reads — exported from the database,
-# never hand-edited, and re-exported on every build.
-.ksor-denylist.json

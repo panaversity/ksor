@@ -1,12 +1,13 @@
 ---
+type: Document
 title: The agent surface
 description: MCP for retrieval with citations, and machine-readable files beside it.
-status: approved
-owner: Product
-order: 2
-effective: 2026-08-22
-provenance:
-  - KSoR README, "an agent interface through MCP for search, retrieval, citation, reasoning, and action"
+status: stable
+order: 6
+generated: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "ksor-starter/KSOR-STAMP-VERSION", at: 2026-08-25T00:00:00Z }
 ---
 
 Agents reach the record through MCP — an open standard, so one corpus answers in

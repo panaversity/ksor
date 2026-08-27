@@ -27,6 +27,7 @@ export const verbs = [
   "init",
   "dev",
   "build",
+  "migrate",
   "serve",
   "ingest",
   "schema",

@@ -5,17 +5,15 @@
 import { describe, expect, it } from "vitest";
 
 import { chunkingFixtures } from "./fixtures/chunking.fixture.js";
-import { contentHash, splitFrontmatter } from "./markdown.js";
+import { contentHash } from "./markdown.js";
 
-describe("splitFrontmatter", () => {
+// The rest of this fixture's oracle parity moved to `record/frontmatter.test.ts`
+// with the reader itself (decision 26). What stays here is the half this module
+// still owns: the body a split produced must hash to what the oracle recorded.
+describe("contentHash — oracle parity over the fixture bodies", () => {
   for (const c of chunkingFixtures.markdownCases) {
     it(c.name, () => {
-      const got = splitFrontmatter(c.text);
-      expect(got.frontmatter, `${c.name}: frontmatter; got ${JSON.stringify(got)}`).toBe(
-        c.frontmatter,
-      );
-      expect(got.body, `${c.name}: body must be byte-exact`).toBe(c.body);
-      expect(contentHash(got.body), `${c.name}: body hash`).toBe(c.bodyHash);
+      expect(contentHash(c.body), `${c.name}: body hash`).toBe(c.bodyHash);
     });
   }
 });

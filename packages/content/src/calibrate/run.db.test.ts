@@ -14,7 +14,7 @@
  * one (found live 2026-08-21).
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -26,6 +26,7 @@ import { buildGeneration } from "../ingest/build.js";
 import { buildShippedProvider } from "../lib/providers/registry.js";
 import { applySchema } from "../schema.js";
 import { runCalibration } from "./run.js";
+import { instanceOf, profileDoc, writeRecord } from "../ingest/fixtures/record-fixture.js";
 import type { ContentInstance } from "../instance.js";
 import type pg from "pg";
 
@@ -33,19 +34,18 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DB = "ksor_calibrate_run";
 const TENANT = "calib-corp";
 
-const DOC = (title: string, order: number): string => `---
-title: ${title}
-status: approved
-order: ${order}
----
-
-# ${title}
+const DOC = (title: string, order: number): string =>
+  profileDoc({
+    title,
+    order,
+    body: `# ${title}
 
 This document exists so the calibration run has real embedded chunks to sample
 and score against. It is written at enough length to be classified as prose
 rather than navigation, because a navigation chunk is excluded from retrieval
 and a corpus of them would give the run nothing to measure at all.
-`;
+`,
+  });
 
 describe.runIf(adminDsn !== "")("runCalibration against a real store (db)", () => {
   let pool: pg.Pool;
@@ -66,38 +66,24 @@ describe.runIf(adminDsn !== "")("runCalibration against a real store (db)", () =
     await grantIngest(pool, TENANT);
 
     work = mkdtempSync(path.join(tmpdir(), "ksor-calib-"));
-    const knowledge = path.join(work, "knowledge");
-    mkdirSync(knowledge, { recursive: true });
-    writeFileSync(path.join(knowledge, "alpha.md"), DOC("Alpha", 1), "utf8");
-    writeFileSync(path.join(knowledge, "beta.md"), DOC("Beta", 2), "utf8");
-
-    instance = {
+    writeRecord(work, {
       name: TENANT,
-      corpusId: TENANT,
-      tenantId: TENANT,
-      dsnEnv: "KSOR_DB_URL",
-      abstain: { vectorFloor: null, keywordFloor: null },
-      textSearchConfig: "english",
-      maximumResponseCharacters: 120_000,
-      instructions: "",
-      audiences: [],
-      defaultVisibility: null,
-      embeddingProvider: "fake",
-      embeddingModel: "fake-embed-001",
-      embeddingDim: 1536,
-    } as ContentInstance;
+      docs: { "alpha.md": DOC("Alpha", 1), "beta.md": DOC("Beta", 2) },
+    });
+
+    instance = instanceOf(TENANT, TENANT);
 
     // Two generations, so "the served one" is a CHOICE the run has to make
     // rather than the only number available.
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: knowledge,
+      recordRoot: work,
       flip: true,
       sourceCommit: "gen-one",
     });
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: knowledge,
+      recordRoot: work,
       flip: true,
       sourceCommit: "gen-two",
     });

@@ -18,10 +18,12 @@
 import type pg from "pg";
 
 import { runRead } from "../db.js";
+import { ADMITTED, ADMITTED_CTE } from "../lib/admit.js";
 // Calibration measures the floor over the WHOLE record, deliberately — the
 // threshold is a property of the corpus, not of one caller's tier. Stated,
 // because an unbound scope now denies (the seam fails closed).
-import { WHOLE_RECORD_SCOPE as CALIBRATION_SCOPE } from "../lib/audience.js";
+import { audienceGucs, WHOLE_RECORD_SCOPE } from "../lib/audience.js";
+import { NO_TRUST_FLOOR } from "../lib/trust.js";
 import { aembedIntent, type EmbeddingProvider, type TextGenerator } from "../lib/embedding.js";
 import { topOneScore, VECTOR_TXN_GUCS, type SearchScope } from "../lib/search.js";
 
@@ -41,6 +43,7 @@ WITH RECURSIVE g AS (
     FROM corpora WHERE tenant_id = $1 AND corpus_id = $2
 ),
 ${DENIED_CTE},
+${ADMITTED_CTE},
 ranked AS (
     SELECT c.content, n.stable_id,
            row_number() OVER (PARTITION BY n.node_id ORDER BY md5(c.content)) AS rn
@@ -53,6 +56,7 @@ ranked AS (
       AND c.labels->>'source_type' = 'prose'
       AND n.status = 'published'
       AND ${DENY}
+      AND ${ADMITTED}
       AND length(regexp_replace(c.content, '\\s', '', 'g')) >= $3
 )
 SELECT content FROM ranked WHERE rn <= $5`;
@@ -111,11 +115,33 @@ export interface CalibrationOptions {
   readonly perNode?: number;
   readonly minChars?: number;
   readonly targetPrecision?: number;
+  /**
+   * The viewer list to measure through — `public` plus every registered
+   * audience (`widestViewer`). Omitted or null falls back to the whole-record
+   * sentinel, which admits every list; the CLI always names one, so the
+   * fallback is for a caller measuring a record whose policy is not ingested
+   * yet.
+   */
+  readonly viewer?: readonly string[] | null;
+}
+
+/**
+ * The scope every calibration statement binds: the widest viewer, the lowest
+ * trust floor, and (through the predicate's default) lifecycle at now(). The
+ * floor must be measured on the set the door serves — a draft, a not-yet-
+ * effective or a stale document setting the low tail would tune the floor to
+ * passages no answer can ever cite.
+ */
+function calibrationScope(
+  viewer: readonly string[] | null | undefined,
+): Readonly<Record<string, string>> {
+  return { ...(viewer == null ? WHOLE_RECORD_SCOPE : audienceGucs(viewer)), ...NO_TRUST_FLOOR };
 }
 
 async function scoreQueries(
   pool: pg.Pool,
   scope: SearchScope,
+  gucs: Readonly<Record<string, string>>,
   provider: EmbeddingProvider,
   queries: readonly string[],
   inCorpus: boolean,
@@ -127,7 +153,7 @@ async function scoreQueries(
       pool,
       scope.tenantId,
       (client) => topOneScore(client, scope, vector ?? []),
-      { ...VECTOR_TXN_GUCS, ...CALIBRATION_SCOPE },
+      { ...VECTOR_TXN_GUCS, ...gucs },
     );
     if (score === null) {
       // The math treats a null score as fatal — surface it with the query.
@@ -146,6 +172,7 @@ export async function runCalibration(
   options: CalibrationOptions,
 ): Promise<CalibrationReport> {
   const generation = options.generation ?? null;
+  const gucs = calibrationScope(options.viewer);
   const scope: SearchScope = {
     tenantId: options.tenantId,
     corpusId: options.corpusId,
@@ -165,7 +192,7 @@ export async function runCalibration(
         measured: row?.generation == null ? null : Number(row.generation),
       };
     },
-    CALIBRATION_SCOPE,
+    gucs,
   );
   const embedded = counted.embedded;
   if (embedded === 0) {
@@ -190,16 +217,21 @@ export async function runCalibration(
     }
     const minChars = options.minChars ?? 200;
     const perNode = options.perNode ?? 2;
-    const passages = await runRead(pool, options.tenantId, async (client) => {
-      const r = await client.query(SAMPLE_SQL, [
-        options.tenantId,
-        options.corpusId,
-        minChars,
-        generation,
-        perNode,
-      ]);
-      return r.rows.map((row: { content: string }) => row.content);
-    });
+    const passages = await runRead(
+      pool,
+      options.tenantId,
+      async (client) => {
+        const r = await client.query(SAMPLE_SQL, [
+          options.tenantId,
+          options.corpusId,
+          minChars,
+          generation,
+          perNode,
+        ]);
+        return r.rows.map((row: { content: string }) => row.content);
+      },
+      gucs,
+    );
     if (passages.length === 0) {
       throw new Error("no passages sampled although embedded chunks exist — lower --min-chars");
     }
@@ -226,8 +258,8 @@ export async function runCalibration(
   const oocSource = options.oocProbes === undefined ? "built-in" : "provided";
   const ooc = normalizeQueries(options.oocProbes ?? BUILT_IN_OOC);
   const detail = [
-    ...(await scoreQueries(pool, scope, options.provider, inQueries, true)),
-    ...(await scoreQueries(pool, scope, options.provider, ooc, false)),
+    ...(await scoreQueries(pool, scope, gucs, options.provider, inQueries, true)),
+    ...(await scoreQueries(pool, scope, gucs, options.provider, ooc, false)),
   ];
   return buildReport(
     detail,

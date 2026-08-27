@@ -2,7 +2,7 @@ import { ArrowRight, FileText, Folder } from "lucide-react";
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import { statusTone } from "@/lib/governance";
+import { badgeLabel, badgeTone } from "@/lib/governance";
 import type { RecordEntry } from "@/lib/source";
 
 /**
@@ -28,7 +28,7 @@ import type { RecordEntry } from "@/lib/source";
  *
  * What survives from the register is the part that was never about looks: the
  * record's serif for its own words, mono for what the record says ABOUT them —
- * who owns it, how much it holds, whether it carries a caveat — and `approved`
+ * who owns it, how much it holds, whether it carries a caveat — and `stable`
  * staying silent, because a label on every row is a label nobody reads.
  *
  * Server-rendered plain markup — it survives print, a failed bundle and
@@ -70,11 +70,11 @@ export function RecordIndex({
                     <span className="font-display text-lg leading-snug font-semibold tracking-[-0.008em] transition-colors group-hover:text-fd-primary">
                       {entry.title}
                     </span>
-                    {entry.status === null ? null : (
+                    {entry.badge === null ? null : (
                       <span
-                        className={`rounded-sm border border-fd-border px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-fd-foreground uppercase ${statusTone(entry.status)}`}
+                        className={`rounded-sm border border-fd-border px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-fd-foreground uppercase ${badgeTone(entry.badge)}`}
                       >
-                        {entry.status}
+                        {badgeLabel(entry.badge)}
                       </span>
                     )}
                   </span>

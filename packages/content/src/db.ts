@@ -28,7 +28,6 @@ import {
   type Gucs,
 } from "@panaversity/ksor-postgres";
 import { envFloat, envInt } from "./env.js";
-import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
 
 export const TENANT_GUC = "app.tenant_id";
 export const RUNTIME_ROLE = "sor_content_runtime";
@@ -64,9 +63,72 @@ const READ_RETRY_BACKOFF_S = (): number => envFloat("KSOR_READ_RETRY_BACKOFF_S",
  */
 export class ContentStoreError extends Error {
   constructor(className: string) {
-    super(`content store temporarily unavailable (${className})`);
+    // `pg` reports most connection failures as a bare `Error`, so this rendered
+    // "content store temporarily unavailable (Error)" — a parenthetical that
+    // looks like a truncated diagnostic and identifies nothing. The pool's own
+    // "idle client error (error 57P01)" earns its brackets; this did not
+    // (resilience walk, 2026-08-25).
+    super(
+      className === "" || className === "Error"
+        ? "content store temporarily unavailable"
+        : `content store temporarily unavailable (${className})`,
+    );
     this.name = "ContentStoreError";
   }
+}
+
+/**
+ * A request Postgres refused to execute AS WRITTEN — permanent, caller-caused,
+ * and harmless to the connection.
+ *
+ * Subclasses ContentStoreError for the reason `SchemaVersionError` does: every
+ * caller (the gateway's exit contract, the refusal body) classifies on that
+ * type, so escaping the MESSAGE must not mean escaping the taxonomy. What it
+ * replaces is the promise inside the old message. "content store temporarily
+ * unavailable" is read by an agent — and by this door's own tool guidance,
+ * which says `unavailable` means "retry later; never report it as 'not in the
+ * record'" — as WAIT AND TRY AGAIN. For a deterministic input fault the retry
+ * can never succeed, so a caller with one malformed argument was told the store
+ * was down, told to keep asking, and told not to conclude anything about
+ * coverage, while the store answered everyone else (protocol-QA walk,
+ * 2026-08-25).
+ *
+ * Carries the SQLSTATE rather than the constructor name. `pg` reports every one
+ * of these as `DatabaseError`, which distinguishes nothing, while the five
+ * characters of a SQLSTATE are the actual diagnostic and name no host, role or
+ * relation — the same reduction ContentStoreError exists to make.
+ */
+export class ContentInputError extends ContentStoreError {
+  override readonly name: string = "ContentInputError";
+  constructor(sqlstate: string) {
+    super(sqlstate);
+    this.message =
+      `content store rejected this request as written (SQLSTATE ${sqlstate}) — ` +
+      "an argument cannot be represented, so the request is malformed rather than the " +
+      "store unavailable. Retrying it unchanged will not help; the store is healthy.";
+  }
+}
+
+/**
+ * SQLSTATE class 22 — data exception — is the ONE class treated as permanent
+ * here, and the narrowness is deliberate.
+ *
+ * Class 22 is genuinely about the VALUES a statement was handed: 22021 for a
+ * NUL byte in text, 22P02 for an unparseable literal, 22001 for an overlong
+ * one. Nothing in it is healed by waiting.
+ *
+ * The neighbouring classes are NOT included even though they are equally
+ * permanent, because they are permanent for someone ELSE: 42 (syntax and
+ * access rules) means a missing table or a missing grant — an operator's
+ * problem, and `SchemaStateError` already speaks for that one — and 23
+ * (integrity constraints) means a write this read path does not perform.
+ * Labelling either "your request is malformed" would send the wrong person to
+ * fix it, which is the same defect this narrowing exists to correct.
+ */
+function isPermanentInputError(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const code = (error as { code?: string }).code;
+  return typeof code === "string" && code.startsWith("22") ? code : null;
 }
 
 function isDriverError(error: unknown): boolean {
@@ -77,6 +139,10 @@ function isDriverError(error: unknown): boolean {
 }
 
 function sanitized(error: unknown): never {
+  // Checked BEFORE isDriverError, which answers "does it carry a code" and so
+  // would swallow every one of these into the transient message.
+  const permanent = isPermanentInputError(error);
+  if (permanent !== null) throw new ContentInputError(permanent);
   if (isDriverError(error)) {
     // pg's DatabaseError carries name="error" — the constructor name is
     // the diagnostic the oracle's class-name contract meant.
@@ -127,9 +193,30 @@ function gucsFor(tenantId: string, role: string, statementTimeoutMs: number | nu
 }
 
 /**
- * The read path. `extraGucs` exists so the search path folds the two HNSW
- * GUCs into the same one-statement bind (a plain filtered HNSW walk
- * silently under-returns without them).
+ * The read path. `extraGucs` carries the caller's SCOPE — the audience list and
+ * the trust floor — and the two HNSW GUCs the search path folds into the same
+ * one-statement bind (a plain filtered HNSW walk silently under-returns
+ * without them).
+ *
+ * NOTHING about the audience is bound here. A read that names no viewer leaves
+ * `app.viewer` unset, and the serving predicate is false for every row: an
+ * unbound GUC overlaps nothing, so an unscoped read is served NOTHING.
+ *
+ * This function used to bind the whole-record sentinel by default, so that
+ * "the whole record" would be a value a caller states rather than an accident
+ * of an unbound GUC — and it produced the opposite: the accident WAS the
+ * default, every unscoped read got every audience, and the SQL backstop could
+ * never fire because the viewer was never unbound. The only thing standing
+ * between a forgotten narrowing and serving every tier was a grep over
+ * service.ts. A default of "every audience" underneath a governance predicate
+ * is a loaded gun in a codebase whose posture is to refuse rather than default,
+ * so it is gone (review 2026-08-25). Callers entitled to the whole record —
+ * calibration, ingest-side verification, tests — pass WHOLE_RECORD_SCOPE, and
+ * now genuinely say it.
+ *
+ * A caller that reads no content at all (the governance gate, the policy row,
+ * the takedown ledger) binds nothing and needs nothing: those statements name
+ * their own tables and carry no audience predicate to satisfy.
  */
 export async function runRead<T>(
   pool: pg.Pool,
@@ -142,13 +229,6 @@ export async function runRead<T>(
       pool,
       {
         ...gucsFor(tenantId, RUNTIME_ROLE, READ_STATEMENT_TIMEOUT_MS),
-        // The audience scope is ALWAYS bound. The SQL predicate denies when it
-        // is unset — deliberately, so a statement can never serve every tier
-        // because nobody stated one — and this makes "the whole record" the
-        // explicit default for a caller that does not narrow it, rather than
-        // an accident of an unbound GUC. The serving door overrides it below
-        // with the caller's actual tier (review of PR #43).
-        ...WHOLE_RECORD_SCOPE,
         ...extraGucs,
       },
       op,

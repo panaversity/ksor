@@ -15,8 +15,14 @@
 
 import type pg from "pg";
 
-import { AUDIENCE_ALLOWED, audienceAllowed } from "./audience.js";
-import { DENIED_CTE, DENY } from "./takedown.js";
+import { admitted, ADMITTED, ADMITTED_CTE, admittedCte } from "./admit.js";
+import {
+  GOVERNANCE_COLUMN_COUNT,
+  governanceColumns,
+  governanceFromRow,
+  type NodeGovernance,
+} from "./search.js";
+import { DENIED_CTE, deniedCte, DENY } from "./takedown.js";
 import { type DocumentChunk } from "./windowing.js";
 
 const GEN = `
@@ -54,10 +60,34 @@ live AS (
 // when a row says so — the shared `denied` set from takedown.js, bound on every
 // resolution + outline arm (search.ts and calibrate/run.ts bind the same seam).
 
+/**
+ * Admission (`lib/admit.ts`) decided on the LIVE generation, not the pinned
+ * one — the same reasoning as the `now` join above and for the same three
+ * guarantees now instead of one: a pin exists so a citation keeps resolving to
+ * the same bytes, never so a document that has since been restricted,
+ * deprecated, expired or de-verified goes on reading in full for the token's
+ * life. Outline judges on the generation it walks, which is the generation its
+ * rows describe.
+ */
+const DENIED_LIVE_CTE = deniedCte("denied_live", "live");
+const ADMITTED_LIVE_CTE = `${DENIED_LIVE_CTE},
+${admittedCte("admitted_live", "live", "denied_live")}`;
+const ADMITTED_LIVE = admitted("now", "admitted_live");
+
+/**
+ * The governance a read carries out, taken from the LIVE row (`now`) and never
+ * from the pinned one — the same reasoning as the admission above. A pin exists
+ * so a citation keeps resolving to the same bytes; it must not also freeze the
+ * record's position ON those bytes, or a document de-verified this morning
+ * would go on reading as human-reviewed for the token's life.
+ */
+const GOVERNANCE = governanceColumns("now");
+
 /** Candidates by LEAF slug ($4), each with its full root path (for suffix disambiguation). */
 export const NODE_BY_SLUG_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
+${ADMITTED_LIVE_CTE},
 -- The walk exists to BUILD PATHS, so it does not gate by audience; the
 -- RESOLVED node does, below. Gating every ancestor made an internal parent
 -- prune its public children, so a document that search had just returned --
@@ -78,7 +108,8 @@ tree AS (
     JOIN tree t ON n.parent_id = t.node_id
     WHERE n.tenant_id = $1 AND n.generation = t.generation AND n.status = 'published'
 )
-SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink
+SELECT n.node_id, n.slug, n.title, n.stable_id, n.path, n.generation, n.permalink,
+       ${GOVERNANCE}
 FROM tree n
 JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
                        AND self.generation = n.generation
@@ -87,7 +118,7 @@ JOIN content_nodes self ON self.node_id = n.node_id AND self.tenant_id = $1
 JOIN live ON TRUE
 JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
                       AND now.stable_id = self.stable_id
-WHERE n.slug = $4 AND ${DENY} AND ${audienceAllowed("now")}
+WHERE n.slug = $4 AND ${DENY} AND ${ADMITTED_LIVE}
 ORDER BY n.path`;
 
 export const ALIAS_SQL: string = `
@@ -103,14 +134,15 @@ WHERE a.tenant_id = $1 AND a.alias_slug = $4`;
  * resolution as well).
  */
 export const NODE_BY_STABLE_ID_SQL: string = `
-WITH RECURSIVE ${GEN}, ${DENIED_CTE}
-SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink
+WITH RECURSIVE ${GEN}, ${DENIED_CTE}, ${ADMITTED_LIVE_CTE}
+SELECT n.node_id, n.slug, n.title, n.stable_id, n.stable_id::text AS path, n.generation, n.permalink,
+       ${GOVERNANCE}
 FROM content_nodes n JOIN g ON n.generation = g.gen
 JOIN live ON TRUE
 JOIN content_nodes now ON now.tenant_id = $1 AND now.generation = live.gen
                       AND now.stable_id = n.stable_id
 WHERE n.tenant_id = $1 AND n.stable_id = $4 AND n.status = 'published' AND ${DENY}
-  AND ${audienceAllowed("now")}`;
+  AND ${ADMITTED_LIVE}`;
 
 export const DOCUMENT_CHUNKS_SQL: string = `
 WITH ${GEN}
@@ -121,6 +153,28 @@ JOIN sources s ON s.source_id = c.source_id AND s.tenant_id = c.tenant_id
               AND s.generation = c.generation
 WHERE c.tenant_id = $1 AND s.node_id = $4 AND s.modality = 'prose'
 ORDER BY c.source_id, c.ordinal`;
+
+/**
+ * The document's frontmatter, byte-exact as its author wrote it.
+ *
+ * Its own statement rather than a column on DOCUMENT_CHUNKS_SQL: that query
+ * returns one row per chunk, and a document with a hundred chunks would carry
+ * a hundred copies of the same block across the driver for one use.
+ *
+ * `ORDER BY source_id LIMIT 1` because a node's frontmatter is its FILE's, and
+ * the plain-tree adapter gives a concept exactly one prose source. If a future
+ * adapter gives a node several, this returns the first deterministically
+ * rather than picking one at random — and that is the point at which "which
+ * file's frontmatter" becomes a question worth answering properly.
+ */
+export const DOCUMENT_FRONTMATTER_SQL: string = `
+WITH ${GEN}
+SELECT s.frontmatter
+FROM sources s
+JOIN g ON s.generation = g.gen
+WHERE s.tenant_id = $1 AND s.node_id = $4 AND s.modality = 'prose'
+ORDER BY s.source_id
+LIMIT 1`;
 
 export const UNIT_TREE_SQL: string = `
 WITH ${GEN}
@@ -158,6 +212,7 @@ SELECT path, climbed FROM up WHERE parent_id IS NULL ORDER BY path LIMIT 1`;
 export const OUTLINE_SQL: string = `
 WITH RECURSIVE ${GEN},
 ${DENIED_CTE},
+${ADMITTED_CTE},
 walk AS (
     SELECT n.node_id, n.parent_id, n.slug, n.kind, n.title, n.position, n.stable_id,
            n.generation, n.permalink, 0 AS depth, ARRAY[n.position] AS sort_key,
@@ -202,7 +257,7 @@ SELECT w.slug, w.kind, w.title, w.heading_path,
        (SELECT count(*) FROM content_nodes ch
          WHERE ch.tenant_id = $1 AND ch.generation = w.generation
            AND ch.parent_id = w.node_id AND ch.status = 'published'
-           AND ${audienceAllowed("ch")}
+           AND ${admitted("ch")}
            AND ch.node_id NOT IN (SELECT node_id FROM denied)) AS child_count,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
@@ -217,7 +272,7 @@ JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
 -- computed next_offset from the post-strip count, so every later page started
 -- one row early and repeated its predecessor's last row (round-9 review of
 -- PR 43).
-WHERE ${DENY} AND ${AUDIENCE_ALLOWED} AND ($4::uuid IS NULL OR w.depth > 0)
+WHERE ${DENY} AND ${ADMITTED} AND ($4::uuid IS NULL OR w.depth > 0)
 ORDER BY w.sort_key
 LIMIT $6 OFFSET $7`;
 
@@ -234,7 +289,7 @@ export class UnknownSlug extends Error {
   }
 }
 
-export interface DocumentNode {
+export interface DocumentNode extends NodeGovernance {
   readonly nodeId: string;
   readonly slug: string;
   readonly title: string;
@@ -264,7 +319,7 @@ function toNumber(value: unknown, column: string): number {
 }
 
 /** Both node lookups project exactly these columns, in this order. */
-export const NODE_COLUMNS = 7;
+export const NODE_COLUMNS: number = 7 + GOVERNANCE_COLUMN_COUNT;
 
 /**
  * Width-guarded row parse. The oracle's scar: its star-unpack silently
@@ -287,6 +342,7 @@ export function nodeRows(result: pg.QueryArrayResult): DocumentNode[] {
     path: String(row[4]),
     generation: toNumber(row[5], "generation"),
     permalink: row[6] === null ? null : String(row[6]),
+    ...governanceFromRow(row, 7),
   }));
 }
 
@@ -384,6 +440,20 @@ export async function documentChunks(
     headingPath: String(row[1]),
     content: String(row[2]),
   }));
+}
+
+/** The document's frontmatter block, or null when the file carried none. */
+export async function documentFrontmatter(
+  client: pg.PoolClient,
+  scope: ReadScope,
+  nodeId: string,
+): Promise<string | null> {
+  const result = await arrayQuery(client, {
+    text: DOCUMENT_FRONTMATTER_SQL,
+    values: [scope.tenantId, scope.corpusId, scope.pinnedGeneration, nodeId],
+  });
+  const value = result.rows[0]?.[0];
+  return value === undefined || value === null ? null : String(value);
 }
 
 /**

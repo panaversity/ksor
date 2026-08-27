@@ -82,16 +82,21 @@ The emitted `Dockerfile` names no host. It installs the pinned
 
 ```sh
 docker build -t my-record .
-docker run --rm -p 8080:80 --env-file .env my-record
+docker run --rm -p 8080:80 --env-file .env \
+  -e KSOR_AUTH=disabled-public my-record
 ```
 
 Two things about that command, both of which bite:
 
 - **The image listens on 80**, which is why the mapping is `8080:80`. If your
   `.env` sets `PORT`, change the right-hand side to match.
-- **`.env` must contain `KSOR_AUTH=disabled-public`, even locally.** A container
-  gets `$PORT` and therefore binds `0.0.0.0` — a public bind — and
-  `disabled-local` refuses there by design. Your laptop is not the exception.
+- **`KSOR_AUTH=disabled-public` is required, even locally.** A container gets
+  `$PORT` and therefore binds `0.0.0.0` — a public bind — and the
+  `disabled-local` a scaffolded `.env` carries refuses there by design. Your
+  laptop is not the exception. Pass it with `-e` rather than editing `.env`, so
+  a plain `ksor serve` outside the container keeps its loopback posture; `-e`
+  overrides `--env-file`. A real deployment sets it — or the SSO variables — in
+  the host's environment, since `.dockerignore` keeps `.env` out of the image.
 
 That runs on Cloud Run, Fly, Render, ECS, Kubernetes, or a VPS with no changes.
 `vercel.json` **points at this same file** rather than replacing it, which is
@@ -107,6 +112,34 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 - **`system/`** — that is the other surface, built and hosted separately.
 
 ## Deploying both surfaces to Vercel
+
+> **Importing from the Vercel dashboard: clear the Root Directory first.**
+> Vercel auto-detects a root directory by looking for a framework, finds the
+> Next app, and fills the field with **`system/site`**. The build then reads
+> `system/site/vercel.json`, which does not exist, and fails with:
+>
+> ```
+> Error: Project framework is set to "services", but no services are declared.
+> ```
+>
+> The services ARE declared — in `vercel.json` at the repository root, which is
+> the only place they can be, because one of them builds the site and the other
+> builds a container from the root `Dockerfile`. The import screen even lists
+> both, because that step reads the root file; the BUILD step uses the Root
+> Directory override instead.
+>
+> **Set Root Directory to the repository root (`./`) and redeploy.** Nothing in
+> the record changes. Found by an adopter on 2026-08-26, and it will happen on
+> every dashboard import until Vercel's detection changes — the layout that
+> triggers it, code under `system/`, is decision 8 and is not moving.
+>
+> Also confirm **Application Preset is `Services`**; with any other preset the
+> `services` key is ignored and `/mcp` never exists. Vercel Services is in Beta.
+>
+> **If it still argues, deploy the site alone** — it needs no preset and no
+> services: build command `pnpm -C system/site build`, output directory
+> `system/site/out`. That is the stricter posture decision 29 describes, and
+> the door can be deployed separately.
 
 The emitted `vercel.json` declares both services and routes between them:
 
@@ -234,22 +267,40 @@ rebinding is worth an attacker's effort only when it reaches something they coul
 not reach directly. With `KSOR_AUTH=disabled-public` the record is already served
 to anyone who types the URL, so there is nothing for rebinding to steal.
 
-### The site build needs the DSN too
+### The site build runs `ksor build` first
 
-Once `instance.md` declares a `database:` block, `pnpm build` runs
-`pnpm export-denylist` first — it asks the database what has been withdrawn and
-writes `.ksor-denylist.json`. Without `KSOR_DB_URL` the build **refuses**:
+`pnpm build` is `ksor build` followed by the site build. `ksor build` needs no
+database: it regenerates every `index.md`, runs the record checker, and writes
+`build.lock.json` — commit it — which every machine artefact stamps. A refusal
+stops the build before a byte is written; `--strict` also refuses an
+uncommitted input. Takedowns reach the site through the committed ledger
+(`.ksor/takedowns.yaml`), which is a file in the repository — so the site build
+needs no `KSOR_DB_URL` at all.
 
+That is the design working. A takedown reaches the door instantly (it is a row)
+and reaches the site at its next build (it reads the ledger), so the act that
+withdraws a document is the same merged commit on both surfaces. Merge the
+ledger entry, rebuild, redeploy.
+
+**Your deploy runs it too, and that is deliberate.** `vercel.json` builds with
+`pnpm build`, so the host regenerates the indexes and the lock before building
+the site. The consequence is worth knowing in both directions: you can deploy
+without ever having run `ksor build` yourself — the record checker still runs
+there, so a record that breaks the profile still fails the deploy — but the
+`build.lock.json` in your repository is not necessarily the one that shipped.
+The `build_id` that DID ship is stamped into the deployed `llms.txt`.
+
+If you want the stricter property — the deployed build_id is one a human
+reviewed in a pull request — build the site alone instead:
+
+```json
+"buildCommand": "pnpm -C system/site build"
 ```
-KSOR_DB_URL is unset, and instance.md declares a database
-  why: a takedown lives in that database. Without it this build cannot tell
-       'nothing is denied' from 'nobody asked'
-```
 
-That refusal is the design working. A takedown reaches the door instantly (it is
-a row) and reaches the site at its next build (it reads a file), so a site built
-without the DSN would keep publishing what the door already refuses. Set
-`KSOR_DB_URL` on the site build as well as on the door.
+The site refuses `ksor-lock-missing` or `ksor-lock-stale` when the committed
+lock does not describe the tree, so a deploy then fails until someone runs
+`ksor build` and commits the result. That is your file to change; ksor does not
+choose it for you.
 
 ## Keeping people out of the site
 
@@ -282,12 +333,20 @@ nothing.
 
 ### "Some documents are restricted, most are not"
 
-**Build per audience.** `KSOR_AUDIENCE=<tier> pnpm build` stages only what that
-tier may see, so restricted documents are **never written into the artifact** —
-enforcement by absence, which is the only kind a static host can honour. Publish
-the public artifact openly and the wider one behind the gate above.
+**Build per audience.** `KSOR_AUDIENCE=public,internal pnpm build` stages only
+what that viewer may see, so the concepts it may not are **never written into
+the artifact** — enforcement by absence, which is the only kind a static host
+can honour. Publish the public artifact openly and the wider one behind the
+gate above.
 
-Plain `pnpm build` is always the public tier, so the safe thing is the default.
+The value is a comma list of registered audiences and it must include `public`
+— a bare `KSOR_AUDIENCE=internal` is refused (`ksor-viewer-omits-public`),
+because every reader of a restricted build is also a reader of the open one and
+a build for the restricted audience alone would silently drop every public
+concept. A concept is staged when its `ksor.audience` list overlaps the
+viewer's; there is no ordering between audiences to be narrower or wider than.
+
+Plain `pnpm build` is `[public]`, so the safe thing is the default.
 
 ### "Different readers see different documents, decided per request"
 
@@ -428,8 +487,8 @@ connections** — the pool minimum is 0 and an unused connection closes after 10
 first request after a suspend both wakes the database and retries the connect
 rather than failing.
 
-Measured against a live deployment on Vercel, Neon behind it, an 81-document
-record of 6,963 chunks:
+Measured 2026-08-23 against a live deployment on Vercel, Neon behind it, an
+81-document record of 6,963 chunks, and not re-measured since:
 
 |                                        |           |
 | -------------------------------------- | --------- |

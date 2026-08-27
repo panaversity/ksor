@@ -10,8 +10,19 @@
 export interface OrderCase {
   readonly name: string;
   readonly why: string;
-  /** Sibling entries as they appear on disk, in ARBITRARY input order. */
-  readonly entries: readonly { readonly file: string; readonly order?: unknown }[];
+  /**
+   * Sibling entries as they appear on disk, in ARBITRARY input order.
+   *
+   * `depth` applies to a DIRECTORY entry: how far below it the concept carrying
+   * the order sits. 1 (the default) puts it directly inside; 2 nests it one
+   * level further, which is the shape that separated the two implementations of
+   * a folder's sort key.
+   */
+  readonly entries: readonly {
+    readonly file: string;
+    readonly order?: unknown;
+    readonly depth?: number;
+  }[];
   /** The file names, in the order both surfaces must produce. */
   readonly expected: readonly string[];
 }
@@ -110,5 +121,24 @@ export const ORDER_CASES: readonly OrderCase[] = [
       { file: "guides", order: 1 },
     ],
     expected: ["guides", "loose.md"],
+  },
+  {
+    name: "a folder ties with a document on its own name",
+    why: "the index generator emitted every folder bullet AFTER every concept bullet, so a folder could never land between two documents",
+    entries: [
+      { file: "guides", order: 1 },
+      { file: "handbook.md", order: 1 },
+      { file: "appendix.md", order: 1 },
+    ],
+    expected: ["appendix.md", "guides", "handbook.md"],
+  },
+  {
+    name: "a folder's order comes from a concept anywhere BENEATH it",
+    why: "the generator folded over descendants and the adapter over the folder's own concepts, so a folder whose documents live one level deeper sorted first on one surface and last on the other",
+    entries: [
+      { file: "alpha", order: 1, depth: 2 },
+      { file: "beta.md", order: 2 },
+    ],
+    expected: ["alpha", "beta.md"],
   },
 ];

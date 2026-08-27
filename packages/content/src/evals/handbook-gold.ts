@@ -110,4 +110,7 @@ export const HANDBOOK_OOC: readonly string[] = [
  * to a content question. Admitting everything would score well on recall and
  * fail here.
  */
-export const NAV_NEGATIVE_SLUG = "index";
+// The link-list page is `overview.md` since the record moved to the profile:
+// `index.md` is generated and never a node (decision 26), so the navigation
+// negative had to become a concept to stay in the measurement at all.
+export const NAV_NEGATIVE_SLUG = "overview";

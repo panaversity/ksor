@@ -161,6 +161,15 @@ describe("no document claims that serving publishes", () => {
   it("…and the scripts themselves keep them separate", () => {
     expect(manifest.scripts["serve"], "serving is one command").toBe("ksor serve");
     expect(manifest.scripts["refresh"], "publishing is its own act").toContain("ingest");
+    // …and it BUILDS first. `ingest` publishes only a tree `ksor build` has
+    // checked, and refuses `ksor-lock-missing` without the lock — so a brand
+    // new record following the emitted README's ordered path
+    // (`pnpm provision` → `pnpm refresh` → `pnpm serve`) died at step two,
+    // on a recipe that never mentions `ksor build`. Walked live on a real
+    // scaffold against a real Postgres, 2026-08-25. The order is the
+    // assertion: a build that ran after the ingest would not have helped.
+    const refresh = manifest.scripts["refresh"] ?? "";
+    expect(refresh, "refresh must build before it ingests").toMatch(/ksor build[\s\S]*ingest/);
   });
 });
 

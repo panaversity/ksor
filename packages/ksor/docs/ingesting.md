@@ -14,18 +14,33 @@ embedding cost on every cold start and would need write credentials at runtime.
 So **a first deploy with no ingest serves an empty record.** It is not broken;
 nothing was ever published to it.
 
+## `ksor ingest` or `pnpm refresh`?
+
+Both, and they are not alternatives — one contains the other.
+
+|                | makes correct                                                                       | needs a database |
+| -------------- | ----------------------------------------------------------------------------------- | ---------------- |
+| `ksor build`   | the **site** — checks the record, regenerates the indexes, writes `build.lock.json` | no               |
+| `ksor ingest`  | the **agent door** — embeds, loads Postgres, flips a generation                     | yes              |
+| `pnpm refresh` | both, in order: `ksor build` → `ksor ingest --flip` → `ksor gc`                     | yes              |
+
+`pnpm refresh` is the scaffold's script and the one to reach for by hand — it
+is a single command that leaves every surface current. `ksor ingest` is the
+verb underneath it, and it is what CI, a deploy step, or an agent calls when
+the individual step is the subject. The rest of this page is about that verb.
+
 ## Before the first command
 
 Ingest reads your markdown, sends each new chunk to an embedding provider, and
 writes the result to Postgres. So four things must be true, and none of them is
 created for you.
 
-|                      | what                                                                                                          | how                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **The corpus**       | `knowledge/` at your repo root — CommonMark `.md`, one document per file, `title` and `status` in frontmatter | `pnpm check` validates it and explains any violation                                           |
-| **The database**     | Postgres with **pgvector** — `CREATE EXTENSION vector;`                                                       | any managed host; the DDL below needs a role that can create tables                            |
-| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                   | [aistudio.google.com](https://aistudio.google.com/apikey); the free tier covers a first corpus |
-| **The DSN**          | `KSOR_DB_URL`, named by `instance.md`'s `database.dsn_env`                                                    | uncomment the `database:` block in `instance.md` first                                         |
+|                      | what                                                                                                                                                                              | how                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **The corpus**       | `knowledge/` at your repo root — CommonMark `.md`, one document per file, in the KSoR Profile of OKF: `type`, `title`, `description`, `status` and `ksor.audience` in frontmatter | `pnpm check` validates it and explains any violation; `ksor build` must have written a current `build.lock.json` before ingest will run |
+| **The database**     | Postgres with **pgvector** — `CREATE EXTENSION vector;`                                                                                                                           | any managed host; the DDL below needs a role that can create tables                                                                     |
+| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                                                                                       | [aistudio.google.com](https://aistudio.google.com/apikey); the free tier covers a first corpus                                          |
+| **The DSN**          | `KSOR_DB_URL`, named by `instance.md`'s `database.dsn_env`                                                                                                                        | already named by `instance.md`'s `database:` block                                                                                      |
 
 Both variables go in `.env` beside `instance.md` — `ksor` reads it automatically,
 and `.env` is gitignored. Every command below is run **from your repository
@@ -54,6 +69,24 @@ pnpm build     # rebuilds the website from the same corpus
 serves immediately; the website is a static build and only changes when you
 rebuild and redeploy it. Ingest alone leaves the human surface showing the old
 content, which reads as a half-failed ingest and is not one.
+
+## When ingest says the lock is stale
+
+`ksor ingest` refuses a record whose `build.lock.json` does not match the tree
+(`ksor-lock-stale`), or that has none at all (`ksor-lock-missing`). **The fix is
+always `ksor build` in that directory — never an edit to the lock.** The lock is
+what says which bytes were checked; editing it to agree with the tree asserts a
+check that never ran, which is the one thing it exists to prevent.
+
+Freshness covers **seven** sets, not just your documents: `instance.md`,
+`.ksor/governance.yaml`, `.ksor/takedowns.yaml`, the concepts, the companions,
+the assets, and the generated `index.md` files. So a refusal can name a file you
+would not think of as content — the policy, the takedown ledger, a diagram you
+replaced, or an index you have never opened. That breadth is deliberate: a
+freshness claim that cannot see the ledger is not a freshness claim. The
+website's lock was fixed for exactly this once already, after deleting a
+denial's four lines republished the document with the committed lock still
+validating; ingest had the same hole, found by review before anyone hit it.
 
 ## What a generation is
 
@@ -106,17 +139,19 @@ An empty `nodes` array means nothing was published — the ingest did not run, o
 ran without `--flip`. Then search for a phrase you know is in the record and
 check the hits carry `provenance.stable_id` and `generation`.
 
-**`provenance.stable_id` is also how you name a document to `takedown`.** For
-most documents it is `knowledge/<path-without-.md>`; a search result is the
-reliable way to read one off rather than guessing.
+**`provenance.stable_id` is also how you name a document to `takedown`.** It is
+`knowledge/<path-without-.md>` — always, since path is identity and nothing
+overrides it — and a search result is still the reliable way to read one off
+rather than typing it from memory.
 
 ## Where ingest runs — not on the host
 
 Ingest is a long job. It embeds every new chunk through the provider, and that
 is bounded by the provider's throughput rather than by anything ksor does.
 
-**Measured:** an 81-document book — 6,963 chunks — took **about 50 minutes**
-against a remote Postgres on a first, cold ingest with nothing to carry forward.
+**Measured 2026-08-23:** an 81-document book — 6,963 chunks — took **about 50
+minutes** against a remote Postgres on a first, cold ingest with nothing to
+carry forward. Not re-measured since.
 
 Compare that with the request timeouts of the platforms people reach for first:
 a serverless function caps out in the region of 300–800 seconds depending on
@@ -148,7 +183,8 @@ If your provider offers both a **pooled** and a **direct** endpoint (Neon's
 `-pooler` host, or port 6432), use whichever it gives you. ksor detects which and
 says so at boot, but the line is informational — it classifies, it never
 transforms, and the hazard it descends from cannot arise here. The 6,963-chunk
-ingest measured above ran through a pooled endpoint without incident. Reach for
+ingest measured above (2026-08-23) ran through a pooled endpoint without
+incident. Reach for
 the direct endpoint only if you actually hit pooler connection limits.
 
 ## Turning the abstention gate on
@@ -161,13 +197,23 @@ measure until the corpus is in there.
 pnpm exec ksor calibrate --instance instance.md
 ```
 
-It prints a recommended `vector_floor`. Paste it into **`instance.md`** with the
-date you measured it, then restart `ksor serve` — the floor is read at boot:
+It ends with a block to paste into **`instance.md`**'s frontmatter, exactly as
+printed — the floor, the measurement recorded beside it as a comment, and
+`floor_digest`, the digest of the retrieval predicate the floor was measured
+through. Paste it, then restart `ksor serve`: the floor is read at boot.
 
 ```yaml
 retrieval:
-  vector_floor: 0.55 # measured by ksor calibrate on 2026-08-23
+  vector_floor: 0.55 # calibrated 2026-08-23 on generation 3, model gemini-embedding-001/d1536, door: synthesized
+  floor_digest: 8bfb07d0e6f5
 ```
+
+If the file already declares `retrieval:`, merge the keys into the block it has
+rather than adding a second one — a duplicate key is refused.
+
+A measurement that does not separate in-corpus from out-of-corpus prints **no
+floor at all**, and a `vector_floor: uncalibrated` block instead. That block is
+the fail-closed state: every serve refuses until a real number replaces it.
 
 Until you do, `/health` reports the gate as `OFF (no floor declared — will not
 refuse out-of-corpus questions)` and every search envelope carries
@@ -186,11 +232,13 @@ correctly stays uncalibrated.
 
 ## Withdrawing a document
 
-A takedown is a row, not a file, so it reaches the door immediately:
+A takedown is a committed ledger entry FIRST and a database row second, written
+in one act — so it reaches the door immediately and the site at its next build,
+and a record with no database can still withdraw a document:
 
 ```sh
 pnpm exec ksor takedown --instance instance.md <stable-id> \
-  --reason "legal request 2026-08" --actor "j.smith"
+  --reason "legal request 2026-08" --actor human:j.smith
 ```
 
 `--actor` is required, and there is no default. A name taken from the
@@ -198,8 +246,23 @@ environment reads like a person and is whatever the shell happened to be
 (`runner` under CI, `root` in a container) — worse than no name at all in the
 one row that exists to record who did this.
 
-**The site stops at its next build.** It reads `.ksor-denylist.json`, which
-`pnpm build` refreshes via `pnpm export-denylist`. So after a takedown, rebuild
-and redeploy the site, or the human surface keeps publishing what the agent
-surface already refuses. See [deploying.md](./deploying.md) for why that build
-needs `KSOR_DB_URL`.
+Two things the actor must satisfy, both refused before any database is touched.
+It must be a well-formed actor — `human:<handle>` or `process:<id>`, never a
+bare name (`ksor-actor-form`) and never a `team:` (a team cannot perform an
+act). And `takedown_authorities` in `.ksor/governance.yaml` must name it
+(`ksor-takedown-unauthorised`); the same check runs over every entry in the
+ledger at `pnpm check`, `ksor build` and ingest, so a line appended by hand in a
+pull request is refused exactly as the verb would refuse it.
+
+Lifting a takedown is `--revoke <entry-id>` — the id of the LEDGER ENTRY, not
+the stable id. The denial that created it prints the id, `ksor takedown
+--ledger` lists it, and it is written in `.ksor/takedowns.yaml`; none of the
+three needs a database, because the ledger is a file in the repository. The
+ledger is append-only: a revocation is a new entry, never a deleted line, and a
+build whose ledger shrank against its own git history is refused.
+
+**The site stops at its next build.** It reads the committed ledger
+(`.ksor/takedowns.yaml`), so after a takedown, merge the entry, rebuild and
+redeploy the site, or the human surface keeps publishing what the agent
+surface already refuses. The site needs no database for this: the
+ledger is a file in the repository, and the site build reads it.

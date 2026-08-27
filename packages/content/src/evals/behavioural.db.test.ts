@@ -31,6 +31,7 @@ import { contentPool } from "../db.js";
 import { grantIngest } from "../grant.js";
 import { buildShippedProvider } from "../lib/providers/registry.js";
 import { embedQueryVlit } from "../lib/query-embed.js";
+import { GATE_PREDICATE_DIGEST } from "../lib/search.js";
 import { keyRingFromEnv } from "../lib/snapshot.js";
 import { applySchema } from "../schema.js";
 import { buildGeneration } from "../ingest/build.js";
@@ -104,12 +105,13 @@ describe.runIf(canRun)("behavioural evals", () => {
       dsnEnv: "KSOR_DB_URL",
       // No floor: these assertions are about DISCLOSURE and provenance, which
       // must hold at level 0 — the shape every adopter starts in.
-      abstain: { vectorFloor: null, keywordFloor: null },
+      abstain: { vectorFloor: null, keywordFloor: null, floorDigest: null },
       textSearchConfig: "english",
       maximumResponseCharacters: 120_000,
       instructions: "",
-      audiences: [],
-      defaultVisibility: null,
+      title: TENANT,
+      description: "An eval record.",
+      toolchain: null,
       embeddingProvider: PROVIDER,
       embeddingModel: MODEL,
       embeddingDim: 1536,
@@ -117,7 +119,7 @@ describe.runIf(canRun)("behavioural evals", () => {
 
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: path.join(CORPUS, "knowledge"),
+      recordRoot: CORPUS,
       flip: true,
       sourceCommit: "eval",
     });
@@ -179,7 +181,10 @@ describe.runIf(canRun)("behavioural evals", () => {
       const floor = Math.max(...oocScores) + 1e-6;
       const gated: ServiceContext = {
         ...ctx,
-        instance: { ...instance, abstain: { vectorFloor: floor, keywordFloor: null } },
+        instance: {
+          ...instance,
+          abstain: { vectorFloor: floor, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
+        },
       };
 
       for (const query of OUT_OF_CORPUS) {
@@ -247,7 +252,7 @@ describe.runIf(canRun)("behavioural evals", () => {
     const provider = buildShippedProvider(PROVIDER, { apiKey: apiKey || null });
     await buildGeneration(pool, instance, {
       provider,
-      knowledgeDir: path.join(CORPUS, "knowledge"),
+      recordRoot: CORPUS,
       flip: false,
       sourceCommit: "eval-unpublished",
     });

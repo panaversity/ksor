@@ -9,6 +9,13 @@
  * that now reads "Schema migrations — DONE", so the quotation is history rather
  * than a live citation (round-9 review of PR 43).
  *
+ * Applying is guarded by VERSION, not by idempotent SQL: each step re-reads
+ * `schema_meta` inside an advisory lock and runs only if the database is
+ * exactly at its `from`. A file may therefore consume what it converts — the
+ * 2.5 step maps `visibility` into `audience` and drops the column — and a
+ * hand-run of an already-applied step refuses loudly instead of quietly doing
+ * nothing.
+ *
  * A migration names BOTH ends of the step it performs:
  * `schema/migrations/<from>-<to>__<slug>.sql`. Encoding only the target would
  * make "2.2 never existed" and "the 2.2 migration is missing" indistinguishable
@@ -118,6 +125,18 @@ export function planMigrations(
   return plan;
 }
 
+/**
+ * A step that BREAKS older readers declares its new floor as a comment line
+ * (`-- compatible_from: 2.5`); an additive step declares nothing and the
+ * database keeps the range it already records. Without this, a migrated
+ * database claimed a 2.0 reader could still read it after 2.5 dropped the
+ * column that reader's predicate names.
+ */
+export function compatibleFromOf(sql: string): string | null {
+  const m = /^--\s*compatible_from:\s*(\d+(?:\.\d+)*)\s*$/m.exec(sql);
+  return m?.[1] ?? null;
+}
+
 export function migrationsDir(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "schema", "migrations");
 }
@@ -167,10 +186,21 @@ export async function runMigrations(
         await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
           "ksor-schema-migrate",
         ]);
-        // Re-read INSIDE the lock. The plan was computed before waiting for it,
-        // so a concurrent run may have already applied this exact step; a
-        // second application only survives today because both shipped
-        // migrations happen to be idempotent (round-1 review of #43).
+        // Re-read INSIDE the lock, and this is the ONLY thing that stops a
+        // step being applied twice. The plan was computed before waiting for
+        // the lock, so a concurrent run may have already applied this exact
+        // step (round-1 review of #43).
+        //
+        // A migration FILE is not required to be idempotent and 2.4 -> 2.5 is
+        // not: it fills `audience` from `visibility` and then drops
+        // `visibility`, so its own UPDATE refuses on a second run. That is the
+        // right shape for a mapping step — an operator re-running an applied
+        // step by hand should hear about it rather than get a silent no-op that
+        // leaves `schema_meta` untouched — and it makes this re-read
+        // load-bearing rather than belt-and-braces. Both halves are pinned in
+        // migrate.db.test.ts ("the version guard, not the file, is what stops a
+        // second application"), because the comment that used to sit here said
+        // the opposite (review 2026-08-25).
         const current = await client.query(
           "SELECT schema_version FROM schema_meta ORDER BY applied_at DESC LIMIT 1",
         );
@@ -179,10 +209,12 @@ export async function runMigrations(
         // below 2.0 — the exact bug compareSchemaVersion is here to avoid
         // (round-3 review of #43).
         const seen = await client.query("SELECT compatible_from FROM schema_meta");
-        const compatibleFrom = seen.rows
-          .map((r: { compatible_from: string }) => String(r.compatible_from))
-          .filter((v) => v !== "")
-          .reduce((lowest, v) => (compareSchemaVersion(v, lowest) < 0 ? v : lowest), step.from);
+        const compatibleFrom =
+          compatibleFromOf(sql) ??
+          seen.rows
+            .map((r: { compatible_from: string }) => String(r.compatible_from))
+            .filter((v) => v !== "")
+            .reduce((lowest, v) => (compareSchemaVersion(v, lowest) < 0 ? v : lowest), step.from);
         const at = String(
           (current.rows[0] as { schema_version?: string } | undefined)?.schema_version ?? "",
         );

@@ -1,5 +1,1154 @@
 # @panaversity/ksor
 
+## 0.0.48
+
+### Patch Changes
+
+- 4883d2c: A document page gives its text 16px more room: the horizontal padding drops
+  from 32px to 24px. The reading measure itself is unchanged — widening it was
+  tried and reverted, because measuring what the column already is showed it is
+  wider than the comment beside it claimed, not narrower.
+
+## 0.0.47
+
+### Patch Changes
+
+- 00c99da: **The intake interview asks its three questions in the owner's words.** The
+  previous wording was precise and unanswerable: question 1 asked the owner to
+  finish "when someone here disagrees with this corpus, the corpus wins about
+  ___", which is not a sentence unless you already know the ledger analogy the
+  README uses, and then explained what the answer would be used for inside the
+  question itself. An owner reported being unable to tell what it wanted at all.
+
+  Now: "What is this knowledge base about?", "What is close to that, but not part
+  of it?", and "Who signs off on a document, and who can take one down?" — each
+  with one too-vague example and one specific enough, and nothing about
+  `instance.md` or the MCP surface in the question. The reasoning that used to sit
+  inside the questions moved below them, where it explains the design to whoever
+  maintains the skill instead of blocking the person answering.
+
+  Nothing about what gets written changed.
+
+## 0.0.46
+
+### Patch Changes
+
+- a28fac9: **The Auth0 recipe now names the trap that costs the afternoon it warns about.**
+  Walked end to end against a live Auth0 tenant and a deployed door for the first
+  time (2026-08-26), and the recipe was right about what to type and silent about
+  the two things that actually go wrong.
+
+  The API **Identifier** must equal `KSOR_MCP_RESOURCE_URL` character for
+  character, `/mcp` path included — and **Auth0 does not let you edit it after the
+  API is created**, so a wrong one is fixed by making a new API, not by correcting
+  the field. Neither fact was written down.
+
+  Two Auth0 errors now have a table, because both arrive as a failed token request
+  and they mean opposite things: `Service not enabled within domain` is no API
+  with that Identifier, while `Client "…" is not authorized to access resource
+server` means the Identifier is right and the grant from step 5 is missing.
+  Moving from the first to the second is progress.
+
+  And "Verify it" gains a step 0: ask the PROVIDER for a token before touching the
+  door. Half of these failures never reach ksor, and one `curl` at the token
+  endpoint separates the halves — which is how this diagnosis was actually made,
+  after several rounds of reasoning about dashboard toggles that turned out not to
+  be the cause.
+
+  **And it now says you need more than one Application.** The recipe never
+  mentioned the site's own sign-in control, never said its Application is a
+  different TYPE from an assistant's, and never said the two cannot be the same
+  registration — a public client with no secret and a confidential client that
+  sends one are different things, and using one for both returns a bare `401` at
+  the token endpoint that names nothing. A table at the top of the recipe now
+  gives one row per caller: what type, what token-endpoint auth, what callback,
+  and whether it needs the grant from step 5.
+
+## 0.0.45
+
+### Patch Changes
+
+- 1875d06: **`pnpm preview` — somewhere for `pnpm build` to land.**
+
+  The site is a static export, so there is no server to start; that is what makes
+  the record hostable anywhere. But it also means the natural thing to try after a
+  build — `pnpm start` — answers `ERR_PNPM_NO_SCRIPT_OR_SERVER`, which explains
+  none of that. `pnpm preview` serves `system/site/out` on the same bytes a host
+  would. It is `node:http` and nothing else: no dependency, no network fetch, works
+  offline and behind a firewall, for the same reason the build downloads nothing.
+  Run before a build, it says so and exits `3`.
+
+  **And the Vercel dashboard import now says what actually goes wrong.** Vercel
+  auto-detects a root directory by looking for a framework, finds the Next app, and
+  fills the field with `system/site`. The build then reads
+  `system/site/vercel.json`, which does not exist, and fails with
+  `Project framework is set to "services", but no services are declared` — even
+  though the import screen just listed both services, because that step reads the
+  root file and the build step uses the Root Directory override. The fix is one
+  field: set Root Directory to the repository root. `docs/deploying.md` now names
+  the error, the cause and the fix, plus the site-only fallback.
+
+  Found by an adopter, and it will recur on every dashboard import until Vercel's
+  detection changes — the layout that triggers it is decision 8 and is not moving.
+
+  **And the intake interview asks three questions, not seven.** Seven did not
+  survive contact: an agent running the skill decided five were too many,
+  defaulted them, and reported "answered: all seven" — including the one that
+  decides who may approve a document, which it filled from a git handle. A
+  process the tool executing it shortcuts is too long.
+
+  Scope, Boundary and Authority are asked, because none can be defaulted: the
+  first two give the abstention gate an edge to be outside of, and the third is
+  a governance act, which never gets guessed (decision 21). The other four are
+  STATED as defaults in one block — read by both, declines firmly, one `public`
+  audience, no sources yet — written only if the owner does not object, and the
+  write-back must name which were answered and which were defaulted. Reporting a
+  default as an answer is now called out in the skill as the thing not to do.
+
+  **The scaffold README no longer tells you to uncomment something that ships
+  uncommented.** 0.0.42 filled in `instance.md`'s `database:` block; the README
+  kept instructing the adopter to uncomment it, and named a refusal
+  (`instance.md declares no database: block`) they could no longer reach. The
+  emitted `AGENTS.md` had already been corrected and the README had not — two
+  documents describing one file, and only one of them updated. Vercel is three
+  steps ending in the Root Directory fix, `preview` sits beside `build`, and a
+  "When something refuses you" table maps every refusal an adopter meets to what
+  to do about it.
+
+  **The scaffold README is restructured around what the record is FOR.** It now
+  opens on the agent interface — an MCP door that answers with citations and
+  declines what the record does not cover — rather than on an architecture
+  diagram, because a reader classifies the project in the first fifteen seconds
+  and "governed markdown plus a site" puts it in the wrong bucket.
+
+  `ksor calibrate` moves into the main command path, between `refresh` and
+  `serve`. It was a parenthetical and a remedy-after-the-fact, which meant the
+  README's own three-question test failed at exactly the question it says
+  matters. Verified on the five-document starter: calibrate needs an ingested
+  corpus but NO running server, produces `vector_floor: 0.609`, and with it
+  applied the test passes as written — the paraphrased in-corpus question is
+  answered at 0.701 while an adjacent miss abstains at 0.550 and a far-outside
+  one at 0.512. The "expect answers, not refusals" note moves from postscript to
+  precondition, where it prevents the disappointment instead of explaining it.
+
+  Also: Neon is named for hosted Postgres rather than leaving it abstract (it is
+  already what this project's own docs are measured against, and pgvector is on
+  its free tier), the deploy section ends at the Root Directory fix, and a
+  "When something refuses you" table maps every refusal an adopter meets to the
+  one thing to do about it.
+
+## 0.0.44
+
+### Patch Changes
+
+- 2ece135: **A lighter starter, and `refresh` finally says what it does** (issues #173, #171).
+
+  `ksor init` put five of `knowledge/`'s eleven files onto a single concept — 199
+  lines of companions against a 40-line document — so the first thing an adopter
+  opened was one document wearing four attachments. The flashcards, quiz and
+  slides companions are gone; `what-is-a-ksor.summary.md` stays, because it is the
+  only companion carrying a governance rule (exactly `type: Summary`, one key), so
+  the profile marker is still demonstrated. `knowledge/` goes from 11 files to 8.
+
+  What that costs, stated rather than glossed: the recall, quiz and slides tabs are
+  no longer shown by the starter, and an adopter meets those features in the docs
+  instead. Nothing about the companion mechanism changed — decision 24 is
+  untouched, and the migrate fixture that proves a deck migrates byte-identically
+  is frozen from an older tree, so it still covers the case.
+
+  And `pnpm refresh` was a name the constitution never defined, sitting beside
+  `pnpm ingest` and `ksor ingest` with nothing saying how the three relate. It has
+  a vocabulary entry now, and `docs/ingesting.md` opens with the model: `ksor
+build` makes the SITE correct with no database, `ksor ingest` makes the AGENT
+  DOOR correct, and `pnpm refresh` runs both. The split between the scaffold's
+  script and the underlying verb is deliberate, and now it is written down instead
+  of inferred.
+
+## 0.0.43
+
+### Patch Changes
+
+- 9ecfd78: **A document page that reads at a glance, and a dev server that sees new
+  documents again.**
+
+  The governance row is two tiers. It was one line carrying 79 characters, of
+  which the approver was 32 (41%) and the three labels 19 (24%) — so a producer
+  id was the longest thing on the page and the two facts a reader actually scans
+  for, what state this is in and whether anyone has checked it, competed with it.
+  Now the chips lead with Export beside them, and provenance sits beneath in
+  muted weight. Nothing is hidden: decision 21 requires a governance act to name
+  its actor and decision 27 requires a non-human approver to be disclosed, so the
+  approver moved one line down, not one click away, and every byte of it is still
+  in the server-rendered markup an agent parses.
+
+  Export no longer lands in the middle of the row. It and the reading time each
+  carried their own `ms-auto`, and on a row narrow enough to wrap they shared a
+  line — where two auto margins SPLIT the free space rather than stacking. They
+  are one right-hand cluster now.
+
+  **And adding a document to `knowledge/` while `pnpm dev` runs shows it again.**
+  This regressed in 0.0.41: `refreshStage` walked the STAGE and skipped anything
+  the stage did not already hold, so an arrival — which has no file to walk onto
+  — was never written, and the manifest naming what publishes never learned about
+  it. Measured: `/docs/<new>/` 404 → 200, sidebar 0 → 1, `llms.txt` 0 → 1;
+  0.0.40 served it at 200, so this is a repair rather than a feature. Removals
+  still wait for a restart, deliberately — a deleted file leaves fumadocs'
+  generated imports pointing at something gone.
+
+  The comment explaining why arrivals were refused was also wrong, and is
+  corrected: fumadocs-mdx 15.3.0 DOES regenerate on a write into the
+  dot-prefixed stage. Our own function was the blocker.
+
+  Finally, the starter's `knowledge/surfaces/overview.md` was titled `Surfaces`
+  inside the Surfaces section, so its breadcrumb read `Surfaces › Surfaces`. It
+  is `Overview` now.
+
+- 9ecfd78: **Two fixes on the document page.**
+
+  The governance row put **Export** in the middle of the row with nothing under
+  it. Export and the reading time each carried their own `ms-auto`, and on a row
+  narrow enough to wrap they landed on the same line — where two auto margins
+  SPLIT the free space between them rather than stacking, so Export came to rest
+  mid-row instead of at either end. They are now one right-hand cluster and
+  travel together at every width.
+
+  And the starter's `knowledge/surfaces/overview.md` was titled `Surfaces` inside
+  a section already called Surfaces, so its breadcrumb read `Surfaces › Surfaces`
+  and the sidebar showed a Surfaces inside Surfaces. It is titled `Overview` now,
+  matching its filename, and the generated section index was regenerated with it.
+
+## 0.0.42
+
+### Patch Changes
+
+- d55097c: **Document what a deploy actually does to your lock.** `vercel.json` builds the
+  site with `pnpm build`, which runs `ksor build` first — so the host regenerates
+  every `index.md` and `build.lock.json` before building. That has two
+  consequences worth knowing, and neither was written down: you can deploy
+  without ever running `ksor build` yourself, and the `build.lock.json` in your
+  repository is not necessarily the one that shipped.
+
+  Nothing changes in behaviour. The record checker still runs on the deploy, so a
+  record that breaks the profile still fails there, and the `build_id` that did
+  ship is stamped into the deployed `llms.txt`.
+
+  `docs/deploying.md` now also shows the stricter posture for adopters who want
+  the deployed build reviewed before it ships — `buildCommand: "pnpm -C
+system/site build"`, which refuses `ksor-lock-missing` or `ksor-lock-stale`
+  until someone runs `ksor build` and commits it. That is one line in your own
+  `vercel.json`; ksor ships no flag for it.
+
+- abef414: **Fix the release-note lookup, properly this time.** The previous release added
+  `releaseNote()` so doc-truth assertions could survive a changeset being folded
+  into the changelog. It resolved a consumed note to the NEWEST changelog
+  section, which is only correct for the release that consumes it: a note
+  consumed in 0.0.41 lives in the 0.0.41 section forever, so by 0.0.42 the lookup
+  returned a different release entirely.
+
+  Two failures came out of that, and the second was worse than the bug it
+  replaced: presence assertions went red, and a fenced-block scan went VACUOUS —
+  passing because the section handed to it contained no code blocks at all.
+
+  `releaseNote()` now returns the whole changelog once a note is consumed, plus
+  whether the note is still `pending`. Assertions about the PRESENCE of prose use
+  the text (finding it anywhere in the changelog proves it shipped); assertions
+  about STRUCTURE gate on `pending`, because "every fenced block must show
+  `--approve-by`" is a rule about a note still under review, not one to apply to
+  the whole published history.
+
+  Verified in both states and mutation-tested against the released tree: removing
+  `--approve-by` or changing the tool-size figure in the changelog turns the
+  assertions red.
+
+- bfcf900: **A new record already names its DSN variable.** `instance.md`'s
+  `database.dsn_env` shipped commented out, so climbing to the served rung began
+  with an edit whose only purpose was to delete two `#` characters — and the
+  instruction to do it was repeated in four places, one of which (`.env.example`)
+  sat right beside a `KSOR_DB_URL=` line that was NOT commented. A first-time
+  reader had to notice that one file names the variable and another defines it,
+  and that only one of the two needed uncommenting.
+
+  It is filled in now. Naming an environment variable costs nothing and requires
+  no database: `pnpm dev` and `pnpm build` never read it, and the value only has
+  to exist when you run `provision`, `refresh` or `serve`. Verified on a real
+  scaffold from the published package with the block live and `KSOR_DB_URL`
+  unset — `check`, `ksor build` and a full static site build all succeed, and the
+  record publishes.
+
+  So the served rung is now: set `KSOR_DB_URL` in `.env`, then `provision`,
+  `refresh`, `serve`. The step that was pure ceremony is gone, and `ksor init`'s
+  own next-steps, the scaffold's `AGENTS.md`, `.env.example` and
+  `docs/ingesting.md` all say the same thing.
+
+## 0.0.41
+
+### Patch Changes
+
+- fe9a0af: Refuse a withdrawal a document attests for itself, and close three record-checker gaps
+
+  - **`ksor-deprecator-unauthorised` no longer accepts `ksor.owner`.** The owner who
+    may withdraw a document is the one an `ownership:` rule in
+    `.ksor/governance.yaml` resolves — never the `ksor.owner` the document writes
+    about itself, which is free text the profile does not even form-check. Before
+    this, `ksor.owner: human:mallory` beside `ksor.deprecated.by: human:mallory`
+    passed in any record whose policy declares no `ownership:` rule, which is the
+    shape both `ksor init` and `ksor migrate` emit. That was asymmetric with
+    approval, where a policy naming no matching rule refuses outright.
+
+    **This is a behaviour change for existing records.** If your policy declares no
+    `ownership:` rule, a `deprecated` document must now name a
+    `takedown_authorities` actor in `ksor.deprecated.by`, or the build refuses.
+    Either record the withdrawal by a takedown authority, or add an `ownership:`
+    rule naming who owns that path.
+
+  - **A dot-prefixed or backslash-bearing filename under `knowledge/` is refused**
+    (`ksor-name-unportable`). `knowledge/.secret.md` used to pass with no refusal
+    at all and became a full concept: the MCP door served it while the site's file
+    walk, which does not match dot-prefixed names, had no route for it. A backslash
+    is a legal character in one Linux filename and the path separator on Windows,
+    where the checkout fails outright.
+
+  - **`index.summary.md` is refused (`ksor-attachment-of-index`).** A generated
+    index is not a document — no route, no node, no governance — so nothing can
+    attach to it, and the orphan rule could not see the problem because the
+    generated `index.md` IS committed. The file was accepted, stamped into
+    `build.lock.json`'s `companions[]` and into `build_id`, and then published on
+    no surface at all, silently. Decision 27 retires the `index.summary.md` row
+    from the canonical attachment table with it.
+
+  - **An `.mdx` summary is recognised as an attachment.** The checker kept its own
+    list of companion suffixes and it had drifted from the canonical one, so
+    `x.summary.mdx` got no orphan check, no `type: Summary` check and none of its
+    parent's governance. Both copies are now derived from the one list.
+
+- fe9a0af: A cold start against a sleeping database no longer crash-loops the door, and an unauthenticated public bind says what it is actually handing out.
+
+  **`ksor serve` meant it when it said DEFERRED.** The door is built to come up when the content store is unreachable — it announces `boot checks DEFERRED … NOT READY`, refuses every request, and retries until the database answers, because a serverless Postgres waking from suspend is an ordinary deploy, not an exception. One read sat outside that guard: the viewer list is validated against the ingested policy's registry, which is a row, and reading it threw two statements after the DEFERRED line had already printed. The process exited 3, the platform restarted it, and it did the same thing again — a crash loop for a database that was merely asleep. That read is now one of the boot checks, so deferring defers it too, and until it passes the door holds the one viewer list that is legal for every record: `public`. Nothing is served through it, because an unverified instance refuses every request.
+
+  **A refusal is no longer deferred as though it were an outage.** A stemming mismatch between `instance.md` and the stored `search_tsv`, and a `KSOR_AUDIENCE` naming an audience the policy does not register, are both decided by a row the database ANSWERED with. They were caught by the deferral branch, which reported `content store unreachable` about a store that had just replied and left the door retrying a verdict no retry can change. Both now refuse at boot, where they can be fixed.
+
+  **`KSOR_AUTH=disabled-public` now states what it reaches.** The boot report carried two facts and never their product: one line said the door was unauthenticated, another said `audience public,internal`, and a door serving the internal half of the record to anonymous callers read exactly like one serving only the public half. The auth line now names the restricted tiers by name — and stops saying "the whole record" when only the public audience is being served, so the loud sentence means something when it is true.
+
+- e23e07d: The door's refusals now say the right thing, to the right audience — and a governance refusal no longer names the documents it withdrew.
+
+  **A 503 stopped enumerating withdrawn documents.** Two governance refusals interpolated the `stable_id`s of documents somebody had TAKEN DOWN into the message a caller receives. Under `KSOR_AUTH=disabled-public` that reaches anyone who can reach the port: the strongest governance act in the product, listing what it had removed, to an unauthenticated agent. `GovernanceGateError` now takes those identifiers through a parameter of their own and appends them to the OPERATOR's copy alone — the one that goes to the server's logs, where the fix happens. The 503 keeps the slug, the count and the remedy, which is what a caller could act on anyway. The split is structural rather than a matter of care: there is no route from the identifier parameter to the text that goes on the wire.
+
+  **A refusal stopped misdiagnosing itself as a database outage.** Which errors are the door's own verdicts was written out in two places — the boot path that refuses them and the layer that decides what a caller may read — and the two lists disagreed. So a one-character typo in `KSOR_AUDIENCE`, on a container whose database happened to be asleep when it started, answered every request with `the content store is unavailable (AudienceError)`: a refusal blaming a database that had just replied, while the text naming the typo and the fix reached nobody. It is now one table, with each entry saying which half of its message is public and why, so the two cannot drift apart again. A record's registered audience names are treated like the withdrawn document paths above — the operator's logs get them, a caller does not.
+
+  **`/ready` stopped blaming the network for a refusal.** It collapsed every failure to `false` and answered `content store unreachable` — so a governance violation, about a database that had just replied and that no retry can fix, was reported forever as a network fault, while `POST /mcp` returned the real remedy. One door telling two stories. The probe now names the class of refusal and points at the logs. It deliberately says LESS than the 503 does: `/ready` is unauthenticated on every posture, including the bearer-gated one, so it is the wrong place to repeat a record's governance state.
+
+  **The embedding-space guard is retried instead of switched off.** It is fail-closed on a warm boot, but a cold start caught it, reduced it to a note on `/health`, and never ran it again — so a door that started against a sleeping database and recovered reported itself ready and then compared vectors across two embedding spaces, with the abstention floor calibrated in a space the record no longer used. It now sits with the other boot checks: deferred together, retried together, and a proven mismatch refuses.
+
+  **`/health` says when the boot checks have not passed**, instead of reporting a normal-looking posture while every request is being refused.
+
+  **The abstention line stopped claiming an armed gate on a door that refuses every search.** A `vector_floor` with no digest was measured against a retrieval predicate that has since changed, so the gate treats it as uncalibrated and refuses everything — and the boot report and `/health` both announced `floor 0.631 — below it, this record abstains`. The operator was told the record was abstaining at a measured threshold while it was in fact answering nothing at all, which is this product's own "honest absence, never silent weakness" rule inverted, and it is the first state an adopter meets after upgrading. Both surfaces now take the decision from one function, and say to run `ksor calibrate`.
+
+  **A Host or Origin allowlist is matched the way HTTP compares those values.** `KSOR_ALLOWED_HOSTS=MCP.Acme.com` used to reject every client that resolved it — a total outage from a valid setting, refused with a message that named neither the value nor the variable. Both sides are case-folded now, and both refusals carry their remedy, as does the 413 that used to say only that a body was too large.
+
+- fa49d37: Make the emitted scaffold docs survive being followed literally
+
+  A first-hour walkthrough obeyed the emitted README word for word and hit four
+  dead-ends. Each is now fixed where the reader meets it, not only in the deep
+  doc that already got it right.
+
+  - **The publish recipe was incomplete and refused.** "`status: stable` with a
+    `ksor.approval`" is two thirds of it — `ksor-stable-ungenerated` also demands
+    `generated: { by, at }`, which appeared nowhere in the README. It now shows
+    the whole frontmatter shape, says which half is provenance (any producer) and
+    which is authority (an actor `.ksor/governance.yaml` lists), and names the
+    ordering rule between the two `at`s.
+  - **"The ordered path is:" was not the order.** The command block ran before
+    the instruction to uncomment `database:` in `instance.md`, which sat thirteen
+    lines below it, so step two died with `instance.md declares no database:
+block`. The emitted `AGENTS.md` had the right order all along; the README now
+    matches it — config, environment, then commands.
+  - **The Docker smoke test refused with the `.env` the README told you to
+    write.** A container sets `$PORT`, so the door binds `0.0.0.0` and
+    `KSOR_AUTH=disabled-local` correctly refuses. The refusal is right and stays;
+    the printed command now carries `-e KSOR_AUTH=disabled-public` and says why,
+    on the command rather than in `.env` so an ordinary `ksor serve` keeps its
+    loopback posture. Fixed in the README, `AGENTS.md`, the `Dockerfile` header,
+    `.env.example` and `docs/deploying.md`, which now all print one recipe.
+  - **`ksor` reads `.env`, but a refusal says "export that variable".** Both are
+    true and a newcomer met both; the README now says so in one sentence.
+
+  Two smaller truths: `pnpm refresh` builds before it ingests, and both places
+  that describe it said otherwise; and `instance.md`'s own description of the
+  starter claimed "types, statuses, audiences, a folder and a companion summary"
+  where the starter is in fact five approved documents, all one type, one status
+  and one audience, three of them in a folder, with one carrying all four study
+  attachments.
+
+  New: a short **note on `audit`**. A fresh `npm install` ends with high-severity
+  advisories against the pinned `next` and an invitation to `npm audit fix
+--force`, which would break the pin — and nothing said not to. The note says
+  don't let an audit tool raise the pin, explains the one structural reason the
+  report reads worse than it is (the site is a static export, so no framework
+  server, middleware, server actions, rewrites or image optimizer ever run), and
+  names what that argument does NOT cover: the build toolchain, and any served
+  route added later.
+
+- 8a384be: Four places where the product was wrong about itself.
+
+  **A governance key one level from where the profile reads it is refused by
+  name** (`ksor-key-misplaced`). `effective_from:` at a concept's top level is
+  spelled correctly, so no near-miss net could see it and OKF §11 preserved it —
+  a document embargoed to 2099 built clean, exited 0 and published the same day.
+  The mirror, `ksor.stale_after`, was refused as a key of a closed block and told
+  the author to "remove `stale_after:`"; following that remedy on a document
+  already past that instant flipped it from withheld to published. Both
+  directions are now named, and no remedy in the profile deletes a governance
+  value — an unrecognised key under `ksor:` is moved to the top level, where §11
+  preserves it.
+
+  **Every surface now says whose claim the trust tier is.** `verified[].by` is
+  checked for its actor form and nothing else: the Governance Policy has no
+  verification family, so any well-formed `human:` actor promotes a document to
+  `human-reviewed` — while `ksor.approval.by` is refused outright when no rule
+  matches it. That asymmetry is deliberate (record spec §2.3) and unchanged; what
+  changed is that the `search` and `read` tool descriptions, the emitted
+  `.env.example` and the emitted `AGENTS.md` said or implied otherwise. At
+  `KSOR_MIN_TRUST_TIER=human-reviewed` the only document a record served was the
+  one asserting its own review. The tool definitions grow 520 chars for it
+  (16,214 → 16,734 as transmitted, ~4,054 → ~4,184 always-resident tokens);
+  `packages/ksor/docs/tool-surface.md` has the re-measured table.
+
+  **`ksor build` says what its own snapshot will stop being true.** Machine-surface
+  admission is decided once, at the build's `as_of`, and written into files that
+  cannot re-decide themselves — so a document whose `stale_after` passes after a
+  build keeps appearing in `llms.txt` and its markdown twin while `ksor serve`
+  already refuses it. The build now names the documents it held back and why, and
+  the next instant at which this goes out of date. It is a notice and not a
+  refusal: a document past its review date is a governed state, and a build that
+  refused it would make deleting the `stale_after` the fastest way to green. The
+  emitted `AGENTS.md` stated the exclusion unconditionally and now states the
+  rebuild obligation instead; the emitted `README.md` carries it too.
+
+  **Three `ksor takedown` remedies name `--actor`.** Decision 21 requires it on
+  every mode that writes the ledger, so the printed fix lines exited 1 on
+  `ksor-takedown-unattributed` when pasted.
+
+- fe9a0af: Ingest now checks the whole lock, refuses an unaccountable takedown before it spends anything, and never serves a tier nobody asked for
+
+  **`ksor ingest` reads every digest `ksor build` records, not just the document
+  hashes.** The lock covers the instance, the governance policy, the takedown
+  ledger, the companions, the assets and the generated indexes — and ingest was
+  comparing only `documents[]`. So a governance file edited _after_ the build that
+  checked it went straight into a published generation: delete a denial's four
+  lines from `.ksor/takedowns.yaml`, ingest, and the MCP door published a document
+  the website still withdrew. Editing any of them without rebuilding now refuses
+  `ksor-lock-stale` and names the file. Re-run `ksor build`, commit both, ingest.
+
+  **A denial nothing in the repository accounts for now stops ingest where it
+  happens.** A record upgraded from schema 2.4 carries denylist rows with no
+  ledger entry, and `ksor serve` refuses to boot on exactly that. Ingest used to
+  say nothing, build and embed a whole generation, and only then refuse — leaving
+  an un-activated generation behind. It now refuses at the ledger step, before a
+  generation is allocated, with the same `ksor-takedown-unledgered` slug and the
+  remedy that resolves it (`ksor migrate --write`, commit, ingest).
+
+  **A read that names no audience is served nothing.** The kernel's read path bound
+  "the whole record" as its default viewer, which meant the SQL rule that denies an
+  unstated viewer could never fire. The default is gone: callers entitled to the
+  whole record say so, and everything else fails closed. An audience identifier
+  containing the list separator, or spelled `*`, is refused
+  (`ksor-audience-identifier-invalid`) rather than silently read as a different set
+  of audiences.
+
+  **A withdrawn-then-deleted document no longer bricks the record.** Deleting a
+  document after withdrawing it is the sequence the record spec sanctions, and
+  `ksor migrate --write` produces it on its own for any denial whose document is
+  already gone. The denylist row carried no record of that, so the boot check read
+  "no document with this id" as an orphaned denial and refused `ksor ingest` and
+  `ksor serve` permanently — while `ksor build` and the website stayed green. The
+  remedy it printed could not clear it: `ksor takedown --removed` records what
+  happened to the FILE and moves no row, so the only escape was to un-withdraw the
+  document. The row now carries `expected`, and a document the record itself
+  documents as removed is no longer read as an orphan. It stays withdrawn: the
+  serving predicate never reads that column.
+
+  **A migrated database is now the same database as a fresh one.** Nothing compared
+  the two; a schema-parity check across columns, constraints, indexes, policies,
+  privileges and triggers found the profile's two CHECK constraints carrying
+  different names on each side, and `schema.sql` now names them as the migration
+  does.
+
+  Also: an empty `sources:` list is the same value as no `sources:` list
+  everywhere, so it no longer changes a generation's provenance digest depending
+  on which side of a round trip it is read from.
+
+  **A malformed argument no longer reports itself as an outage.** A value Postgres
+  cannot represent — a NUL byte in a slug or a query is the reachable case — made
+  every read fail with "content store temporarily unavailable". The condition is
+  deterministic and harmless to the connection, but the tool guidance this door
+  hands every agent says `unavailable` means retry later and never conclude the
+  thing is absent, so a caller with one bad argument was told to retry forever
+  while the store answered everyone else. SQLSTATE class 22 is now reported as
+  what it is: the request was rejected as written, the store is healthy, and
+  retrying it unchanged will not help. Connection failures are unchanged.
+
+- 0a0b048: Three governance rules that judged the wrong thing.
+
+  **A takedown ledger no longer breaks on a personnel change.** Every entry was checked against the takedown authorities named in `.ksor/governance.yaml` _today_, so removing someone who had left the organisation refused every entry they had ever written — the record stopped building for a personnel change, not a governance one — and the obvious remedy, deleting those entries, is `ksor-ledger-shrank`. The only escape was to go on naming a departed person as an authority, which is a lie the policy would then carry. Authority is now checked where the act happens: an entry this record has not yet accepted. The committed `build.lock.json` is the only evidence of acceptance, because it is written by a build that got past this very check; git history proves only that a line was committed, which anyone with write access can do, so a hand-appended entry in a pull request is still refused exactly as before. Acceptance is of TEXT, so an entry retargeted under an accepted id is judged again.
+
+  **A Governance Policy path that can never match is refused instead of silently ignored.** Scope paths are bundle-relative directory prefixes, and a concept's id carries neither its `.md` nor the `knowledge/` prefix — so `paths: ["hr/handbook.md"]` and `paths: ["knowledge/hr/"]`, the two forms a hand reaches for first, matched nothing at all. The tightly scoped rule simply never applied and approval or ownership resolution fell through to whatever broader rule was left, with nothing red on any surface. Both are now `ksor-policy-invalid`, naming the path and the one it would have to be. A bare `/` still means the whole record.
+
+  **A legal hold over the whole record is refused instead of half-performed.** A ledger entry naming the record root (`stable_id: knowledge/#section`, `scope: subtree`) was accepted, and only one of the two surfaces could carry it out. The site reads the empty prefix as everything, so the website went dark; the serving side walks `parent_id` from the node the denylist row names, and no node exists for the record root — top-level sections have no parent — so its seed was empty and the MCP door went on serving every document. Measured on a live 187-document record: the website dark, the door answering in full. The website going dark then reads as confirmation that a hold is in place over a door that never stopped. It is now `ksor-takedown-dangling`, naming the form that works — one subtree entry per top-level section — and it is raised on the in-force set rather than at parse time, so the entry stays readable and `ksor takedown --revoke` remains the way out.
+
+- fe9a0af: **The link checker no longer goes blind on two ordinary markdown shapes.** Every link rule — `ksor-link-widens`, `ksor-link-dead`, `ksor-link-escapes` — and the footnote rule read the document with its code stripped out, so a shape the stripper mistook for code took its links out of reach of all four at once, with nothing red. A public document could point at a restricted one and `ksor build` exit 0.
+
+  **A list item's continuation paragraph is prose, not code.** CommonMark requires four spaces of indent there, and the stripper read any four-space line as an indented code block — so the link in
+
+  ```
+  - A bullet.
+
+      See [the plan](/secret/plan.md) for detail.
+  ```
+
+  was invisible to the checker while the site published it as a live link. Indentation is now measured from the container's content column, the way CommonMark measures it: code inside an item starts four columns past the ITEM, and a fenced sample inside an item is still a fence. A sub-bullet at the same indent was always seen, which is why this hid.
+
+  **A fence that never closes now hides only itself.** The fence state survived to end of input, so one stray ` ``` ` in prose silenced every link and footnote after it — half a document unjudged, with no signal. An unclosed fence is a stray backtick run, not a block, and the rest of the document is judged again.
+
+  Both directions were checked: no document in the shipped starter or the example corpus changes shape under the new stripper, and everything that was really code — indented blocks, fenced blocks inside list items, code spans, thematic breaks — is still stripped.
+
+- 4d67703: Make six CLI messages answer the question the reader is actually holding
+
+  Every one of these came out of a first-hour walkthrough that followed the
+  printed output literally.
+
+  - **`ksor calibrate`'s paste block is now a block you can paste.** It ended with
+    "Paste into instance.md:" and then `vector_floor:` / `floor_digest:` at the
+    top level — where neither key lives. Pasted verbatim, the file was refused
+    (`ksor-instance-format`), so nothing shipped, but the one instruction the
+    report gives was wrong. It now prints the `retrieval:` block those keys belong
+    in, at column 0, because two spaces of terminal indentation lands inside a
+    frontmatter as a nested mapping and `yaml` refuses it outright. The
+    non-separable verdict's fail-closed block moved to the end of the report for
+    the same reason, and both are asserted by pasting them into a real instance.md
+    and parsing it.
+
+  - **A misplaced instance key now NAMES the block it belongs to.** The refusal
+    said "nest it under the block it belongs to" without ever saying which block
+    — and the file already holds the map that answers it. `vector_floor` and
+    `floor_digest` are told they are keys of `retrieval:`, and the remedy prints
+    the block with the values the file already carries, so the fix moves the
+    setting rather than dropping it.
+
+  - **A port already held now names its remedy.** `ksor serve` printed its boot
+    lines and then a bare Node errno — `error: listen EADDRINUSE` and the address,
+    with no `fix:` and no mention of `KSOR_MCP_PORT`. It now says what is wrong,
+    why, how to find the process holding the port, and how to serve on another
+    one; `EACCES` and `EADDRNOTAVAIL` get their own remedies, because the next
+    command differs. The exit code is unchanged: a bind failure
+    is the environment (3), never a refusal.
+
+  - **`ksor serve --help` and `ksor init --help` have pages.** Both fell through to
+    the generic verb list while every other verb answered for itself. `serve`'s
+    page names its one flag and the environment variables a first run needs —
+    including the one a busy port sends you looking for.
+
+  - **Every write-plane refusal opens with `error: <slug>`.** `ksor build` printed
+    a machine-readable slug alone on the first stderr line and `ksor schema` printed
+    none at all, for the same malformed file — so an agent reading `stderr` got a
+    different shape per verb. `schema`, `ingest`, `calibrate`, `grant`, `takedown`
+    and `gc` now keep the contract the docs already stated, naming the RECORD's own
+    slug where a record file is what refused. A bad `--dim` is `bad-args` rather
+    than a slug about an instance it never read.
+
+  - **A refusal states its reason once.** `ksor serve`, `ingest`, `schema`,
+    `calibrate`, `gc` and `grant` printed the same sentence twice — inline on the
+    `error:` line and again under `why:`.
+
+  - **`ksor build` says what it could not record about provenance.** On a record
+    with no commit it said only `(dirty)` — a word no shipped document defines —
+    and wrote `"source_commit": null` in silence, while `ksor ingest` explained the
+    identical state in full. Build now prints the same sentences ingest does, from
+    one shared module: the commit it published from when there is one, and what is
+    missing and how to fix it when there is not. It still does not refuse — a
+    provenance-less build is legitimate, and `--strict` is there for anyone who
+    wants it refused.
+
+- 8a384be: **`ksor migrate` no longer widens an audience, brick a record, or emit a tree
+  it then refuses.** Three defects found by walking the upgrade path end to end
+  against a real database and a real door.
+
+  - **A re-run republished an internal record as public.** Migrate writes
+    `instance.md` first and deletes the `audiences:` model from it, so a record
+    that reached a second run with pre-profile documents still on it had nothing
+    to expand them against — and the fallback for "no model" is `[public]`. The
+    route needed no crash: `ksor migrate --write`, `git restore knowledge/`,
+    `ksor migrate --write --approve-by human:x` left a `default_visibility:
+internal` document readable by every unauthenticated caller, at exit 0 with a
+    clean diff. Losing the model now REFUSES, naming the document and both ways
+    out; and `instance.md` is written LAST, so an interrupted run leaves the
+    model readable and is simply re-runnable.
+  - **A record that had ever withdrawn a section could not be published after
+    upgrading.** A denial anchored on `<dir>/index.md` follows the prose migrate
+    moves to `<dir>/overview.md`, and the `takedown_denylist` row it came from
+    still named the old path — accounted for by nothing, so `ksor ingest` refused
+    `ksor-takedown-unledgered` and `ksor serve` refused to boot. The remedy they
+    both print, `ksor migrate --write`, answered "nothing to migrate": the
+    transcription ran only into a record with no ledger at all. The stock
+    scaffold ships `knowledge/surfaces/index.md`, so the trigger was in every
+    adopter's tree. Migrate now records the row as it stands alongside the
+    repointed hold, and APPENDS to an existing ledger any row nothing accounts
+    for — which rescues a record already in that state. An existing entry is
+    still never rewritten, and an existing ledger is never regenerated.
+  - **Migrate wrote a supersession pointer `ksor build` refuses.** A
+    `superseded_by:` resolving to no concept — commonly a bare name resolved
+    against the document's own folder — was written out, followed by "Run
+    `ksor build`", which refused it as `ksor-supersession-strands`. It is now
+    refused up front, naming what was written, what it resolved to, and the
+    concept that is actually there under that name.
+
+- 9e50b4b: `ksor build` runs (`specs/ksor/build/spec.md`): it generates every `knowledge/**/index.md` in memory, runs the record checker, and on green writes the indexes whose bytes changed plus `build.lock.json` — `build_id` over everything a projection reads, `source_commit` from the last commit touching an input, `dirty`, `as_of` (`--as-of` pins it), the canonical viewers and each document's admitted set. A refusal exits 1 with the slug first and writes nothing; `--strict` refuses an uncommitted input; the takedown ledger is checked for deleted entries against every version git has seen and the committed lock, and a shallow clone is refused unless `--allow-unverifiable-ledger`. The scaffold's `check.mjs` is now GENERATED from the record module at package-build time — one rule set with `ksor build`, bundled with its YAML parser (ISC notice in the banner), read-only, refusing a stale index — and the hygiene rules the hand-written checker carried (portable names, file types, PNG integrity, dead and escaping links, the instance's closed key set) live in the record module with stable slugs. The starter is rewritten in the KSoR Profile: `instance.md` format 2, `.ksor/governance.yaml`, `type: Document` concepts, generated indexes; every manager's `build` script is `ksor build` followed by the site build, and `export-denylist` is removed. A `ksor.superseded_by` pointer on a concept that is not `deprecated` is refused (`ksor-supersession-strands`), as the hand-written checker did.
+- b3f1db6: The MCP door now says what the record knows about a passage, and lets a caller ask for better.
+
+  `search` accepts `min_trust_tier` — `unverified`, `machine-confirmed` or `human-reviewed` — so an agent can ask to be answered only from documents someone has reviewed. `KSOR_MIN_TRUST_TIER` sets the deployment's own floor, and the two compose by one rule: the higher of the pair. Configuration TIGHTENS and a request never loosens, so a door configured for `human-reviewed` cannot be talked down by an argument. The floor is bound into the retrieval arms, never applied to the hits afterwards — a floor enforced after ranking has already let a lower-tier passage decide what the answer was.
+
+  The default and the enforcement live in the handler, not in `system/gateways/content.ts`. A registration scaffolded before this release keeps working exactly as it did; the door NOTICES the missing parameter at boot, names the tool by the name you gave it and prints the line to paste, and then opens. Nothing is weakened by its absence — only the capability is gone.
+
+  **Every hit now carries `governance`**: the document's `status`, its `trust_tier`, the latest `verified` act (or null when nobody has reviewed it — an honest state of a governed record, not a defect), `effective_from`, `stale_after`, and `approval` with `checked: "policy"`. That last word is deliberate and is the whole point of the key: the approver was checked against your Governance Policy's authority list and NOT against change control, which lands in phase B. An envelope that said only "approval" would let an agent report more verification than happened.
+
+  **`read` carries the same `governance` block**, from the same stored columns, taken from the record's live row rather than a pinned one — a snapshot keeps a citation resolving to the same bytes, it does not freeze what the record has since decided about them. It sits beside the frontmatter on purpose: the frontmatter is what the author DECLARED and is untrusted corpus text, `governance` is what the record checked and stored, and the tool description says which is which.
+
+  **`read` returns the concept's frontmatter**, byte-exact as its author wrote it — comments and keys ksor has never heard of included. Not a re-serialisation: the profile preserves unknown keys, so a re-rendered block would be a different document wearing the record's name. Schema 2.5 gains `sources.frontmatter` for it, additively; existing records pick it up at their next `ksor ingest`.
+
+  **Every serving act's audit row records its scope** — the viewer list, the trust floor that applied, whether it abstained, how many results came back, and the generation. Never the passages and never the query: a trail that accumulated content would be a second copy of your record with no audience predicate over it and no takedown seam bound to it.
+
+  The frontmatter is a second untrusted channel, so the in-band injection advisory now reads BOTH: a `paste this into your agent` line in a frontmatter value raises `content_advisory` exactly as the same line in the prose does. It did not before, and a programmatic consumer re-reads the payload each turn and never the tool description.
+
+  A `min_trust_tier` your record cannot recognise is now REFUSED (`ksor-trust-floor-unknown`) instead of being read as "no floor". It used to resolve to -1 and serve the whole record — the opposite of what the same rule does for `KSOR_MIN_TRUST_TIER`, which has always refused a value it does not know rather than falling back.
+
+  Costs, recorded rather than argued away: the served `tools` array is now 16,734 characters — ~4,184 always-resident tokens, against the ~2,990 decision 23 recorded, with `search` growing 5,383 → 7,932 and `read` 3,396 → 5,466. The three definitions' own JSON sums to 16,730 of that; the array adds the brackets and the separators. Each `search` hit — and each `read` reply — carries 262 characters more where the document has a verification and an approval, 133 where a level-0 record has neither. `packages/ksor/docs/tool-surface.md` has the re-measured table and says which of its numbers are exact and which are derived.
+
+- d1bc2a2: Wire the kernel onto the record module: `ksor ingest` reads every document through the ONE profile reader instead of its own frontmatter scanner, and schema 2.5 stores what it finds. `content_nodes.visibility` becomes `audience TEXT[]` (GIN-indexed, ranked tiers mapped to a one-element list and then dropped); the authored status is mapped and CHECKed onto `draft | stable | deprecated`; `sources`, `verified`, `generated`, `approval` and `deprecated` land as JSONB beside `effective_from`, `stale_after` and a derived `trust_tier`; each ingestion run records the `build_id` it published, the Governance Policy as a row with its digest, and the takedown ledger's id set; and `takedown_denylist` gains the ledger entry that wrote each row and the one that revoked it. Existing databases walk `2.4 -> 2.5` through `schema/migrations/`. A generation built before 2.5 refuses to serve until it is re-ingested, because the migration can only narrow a ranked tier and answering a viewer from a half-mapped row is not a thing a system of record may do.
+
+  `ksor ingest` now refuses the whole record before it writes anything: the record checker, then `build.lock.json` (`ksor-lock-missing` / `ksor-lock-stale` when the tree has moved since the build), then the ledger — and it applies ledger entries in file order, so a takedown reaches the database even when no document byte changed. `instance.md` is `format: 2`: `audiences:` and `default_visibility:` move to `.ksor/governance.yaml` and are refused with the migration hint, `title`, `description` and `toolchain` arrive. Two live defects go with it — a `CHUNK_POLICY` bump no longer reports "unchanged" against a generation chunked under the old policy, and a revoked denial no longer keeps denying.
+
+  `ksor takedown` is rewritten ledger-first (`specs/ksor/record/spec.md` §5): the act is appended to the committed, append-only `.ksor/takedowns.yaml` and only then written as the denylist row, so a record with no database gets takedown for the first time and the site reads denials from the repository. `--revoke <entry id>` lifts a denial by adding an entry rather than deleting a line, `--removed` records that a denied document was deleted, `--file-only` writes the entry alone, and `--apply` writes every unapplied entry's row under its own recorded actor. The verb refuses an actor `takedown_authorities` does not name before any DSN is resolved. **Breaking:** `ksor takedown --export`, `.ksor-denylist.json` and the scaffold's `export-denylist` step are removed.
+
+- 38ac704: `ksor migrate` rewrites a record written before the KSoR Profile into it, and
+  prints a unified diff before it writes anything. `visibility` expands UPWARD
+  through the old ordered audience model (`internal` under
+  `[public, internal, board]` becomes `[internal, board]` — a one-element list
+  would silently drop the document from the board build); `provenance` strings
+  become `sources` with the string as the scope descriptor; `effective` widens to
+  midnight UTC; `review` becomes `draft` and `superseded` becomes `deprecated`
+  with an attributed `ksor.deprecated` and a `ksor.superseded_by` resolved to a
+  concept id; `approved` becomes `draft` unless `--approve-by` names the human
+  performing the approval; the instance becomes format 2 with its authority moved
+  into a written `.ksor/governance.yaml`; a reserved `index.md`/`README.md`
+  carrying prose moves to `overview.md`; every summary companion gains
+  `type: Summary`; and every denylist row in the database becomes a committed
+  ledger entry. It never authors knowledge: a title, a description, a
+  `generated.at` or a takedown actor it cannot derive is refused by name
+  (`ksor-migrate-underivable`). `--write-site` offers the site's byte-copied rule
+  modules in the same diff. The adopter's frontmatter comments survive — the
+  commented-out `database:` block in `instance.md` is their runbook.
+
+  A top-level `superseded_by:` is now refused as a pre-profile key rather than
+  preserved as an unknown one: the profile reads `ksor.superseded_by`, so a
+  top-level one announced a successor no surface showed.
+
+  The scaffold's skills are rewritten for the profile — the intake interview
+  gains a seventh question (who may approve, who may withdraw) and writes
+  `.ksor/governance.yaml`; `add-sources` emits profile frontmatter with `sources`
+  and footnote citations and never records an approval; `make-summary` emits
+  `type: Summary`. `.env.example` documents `KSOR_AUDIENCE` as the comma list of
+  audiences it is, always including `public`.
+
+- 466d573: **The record is an OKF bundle now.** `knowledge/` is Markdown in the KSoR
+  Profile of the Open Knowledge Format — the shape the README has described for
+  weeks and the code did not hold. One rule set reads it: the CLI, the site and
+  the MCP door all check the same frontmatter through the same module, so a
+  document that publishes on one surface can no longer be refused on another.
+
+  It stays a `patch` — the record format is still finding its shape and the
+  0.0.x band says so — but it changes surfaces adopters depend on, so read the
+  upgrade path below before taking it. In one place, what moves:
+
+  - **A document's frontmatter.** `type`, `title`, `description`, `status`
+    (`draft | stable | deprecated`) and `ksor.audience` (a list) are required;
+    `stable` additionally carries `generated` and an `ksor.approval` by an actor
+    the Governance Policy authorises. `visibility`, `owner`, `provenance`,
+    `effective`, `superseded` and `sor_id` are refused **by name**, with the
+    migration named in the refusal.
+  - **Two files beside the bundle.** `.ksor/governance.yaml` says who may
+    approve and who may take down; `.ksor/takedowns.yaml` is the committed,
+    append-only takedown ledger, and it appears the first time something is
+    withdrawn — no file is the honest way to say nothing ever has been. Both
+    are tracked, not scratch: `.gitignore` ignores `.ksor/*` and un-ignores
+    these two by name.
+  - **`instance.md` is `format: 2`** — `audiences:` and `default_visibility:`
+    move into the policy; `title`, `description` and `toolchain:` arrive.
+  - **Two new verbs.** `ksor build` (database-free: generate the indexes, check
+    the record, write `build.lock.json`) and `ksor migrate` (rewrite a
+    pre-profile record, printing a diff before it writes anything).
+  - **Removed:** `ksor takedown --export`, `.ksor-denylist.json` and the
+    scaffold's `export-denylist` step. The site reads denials from the ledger,
+    so a record with no database has takedown for the first time.
+
+  **To upgrade an existing record**, in order:
+
+  ```sh
+  pnpm add -D @panaversity/ksor@latest
+  ksor migrate --actor human:<you>  # prints the diff, writes nothing
+  ksor migrate --write --actor human:<you> --approve-by human:<you>
+  ksor build
+  # a served record, after committing the migration:
+  ksor schema --instance instance.md --apply   # 2.4 -> 2.5
+  ksor ingest --instance instance.md --flip
+  ```
+
+  `ksor migrate` never authors knowledge: a document whose `description` it
+  cannot derive is refused by name rather than filled in, and an `approved`
+  document becomes a `draft` unless `--approve-by` names the human doing the
+  approving. Both are the same rule — a governance act names the actor who
+  performed it, and the tool does not guess one.
+
+  **That is why `--approve-by` is in the block above, and what happens without
+  it.** Every `approved` document becomes a `draft`, and a draft reaches no
+  machine surface at all: the next `ksor build` reports `0 admitted to a machine
+surface`, and `llms.txt`, the `/md/` twins and the MCP door publish nothing
+  until a human approves. Where one document supersedes another it does not even
+  get that far — `ksor build` refuses with `ksor-supersession-strands`, because
+  the successor migrate just demoted is a draft and a reader sent to it would be
+  stranded. Pass `--approve-by human:<you>` when you are the person
+  `.ksor/governance.yaml` authorises to approve; otherwise expect to approve the
+  record document by document before it publishes again.
+
+  **Two things will refuse until you act, deliberately.** A generation ingested
+  before schema 2.5 will not serve until it is re-ingested, because the
+  migration can only narrow a ranked tier and half a governance row is not
+  something a system of record answers from. And a calibrated
+  `retrieval.vector_floor` measured before this release carries no
+  `floor_digest`, so the door REFUSES every `search`, `read` and `outline`
+  (`ksor-uncalibrated`; the search envelope's `gate` reads `"uncalibrated"`
+  rather than `"off"`) until `ksor calibrate` re-measures it through the
+  predicate that now applies. It refuses rather than abstains, deliberately: an
+  abstention would tell the caller this record does not cover the question, when
+  what is true is that the gate cannot be trusted to decide. A threshold carried
+  across a predicate change stays plausible and stops meaning what it said.
+
+- b14a82c: Land the record module (`packages/content/src/record/`) that the OKF-native record (`specs/ksor/record/spec.md`) will be checked and built by: a frontmatter splitter that reads real YAML and refuses anything else as `ksor-frontmatter-invalid`; the concept profile as a zod schema with one refusal slug per rule; the Governance Policy reader with KSP 4.2.5 scope resolution; the takedown ledger reader (unauthorised actor, dangling, re-added, shrank); the OKF §8 index generator; footnote and link reading in both OKF link forms; the overlap, widening and lifecycle rules with their decision tables; and `checkRecord`, one rule set over an in-memory tree. The CLI now carries `yaml` (2.9.0, ISC, zero transitive dependencies; decision 26) as a runtime dependency, because a profile-shaped document's `ksor:` block and the `.ksor/*.yaml` control files are real YAML that no line scanner can read. Everything else in this release reads the record through this one module — `ksor build`, `ksor ingest`, the MCP door, the site's staging and the emitted `pnpm check` — which is what makes one rule set one rule set.
+- d4061a5: A second review pass over the OKF-native record, and two of its findings were holes in the fixes themselves.
+
+  **An asset is judged by every directory above it, not only the one it sits in.** A public document linking `/secret/chart.svg` was refused; the same document linking `/secret/img/chart.svg` was not, because `secret/img/` holds no concept of its own and the rule read that as a shared `images/` folder. `ksor build` exited 0 and the public site carried the restricted directory's name and the asset's bytes. The check now climbs to the nearest ancestor that holds a concept, which leaves genuine shared folders alone and closes the nesting.
+
+  **A `.DS_Store` no longer makes the site unbuildable.** The stage walked `knowledge/` itself to decide what an asset is, while `build.lock.json` was written from the record loader — which skips OS junk and never reads a symlink as bytes. So the first time Finder touched `knowledge/`, every local `pnpm build` refused `ksor-lock-stale` naming a file `ksor build` cannot put in the lock, and the remedy that refusal prescribes wrote the identical lock. A symlinked asset hit the same disagreement and was reported as a stale lock rather than as the symlink it is. The stage now takes its assets from the record it already loaded, so there is one answer to what an asset is.
+
+  **The site checks the takedown ledger against git history, like the shipped checker does.** The lock is hand-editable and travels in the same change as the ledger, so on its own it cannot see an entry deleted: recomputing `ledger_sha256` and emptying `ledger_entries` made the two agree about a denial that was gone, and the denied document was published again. Outside a repository, or on a shallow clone, the build says so and falls back to the lock rather than refusing every shallow checkout.
+
+  **The all-draft build is tested by something that runs Next.** The fix for the route that used to throw when a build publishes no page was covered only by a staging test that never reaches the route module. The scaffold end-to-end suite now builds the starter exactly as `ksor init` emits it, before touching its policy, and asserts that not one draft reaches a page or `llms.txt`.
+
+- d39e7c6: Close the review findings raised against the OKF-native record before it ships, most of them fail-open reads that no test would have caught.
+
+  **Governance objects are closed, not stripped.** The Governance Policy is the root of authority, and zod's default is to drop an unknown key — so `scope: { path: [...] }`, one letter wrong, left an empty scope that matches every concept and made a drafts-only rule the record's approval fallback. Every object in `.ksor/governance.yaml` now refuses an unknown key by name, with the nearest allowed one. The `ksor:` block is ksor's own namespace, not OKF's, and is closed the same way: `ksor.effective-from` (one hyphen) published an embargoed policy four weeks early with nothing red. A top-level key one edit from a profile key is refused too — a mistyped `stale_after` serves an expired document forever — while the concept's own top level stays open, as OKF §11 requires. And the keys the build writes into a document's twin (`trust_tier`, `build_id`, `source_commit`, `ksor_version`, `dirty`) are now refused on a concept: declaring one published it twice and made the build stamp forgeable.
+
+  **The site's lock covers the files that hold the governance.** Freshness was checked against documents and companions only, so deleting a denial's four lines from the ledger republished the denied document, and editing `instance.md` published a title nothing checked — exit 0, no slug. The three control files are hashed now, the lock's ledger entry digests are passed to the checker (so an entry retargeted in place refuses at the site build too), and assets join the lock, because the site publishes their bytes and a tampered diagram passed unnoticed. Three more fail-open reads in the same schema: an `as_of` that does not parse made every lifecycle comparison false and published a policy effective in 2030 as current; a `ksor_version` the site cannot compare slipped past the outdated gate and was stamped verbatim into every machine artefact; and a lock built with drafts SHOWN published every draft on a plain build.
+
+  **Refusals where the tool used to guess.** `ksor migrate` refuses `sor_id` (dropping it changes a document's stable id and breaks every takedown keyed on the old one), an escaping or stranded `superseded_by` (it used to write `ksor.superseded_by: null`, frontmatter the checker then rejects), a denylist row whose `scope` it cannot read, and a subtree row naming a document rather than a container. It deletes `id:` and `name:`, which only restated the path — leaving them made migrate an infinite loop that re-minted an approval instant on every run. A link from a public concept to an asset inside a restricted directory is `ksor-link-widens`: it used to stage that directory's name and bytes into the public build.
+
+  **The shipped gate can see a deleted takedown.** The emitted checker's only baseline was the committed lock, which travels in the same pull request: emptying both together printed "ok". It reads git history itself now, keeps the lock as a second baseline, and refuses a lock it cannot parse instead of silently holding nothing.
+
+  **A build that admits nothing still builds.** The docs route threw "the record has no documents" whenever a build published no page — the state a record of drafts reaches, which `ksor migrate` produces on its own whenever `--approve-by` is not passed. It renders the record it has instead of failing the build. The scaffold's own documentation is corrected in the same change: `ksor takedown --export` and `.ksor-denylist.json` are gone, the site honours a takedown from the committed ledger with no database access, and the dead denylist reader no longer ships in every adopter's repo.
+
+- 48929da: **Review fixes across the record, the deny seam and the site's machine
+  surfaces.** Ten defects found by an independent review of the OKF-native work,
+  each reproduced before it was fixed.
+
+  Governance:
+
+  - A takedown ledger holding TWO denials of one document, with only the newer
+    revoked, disagreed with itself: the site kept the document withdrawn and the
+    MCP door served it. The denylist projection now takes its live set from the
+    same function the site reads, and `ksor takedown --list` no longer reports a
+    revoked row as denied.
+  - `ksor-link-widens` judged only links that resolved to a concept or an asset.
+    A public document could link a restricted document's `.summary.md`, a
+    restricted directory, or that directory's generated index — publishing the
+    restricted id and the directory name into the public page, its `/md/` twin
+    and `llms-full.txt`. Every target kind is judged now.
+  - A section whose every document had been taken down stayed in the door's
+    `outline` with `child_count: 0`, while the site pruned the folder entirely.
+    Denial binds inside the admission walk, so both surfaces refuse it. **This
+    moves the serving predicate's digest**, so a record with a calibrated
+    `vector_floor` refuses every `search`, `read` and `outline` with
+    `ksor-uncalibrated` until `ksor calibrate` is re-run. The door still boots,
+    and its report says so; the candidate set search sees is unchanged, but the
+    tripwire cannot know that.
+
+  Reading order — the site and the door disagreed three ways, and now share one
+  rule asserted row by row: folders interleave with documents instead of
+  following them, a folder sorts where its first document sorts however deep that
+  document is, and ties break on the file name on both surfaces. The starter's
+  `surfaces/` documents are renumbered so a fresh `ksor init` publishes exactly
+  the order it did before.
+
+  The site's machine surfaces:
+
+  - `![chart](/chart.png)` — the bundle-absolute image form the record checker
+    accepts — broke `pnpm build` with "Module not found" against a `public/`
+    directory the scaffold does not have. Images resolve against the stage now,
+    like every other bundle-absolute link.
+  - The `/md/` twin and `llms-full.txt` were built from fumadocs' processed
+    markdown, so an image reached them as `<img src="__img0" />` while the door
+    returned the record's own bytes. Both now republish the staged source.
+  - An image referenced only from a document's `.summary.md` was validated by the
+    checker, hashed into `build_id`, and never copied into the stage — killing
+    the export.
+
+  Operator surface: `ksor takedown --list` and `--ledger` work on a record with
+  no database, which is the rung `ksor init` emits — `--revoke` takes an id only
+  `--ledger` prints, so that workflow could not be completed at all. One bad
+  document no longer produces a cascade of `ksor-index-stale` refusals whose
+  prescribed fix cannot be run. And the takedown ledger's header no longer names
+  `pnpm` in npm and bun scaffolds.
+
+- da1e5b6: Serving now reads the whole governance row, not just its audience half. Schema 2.5 stores the profile's lifecycle and trust on every node and, until now, only `audience` was consulted — so the MCP door answered from drafts, from documents before their `effective_from`, from documents past their `stale_after` and from deprecated ones, all four of which record spec §2.5 says a machine surface never publishes and all four of which the site's own build already refused. `lib/lifecycle.ts` and `lib/trust.ts` join the audience overlap in ONE admitted set that search's two arms, `read`, `outline` and the calibration sampler bind beside the takedown denial. A caller may name a minimum trust tier and it is enforced as an arm predicate, never after ranking. A SECTION carries no governance of its own and is admitted only when a descendant is visible, resolved by a recursive walk — so a folder whose every document is a draft, expired or below the floor stops advertising an empty shelf.
+
+  A calibrated `retrieval.vector_floor` now travels with `retrieval.floor_digest`, the digest of the retrieval predicate it was measured through, which `ksor calibrate` prints beside the number. A floor is a threshold inside one candidate set; carried across a predicate change it stays plausible and stops meaning what it said. A declared floor whose digest is not this door's — **including a floor calibrated before this release, which has none** — enters the existing declared-but-uncalibrated refusal, and the search envelope reports `gate: "uncalibrated"` rather than `"off"`. Re-run `ksor calibrate` and paste both lines. The snapshot token now binds the viewer list too, so a token minted for one audience cannot re-serve its pinned generation to another.
+
+- 3d0de9f: Stage the scaffolded site on the OKF-native record (`specs/ksor/build/spec.md` §3). Staging now runs for EVERY build — the level-0 fast path that served `knowledge/` unstaged is gone, because no record is now safe to serve raw. The site reads the record with the SAME rules `ksor build` runs, through byte-copies of the record module (decision 18), so frontmatter is real YAML rather than a line scanner. `KSOR_AUDIENCE` is a comma list validated against the lock's registry (`ksor-viewer-unregistered`) and required to include `public` (`ksor-viewer-omits-public`); unset means `[public]`. Lifecycle is decided once, at the lock's `as_of`, by the record spec §2.5 table: drafts appear only under `pnpm dev` or `KSOR_DRAFTS=show`, and a deprecated, not-yet-effective or stale concept renders with a badge on the human surfaces and is absent from `llms.txt`, `llms-full.txt`, the markdown twins and `server.json`. Denials come from `.ksor/takedowns.yaml` in ledger order; the `.ksor-denylist.json` reader and its `ksor-denylist-missing` refusal are gone. Every directory's `index.md` is REGENERATED from the staged tree — never the committed one copied — so a folder page lists exactly what this viewer may see, and a directory with no admitted concept gets no bullet in its parent. `llms.txt`, `llms-full.txt`, every twin and `/.well-known/mcp/server.json` carry the build's `build_id`, `source_commit` and `ksor_version`. The site build refuses `ksor-lock-missing` / `ksor-lock-stale` without a fresh `build.lock.json` outside development, and `ksor-site-outdated` when the lock was written by a newer `ksor` than the site's rule modules carry. `pnpm dev` keeps the staging path with drafts admitted and machine routes stamped `build_id: null`, `unstamped: true`. Links between concepts now resolve in both the forms OKF §6.1 allows — bundle-absolute and relative, `.md` optional — which the shell's own resolver never read, so they reached the page they name rather than 404ing.
+- 561750f: Show the whole trust signal on a governed page, and serve the markdown twin's frontmatter intact (`specs/ksor/record/spec.md` §2, `specs/ksor/build/spec.md` §3). A document's page now carries a **status chip on every page** — `draft`, `stable` or `deprecated`, `stable` included, because a reader who cannot see it cannot tell a governed record from a site that never said — the **trust tier** OKF names (`unverified` / `machine-confirmed` / `human-reviewed`) beside the verification that set it, the **approver and date** that make a stable document stable, and, on a withdrawn one, **who withdrew it and when**. Where the calendar keeps an otherwise current document off the machine surfaces, a second chip carries record spec §2.5's own words with the date the spec's ellipsis stands for: `effective from 2030-01-01`, `past its review date`. `unverified` is printed rather than hidden — it is the honest state of a stable, approved concept nobody has reviewed.
+
+  The `/md/` twins and `llms-full.txt` now serve each concept's **own frontmatter, verbatim**, under the derived `trust_tier` and the build's `build_id` / `source_commit` / `ksor_version`. The projection they replaced flattened `ksor.owner` into a top-level `owner:` and `ksor.effective_from` into `effective_from:` — both keys record spec §2.7 refuses BY NAME as pre-profile leftovers, so every twin published a frontmatter the record's own checker would have rejected, and every unknown key §2.7 preserves was dropped on the way out. An OKF consumer now parses the profile's grammar rather than this shell's summary of it.
+
+  Fixed: a withdrawn document's **search result** wore the ordinary grey chip, because the CSS that tints it still selected the pre-profile status word `superseded`. Search is where a reader chooses between two documents and where the snippet quotes the withdrawn figure.
+
+- adf42df: The shipped docs and the scaffold's own contract now describe the OKF-native
+  record rather than the one before it.
+
+  Every document `ksor init` emits, and every page in the package's `docs/`, had
+  sentences that stopped being true when the record became an OKF bundle. The
+  ones an adopter would have acted on:
+
+  - **`ksor takedown` was documented as needing a database**, with examples that
+    omit the required `--actor`, pass `--subtree` (not a flag; the verb takes
+    `--scope subtree`) and pass a stable id to `--revoke` (which takes a ledger
+    entry id). None of the three commands ran. A takedown is ledger-first, so a
+    record with no database can withdraw a document, and the actor must be a
+    well-formed `human:`/`process:` id that `takedown_authorities` names.
+  - **`KSOR_AUDIENCE=<tier>` was documented in two places** and is refused: the
+    value is a comma list that must include `public`, and admission is list
+    overlap rather than a tier ordering.
+  - **The display title was documented as `instance.md`'s body `# H1`**, which
+    no longer exists; it is the `title:` key.
+  - **A summary companion was documented as carrying no frontmatter**, which is
+    now the one thing that refuses it: it carries exactly `type: Summary`.
+  - **`pnpm check` was credited with the quiz and slides audits.** Those run in
+    the site build; `pnpm check` never ran them.
+  - The tool-surface numbers in the scaffold's AGENTS.md were the 2026-08-23
+    measurement, taken before the trust floor and the per-hit governance block;
+    they are the re-measured ones, each with its date, and `min_trust_tier` is
+    now shown in the registration example it belongs to.
+  - The scaffold README's file table never named `.ksor/governance.yaml`,
+    `.ksor/takedowns.yaml` or `build.lock.json`, which are committed record
+    files an adopter has to understand.
+
+  `ingesting.md` also gains the remedy for a stale lock, which it never carried:
+  `ksor ingest` refuses `ksor-lock-stale` / `ksor-lock-missing`, the fix is always
+  `ksor build` and never an edit to the lock, and freshness covers seven sets —
+  the instance, the policy, the ledger, the concepts, the companions, the assets
+  and the generated indexes — so a refusal can name a file an adopter does not
+  think of as content.
+
+  No behaviour changed.
+
+- 1d18eef: **The upgrade path from a pre-profile record now runs end to end.** Review of
+  the OKF-native release found `ksor migrate` rewriting the record and nothing
+  else, so an adopter who followed the runbook ended with a record they could
+  neither build nor check. What changed:
+
+  - **A record that declares a database can be migrated at all.** Reading its
+    takedown denylist went through a reader that accepts the profile's instance
+    only, so every record that had ever climbed to the served rung — exactly the
+    population with denials to transcribe — was refused before a single query
+    ran, blaming the database and telling you to run the command that had just
+    refused.
+  - **`ksor migrate` with no `--write` prints the diff again.** The documented
+    first step exited `1` on every pre-profile record, because the `--actor`
+    requirement did not distinguish showing a migration from applying one. The
+    dry run names `human:<you>` in the diff and says what to re-run with.
+  - **The commonest pre-profile shape no longer ends red.** A withdrawn document
+    pointing at an approved successor had that successor demoted to `draft`, and
+    `ksor build` then refused the tree. Migrate refuses that up front and names
+    `--approve-by`.
+  - **The files the migration invalidates are offered with it.** The emitted
+    format checker in both skill trees (a stale one refused the record migrate
+    had just written, in your editor and in your CI); the root `build` script,
+    which called a `ksor takedown` flag this release removed; `.gitignore`, whose
+    `.ksor/` line silently un-tracked the new Governance Policy and takedown
+    ledger; and, under `--write-site`, the WHOLE of `system/site` rather than
+    three rule modules.
+  - **`ksor build` refuses `ksor-governance-ignored`** when a policy or ledger it
+    can see is one git will never commit — the state that used to build green
+    locally and fail in a clone with a refusal that never named the cause.
+  - **`ksor build --strict` counts the build's own writes.** Regenerating a
+    committed-but-stale index made the tree dirty AFTER `dirty` was read, so a
+    strict build could stamp `dirty: false` and a commit that does not contain
+    what it published.
+
+- 0a0b048: Two ways a concept could leave the index while its page stayed published.
+
+  **A `title` or `description` written across two lines is refused rather than rendered.** Both are written into ONE §8 index bullet, so a line break there does not render badly — it makes the bullet unreadable, and the concept disappears from the index, the sidebar and the reading order while it keeps its route and the MCP door keeps serving it. Nothing went red: the index generator and the index parser are two halves of one format and agreed on the broken output, so `ksor-index-stale` stayed green over it. A trailing break is the same defect wearing a YAML scalar style — `>` folds onto one line and keeps the newline, which emptied the description in the bullet and nowhere else. `ksor-one-line-form` now refuses both at the one place every surface reads, and `ksor migrate` folds a block or folded scalar onto one line rather than handing back a tree its own checker rejects.
+
+  **A `%` in a filename is refused, and the site no longer dies decoding one.** `knowledge/50%-off.md` passed the checker and then killed `next build` with a bare `URIError: URI malformed` naming no file at all. A path is also a URL, where `%` opens an escape sequence: `50%-off.md` is a malformed one and `50%20off.md` decodes to a different name, so the character gives one document two identities — which is what `ksor-name-unportable` exists to refuse. The site's decode is guarded as well, the way the record's own link resolver already guards the identical call, so a bundle from another OKF producer renders the listing it can instead of taking the build down.
+
+- fe9a0af: Three findings from the third review pass, each one a guarantee that held only by accident.
+
+  **A governed document can no longer leave the record in silence.** A floor key that was PRESENT but unusable — `title: 42` from a title that lost its quotes, an empty `description:`, `status: 5` — pushed no refusal and had its schema complaint discarded as the duplicate of a refusal nobody had made. `parseConcept` returned "refused" with an empty list, so `ksor build` and `pnpm check` dropped the document — no page, no MCP node, no lock entry — printed nothing at all, and exited 0. Thirty-nine such values across the four floor keys did this; a whitespace-only title was accepted outright. Each is now refused by name, and a refusal with nothing to print is structurally impossible rather than merely absent.
+
+  **`order` must be a finite number.** YAML resolves `.inf`, `-.inf`, `.nan` and an overflowing `1e400` to real numbers, and the refusal an author got for one read "Invalid input: expected number, received number". It now says what an order is and what to write instead.
+
+  **A record that lives below its git repository root has a takedown ledger again.** `git show <rev>:<path>` reads a path relative to the repository root, while a `git log -- <pathspec>` is relative to the working directory — which is already the record root. Prefixing both asked git for `docs-sor/docs-sor/.ksor/takedowns.yaml`, and a pathspec that matches nothing is not an error: git exits 0 and prints nothing, so the baseline came back empty AND verified. Deleting a denial and the lock together then rebuilt clean and republished the withdrawn document. Now green on a record one and three directories down.
+
+  **The takedown ledger's history baseline is complete, or it says it is not.** Three ways a version could go missing while the answer still read "verified": git's default history simplification pruned a merged branch whose net effect on the file was nil, so a denial recorded and quietly withdrawn inside one pull request never entered the baseline and its deletion could never be caught — the one deletion the committed lock cannot catch either, because the lock travels in that same pull request. A ledger version larger than one megabyte was silently skipped, as was any version whose bytes failed to read, because a failed read looked exactly like the commit that deleted the file. All three are closed: the walk reads full history in ancestry order, a version that is in the tree but unreadable makes the whole baseline report itself unverified, and the size ceiling is 64 MB.
+
+  **`build.lock.json` records the generated indexes.** The `index.md` files a build writes are published — they are the surface an external reader parses to find anything at all — and they appeared in no section of the lock. They now have their own, hashed over the bytes the build wrote, and they move `build_id` like any other published bytes. Existing locks are regenerated by `ksor build`, which says so.
+
+- 520f1ed: **`pnpm refresh` now builds before it ingests.** The emitted README gives one
+  ordered path to the agent surface — `pnpm provision`, `pnpm refresh`,
+  `pnpm serve` — and on a brand new record the second step failed:
+  `ingest` publishes only a tree `ksor build` has checked, and refused
+  `ksor-lock-missing` on a recipe that never mentions `ksor build`.
+
+  The refusal named the fix, so nobody was stranded — but the documented path did
+  not work, which is the thing a first run is for. `refresh` is
+  `ksor build && pnpm ingest && pnpm gc` now: publishing stays a deliberate act,
+  separate from serving, and the check that makes it publishable is part of it.
+
+  All three managers emit it: npm and bun REPLACE the manager-owned scripts
+  rather than extending the template's, so fixing the template alone left both of
+  them broken. Walked end to end under pnpm, npm and bun — install, provision,
+  refresh, serve, then a live MCP call returning cited hits.
+
+  **An existing record gets the same fix from `ksor migrate`.** The sentence
+  here used to say existing records needed no change, which was exactly backwards:
+  `ksor ingest` gained a lock gate in this release, so a `refresh` that does not
+  build first refuses `ksor-lock-stale` the first time the record is edited
+  (`ksor-lock-missing` if `ksor build` has never run). `migrate` rewrites the
+  script — matched by the ingest script it calls, so it works whichever manager
+  scaffolded the project, and the `ingest` script itself is left alone.
+
+  If you upgraded before this release and hand-edited your manifest, check that
+  `refresh` begins with `ksor build &&`.
+
+- 4c95a7a: **Fix a release gate that broke on the act of releasing.** Four doc-truth
+  assertions read `.changeset/<slug>.md` directly. A changeset is a transient
+  file — `changeset version` folds it into `CHANGELOG.md` and deletes it — so
+  those assertions passed on every feature PR and threw `ENOENT` in the Version
+  PR, the one run whose failure costs a red release instead of a red PR. It would
+  have done so on every future release, not just this one.
+
+  The assertions were right; only the place they looked was wrong. A new
+  `releaseNote()` resolves a note to the pending changeset when it is still
+  pending, and otherwise to the newest section of the changelog it was folded
+  into — scoped to the newest section deliberately, so a rule adopted in this
+  release is never asserted against prose written several releases ago.
+
+- dc079c5: `ksor ingest --knowledge` is retired. The record root — the directory holding
+  `instance.md` — supplies `knowledge/`, `.ksor/` and `build.lock.json` alike
+  (record spec §1), so the flag could only ever name the one directory it was
+  already going to read. It survived this release as a tolerated argument that
+  `--help` did not list, which is the shape of a trap: it worked, so nobody
+  noticed it meant nothing.
+
+  Passing it now refuses like any other unknown flag, and `ksor migrate` strips
+  it from the `ingest` script the pre-profile scaffold shipped, in the same diff
+  that drops `export-denylist`.
+
+- aec9ddd: **The emitted scaffold now says what a fresh record publishes, and what its
+  tooling actually does.** Six sentences an adopter acts on were false about the
+  project `ksor init` hands them.
+
+  - **The record now says what a fresh build publishes.** The emitted README
+    and AGENTS.md said nothing about the starter's publication state at all, and
+    the `intake-interview` skill never raised it. All three now do, and the
+    skill's turn is offered rather than performed on the owner's behalf, never
+    beside an invented `verified` entry. (Which state they describe moved in the
+    same release — see "A freshly scaffolded record now publishes on its first
+    build".)
+  - **`ksor takedown --list` and `--ledger`** were documented as needing
+    "nothing". They need no ACTOR; the sentence now says that, and says they
+    read the committed `.ksor/takedowns.yaml` on a record with no database.
+    Both AGENTS.md and `docs/ingesting.md` also presented `--ledger` as the only
+    route to the entry id `--revoke` takes — the denial prints it and the ledger
+    file holds it, and neither needs a database.
+  - **The format-checker skill** claimed "a ksor upgrade replaces it" of a
+    `check.mjs` that no verb refreshed, in a skill that tells the agent to obey
+    a printed fix literally. It now names the upgrade path and the rule for
+    when checker and record disagree: upgrade, never undo the migration.
+  - **`.env.example`** told npm and bun adopters to set three variables "before
+    `pnpm build`". It is the one emitted file copied byte-for-byte rather than
+    prose-translated, so it now names no manager at all.
+  - **The `## Skills` list** had lost a sentence to an inserted bullet:
+    `make-slides` ended mid-sentence and `make-summary` read "attach it and
+    attach it".
+  - **The actor convention** is documented as far as it is enforced.
+    `ksor.owner` is free text that nothing parses — every other actor slot is
+    form-checked — so the profile documentation says so instead of describing a
+    check that does not run.
+
+  The upgrade runbook's preview step now names `--actor human:<you>`. Bare
+  `ksor migrate` does print the diff — it writes nothing, so it needs nobody's
+  name — but the `.ksor/governance.yaml` in that diff carries a `human:<you>`
+  placeholder where your handle will go, and passing your own shows the file you
+  will actually get. `--write` is the step that refuses without `--actor`,
+  because that is the step that performs the act.
+
+- 71309c2: **Cuts and corrections from the final simplification pass.** Nothing here
+  changes what the tool does; it removes code that had stopped being reachable
+  and corrects three comments that had stopped being true — plus one hand copy
+  of a rule that was actively wrong.
+
+  - **`page-order.ts` is gone**, both copies. It sorted the site's page tree
+    until this release replaced that path with the generated indexes, after which
+    its only remaining callers were the drift tests asserting the two copies
+    matched — a guard on dead code. The tie-break reasoning it recorded (a
+    folder's descendant url compares against a sibling in the wrong order,
+    because `/` sorts after `-`) moves onto the live `routeAt`, which performs
+    the defence and did not say why.
+  - **The attachment suffix list had a fifth hand copy**, in the site's staging
+    step, and it was wrong: it claimed byte-identity with a checker that had
+    moved to the canonical rule, and it was missing `.summary.mdx`, so the stage
+    and the lock writer disagreed about which files are attachments. Both
+    divergences were masked by earlier refusals, so nothing was observable — the
+    shape decision 18 exists to catch. It now calls the canonical rule, as does a
+    sixth copy found in a test fixture, where a fixture classifying attachments
+    by its own rule could not detect the code under test classifying them
+    differently.
+  - **The guard that should have caught those two** scanned one directory and
+    skipped test files. A copy was sitting in each blind spot. It now covers the
+    emitted scaffold and tests as well.
+  - **`splitFrontmatter` in the ingest module is gone.** Decision 26 made
+    `record/frontmatter.ts` the one reader and every caller moved; what was left
+    behind was an unused copy whose test asserted three behaviours the product
+    had deliberately abandoned.
+  - Also removed: three exported helpers in the site's attachment module that
+    never had a caller, a predicate parameter no caller ever passed, and a
+    test that asserted `true`.
+
+  **Two guarantees gained an assertion**, both found while looking for
+  redundancy rather than for holes:
+
+  - **The trust tier now has a conformance table.** It had two implementations —
+    the kernel's and the site's, which cannot import the kernel — and nothing
+    asserting they agree, while the tier is stamped into every `/md/` twin and
+    stored as the column the MCP door's `min_trust_tier` floor compares against.
+    Both halves now run the same rows, including one the previous hand-written
+    expectations did not cover: an actor whose producer merely contains the word
+    `human` is a machine.
+  - **`GATE_PREDICATE_DIGEST` is pinned by value, not by shape.** It was asserted
+    only to be twelve hex characters. Every `ksor calibrate` writes it into the
+    adopter's `instance.md` and the door compares it at boot, so a whitespace-only
+    reflow of the serving predicate would have invalidated every calibrated floor
+    in the field with nothing going red.
+
+- 0a0b048: Teach the record checker about carried pages, so a document may ship the sim it frames.
+
+  A record can carry an interactive page beside its document — `<name>.sim.html`, framed click-to-load where the prose puts it, served from the record's own path so it works offline and no third party learns who is reading. The checker had never been told: it refused every one of them `ksor-file-type` ("unexpected file type `.html`"), so `ksor build` exited 1 on any record that used the feature and no adopter could publish a sim at all.
+
+  `<name>.sim.html` is now admitted, by that SUFFIX and nothing wider — a bare `.html` or `.htm` is still refused, and now says what shape a carried page has to take instead of only that this one is wrong. The rule that decides it is one file (`lib/sim-rule.ts`), read by the checker, the site's staging and the emitted `pnpm check` alike, and pinned to the site's embed rule by a test, because a marker that drifts between "what the record admits" and "what the site frames" fails silently in both directions.
+
+  A sim stays an ASSET, not a study attachment: named freely, many per document, no route, no stable id, no MCP node, no `llms.txt` line and no markdown twin of its own — asserted now rather than assumed. Its governance is inherited by position, through the link in a document that survived every filter: an internal document's sim reaches no public build, a taken-down document's sim is denied with it under node and subtree denials alike, and a sim no document links is never published, so it never becomes a url.
+
+- ac1c477: **A restricted document's sim no longer survives into a public build.** The
+  site published carried sims by copying them into `system/site/public/sims/`
+  and never removing what an earlier build had left there. Because static export
+  ships `public/` verbatim and that directory is gitignored, the accumulation was
+  invisible and served: build once with `KSOR_AUDIENCE=public,internal`, build
+  again with the default, and the internal document's sim was still at
+  `/sims/<path>.html` — the same for a document taken down between builds.
+
+  The staged tree was correct in both builds, which is why nothing was red; the
+  leak was entirely in the publish step that mirrors it. That step now prunes
+  whatever the current build did not publish, so `public/sims/` holds exactly the
+  sims this audience is allowed to see. Adopters get it on the next build; no
+  record change is needed.
+
+- cd21ec3: A code fence in a language the highlighter does not carry renders as plain
+  text instead of failing the build. A record is not a code project: an author
+  writing ` ```promql `, ` ```logql ` or ` ```gotemplate ` is describing their own
+  stack, and shiki throws on a language it has no grammar for — so one fence
+  anywhere in the record took the whole site down with a stack trace naming a
+  file in `node_modules`. Found on a real 187-document handbook where three such
+  languages appeared across some 3,000 fences.
+- fe9a0af: Seven site fixes from the 2026-08-25 review.
+
+  **The stage stopped re-writing itself, and a companion stopped escaping its parent.** A staged path is now emitted once, whatever asks for it. A document linking its own deck (`[Cards](./x.flashcards.yaml)`) had it copied twice — once as its parent's companion and once as a link target found on disk — and the freshness check that decides whether a stage may be left alone compares a count before it compares bytes, so it answered false forever in that record: every evaluation of every build wiped and refilled a stage that was already correct, which is exactly the check that stands between a build and a half-written stage. The same filesystem probe was a second way into the stage for a file that is meant to have only one: a public document linking a TAKEN-DOWN document's deck staged the deck, because the link rules judge a companion by its parent's audience and a takedown is not an audience. A companion now reaches the stage with its parent or not at all.
+
+  **`site.governance: false` no longer swallows a lifecycle caveat.** A `stable` document with a future `ksor.effective_from`, or one past its `stale_after`, showed its chip in the sidebar, in folder listings and in search — and then opened as a current, in-force policy with nothing on the page, while the MCP door declined it outright. The key hides ATTRIBUTION (owner, approver, verifier, sources); it never hid the deprecation notice, and it now never hides the badge either. `deprecated` stays off the page's chip row, because the notice above the title already says it.
+
+  **A file the record may not hold is diagnosed by the rule it breaks.** An `.mdx` dropped into `knowledge/` was reported as `ksor-lock-stale` — "run `ksor build` again", which is the command that refuses the file — instead of `ksor-file-type`. The lock's file-by-file comparison now runs after the record's own checker, so the tree is judged a record before the lock is asked whether it describes that tree. Same for bytes that are not a valid image, now `ksor-asset-corrupt`.
+
+  **A link's scheme is read the way a browser reads it.** `\tjavascript:…` fell through the site's scheme test, which then treated it as a link into the record. Defence in depth — the record checker refuses such a link before the page exists — but the guard now strips the leading control characters a URL parser strips, so it means what it says.
+
+  **The record watcher stopped holding the process open.** `pnpm dev` watches `knowledge/` and unref'd the watcher so it could never be the reason a process refuses to exit. On macOS and Windows that works — a recursive watch is native there. Everywhere else, Node substitutes a JS implementation that opens one watcher per directory and whose `unref()` walks a map of `Stats` objects unrefing anything that is `instanceof StatWatcher` — nothing in that map ever is, so it is a silent no-op and every watcher, created persistent by default, holds the event loop open forever. The watcher is now declared `persistent: false`, which is what makes the promise true on every platform; it still delivers every event while the dev server holds the process open, which is the only time it runs.
+
+  **The stage lock stops waiting.** A holder killed mid-stage — Ctrl-C on `pnpm dev`, a cancelled job, an OOM — never runs the code that removes its lock, and the waiter broke a lock only when the recorded pid was GONE. A recycled pid reads as alive, so the wait was unbounded in practice as well as in code: `pnpm dev` repeating "waiting on .staged-knowledge.lock" on every request, with no build running, until the file was deleted by hand. After two minutes the build now refuses `ksor-stage-locked`, naming the file, the recorded pid, and what a signal-0 probe actually established — including that EPERM means "exists and is not ours", which a recycled pid produces too. It does NOT break the lock: the stage is removed and refilled in place, so breaking one a live holder still holds would publish a half-written record.
+
+  **The site's lock reader covers the indexes.** `build.lock.json` records the bytes of every `index.md` the build generated, and `ksor ingest` has always compared them; the site's reader declared three lists and compared three. The indexes are the one thing under `knowledge/` the build writes rather than reads, and the one thing the site never copies — it regenerates a per-viewer set — so a committed index left at another branch's bytes by a merge, with no re-run of `ksor build`, was invisible to `pnpm build` and `ksor-lock-stale` to the door: one surface publishing what the other refused. The comparison is against the COMMITTED bytes, never the staged ones, because the lock records the whole record's indexes and a restricted viewer's index is legitimately shorter.
+
+- 35e2cdf: **A freshly scaffolded record now publishes on its first build.** `ksor init`
+  then `ksor build` reports **5 admitted to a machine surface**. It reported
+  **0**: the five starter documents shipped `status: draft`, and a draft reaches
+  no surface of a build — so a brand-new project came up with an empty
+  `## Documents` in `llms.txt`, empty `/md/` twins, no document route, and an MCP
+  door that answered nothing. That was deliberate, and it cost more than it was
+  worth on the one build that is meant to be simple to get started.
+
+  **What changed.** The five samples ship `status: stable` with
+  `ksor.approval: { by: "ksor-starter/<the CLI version that scaffolded you>" }`,
+  and the emitted `.ksor/governance.yaml` authorises that actor beside
+  `human:you`.
+
+  **The approver is a producer, not a person.** `ksor-starter/0.0.x` is the same
+  form `generated.by` already uses, so it can never be read as a human who
+  reviewed something — which is exactly what the rule against a tool recording an
+  approval exists to prevent. The trust tier on every one of those pages stays
+  `unverified`, and no `verified` entry is written. Your record does not claim
+  anybody checked this, because nobody did.
+
+  **Two things to do with the samples.** They describe KSoR, not your
+  organisation, so replacing them is the first real act on the record — and when
+  the last one is gone, delete `ksor-starter/...` from `approval_authorities` in
+  `.ksor/governance.yaml`. Nothing of yours should be approved by a tool. The
+  emitted README, `AGENTS.md`, the policy file's own comment and the
+  `intake-interview` skill all say so.
+
+  **Nothing changes for what you write.** A new document is `status: draft` and
+  reaches no machine surface — no page, no sidebar row, no `llms.txt` entry —
+  until a human approves it with `status: stable` plus a
+  `ksor.approval: { by, at }` naming an actor your policy authorises.
+
+  **Existing records are untouched.** This is the `ksor init` template only; no
+  verb, refusal or lock field changed, and `ksor migrate` still demotes
+  `approved` to `draft` unless `--approve-by` names the human approving.
+
+- 959c8c5: **A subtree takedown now reads `expected`, so one ordinary command no longer wedges the record.** `ksor takedown --scope subtree knowledge/<dir>` on a directory that does not exist yet is a sanctioned act — a denial may precede what it names — and the verb recorded it correctly, printing `expected: removed` and exiting 0. The checker then refused it: its subtree branch judged presence alone and never consulted `expected`, so the very next `ksor build` exited 1 with `ksor-takedown-dangling`, on a ledger entry that is append-only and cannot be deleted. The only escape it named was `--revoke`, which records a lift that never happened and drops the hold if the path ever returns; "restore the directory" does not survive a clone, because git cannot commit an empty one. The identical act at node scope built green. The sanctioned withdraw-then-delete sequence wedged the same way, and `ksor migrate --write` could produce a ledger whose first build refused, because it hardcoded `expected: present` for every subtree denial it transcribed.
+
+  The mirror gap was the same defect facing the other way: `expected: removed` at subtree scope had no re-added arm, so a directory the record said was deleted could come back with nothing red — while the serving half had read `expected` scope-blind all along, meaning the two surfaces disagreed about which records are publishable. One rule now decides both scopes, in both directions: a `present` entry whose target is gone is `ksor-takedown-dangling` and a `removed` entry whose target is back is `ksor-takedown-readded`, whether the target is a document or a directory. `ksor migrate` derives `expected` from the post-migration tree with the same function the checker judges it with, and the dangling refusal names `--removed` — the exit that records what actually happened — rather than a revocation. The record ROOT (`knowledge/#section`) is still refused whatever `expected` says: that form is unhonourable by the serving half, not merely out of step with the tree.
+
+- 8a384be: Two ways `ksor takedown` answered wrongly about arguments an adopter types.
+
+  **`ksor takedown --instance .` reads the record you are standing in.** It was the last verb taking `--instance` verbatim, so it resolved the record root as `dirname()` of the path given — the record's PARENT when the path is a directory. The verb then reported `ksor-policy-missing` about a record whose `.ksor/governance.yaml` was right there, and the fix it printed would have had the adopter overwrite their real `approval_authorities` and `takedown_authorities`: a false report about the record, with a remedy that destroys governance. `--list` and `--ledger` hit the same cause down a different path — reading a directory throws `EISDIR` rather than "declares no database", so the level-0 branch was never taken and a record with no database was told to stand up Postgres. Every verb now shares the one `--instance` rule the usage has always documented: an `instance.md`, or a directory at or below the record root.
+
+  **A stable_id is recorded as the record spells it, not as the shell completed it.** A trailing slash is never part of a concept id, and a shell puts one on every directory it completes. `ksor takedown knowledge/policies/x/` matched no concept, so both surfaces denied nothing — and it recorded `expected: removed`, which agrees with "no such concept", so the checker stayed green and nothing ever said the hold was fake: a governance act reported as done, with no red anywhere. `--scope subtree knowledge/policies/#section` recorded the directory `policies//`, which every later `ksor build` refuses in an append-only ledger. The slash is now normalized away on both sides of the `#section` anchor before anything reads the id.
+
+  **A denial naming the whole record is refused as an act, not left in the ledger.** `ksor takedown --scope subtree knowledge/` crashed with a raw `TypeError` under exit `3` — the ENVIRONMENT code, for a bad argument — and `knowledge/#section` was worse: it exited `0` and wrote an entry that every later `ksor build` refuses, in a ledger that is append-only. At the default scope the same id matched no concept, so both surfaces denied nothing while the verb reported a denial. All four spellings are now `ksor-takedown-record-root` at either scope, before anything is written, carrying the same reasoning and the same remedy as the checker's refusal of the recorded form — one subtree entry per top-level section — from one shared text.
+
+- 8a384be: **`ksor takedown` no longer destroys another operator's withdrawal, and no longer reports one it did not record.**
+
+  The verb read `.ksor/takedowns.yaml`, decided what the act was, and wrote the WHOLE file back. Nothing serialised those three steps, so a second run that read before the first one wrote rewrote the file from its own stale text — and every entry appended in between was gone. Each run printed ``recorded as `<id>`​`` and exited `0` all the same, because its own write had succeeded; what it deleted was somebody else's act. Reproduced on a stock `ksor init` scaffold with no database at all: five concurrent runs, five claims of success, three entries on disk, and two documents still published with nothing anywhere in the record saying anyone had ever asked for them to be withdrawn. `ksor build` was green over it, because a ledger that never held the entry is indistinguishable from one whose author never wrote it.
+
+  The same line had a worse reading. `writeFileSync` opens with `O_TRUNC`, so the ledger is ZERO BYTES for the width of the write, and that window is reachable by any concurrent reader — 3.3% of reads under sustained contention on a real 7 KB ledger, and once in 5,177 reads sampled while ordinary `ksor takedown` processes ran. An empty file parsed as a valid EMPTY LEDGER, so the verb handed that state believed the record had withdrawn nothing and wrote a one-entry ledger over forty, exit 0. There is no restore verb, and the entry a revocation would have to name is one of the ones that was deleted, so every remedy the resulting refusals print dead-ends.
+
+  Two mechanisms now, because they answer different failures. The read, the decision and the write happen inside an exclusive lock (`.ksor/takedowns.yaml.lock`, created with `wx` and stamped with the holder's pid; a lock whose holder is gone is broken, and one still held after 30s refuses `ksor-ledger-locked` under exit `3` having written nothing and claimed nothing) — that is what makes N concurrent acts produce N entries. And the write is an `O_APPEND` of the new entry ALONE, which is what makes the loss impossible rather than merely unlikely: a lock is a convention, and an append survives a writer that ignores one. The file now has no state in which it is shorter than it was.
+
+  **A ledger file that exists and is empty is refused (`ksor-ledger-empty`) instead of read as "this record has withdrawn nothing".** No writer produces one — the verb writes the header and the first entry in the same call — so an empty ledger is not a record without denials, it is a record whose denials were lost, and the refusal is the one moment at which they can still be restored from version control. Absence of the FILE is still the honest way to say nothing has ever been withdrawn, and a fresh `ksor init` scaffold ships exactly that.
+
 ## 0.0.40
 
 ### Patch Changes

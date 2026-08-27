@@ -2,6 +2,8 @@
   <img src="https://raw.githubusercontent.com/panaversity/ksor/main/repo-image.png" alt="KSoR — open, vendor-neutral knowledge infrastructure for AI-native organizations" width="100%">
 </p>
 
+[Watch the video: KSoR Introduction](https://www.youtube.com/watch?v=EeTGuQJbHCg&t)
+
 # KSoR
 
 **Open, vendor-neutral knowledge infrastructure for predictable enterprise and education agentic systems.**
@@ -59,32 +61,43 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 > **KSoR is an open knowledge infrastructure framework that makes governed knowledge usable by people, AI agents, and other knowledge systems without giving any one vendor ownership of the record.**
 
+<p align="center">
+  <a href="https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing">
+    <img src="https://raw.githubusercontent.com/panaversity/ksor/main/slides-ksor-8-concepts.png" alt="KSoR in eight concepts — title slide: One Book Everyone Must Follow" width="90%">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing">KSoR in eight concepts →</a></strong><br>
+  17 slides, one hospital, plain language, no code. One authoritative record, what belongs in it, provenance, the governance boundary, abstention, citation, how new knowledge gets approved, and the many open projections that read it — the deck to open when you are introducing KSoR to a team.
+</p>
+
 ---
 
 ## Start here
 
-All you need is Node 24 or newer. Use whichever package manager you already
+All you need is [Node 24 or newer](https://nodejs.org/en/download). Use whichever package manager you already
 have — npm, pnpm, or bun — and the project it creates will use that same
 manager everywhere:
 
 **npm**
 
 ```bash
-npx @panaversity/ksor init my-knowledge-sor
+npx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && npm install && npm run dev
 ```
 
 **pnpm**
 
 ```bash
-pnpm dlx @panaversity/ksor init my-knowledge-sor
+pnpm dlx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && pnpm install && pnpm dev
 ```
 
 **bun**
 
 ```bash
-bunx @panaversity/ksor init my-knowledge-sor
+bunx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && bun install && bun run dev
 ```
 
@@ -101,14 +114,6 @@ in whatever language you write in, and the agent handles the checks and
 structure around it. The project ships `AGENTS.md` with the working rules,
 and the agent will interview you to replace the placeholder in `instance.md`
 — the file that says what this knowledge base covers.
-
-Two commands are worth knowing on day one (shown with pnpm here and for the
-rest of this page; your own project's README uses your manager):
-
-```bash
-pnpm check    # validates your knowledge files — run it before sharing a change
-pnpm build    # builds a fully static site into system/site/out/, hostable anywhere
-```
 
 **Later, when you want AI agents to query your knowledge directly**, you add
 a Postgres database and an embedding API key, then run three commands:
@@ -371,7 +376,7 @@ every surface.
 
 The full specification — the profile, the conformance classes, the
 governance requirements — is the **[KSoR Standard Proposal
-(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft9.md)**, an open
+(KSP-001)](research/ksor-standard-proposal-001-v0.1-draft10.md)**, an open
 standard written so that anyone can implement a conformant KSoR. It defines
 five conformance classes — a corpus (A), a publisher (B), a retrieval layer
 (C), an agent surface (D), and exchange (E) — plus optional profiles for
@@ -807,12 +812,15 @@ If the capitalization policy does not address the situation, the system should n
 
 ## Quick Start
 
-> **Status:** `ksor init` works, and `ksor serve` runs the MCP server over a
-> built record (with `ingest`/`schema`/`calibrate`/`gc` — the climbed rung,
-> needing Postgres and a provider key). Only `dev` and `build` remain designed,
-> not yet implemented — each prints an honest notice and exits `2` today; the
-> scaffold's own `pnpm dev` / `pnpm build` cover local work until they land.
-> [`docs/status.md`](docs/status.md) is authoritative on the released version.
+> **Status:** `ksor init` works, `ksor build` checks the record and writes its
+> lock, `ksor migrate` rewrites a pre-profile record into the profile, and
+> `ksor serve` runs the MCP server over a built record (with
+> `ingest`/`schema`/`calibrate`/`gc` — the climbed rung, needing Postgres and a
+> provider key). Only `dev` remains designed, not yet implemented — it prints
+> an honest notice and exits `2`; the scaffold's own `pnpm dev` covers local
+> work until it lands. `ksor build --bundles` is likewise designed and exits
+> `2`. [`docs/status.md`](docs/status.md) is authoritative on which of these
+> are in the RELEASED version.
 
 ### Requirements
 
@@ -858,7 +866,16 @@ whenever you have edited `knowledge/` — everything is re-runnable, and an
 unchanged corpus costs nothing.
 
 That serves MCP at `http://127.0.0.1:8080/mcp`, announcing its posture as it
-boots (`auth: disabled, abstain gate: OFF (no floor)`).
+boots — an uncalibrated record says so in as many words:
+
+```text
+  auth      DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
+  abstain   OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
+```
+
+`ksor calibrate` measures a floor against your own corpus and prints the two
+lines to paste into `instance.md`; the banner then reads
+`abstain   floor 0.609 — below it, this record abstains`.
 
 Skip `pnpm refresh` and the server comes up with nothing published: every search
 answers `ok: false, reason: "unpublished"` — the record is empty, which is a
@@ -888,7 +905,7 @@ off until you measure a floor with `ksor calibrate` and paste it into
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
-KSP-001 defines the target structure below. The released scaffold is still converging on this profile, so [`docs/status.md`](docs/status.md) remains authoritative for exactly what `ksor init` emits today.
+KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, and `.ksor/governance.yaml` beside them. The takedown ledger `.ksor/takedowns.yaml` is not emitted: the first `ksor takedown` writes it, because an empty ledger would assert an act nobody performed. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
 
 ```text
 my-ksor/
@@ -992,12 +1009,24 @@ Describes the identity and purpose of this KSoR instance.
 For example:
 
 ```markdown
-# Accounting KSoR
+---
+format: 2
+name: accounting-ksor
+title: Accounting KSoR
+description: The governed accounting policies, procedures and controls of Example Corporation.
+toolchain: { requires: ">=0.1.0", scaffolded: "0.1.0" }
+---
 
-This Knowledge System of Record contains the governed accounting
-policies, procedures, definitions, controls, and decision criteria
-used by Example Corporation.
+Answer only from this record. It is authoritative for accounting
+policy, procedure, controls and decision criteria at Example
+Corporation, and for nothing else.
 ```
+
+`name` is the machine identity citations and `llms.txt` use — the one place
+an identity is authored rather than derived from a path. `title` is the
+display title every page leads with. The BODY is the MCP server's
+instructions, handed verbatim to a connecting agent, so it is written for the
+agent rather than as a description of the project.
 
 ---
 
@@ -1128,7 +1157,12 @@ the architecture should make the answer discoverable.
 KSoR binds this responsibility to **SLSA and Sigstore**: provenance
 attestation proving which governed source and build produced a published
 artifact. The published `@panaversity/ksor` package already ships with npm
-provenance attached; corpus-level attestation will land with `ksor build`.
+provenance attached. `ksor build` writes `build.lock.json` — the committed
+record of which corpus, which commit and which toolchain produced a
+publication, stamped into `llms.txt`, every markdown twin and
+`server.json` — but it signs nothing: SLSA/Sigstore attestation of that lock
+is named as out of scope in `specs/ksor/build/spec.md` §5 and will land
+separately.
 
 ---
 
@@ -1227,8 +1261,8 @@ Where OKF ends is where KSoR begins. A format can make knowledge portable; it
 cannot make it governed. OKF makes knowledge portable. **KSoR makes knowledge
 governable.**
 
-The shipped scaffold does not yet emit the KSoR Profile —
-[`docs/status.md`](docs/status.md) is the authority on what runs today.
+`ksor init` emits the KSoR Profile — [`docs/status.md`](docs/status.md) is the
+authority on which release carries it.
 
 ---
 
@@ -1486,8 +1520,11 @@ Everything around it should be replaceable.
 
 ## Deployment
 
-The human surface generated by `pnpm build` in a scaffolded project (and by
-`ksor build` once that verb ships) is a fully static site.
+The human surface generated by `pnpm build` in a scaffolded project is a fully
+static site. `pnpm build` is two steps: `ksor build` checks the record and
+writes `build.lock.json`, then the site build stages what this viewer may see
+and exports it. `ksor build` never renders the site itself — it is
+database-free and knows nothing about a shell.
 
 That makes it suitable for hosts such as:
 
@@ -1685,6 +1722,7 @@ The intended CLI vocabulary is deliberately small:
 ksor init
 ksor dev
 ksor build
+ksor migrate
 ksor serve
 # corpus operations for the served rung:
 ksor ingest
@@ -1711,13 +1749,44 @@ Run the human surface locally with development tooling.
 ksor dev
 ```
 
-### `ksor build`
+### `ksor build` — implemented
 
-Validate and build the deployable KSoR projections.
+Generate every `knowledge/**/index.md` in memory, check the whole record, and —
+only if it passes — write the indexes whose bytes changed plus
+`build.lock.json`. It needs no database, no provider key and no network. A
+refusal exits `1` with the slug on the first stderr line and writes nothing, so
+a red build leaves the tree as it found it.
 
 ```bash
 ksor build
+ksor build --as-of 2026-09-01T00:00:00Z   # pin the instant lifecycle is judged at
 ```
+
+`--bundles`, which would write one OKF bundle per registered audience for
+exchange, is designed and exits `2`.
+
+### `ksor migrate` — implemented
+
+Rewrite a record written before the KSoR Profile into it: audiences expanded
+upward from the old ordered model, provenance into sources, the instance into
+format 2, authority into `.ksor/governance.yaml`. It prints a unified diff and
+changes nothing until `--write`, and refuses by name rather than invent a title,
+a description or the actor behind a takedown.
+
+```bash
+ksor migrate --actor human:you   # prints the diff, writes nothing
+ksor migrate --write --actor human:you --approve-by human:you
+```
+
+`--approve-by` is not optional decoration. Without it every `approved`
+document becomes a `draft`, and a draft reaches no machine surface: the
+following `ksor build` reports `0 admitted to a machine surface` and the
+record's `llms.txt`, `/md/` twins and MCP door publish nothing until a human
+approves. Where one document supersedes another, `ksor build` refuses outright
+with `ksor-supersession-strands` — the successor migrate just demoted is a
+draft, and a reader sent to it would be stranded. Pass it when you are the
+person `.ksor/governance.yaml` authorises to approve; otherwise plan to
+approve the record document by document before it publishes again.
 
 ### `ksor serve` — implemented (the climbed rung)
 
@@ -1733,9 +1802,12 @@ ksor serve
 
 The corpus operations behind the served rung: apply the schema (or migrate an
 existing one forward), authorize a tenant to ingest, ingest `knowledge/` into a
-generation, withdraw a document from every surface (and export the manifest the
-site build reads), calibrate the abstention floor, and collect withdrawn
-generations. Each needs the same Postgres store.
+generation, withdraw a document from every surface, calibrate the abstention
+floor, and collect withdrawn generations. All but `takedown` need the same
+Postgres store: a takedown is written to the committed ledger
+`.ksor/takedowns.yaml` first and to the denylist row second, so a record with
+no database can withdraw a document, and the site reads the withdrawal from the
+repository rather than from an exported manifest.
 
 `grant` is the one to read twice: who may WRITE a tenant's corpus is decided by
 a row in the database that row-level security checks, never by a flag on a

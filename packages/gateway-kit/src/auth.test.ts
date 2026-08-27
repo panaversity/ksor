@@ -125,7 +125,7 @@ describe("buildAuth postures (the smoke-test list)", () => {
     expect(() => buildAuth(env)).toThrowError(/KSOR_JWT_ALLOWED_AUDIENCES/);
   });
 
-  it("only the literal '1' disables auth", () => {
+  it("no value of the retired KSOR_AUTH_DISABLED disables anything", () => {
     expect(() => buildAuth({ KSOR_AUTH_DISABLED: "true" })).toThrowError(AuthConfigError);
     expect(() =>
       buildAuth({ ...SSO_ENV, KSOR_AUTH_DISABLED: "0", KSOR_JWT_ALLOWED_AUDIENCES: "" }),

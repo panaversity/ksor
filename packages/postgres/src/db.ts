@@ -322,7 +322,12 @@ export function createPool(dsn: string, options: DomainPoolOptions): pg.Pool {
   // subject was this, 2026-08-20).
   pool.on("error", (error: Error & { code?: string }) => {
     const code = error.code === undefined ? "" : ` ${error.code}`;
-    console.error(`db pool: idle client error (${error.name}${code}) — connection discarded`);
+    // Same rule as ContentStoreError's: a parenthetical that would say only
+    // "(Error)" identifies nothing and reads as a truncated diagnostic. With a
+    // SQLSTATE it is the most useful part of the line, so it is kept whenever
+    // it carries one (resilience walk, 2026-08-25).
+    const named = error.name === "Error" && code === "" ? "" : ` (${error.name}${code})`;
+    console.error(`db pool: idle client error${named} — connection discarded`);
   });
 
   // How many clients are CHECKED OUT and actually connected.

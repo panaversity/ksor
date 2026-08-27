@@ -5,15 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -C system/site dev",
-    "build": "pnpm export-denylist && pnpm -C system/site build",
-    "export-denylist": "ksor takedown --instance instance.md --export .ksor-denylist.json",
+    "build": "ksor build && pnpm -C system/site build",
+    "preview": "node system/site/preview.mjs",
     "check": "node .agents/skills/format-checker/check.mjs",
     "provision": "pnpm schema && pnpm grant",
     "serve": "ksor serve",
-    "refresh": "pnpm ingest && pnpm gc",
+    "refresh": "ksor build && pnpm ingest && pnpm gc",
     "schema": "ksor schema --instance instance.md --apply",
     "grant": "ksor grant --instance instance.md",
-    "ingest": "ksor ingest --instance instance.md --knowledge knowledge --flip",
+    "ingest": "ksor ingest --instance instance.md --flip",
     "gc": "ksor gc --instance instance.md"
   },
   "dependencies": {

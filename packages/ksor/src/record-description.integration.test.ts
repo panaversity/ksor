@@ -14,7 +14,15 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,30 +30,11 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SHARED = path.resolve(
-  here,
-  "..",
-  "templates",
-  "scaffold",
-  "system",
-  "site",
-  "lib",
-  "shared.ts",
-);
+const SITE = path.resolve(here, "..", "templates", "scaffold", "system", "site");
+const YAML = path.resolve(here, "..", "node_modules", "yaml");
 
-// `shared.ts` reads `site.governance` through this, so the child needs it
-// beside the copy. It imports nothing itself, which is what keeps this to two
-// files rather than a graph.
-const GOVERNANCE = path.resolve(
-  here,
-  "..",
-  "templates",
-  "scaffold",
-  "system",
-  "site",
-  "lib",
-  "governance.ts",
-);
+/** Node strips types but resolves neither `./x` nor `./x.js` to `x.ts`. */
+const RELATIVE_IMPORT = /(from ")(\.{1,2}\/[A-Za-z0-9._/-]+?)(\.js)?(")/g;
 
 const dirs: string[] = [];
 afterAll(() => {
@@ -57,22 +46,34 @@ function describeRecord(instanceMd: string): string {
   dirs.push(dir);
   writeFileSync(path.join(dir, "instance.md"), instanceMd, "utf8");
   // The modules are COPIED beside the fixture so the child can import them by a
-  // literal specifier: the boundary suite reads import targets out of this
-  // file's text, and a computed one would hide the edge from it. `shared.ts`
-  // imports node builtins and `./governance`, which imports nothing — so the
-  // pair behaves identically to the pair in a scaffold.
-  // One rewrite on the way in: the scaffold writes `from "./governance"`,
-  // which TypeScript and the bundler resolve by extension and plain Node ESM
-  // does not. The specifier is the only thing changed, so what runs here is the
-  // same code the site runs.
-  writeFileSync(
-    path.join(dir, "shared.ts"),
-    readFileSync(SHARED, "utf8").replace('from "./governance"', 'from "./governance.ts"'),
-    "utf8",
-  );
-  copyFileSync(GOVERNANCE, path.join(dir, "governance.ts"));
+  // literal specifier, with ONE rewrite on the way in: the scaffold writes
+  // `from "./governance"` and `from "../record/frontmatter"`, which the bundler
+  // resolves by extension and plain Node ESM does not. The specifier is the
+  // only thing changed, so what runs here is the same code the site runs.
+  // `shared.ts` now reads instance.md through the record's frontmatter
+  // splitter (decision 26), so that module and the parser it needs come too.
+  mkdirSync(path.join(dir, "lib"));
+  mkdirSync(path.join(dir, "record"));
+  mkdirSync(path.join(dir, "node_modules"));
+  for (const rel of [
+    "lib/shared.ts",
+    "lib/governance.ts",
+    "record/frontmatter.ts",
+    // The splitter's YAML shape rules moved out into their own module; a copy
+    // list that names files is a list that has to be kept, and a missing one
+    // fails as ERR_MODULE_NOT_FOUND naming a temp directory rather than a rule.
+    "record/yaml-file.ts",
+  ]) {
+    writeFileSync(
+      path.join(dir, rel),
+      readFileSync(path.join(SITE, rel), "utf8").replace(RELATIVE_IMPORT, "$1$2.ts$4"),
+      "utf8",
+    );
+  }
+  copyFileSync(path.join(SITE, "record", "refusal.ts"), path.join(dir, "record", "refusal.ts"));
+  symlinkSync(YAML, path.join(dir, "node_modules", "yaml"), "dir");
   const script = `
-    const { recordDescription } = await import("./shared.ts");
+    const { recordDescription } = await import("./lib/shared.ts");
     console.log(recordDescription());
   `;
   return execFileSync(
@@ -88,12 +89,15 @@ function describeRecord(instanceMd: string): string {
   ).trim();
 }
 
-const FM = "---\nformat: 1\nname: acme-handbook\n---\n";
+const instance = (keys: string): string =>
+  `---\nformat: 2\nname: acme-handbook\n${keys}---\n\nThe MCP instructions.\n`;
 
 describe("the description a record publishes for discovery", () => {
   it("uses the record's OWN first sentence, after its display title", () => {
     const out = describeRecord(
-      `${FM}\n# Acme Operations Handbook\n\nThis record is authoritative for expenses, travel and procurement approvals. Everything else is out of scope.\n`,
+      instance(
+        "title: Acme Operations Handbook\ndescription: This record is authoritative for expenses, travel and procurement approvals. Everything else is out of scope.\n",
+      ),
     );
     expect(out.startsWith("Acme Operations Handbook — This record is authoritative for")).toBe(
       true,
@@ -102,23 +106,12 @@ describe("the description a record publishes for discovery", () => {
   });
 
   it("says plainly when the owner has not described it — never a borrowed sentence", () => {
-    // The scaffold's opening paragraphs are AUTHORING guidance ("The heading
-    // above is this record's display title…"). Reading one of those as the
-    // record's scope is worse than admitting there is none: it publishes
-    // instructions-to-the-author as if they described the corpus.
-    const out = describeRecord(
-      `${FM}\n# Knowledge System of Record\n\nThe heading above is this record's display title.\n\nThis Knowledge System of Record is authoritative for — _fill this in; it is\nthe single most important sentence in the project._\n`,
-    );
+    // The body is the MCP server's instructions, not a description (record
+    // spec §3); with no `description:` there is nothing honest to publish.
+    const out = describeRecord(instance("title: Knowledge System of Record\n"));
     expect(out).toBe(
       "Knowledge System of Record — its owner has not yet described what this record covers.",
     );
-  });
-
-  it("skips headings, lists and quotes to reach real prose", () => {
-    const out = describeRecord(
-      `${FM}\n# Acme\n\n## Scope\n\n- not this\n\n> nor this\n\nThe record covers procurement. And more.\n`,
-    );
-    expect(out).toBe("Acme — The record covers procurement.");
   });
 
   it("fits the MCP schema's 100-character cap on ServerDetail.description", () => {
@@ -127,7 +120,7 @@ describe("the description a record publishes for discovery", () => {
     // wrote a real scope sentence — while the 88-character placeholder passed.
     // Silent, and only for records that had been properly described.
     const long = `${"a really long clause ".repeat(40)}end.`;
-    const out = describeRecord(`${FM}\n# Acme\n\n${long}\n`);
+    const out = describeRecord(instance(`title: Acme\ndescription: ${long}\n`));
     expect(out.length, `over the schema cap: ${out.length} chars — ${out}`).toBeLessThanOrEqual(
       100,
     );
@@ -145,20 +138,24 @@ describe("the description a record publishes for discovery", () => {
 
   it("keeps a realistic described record inside the cap", () => {
     const out = describeRecord(
-      `${FM}\n# Acme Operations Handbook\n\nThis record is authoritative for how Acme runs internally: expenses, travel, procurement approvals and the compensation bands the pay review works from.\n`,
+      instance(
+        'title: Acme Operations Handbook\ndescription: "This record is authoritative for how Acme runs internally: expenses, travel, procurement approvals and the compensation bands the pay review works from."\n',
+      ),
     );
     expect(out.length).toBeLessThanOrEqual(100);
     expect(out).toContain("Acme Operations Handbook");
   });
 
-  it("collapses a wrapped sentence onto one line — this ends up inside JSON", () => {
-    const out = describeRecord(`${FM}\n# Acme\n\nThe record covers\nprocurement\nand travel.\n`);
+  it("collapses a folded description onto one line — this ends up inside JSON", () => {
+    const out = describeRecord(
+      instance("title: Acme\ndescription: >\n  The record covers\n  procurement\n  and travel.\n"),
+    );
     expect(out).toBe("Acme — The record covers procurement and travel.");
     expect(out).not.toContain("\n");
   });
 
-  it("falls back to the record's name when there is no body at all", () => {
-    const out = describeRecord(FM);
+  it("falls back to the record's name when there is no title at all", () => {
+    const out = describeRecord(instance(""));
     expect(out).toBe("acme-handbook — its owner has not yet described what this record covers.");
   });
 });

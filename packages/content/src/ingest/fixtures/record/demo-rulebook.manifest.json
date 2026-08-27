@@ -1,0 +1,324 @@
+{
+  "format": 1,
+  "corpus_id": "demo.workshop-rulebook",
+  "source_commit": "dev",
+  "nodes": [
+    {
+      "stable_id": "knowledge/overview",
+      "slug": "overview",
+      "title": "Workshop Safety Rulebook",
+      "kind": "document",
+      "position": 1,
+      "summary": "The official rules of the Maple Street Community Workshop, and how they bind every member.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/emergencies#section",
+      "slug": "emergencies",
+      "title": "Emergencies",
+      "kind": "section",
+      "position": 2,
+      "governance": {
+        "audience": [
+          "public"
+        ]
+      }
+    },
+    {
+      "stable_id": "knowledge/emergencies/overview",
+      "slug": "overview",
+      "title": "Emergencies",
+      "kind": "document",
+      "parent": "knowledge/emergencies#section",
+      "position": 1,
+      "summary": "What every member does first in an emergency, before any machine-specific step.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/emergencies/injuries",
+      "slug": "injuries",
+      "title": "Rule 30: Injuries",
+      "kind": "document",
+      "parent": "knowledge/emergencies#section",
+      "position": 2,
+      "summary": "Who to call, where the kit is, and what is recorded after an injury.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/emergencies/power-and-fire",
+      "slug": "power-and-fire",
+      "title": "Rule 31: Power Cuts and Fire",
+      "kind": "document",
+      "parent": "knowledge/emergencies#section",
+      "position": 3,
+      "summary": "What to do when the power fails or a fire starts, and where the shut-offs are.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/getting-certified#section",
+      "slug": "getting-certified",
+      "title": "Getting certified",
+      "kind": "section",
+      "position": 3,
+      "governance": {
+        "audience": [
+          "public"
+        ]
+      }
+    },
+    {
+      "stable_id": "knowledge/getting-certified/overview",
+      "slug": "overview",
+      "title": "Getting Certified",
+      "kind": "document",
+      "parent": "knowledge/getting-certified#section",
+      "position": 1,
+      "summary": "How a member earns a machine badge and what a checkout covers.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/getting-certified/badges",
+      "slug": "badges",
+      "title": "Rule 10: Machine Badges",
+      "kind": "document",
+      "parent": "knowledge/getting-certified#section",
+      "position": 2,
+      "summary": "Which badges exist, what each permits, and how one is earned or revoked.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/getting-certified/guests",
+      "slug": "guests",
+      "title": "Rule 11: Guests and Minors",
+      "kind": "document",
+      "parent": "knowledge/getting-certified#section",
+      "position": 3,
+      "summary": "What a guest or a minor may do in the workshop, and who is responsible for them.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/machine-rules#section",
+      "slug": "machine-rules",
+      "title": "Machine rules",
+      "kind": "section",
+      "position": 4,
+      "governance": {
+        "audience": [
+          "public"
+        ]
+      }
+    },
+    {
+      "stable_id": "knowledge/machine-rules/overview",
+      "slug": "overview",
+      "title": "Machine Rules",
+      "kind": "document",
+      "parent": "knowledge/machine-rules#section",
+      "position": 1,
+      "summary": "The rules that apply to every badged machine before its own rules do.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/machine-rules/table-saw",
+      "slug": "table-saw",
+      "title": "Rule 20: The Table Saw",
+      "kind": "document",
+      "parent": "knowledge/machine-rules#section",
+      "position": 2,
+      "summary": "How the table saw is set up, guarded and used, and what is never cut on it.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    },
+    {
+      "stable_id": "knowledge/machine-rules/laser-cutter",
+      "slug": "laser-cutter",
+      "title": "Rule 21: The Laser Cutter",
+      "kind": "document",
+      "parent": "knowledge/machine-rules#section",
+      "position": 3,
+      "summary": "Which materials the laser cutter may cut, and which are banned for the fumes they make.",
+      "governance": {
+        "audience": [
+          "public"
+        ],
+        "doc_status": "stable",
+        "generated": {
+          "by": "ksor-fixture/1",
+          "at": "2026-08-20T09:00:00.000Z"
+        },
+        "approval": {
+          "by": "human:cfo",
+          "at": "2026-08-21T09:00:00.000Z"
+        },
+        "trust_tier": 0
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "knowledge/overview.md",
+      "node": "knowledge/overview"
+    },
+    {
+      "path": "knowledge/emergencies/overview.md",
+      "node": "knowledge/emergencies/overview"
+    },
+    {
+      "path": "knowledge/emergencies/injuries.md",
+      "node": "knowledge/emergencies/injuries"
+    },
+    {
+      "path": "knowledge/emergencies/power-and-fire.md",
+      "node": "knowledge/emergencies/power-and-fire"
+    },
+    {
+      "path": "knowledge/getting-certified/overview.md",
+      "node": "knowledge/getting-certified/overview"
+    },
+    {
+      "path": "knowledge/getting-certified/badges.md",
+      "node": "knowledge/getting-certified/badges"
+    },
+    {
+      "path": "knowledge/getting-certified/guests.md",
+      "node": "knowledge/getting-certified/guests"
+    },
+    {
+      "path": "knowledge/machine-rules/overview.md",
+      "node": "knowledge/machine-rules/overview"
+    },
+    {
+      "path": "knowledge/machine-rules/table-saw.md",
+      "node": "knowledge/machine-rules/table-saw"
+    },
+    {
+      "path": "knowledge/machine-rules/laser-cutter.md",
+      "node": "knowledge/machine-rules/laser-cutter"
+    }
+  ]
+}

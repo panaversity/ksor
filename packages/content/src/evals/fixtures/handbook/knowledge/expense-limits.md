@@ -1,7 +1,13 @@
 ---
+type: Document
 title: Expense limits
-status: approved
+description: When receipts are required, the mileage rate, and the submission window.
+status: stable
 order: 3
+generated: { by: "ksor-fixture/1", at: 2026-08-20T09:00:00Z }
+ksor:
+  audience: [public]
+  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }
 ---
 
 # Expense limits

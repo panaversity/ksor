@@ -17,24 +17,51 @@ stays in the package.
 
 ## Why, measured
 
-Live book record (81 documents, 6,963 chunks), 2026-08-23, at ~4 chars/token:
+**Definitions**, re-measured 2026-08-25 from the served `tools/list` of the
+default registration, at ~4 chars/token. They depend on the code alone, so they
+are exact for every record:
 
-|                                | chars  | ~tokens |                                |
-| ------------------------------ | ------ | ------- | ------------------------------ |
-| tool definitions, all three    | 11,960 | 2,990   | **always resident in context** |
-| `search` alone                 | 5,383  | 1,346   | always resident                |
-| `outline` + `read`             | 6,571  | 1,643   | always resident                |
-| one `search`, `k=10` (default) | 14,164 | 3,541   | per call                       |
-| one `search`, `k=5`            | 8,009  | 2,002   | per call                       |
-| one `search`, `k=3`            | 4,153  | 1,038   | per call                       |
+|                                  | chars  | ~tokens |                                |
+| -------------------------------- | ------ | ------- | ------------------------------ |
+| tool definitions, as transmitted | 16,734 | 4,184   | **always resident in context** |
+| `search` alone                   | 7,932  | 1,983   | always resident                |
+| `outline` alone                  | 3,332  | 833     | always resident                |
+| `read` alone                     | 5,466  | 1,367   | always resident                |
+| `outline` + `read`, if deleted   | 8,798  | 2,200   | the delete-both saving         |
+
+The first row is the JSON of the whole `tools` array; every other row is one
+tool's own object. The array carries four characters no tool's row does — two
+brackets and two separators — so the three tools sum to **16,730** and the
+array is **16,734**. Deleting a tool saves that tool's own row.
+
+**Replies** depend on the record's passages. These are the 2026-08-23
+measurement against the live book record (81 documents, 6,963 chunks) plus the
+`governance` block each hit — and each `read` reply — now carries, measured
+exactly at 262 chars for a
+document with a verification and an approval, 133 for a level-0 record with
+neither. NOT re-measured against that record:
+
+|                                | ~chars | ~tokens |          |
+| ------------------------------ | ------ | ------- | -------- |
+| one `search`, `k=10` (default) | 16,784 | 4,196   | per call |
+| one `search`, `k=5`            | 9,319  | 2,330   | per call |
+| one `search`, `k=3`            | 4,939  | 1,235   | per call |
+
+The definitions grew — `search` was 5,383 chars before the trust floor and the
+per-hit governance, `read` 3,396 before it carried the same block — which is
+the price of an agent being able to tell a
+reviewed document from an unreviewed one, charged once per session. The last
+520 chars are the price of that signal being HONEST: `trust_tier` is derived
+from reviews a document declares about itself, gated by no authority list, and
+both floors now say so instead of letting `human-reviewed` read as a check the
+record performed.
 
 Two consequences set the scope:
 
-1. **Dropping an unused tool is the largest win** — ~1,643 tokens for the whole
-   session. Verified live: a registration keeping only a renamed `search` served
-   **5,337** bytes of definitions against the default's 11,960.
+1. **Dropping an unused tool is the largest win** — ~2,200 tokens for the whole
+   session, whether or not the agent would ever have called them.
 2. **`k` is the result lever; `budgets.maximum_response_characters` is not.** It
-   defaults to 120,000 and at ~1,420 chars a hit cannot bind before
+   defaults to 120,000 and at ~1,700 chars a hit cannot bind before
    `MAX_SEARCH_K`. Dead configuration.
 
 ## Why real code, and not a config API
@@ -60,6 +87,7 @@ import {
   McpServer,
   READ_ONLY,
   SEARCH_OUTPUT,
+  TRUST_TIERS,
   composeInstructions,
   searchHandler,
   z,
@@ -76,7 +104,11 @@ export default function buildGateway(ctx, version) {
     {
       title: "Search the handbook",
       description: `Leave, benefits, conduct. Not product docs.\n\n${FLOOR.search}`,
-      inputSchema: z.object({ query: z.string(), k: z.number().int().default(5) }),
+      inputSchema: z.object({
+        query: z.string(),
+        k: z.number().int().default(5),
+        min_trust_tier: z.enum(TRUST_TIERS).optional(),
+      }),
       outputSchema: SEARCH_OUTPUT,
       annotations: READ_ONLY,
     },
@@ -111,8 +143,13 @@ is exactly the drift that leaked the visibility rule four times.
 
 ### What stays in the package
 
-`searchHandler` / `outlineHandler` / `readHandler`, the output schemas, and the
-`FLOOR` text. Handlers because they are the only thing that can prove a passage
+`searchHandler` / `outlineHandler` / `readHandler`, the output schemas, the
+`FLOOR` text — and the DEFAULT and ENFORCEMENT of `min_trust_tier`. The handler
+owns the floor because an adopter's zod could otherwise decide it: a
+`.default("human-reviewed")` would silently empty their record, and the other
+direction would be a loosening the deployment did not choose. The rule is one
+function, `tightenTrustFloor` — the higher of the deployment's floor and the
+caller's — so configuration tightens and an argument never loosens. Handlers because they are the only thing that can prove a passage
 came from the governed record — a hand-written one returning fabricated hits with
 plausible `stable_id`s passes every shape check there is. Schemas and floors
 because they are the citation and abstention guarantees.
@@ -129,6 +166,15 @@ would pass CI and throw on an adopter's install.
 | a served ksor tool whose description lost its `FLOOR` | `ksor-gateway-floor-missing` |
 | a registration that serves no tools                   | `ksor-gateway-no-tools`      |
 | the file throws, or default-exports a non-function    | `ksor-gateway-unloadable`    |
+
+One state is NOTICED rather than refused: a served `search` tool with no
+`min_trust_tier` parameter. The distinction is the contract — a missing `FLOOR`
+is a broken guarantee, a missing `min_trust_tier` is a missing capability. Every
+guarantee still holds without it (the handler applies `unverified`, and the
+deployment's own floor is untouched), so refusing would take a working record
+off the air for a parameter that did not exist when its registration was
+emitted. The notice names the tool by the name the record gave it, and the line
+to paste.
 
 Checks **values**, never key presence: in-process the reply passes by reference,
 so every optional key exists holding `undefined`, and a `"description" in tool`
@@ -154,9 +200,12 @@ read green — a shape this repo has already had to fix twice.
 5. **Integration** — a registration dropping `FLOOR.search` is refused
    `ksor-gateway-floor-missing`; one serving nothing is refused
    `ksor-gateway-no-tools`; a broken file is refused `ksor-gateway-unloadable`.
-6. **Live** — verified against the served book record: rename works with
-   identical provenance, definitions fall 11,960 → 5,337 bytes, the file's `k`
-   is the default, and a floor-less registration exits 1 at boot.
+6. **Live** — verified against the served book record (2026-08-23): rename works
+   with identical provenance, dropping tools falls the definitions accordingly,
+   the file's `k` is the default, and a floor-less registration exits 1 at boot.
+7. **Unit** — a registration with no `min_trust_tier` BOOTS and produces a
+   notice naming the tool and the fix; one that has it produces none; a record
+   serving no search tool produces none.
 
 ## Out of scope
 

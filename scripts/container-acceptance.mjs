@@ -84,15 +84,16 @@ try {
   // 1. Scaffold with the local CLI.
   run(process.execPath, [cli, "init", "demo"], { cwd: work });
 
-  // 2. Point the record at the database. The scaffold ships the block
-  //    commented out, which is the adopter's first edit on this rung.
+  // 2. The record already points at the database: the scaffold ships
+  //    `database.dsn_env` live, so this rung needs no edit to instance.md at
+  //    all. Asserted rather than assumed — if the block ever goes back to
+  //    being commented out, every step below would fail further along and for
+  //    a reason that does not name this one.
   const instancePath = path.join(project, "instance.md");
-  const instance = readFileSync(instancePath, "utf8").replace(
-    "# database:\n#   dsn_env: KSOR_DB_URL",
-    "database:\n  dsn_env: KSOR_DB_URL",
-  );
-  if (!instance.includes("\ndatabase:\n")) fail("could not enable the database block");
-  writeFileSync(instancePath, instance);
+  const instance = readFileSync(instancePath, "utf8");
+  if (!instance.includes("\ndatabase:\n  dsn_env: KSOR_DB_URL")) {
+    fail("the scaffold no longer ships a live `database.dsn_env` block");
+  }
 
   // 3. Install the LOCAL build, not the published one.
   //
@@ -130,9 +131,23 @@ try {
 
   // 4. Publish a generation. This is a DEPLOY step, never something the
   //    container does at boot — the whole point of the serve/ingest split.
+  // `ksor build` FIRST: ingest publishes only a tree the record checker has
+  // passed, and records that build's id on the generation (record spec §1,
+  // build spec §2). Without it ingest refuses `ksor-lock-missing` — which is
+  // the deploy order every adopter's own scripts follow, so the walk follows
+  // it too rather than reaching past it.
+  // The record is used AS EMITTED — no approval step. The starter ships
+  // `status: stable` approved by its producer, so `ksor init` alone gives this
+  // walk a record with something in it, which is the point: the MCP question at
+  // the end asks the container about the knowledge an adopter actually
+  // receives. While the samples were drafts this walk had to approve them first
+  // or the generation published nothing, and the abstention that followed read
+  // as a retrieval failure rather than as an unapproved record (found in CI,
+  // 2026-08-25).
+  ksor(["build"]);
   ksor(["schema", "--instance", "instance.md", "--apply"]);
   ksor(["grant", "--instance", "instance.md"]);
-  ksor(["ingest", "--instance", "instance.md", "--knowledge", "knowledge", "--flip"]);
+  ksor(["ingest", "--instance", "instance.md", "--flip"]);
 
   // 4b. Customize the tool surface, so the walk proves the registration file
   //     actually REACHES the image. It did not once: .dockerignore excluded all

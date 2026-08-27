@@ -52,6 +52,30 @@ export function schemaVersion(): string {
   return m[1]!;
 }
 
+/**
+ * The `compatible_from` schema.sql declares — the OLDEST reader that can read a
+ * database at this version, parsed from the same row as {@link schemaVersion}.
+ *
+ * Derived rather than written down because the remedy that prints it was
+ * hardcoded to `'2.0'`, which was true when it was written and became false
+ * the day 2.5 dropped `visibility` — an operator who pasted it recorded that a
+ * 2.0 reader can read a 2.5 database. A remedy that prints a false fact is
+ * worse than no remedy (product principle 4), and hardcoding the CURRENT
+ * number just re-arms the same trap at 2.6.
+ */
+export function schemaCompatibleFrom(): string {
+  const text = readFileSync(schemaSqlPath(), "utf8");
+  const m = /INSERT INTO schema_meta\s*\([^)]*\)\s*VALUES\s*\(\s*'[^']+'\s*,\s*'([^']+)'/i.exec(
+    text,
+  );
+  if (m === null) {
+    throw new Error(
+      "schema.sql declares no schema_meta compatible_from — cannot determine the oldest reader",
+    );
+  }
+  return m[1]!;
+}
+
 function compareVersion(a: string, b: string): number {
   const pa = a.split(".").map(Number);
   const pb = b.split(".").map(Number);

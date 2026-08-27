@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSecurity } from "./http.js";
+import { rebindRefusal, resolveSecurity } from "./http.js";
 
 /**
  * Host-validation allowlist for the loopback door (the DNS-rebind default).
@@ -86,5 +86,46 @@ describe("resolveSecurity — the loopback rebind allowlist (Host + Origin)", ()
       delete process.env["KSOR_ALLOWED_HOSTS"];
       delete process.env["KSOR_ALLOWED_ORIGINS"];
     }
+  });
+});
+
+describe("what a rebind refusal TELLS the operator, and how it compares", () => {
+  const security = resolveSecurity({ host: "127.0.0.1", port: 8080 });
+
+  it("admits a Host that differs only in case — HTTP says they are the same value", () => {
+    // RFC 9110 §4.2.3. The allowlist was an exact Set lookup on both sides, so
+    // `LocalHost:8080` — which every HTTP client is entitled to send — was
+    // refused by a door bound to exactly that (review finding 4).
+    expect(rebindRefusal(security, "LocalHost:8080", undefined)).toBeNull();
+  });
+
+  it("admits an Origin that differs only in case", () => {
+    expect(rebindRefusal(security, "localhost:8080", "HTTP://LocalHost:8080")).toBeNull();
+  });
+
+  it("still refuses a Host that is genuinely not allowed", () => {
+    const refusal = rebindRefusal(security, "evil.example.com", undefined);
+    expect(refusal?.status).toBe(421);
+  });
+
+  it("names the offending value and the variable that governs it", () => {
+    // Every other refusal on this door carries its remedy; these two said
+    // `{"error":"host not allowed"}` and left the operator with nothing to
+    // search for — which is how a case-folding bug becomes an unexplained
+    // total outage.
+    const refusal = rebindRefusal(security, "evil.example.com", undefined);
+    expect(refusal?.body.error, "the value it saw").toContain("evil.example.com");
+    expect(refusal?.body.error, "the knob").toContain("KSOR_ALLOWED_HOSTS");
+  });
+
+  it("does the same for an Origin", () => {
+    const refusal = rebindRefusal(security, "localhost:8080", "https://evil.example.com");
+    expect(refusal?.status).toBe(403);
+    expect(refusal?.body.error).toContain("https://evil.example.com");
+    expect(refusal?.body.error).toContain("KSOR_ALLOWED_ORIGINS");
+  });
+
+  it("a request with no Origin is not a cross-origin request", () => {
+    expect(rebindRefusal(security, "localhost:8080", undefined)).toBeNull();
   });
 });

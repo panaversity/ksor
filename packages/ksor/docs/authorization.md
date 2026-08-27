@@ -12,7 +12,7 @@ authorization server and pointing the door at it.
 This page is four worked recipes, all executed against real servers rather than
 written from their documentation, plus what an agent does to obtain a token. The
 mechanism is standard OAuth 2.0 — nothing here is specific to any one product,
-and that is the point: three different implementations are shown because a
+and that is the point: four different implementations are shown because a
 single one proves nothing about neutrality. Two are self-hosted (one `docker
 run` each, no account), one is a hosted commercial provider with a free tier,
 and one is an organization's own SSO — which is the case that matters most,
@@ -41,9 +41,11 @@ per-request case needs a decision first.
 **It is one gate, not per-user rules.** The door checks that a token was signed
 by the issuer you named and audienced at this record. It reads no scopes, no
 roles, no groups. **Any caller holding a valid token gets the whole record**, to
-the extent the audience tier allows. If different readers must see different
-documents, that is the record's `audiences:` / `visibility:` model, and it is a
-different mechanism from this page — see the scaffold's AGENTS.md.
+the extent its audience list allows. If different readers must see different
+documents, that is the record's audience model — the registry in
+`.ksor/governance.yaml`, each concept's `ksor.audience` list, and the viewer
+list the door is configured for — and it is a different mechanism from this
+page. See the scaffold's AGENTS.md.
 
 So: this page answers _"can a stranger read my record over MCP?"_ It does not
 answer _"can Alice read what Bob can."_
@@ -67,7 +69,7 @@ works, not while you are trying to make it work.
 to anyone who can reach the port — and it wins over everything below. A scaffold
 ships with `KSOR_AUTH=disabled-local` in its `.env.example`, so a deployment
 that copied that file has it set and will stay unauthenticated no matter how
-carefully you configure the four variables above. Configuring the SSO door is
+carefully you configure the variables above. Configuring the SSO door is
 what turns auth **on**; removing `KSOR_AUTH` is what stops it being off.
 
 Every variable here is read from the environment of the `ksor serve` process —
@@ -190,7 +192,7 @@ opaque by default, no OAuth token endpoint taking a custom audience, no metadata
 document. That is a coherent design; it is simply a different one, and adapting
 it means writing the verification layer ksor already is.
 
-The three recipes below all pass. If yours does too, they will read as the same
+The four recipes below all pass. If yours does too, they will read as the same
 recipe with different button names — because underneath they are.
 
 ## Recipe: Keycloak
@@ -296,6 +298,25 @@ Nothing else in this recipe makes sense until that lands. You are not building
 an API; you are describing the one you already have so Auth0 can mint tokens
 aimed at it.
 
+**You will need MORE THAN ONE Application, and they are different types.** This
+is the single thing most likely to waste your afternoon, because one application
+configured for one caller returns a plain `401` to the other with nothing
+naming the mismatch (found the hard way, 2026-08-26). One API, one caller per
+row:
+
+| The caller                                        | Auth0 Application Type      | Token endpoint auth        | Callback                                                            | Needs step 5 |
+| ------------------------------------------------- | --------------------------- | -------------------------- | ------------------------------------------------------------------- | ------------ |
+| the SITE's sign-in control (`NEXT_PUBLIC_KSOR_*`) | **Single Page Application** | **None** — PKCE, no secret | `https://your-site/auth/callback`                                   | no           |
+| an assistant a person logs into (Claude, an IDE)  | **Regular Web Application** | client secret              | the assistant's own, e.g. `https://claude.ai/api/mcp/auth_callback` | **yes**      |
+| a script, worker or backend agent                 | **Machine to Machine**      | client secret              | none                                                                | **yes**      |
+
+The site row is a different flow and not really part of this page: it requests
+`openid profile email` and **no audience**, so it never touches your API and
+needs no grant. It is here only so you do not try to serve it and an assistant
+from one application — a public client with no secret and a confidential client
+that sends one cannot be the same registration, and the failure is a `401` at
+the token endpoint that says nothing about why.
+
 ### 1. Describe the door
 
 **Applications → APIs → Create API.** The **Identifier** you type becomes the
@@ -306,6 +327,24 @@ has to resolve.
 Name:       my-record
 Identifier: https://your-host.example.com/mcp
 ```
+
+**Type the whole URL, `/mcp` included, and get it right the first time.** The
+Identifier must equal `KSOR_MCP_RESOURCE_URL` character for character — the host
+alone is not enough, because that is not what the door will compare against. And
+**Auth0 does not let you edit an Identifier after the API is created**: a wrong
+one is fixed by creating a NEW API with the right string and granting your
+application access to that one instead.
+
+Two Auth0 errors tell you exactly where you are, and they are easy to confuse
+because both arrive as a failed token request (reported by an adopter,
+2026-08-26):
+
+| Auth0 says                                                               | Means                                                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `Service not enabled within domain: https://…/mcp`                       | **no API has that Identifier.** Yours was created with a different string — make a new one |
+| `Client "…" is not authorized to access resource server "https://…/mcp"` | the API is right and the **grant** is missing — step 5                                     |
+
+Moving from the first message to the second is progress, not a new problem.
 
 Creating it also creates a machine-to-machine **test application** named
 `<API> (Test Application)`. That is your first caller — you do not need to make
@@ -445,9 +484,25 @@ Use the commands below when it did NOT work, or when the caller is a script
 rather than a person. A token from your provider proves the provider works; it
 does not prove the door does. Both halves matter, and the refusal matters more.
 
+**0. Ask the provider for a token FIRST, before you touch the door.** Half the
+failures on this page never reach ksor at all, and this one command separates
+the two halves in a second:
+
+```sh
+curl -s -X POST https://YOUR_TENANT.us.auth0.com/oauth/token \
+  -H 'content-type: application/json' \
+  -d '{"grant_type":"client_credentials","client_id":"…","client_secret":"…",
+       "audience":"https://your-host.example.com/mcp"}'
+```
+
+An `error` here is the PROVIDER refusing, and no amount of ksor configuration
+will change it — see the table in step 1 for what each message means. An
+`access_token` here means the provider works, and anything still failing is the
+door or the token's contents, which is what the rest of this section is for.
+
 **1. Decode the token before using it.** This is the single most useful
-debugging step on this page, because a valid token audienced at the wrong thing
-looks identical to a broken one:
+debugging step once you have one, because a valid token audienced at the wrong
+thing looks identical to a broken one:
 
 ```sh
 echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss, aud, exp}'

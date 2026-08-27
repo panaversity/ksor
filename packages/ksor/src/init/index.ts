@@ -50,10 +50,22 @@ function refuseExists(io: InitIo, word: string): number {
   ]);
 }
 
+/**
+ * The page a bare `ksor init` prints — and, since 2026-08-26, the page
+ * `ksor init --help` prints too. `--help` used to short-circuit at the top of
+ * the CLI and print the generic verb list, so the one verb whose whole contract
+ * is "what does the name have to look like, and where does it write" answered
+ * with a list of other verbs (first-hour walkthrough).
+ */
 function usage(io: InitIo): number {
   io.out(
     "ksor init <name>   create a new Knowledge System of Record in ./<name>\n" +
       "ksor init .        scaffold into the current directory (must be empty)\n" +
+      "\n" +
+      "init takes no flags: the first argument IS the name, so a leading-hyphen\n" +
+      "typo is refused as a bad name rather than read as an option.\n" +
+      "The scaffold is emitted for the package manager that invoked this run —\n" +
+      "`npx` writes an npm project, `bunx` a bun one, everything else pnpm.\n" +
       "\n" +
       "Nothing was scaffolded: bare `ksor init` never writes — an unattended\n" +
       "agent must not scaffold into an unknown directory by accident.\n" +
@@ -143,8 +155,8 @@ function handoff(io: InitIo, name: string, targetWasDot: boolean, manager: Packa
       `  ${run("dev").padEnd(15)} # the site, live at http://localhost:3000\n` +
       "\n" +
       "Then, for the agent surface (needs Postgres and a provider key):\n" +
-      `  ${run("provision").padEnd(15)} # once: uncomment \`database:\` in instance.md, copy\n` +
-      "                  #   .env.example to .env, then apply the schema\n" +
+      `  ${run("provision").padEnd(15)} # once: copy .env.example to .env and set KSOR_DB_URL,\n` +
+      "                  #   then apply the schema\n" +
       `  ${run("refresh").padEnd(15)} # PUBLISH the record — ingest knowledge/ into a generation\n` +
       `  ${run("serve").padEnd(15)} # the MCP server, over what you just published\n` +
       "\n" +
@@ -172,6 +184,11 @@ function init(args: readonly string[], cwd: string, io: InitIo, env: InitEnv): n
       exitCodes.environment,
     );
   }
+
+  // …but `--help` is a QUESTION, not a name: it is the one word here that must
+  // not be scaffolded from. Answered with init's own page, which is what a
+  // reader asking about this verb wants (first-hour walkthrough, 2026-08-26).
+  if (args.includes("--help") || args.includes("-h")) return usage(io);
 
   // init has no flags: the first argument IS the name candidate, so a
   // leading-hyphen typo is a bad name, never silently treated as a flag.

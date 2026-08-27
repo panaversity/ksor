@@ -110,7 +110,12 @@ export const ATTACHMENT_CASES = [
   { name: "returns.flashcards.yaml", kind: "deck", parent: "returns.md" },
   { name: "returns.quiz.yaml", kind: "quiz", parent: "returns.md" },
   { name: "returns.slides.yaml", kind: "slides", parent: "returns.md" },
-  { name: "index.summary.md", kind: "summary", parent: "index.md" },
+  // No `index.summary.md` row: `index.md` is GENERATED (record spec §1) — no
+  // route, no node, no governance of its own — so nothing attaches to it, and
+  // decision 27 retires this row with the authored index. The NAME is still an
+  // attachment by this rule (it has a stem and a known suffix); what refuses it
+  // is `ksor-attachment-of-index` in the checker, which is where "who may be a
+  // parent" belongs — this file only answers "is this name an attachment".
   // A stem containing dots keeps every one of them: the parent is the same
   // name with the attachment suffix removed, never "up to the first dot".
   { name: "v1.2.policy.summary.md", kind: "summary", parent: "v1.2.policy.md" },

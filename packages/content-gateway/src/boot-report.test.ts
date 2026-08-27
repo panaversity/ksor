@@ -19,6 +19,7 @@ describe("the boot report reads as one aligned block", () => {
       ["auth", "DISABLED"],
       ["abstain", "OFF"],
       ["serving", "http://127.0.0.1:8080/mcp"],
+      ["trust", "unverified"],
     ];
     const columns = new Set(cases.map(([label, value]) => bootLine(label, value).indexOf(value)));
     expect([...columns]).toHaveLength(1);
@@ -31,6 +32,25 @@ describe("the boot report reads as one aligned block", () => {
     }
   });
 
+  it("aligns a label that exactly FILLS the field, like every shorter one", () => {
+    // `padEnd` returns a label of exactly the field width unchanged, so the
+    // over-long branch fired and added a space — starting the value one column
+    // right of every shorter label. Inert while the longest live label was 8;
+    // a surprise waiting for the first 9 (review finding 63).
+    const short = bootLine("db", "value");
+    const exact = bootLine("123456789", "value");
+    expect(exact.indexOf("value"), `${exact}\n${short}`).toBe(short.indexOf("value"));
+    // …and it must still not run INTO the value.
+    expect(exact.indexOf("value")).toBeGreaterThan(2 + "123456789".length);
+  });
+
+  it("still separates a label longer than the column from its value", () => {
+    // `padEnd` returns an over-long label unchanged, which printed
+    // `trust floorunverified` — one unreadable word — and every alignment
+    // assertion above stayed green, because none of them used a long label.
+    expect(bootLine("trust floor", "unverified")).toBe("  trust floor unverified");
+  });
+
   it("names the record in the header, so a multi-instance host is legible", () => {
     expect(bootHeader("my-ksor")).toContain("my-ksor");
   });
@@ -38,7 +58,7 @@ describe("the boot report reads as one aligned block", () => {
 
 describe("authPosture", () => {
   it("shouts DISABLED and names the bind it is survivable on", () => {
-    const out = authPosture("disabled", "127.0.0.1", false);
+    const out = authPosture("disabled", "127.0.0.1", false, ["public"]);
     expect(out).toContain("DISABLED");
     expect(out).toContain("127.0.0.1");
     // The mitigation must travel with the scary word, or an operator reading
@@ -47,14 +67,35 @@ describe("authPosture", () => {
   });
 
   it("says what verification actually happens in public mode", () => {
-    expect(authPosture("public", "0.0.0.0", false)).toContain("verified");
+    expect(authPosture("public", "0.0.0.0", false, ["public"])).toContain("verified");
   });
+  it("names the RESTRICTED tiers an unauthenticated public bind is handing out", () => {
+    // Two green-looking lines, and never their product: `KSOR_AUTH=
+    // disabled-public` printed the same sentence whatever KSOR_AUDIENCE said,
+    // so a door serving the internal half to anonymous callers read exactly
+    // like one serving only the public half (review finding 61).
+    const out = authPosture("disabled", "0.0.0.0", true, ["public", "internal"]);
+    expect(out).toContain("UNAUTHENTICATED");
+    expect(out, "the tier by name, not a count").toContain("internal");
+    expect(out).toContain("RESTRICTED");
+    expect(out).toContain("anyone who can reach");
+  });
+
+  it("does not cry RESTRICTED over a door that only serves `public`", () => {
+    // The overstatement in the other direction: the line said "the whole
+    // record" whatever the viewer was, so the word meant nothing by the time
+    // it was true.
+    const out = authPosture("disabled", "0.0.0.0", true, ["public"]);
+    expect(out).toContain("UNAUTHENTICATED");
+    expect(out).not.toContain("RESTRICTED");
+  });
+
   it("does NOT reassure when the escape hatch is serving the record to anyone", () => {
     // The one configuration that needs a loud line printed the reassurance
     // meant for a loopback dev run: "DISABLED — 0.0.0.0 only, and a public bind
     // will refuse to boot", which is false on both counts once
     // KSOR_AUTH=disabled-public permits exactly that bind.
-    const out = authPosture("disabled", "0.0.0.0", true);
+    const out = authPosture("disabled", "0.0.0.0", true, ["public"]);
     expect(out, "must not claim a public bind would refuse").not.toContain("refuse to boot");
     expect(out).toContain("UNAUTHENTICATED");
     expect(out).toContain("KSOR_AUTH=disabled-public");
@@ -64,7 +105,7 @@ describe("authPosture", () => {
 
 describe("abstainPosture — the line that decides whether answers can be trusted", () => {
   it("spells out the CONSEQUENCE of no floor, not just the state", () => {
-    const out = abstainPosture(null);
+    const out = abstainPosture(null, null);
     expect(out).toContain("OFF");
     // "OFF (no floor)" told the operator a status. What they need to know is
     // that an out-of-corpus question comes back answered and cited.
@@ -72,13 +113,27 @@ describe("abstainPosture — the line that decides whether answers can be truste
   });
 
   it("distinguishes a declared-but-uncalibrated floor from an absent one", () => {
-    expect(abstainPosture("uncalibrated")).toContain("REFUSING");
-    expect(abstainPosture("uncalibrated")).not.toBe(abstainPosture(null));
+    expect(abstainPosture("uncalibrated", null)).toContain("REFUSING");
+    expect(abstainPosture("uncalibrated", null)).not.toBe(abstainPosture(null, null));
   });
 
   it("states the number and what it means", () => {
-    expect(abstainPosture(0.631)).toContain("0.631");
-    expect(abstainPosture(0.631)).toContain("abstains");
+    expect(abstainPosture(0.631, "sha256:abc")).toContain("0.631");
+    expect(abstainPosture(0.631, "sha256:abc")).toContain("abstains");
+  });
+
+  it("does NOT claim an armed gate for a floor whose digest is gone", () => {
+    // A floor measured against a predicate that has since changed is not a
+    // floor: the gate reports `uncalibrated` and every search is refused. The
+    // line said "floor 0.631 — below it, this record abstains", so the operator
+    // was told the record was abstaining at a measured threshold while the door
+    // was in fact answering nothing at all — the honest state reported as the
+    // healthy one, which is "honest absence, never silent weakness" inverted.
+    // It is also the FIRST state a real adopter meets after upgrading.
+    const out = abstainPosture(0.631, null);
+    expect(out, "must not read as armed").not.toMatch(/below it, this record abstains/);
+    expect(out).toContain("REFUSING");
+    expect(out, "and the way out").toContain("ksor calibrate");
   });
 });
 

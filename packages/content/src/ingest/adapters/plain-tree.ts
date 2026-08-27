@@ -1,41 +1,43 @@
 /**
- * The plain-tree corpus adapter — ANY folder of Markdown becomes a corpus.
- * Converted from the oracle (sor-agentfactory @ b554f91,
- * ingest/adapters/plain_tree.py); the kernel cannot tell this manifest from
- * any other adapter's.
+ * The record adapter — the checked record becomes a corpus manifest.
  *
- * Conventions (deliberately minimal — an operator can satisfy them with a bare
- * folder):
- *   - directories become `section` nodes; `.md`/`.mdx` files become `document`
- *     nodes;
- *   - `index.md` (or `README.md`) inside a directory is that SECTION's own
- *     content, not a child;
- *   - ordering: the governed `order:` frontmatter key, else name (lib/order-rule.ts)
- *     sort;
- *   - titles: frontmatter `title`, else the filename humanized;
- *   - stable ids: frontmatter `sor_id`, else the tree-relative path;
- *   - hidden entries (leading `.` or `_`) and ALL symlinks are skipped LOUDLY
- *     (reported through `onSkip`, console by default — never silent); symlinks
- *     are never followed, so a link cannot walk out of the tree or cycle it;
- *   - a directory carrying MORE than one index-named file (index.md +
- *     README.md …) fails loud: which one is the section's own content is
- *     ambiguous, and silently dropping the loser is exactly the corpus
- *     corruption this adapter must never commit.
+ * Converted from the oracle's plain-tree walk (sor-agentfactory @ b554f91,
+ * ingest/adapters/plain_tree.py) and then rebuilt on the profile (record spec;
+ * decision 26): the adapter no longer reads frontmatter itself. `checkRecord`
+ * has already parsed every concept through the ONE profile reader and refused
+ * what the profile refuses, so what arrives here is a tree that is known to be
+ * well-formed, and the adapter's only job is identity and order:
  *
- * The oracle's `publish_bundle` (deterministic tgz staging) is a separate
- * slice and is not converted here.
+ *   - every directory under `knowledge/` is the `knowledge/<dir>#section`
+ *     shell — no body, no governance of its own, carrying the UNION of its
+ *     descendants' audience lists so one predicate admits it iff a descendant
+ *     is visible (research/okf-native.md §2 item 4). The `<dir>/index`
+ *     identity is retired: a generated `index.md` creates no node;
+ *   - every concept is a `document` node at `knowledge/<id>` — path is
+ *     identity (`sor_id` retired, decision 26);
+ *   - reserved names (`index.md`, `log.md`, `README.md`) and companions create
+ *     no node and are never chunked;
+ *   - ordering: the governed `order:` key, else name (lib/order-rule.ts), the
+ *     same rule the site's sidebar and the generated index use.
+ *
+ * The kernel cannot tell this manifest from any other adapter's.
  */
 
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
 
-import { governanceFromFrontmatter, NO_GOVERNANCE } from "../governance.js";
-import { compareSiblings, orderValue, tieKey, type Sibling } from "../../lib/order-rule.js";
-import { isAttachment } from "../../lib/attachment-rule.js";
+import {
+  compareSiblings,
+  folderOrder,
+  orderValue,
+  tieKey,
+  type Sibling,
+} from "../../lib/order-rule.js";
+import type { CheckResult } from "../../record/check.js";
+import { humanise } from "../../record/index-file.js";
+import type { Concept } from "../../record/profile.js";
+import { governanceOf, sectionGovernance } from "../governance.js";
 import {
   type Manifest,
-  ManifestError,
   type ManifestFile,
   type ManifestNode,
   manifestFile,
@@ -44,248 +46,125 @@ import {
   parseManifest,
 } from "../manifest.js";
 
-const INDEX_NAMES: readonly string[] = ["index.md", "index.mdx", "README.md"];
+/** The bundle root's name — the first segment of every stable_id. */
+export const BUNDLE = "knowledge";
 
-export interface TreeFile {
-  readonly kind: "file";
-  readonly name: string;
-  readonly text: string;
-}
-
-export interface TreeDir {
-  readonly kind: "dir";
-  readonly name: string;
-  readonly entries: readonly TreeEntry[];
-}
-
-/** Never followed and never read — the walk only reports it. */
-export interface TreeSymlink {
-  readonly kind: "symlink";
-  readonly name: string;
-}
-
-export type TreeEntry = TreeFile | TreeDir | TreeSymlink;
-
-export interface PlainTreeOptions {
+export interface RecordAdapterOptions {
   readonly corpusId: string;
   readonly sourceCommit: string;
-  /** Where "skipped loudly" goes; defaults to console.log — a skip is REPORTED, never silent. */
-  readonly onSkip?: (line: string) => void;
-}
-
-export interface BuildFromTreeOptions extends PlainTreeOptions {
-  /** Display path of the root, used in skip messages and `sources` values; defaults to the root's name. */
-  readonly rootPath?: string;
 }
 
 export interface PlainTreeResult {
   readonly manifest: Manifest;
-  /** manifest path → source file path (bundle staging input). */
+  /** manifest path → record-relative source path (`knowledge/<id>.md`). */
   readonly sources: ReadonlyMap<string, string>;
 }
 
-/** Walk a directory on disk → manifest + sources. Fail-loud on emptiness and ambiguity. */
-export async function buildManifest(
-  treeRoot: string,
-  options: PlainTreeOptions,
-): Promise<PlainTreeResult> {
-  const rootPath = treeRoot.length > 1 ? treeRoot.replace(/\/+$/, "") : treeRoot;
-  let isDir = false;
-  try {
-    isDir = (await stat(rootPath)).isDirectory();
-  } catch {
-    isDir = false;
-  }
-  if (!isDir) throw new ManifestError(`plain-tree root ${rootPath} is not a directory`);
-  const tree = await readTree(rootPath);
-  return buildManifestFromTree(tree, { ...options, rootPath });
+interface Entry extends Sibling {
+  readonly kind: "dir" | "concept";
+  readonly name: string;
+  readonly concept: Concept | null;
 }
 
-/**
- * Load a directory into an in-memory tree. lstat semantics throughout: a
- * symlink is represented as a symlink — even one named `index.md` — never
- * followed, never read (the oracle's docstring contract; its `_index_of`
- * incidentally followed a symlinked index via `is_file()`, which this port
- * deliberately does not reproduce). Non-markdown files are invisible to the
- * walk, exactly as the oracle's suffix filter makes them.
- */
-export async function readTree(dirPath: string): Promise<TreeDir> {
-  const dirents = await readdir(dirPath, { withFileTypes: true });
-  const entries: TreeEntry[] = [];
-  for (const d of dirents) {
-    if (d.isSymbolicLink()) entries.push({ kind: "symlink", name: d.name });
-    else if (d.isDirectory()) entries.push(await readTree(join(dirPath, d.name)));
-    else if (d.isFile() && isDoc(d.name)) {
-      entries.push({
-        kind: "file",
-        name: d.name,
-        text: await readFile(join(dirPath, d.name), "utf8"),
-      });
-    }
-  }
-  return { kind: "dir", name: basename(dirPath), entries };
-}
-
-/** The pure walk: tree → manifest + {manifest path → source path}. */
-export function buildManifestFromTree(
-  root: TreeDir,
-  options: BuildFromTreeOptions,
+/** The pure projection: a checked record → manifest + sources. */
+export function buildManifestFromRecord(
+  check: Pick<CheckResult, "concepts">,
+  dirs: readonly string[],
+  options: RecordAdapterOptions,
 ): PlainTreeResult {
-  const rootName = root.name;
-  const rootPath = options.rootPath ?? rootName;
-  const onSkip = options.onSkip ?? ((line: string): void => console.log(line));
   const nodes: ManifestNode[] = [];
   const files: ManifestFile[] = [];
   const sources = new Map<string, string>();
-  const skipped: string[] = [];
-  /** foreign ordering key -> the documents that declare it and no `order:`. */
-  const foreignOrder = new Map<string, string[]>();
 
-  const noteForeignOrder = (meta: Record<string, unknown>, path: string): void => {
-    if (meta["order"] !== undefined && meta["order"] !== null) return; // the governed key wins; nothing fell back
-    for (const key of FOREIGN_ORDER_KEYS) {
-      if (meta[key] === undefined || meta[key] === null) continue;
-      const seen = foreignOrder.get(key) ?? [];
-      seen.push(path);
-      foreignOrder.set(key, seen);
-    }
-  };
+  // Bundle-relative directories, every ancestor included even when the walker
+  // reported only the leaf.
+  const dirSet = new Set<string>();
+  for (const raw of dirs) {
+    const d = raw.startsWith(`${BUNDLE}/`) ? raw.slice(BUNDLE.length + 1) : raw;
+    for (let cur = d; cur !== ""; cur = parentOf(cur)) dirSet.add(cur);
+  }
+  const conceptsByDir = new Map<string, Concept[]>();
+  for (const c of check.concepts) {
+    const dir = parentOf(c.id);
+    conceptsByDir.set(dir, [...(conceptsByDir.get(dir) ?? []), c]);
+    for (let cur = dir; cur !== ""; cur = parentOf(cur)) dirSet.add(cur);
+  }
 
-  const fullPath = (relSegs: readonly string[], name: string): string =>
-    `${rootPath}/${[...relSegs, name].join("/")}`;
+  // The shape `folderOrder` folds over, built once: directory → the orders of
+  // the concepts sitting directly in it.
+  const ordersByDir: (readonly [string, readonly number[]])[] = [...conceptsByDir].map(
+    ([d, cs]) => [d, cs.map((c) => orderValue(c.order))] as const,
+  );
 
-  const addFile = (nodeSid: string, fileSegs: readonly string[]): void => {
-    const rel = fileSegs.join("/");
-    const manifestPath = `${rootName}/${rel}`;
-    files.push(manifestFile({ path: manifestPath, node: nodeSid }));
-    sources.set(manifestPath, `${rootPath}/${rel}`);
-  };
+  const audiencesBeneath = (dir: string): (readonly string[])[] =>
+    check.concepts.filter((c) => c.id.startsWith(`${dir}/`)).map((c) => c.audience);
 
-  const walk = (dir: TreeDir, relSegs: readonly string[], parentSid: string | null): void => {
-    const entries = [...dir.entries].sort((a, b) =>
-      codePointCompare(a.name.toLowerCase(), b.name.toLowerCase()),
-    );
-    const docs: TreeFile[] = [];
-    const dirs: TreeDir[] = [];
-    for (const e of entries) {
-      if (e.kind === "symlink") skipped.push(`${fullPath(relSegs, e.name)} (symlink)`);
-      else if (e.kind === "file" && isDoc(e.name)) docs.push(e);
-      else if (e.kind === "dir") dirs.push(e);
-    }
-
-    const ordered: (Sibling & { entry: TreeFile | TreeDir })[] = [];
-    for (const f of docs) {
-      if (f.name.startsWith(".") || f.name.startsWith("_")) {
-        skipped.push(fullPath(relSegs, f.name));
-        continue;
-      }
-      if (INDEX_NAMES.includes(f.name)) continue; // the parent section's own content — handled by the caller
-      const fileMeta = frontmatterMeta(f.text);
-      noteForeignOrder(fileMeta, fullPath(relSegs, f.name));
-      ordered.push({
-        order: orderValue(fileMeta["order"]),
-        tie: tieKey(f.name),
-        entry: f,
+  const walk = (dir: string, parentSid: string | null): void => {
+    const entries: Entry[] = [];
+    for (const c of conceptsByDir.get(dir) ?? []) {
+      entries.push({
+        kind: "concept",
+        name: baseOf(c.id),
+        concept: c,
+        order: orderValue(c.order),
+        tie: tieKey(`${baseOf(c.id)}.md`),
       });
     }
-    for (const d of dirs) {
-      if (d.name.startsWith(".") || d.name.startsWith("_")) {
-        skipped.push(fullPath(relSegs, d.name));
-        continue;
-      }
-      const index = indexOf(d, fullPath(relSegs, d.name));
-      const dirMeta = index === null ? {} : frontmatterMeta(index.text);
-      if (index !== null) noteForeignOrder(dirMeta, fullPath(relSegs, `${d.name}/${index.name}`));
-      ordered.push({
-        order: orderValue(dirMeta["order"]),
-        tie: tieKey(d.name),
-        entry: d,
+    for (const d of dirSet) {
+      if (parentOf(d) !== dir) continue;
+      entries.push({
+        kind: "dir",
+        name: baseOf(d),
+        concept: null,
+        // Descendants included — `folderOrder` is the ONE answer, shared with
+        // the index generator the site reads its reading order from. Folding
+        // over the directory's own concepts only made a folder whose ordered
+        // documents live one level deeper unordered here and first there.
+        order: folderOrder(ordersByDir, d),
+        tie: tieKey(baseOf(d)),
       });
     }
-
-    // ONE rule, shared with the site — see lib/order-rule.ts (decision 18).
-    ordered.sort(compareSiblings);
+    entries.sort(compareSiblings);
     let position = 0;
-    for (const { entry } of ordered) {
+    for (const e of entries) {
       position += 1;
-      if (entry.kind === "dir") {
-        const dirSegs = [...relSegs, entry.name];
-        const index = indexOf(entry, fullPath(relSegs, entry.name));
-        const meta = index === null ? {} : frontmatterMeta(index.text);
-        const sid =
-          index === null
-            ? // "#section" keeps an index-less shell distinct from a sibling FILE of the same
-              // name (docs/foo.md + docs/foo/ would otherwise collide on "docs/foo")
-              `${rootName}/${dirSegs.join("/")}#section`
-            : stableIdOf(rootName, [...dirSegs, index.name], meta);
+      const id = dir === "" ? e.name : `${dir}/${e.name}`;
+      if (e.kind === "dir") {
+        const sid = `${BUNDLE}/${id}#section`;
         nodes.push(
           manifestNode({
             stable_id: sid,
-            slug: slugify(entry.name),
-            title: titleOf(meta, entry.name),
+            slug: slugify(e.name),
+            title: humanise(e.name),
             kind: "section",
             parent: parentSid,
             position,
-            governance:
-              index === null ? NO_GOVERNANCE : governanceFromFrontmatter(meta, index.text),
+            governance: sectionGovernance(audiencesBeneath(id)),
           }),
         );
-        if (index !== null) addFile(sid, [...dirSegs, index.name]);
-        walk(entry, dirSegs, sid);
+        walk(id, sid);
       } else {
-        const meta = frontmatterMeta(entry.text);
-        const stem = stemOf(entry.name);
-        const sid = stableIdOf(rootName, [...relSegs, entry.name], meta);
+        const c = e.concept!;
+        const sid = `${BUNDLE}/${c.id}`;
         nodes.push(
           manifestNode({
             stable_id: sid,
-            slug: slugify(stem),
-            title: titleOf(meta, stem),
+            slug: slugify(e.name),
+            title: c.title,
             kind: "document",
             parent: parentSid,
             position,
-            governance: governanceFromFrontmatter(meta, entry.text),
+            summary: c.description,
+            governance: governanceOf(c),
           }),
         );
-        addFile(sid, [...relSegs, entry.name]);
+        const path = `${BUNDLE}/${c.id}.md`;
+        files.push(manifestFile({ path, node: sid }));
+        sources.set(path, path);
       }
     }
   };
-
-  const rootIndex = indexOf(root, rootPath);
-  if (rootIndex !== null) {
-    // the corpus's own landing document — a root node of its own
-    const meta = frontmatterMeta(rootIndex.text);
-    const sid = stableIdOf(rootName, [rootIndex.name], meta);
-    nodes.push(
-      manifestNode({
-        stable_id: sid,
-        slug: slugify(rootName),
-        title: titleOf(meta, rootName),
-        kind: "document",
-        position: 0,
-        governance: governanceFromFrontmatter(meta, rootIndex.text),
-      }),
-    );
-    addFile(sid, [rootIndex.name]);
-  }
-  walk(root, [], null);
-  // reported before any emptiness error, so an all-skips tree explains itself
-  for (const s of skipped) onSkip(`plain-tree: skipped ${s}`);
-  // Same channel as a skip, and for the same reason: a fallback nobody is told
-  // about produces a WRONG reading order, not a missing one (#74).
-  for (const [key, paths] of foreignOrder) {
-    const rel = paths.map((x) => (x.startsWith(`${rootPath}/`) ? x.slice(rootPath.length + 1) : x));
-    const shown = rel.slice(0, 3).join(", ");
-    const more = rel.length - Math.min(3, rel.length);
-    onSkip(
-      `plain-tree: ${rel.length} document(s) declare \`${key}\`, which this record does not ` +
-        `read — reading order fell back to file name (${shown}${more > 0 ? `, and ${more} more` : ""}). ` +
-        "Rename it to `order:` to keep the intended sequence.",
-    );
-  }
-  if (files.length === 0)
-    throw new ManifestError(`plain-tree root ${rootPath} contains no Markdown`);
+  walk("", null);
 
   const manifest: Manifest = {
     format: 1,
@@ -298,66 +177,16 @@ export function buildManifestFromTree(
   return { manifest, sources };
 }
 
-/**
- * Python `p.suffix in (".md", ".mdx")` parity: a dotfile named exactly ".md"
- * has NO suffix.
- *
- * ATTACHMENTS ARE NOT DOCUMENTS. `x.summary.md` ends in `.md`, so without the
- * attachment rule it ingested as a node of its own — `stable_id`
- * `knowledge/x.summary`, its own `content_nodes.visibility` coalescing to the
- * record default, and its own takedown state. That is one cause wearing four
- * costumes: the door served a summary the site hides; served an internal
- * parent's summary at the public tier; served a taken-down parent's summary
- * undenied (per-node denial matches a different id, and the subtree walk goes
- * through `parent_id`, which is the enclosing SECTION, not the sibling
- * document); and served an orphan the site refuses. An attachment belongs to
- * its parent, so it gets no id and is never independently citable.
- */
-function isDoc(name: string): boolean {
-  if (isAttachment(name)) return false;
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0) return false;
-  const suffix = name.slice(dot);
-  return suffix === ".md" || suffix === ".mdx";
+function parentOf(id: string): string {
+  const slash = id.lastIndexOf("/");
+  return slash === -1 ? "" : id.slice(0, slash);
 }
 
-function indexOf(dir: TreeDir, dirPath: string): TreeFile | null {
-  const present: TreeFile[] = [];
-  for (const name of INDEX_NAMES) {
-    const hit = dir.entries.find((e): e is TreeFile => e.kind === "file" && e.name === name);
-    if (hit !== undefined) present.push(hit);
-  }
-  if (present.length > 1) {
-    const names = present.map((p) => `'${p.name}'`).join(", ");
-    throw new ManifestError(`ambiguous section index in ${dirPath}: [${names}] — keep exactly one`);
-  }
-  return present[0] ?? null;
+function baseOf(id: string): string {
+  return id.slice(id.lastIndexOf("/") + 1);
 }
 
-export function stableIdOf(
-  rootName: string,
-  fileSegs: readonly string[],
-  meta: Record<string, unknown>,
-): string {
-  const sid = meta["sor_id"];
-  if (typeof sid === "string" && sid.trim() !== "") return sid.trim();
-  return `${rootName}/${withoutSuffix(fileSegs.join("/"))}`;
-}
-
-/** Python Path.with_suffix("") parity: strip the LAST suffix only; a dotfile has none. */
-function withoutSuffix(rel: string): string {
-  const slash = rel.lastIndexOf("/");
-  const name = rel.slice(slash + 1);
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0) return rel;
-  return rel.slice(0, slash + 1) + name.slice(0, dot);
-}
-
-function stemOf(name: string): string {
-  return withoutSuffix(name);
-}
-
-function slugify(text: string): string {
+export function slugify(text: string): string {
   const slug = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -365,168 +194,4 @@ function slugify(text: string): string {
   if (slug !== "") return slug;
   // a non-Latin name slugs to nothing — derive a stable slug, never crash
   return "x-" + createHash("sha256").update(text, "utf8").digest("hex").slice(0, 8);
-}
-
-const CASED = /\p{Cased}/u;
-
-/**
- * Python str.title() parity (the oracle's `_humanize`): a cased character
- * following an uncased one uppercases, following a cased one lowercases —
- * apostrophe quirk included ("rock'n'roll" → "Rock'N'Roll"). Node titles are
- * carry-forward join keys, so the quirk is load-bearing, not cosmetic.
- */
-function humanize(stem: string): string {
-  const spaced = stem.replace(/[-_]+/g, " ").trim();
-  let out = "";
-  let prevCased = false;
-  for (const ch of spaced) {
-    const cased = CASED.test(ch);
-    out += cased ? (prevCased ? ch.toLowerCase() : ch.toUpperCase()) : ch;
-    prevCased = cased;
-  }
-  return out;
-}
-
-/** Python `str(meta.get("title") or _humanize(...))` — falsy titles fall back. */
-function titleOf(meta: Record<string, unknown>, fallbackStem: string): string {
-  const t = meta["title"];
-  if (t === undefined || t === null || t === "" || t === 0 || t === false)
-    return humanize(fallbackStem);
-  return String(t);
-}
-
-/** Python compares strings by code point; JS `<` compares UTF-16 units — they differ on astral names. */
-function codePointCompare(a: string, b: string): number {
-  const as = [...a];
-  const bs = [...b];
-  const n = Math.min(as.length, bs.length);
-  for (let i = 0; i < n; i++) {
-    const d = (as[i]?.codePointAt(0) ?? 0) - (bs[i]?.codePointAt(0) ?? 0);
-    if (d !== 0) return d;
-  }
-  return as.length - bs.length;
-}
-
-// ^\uFEFF? — a BOM-prefixed file must not serve its YAML as a chunk
-// (review finding, 2026-08-19).
-/**
- * Ordering keys OTHER ecosystems read, which this record does not.
- *
- * Reading order here is the governed `order:` key alone (decision 9 retired the
- * predecessor's Docusaurus keys; the MCP door had been reading them). But a
- * corpus arriving from Docusaurus, Hugo or Jekyll carries its own, and ignoring
- * one silently produces a WRONG order rather than a missing one — filename
- * order, served to `llms.txt`, the sidebar and the `outline` tool alike. Found
- * on a real 81-document book where 73 files declared `sidebar_position` (#74).
- */
-const FOREIGN_ORDER_KEYS: readonly string[] = [
-  "sidebar_position", // Docusaurus, and the predecessor
-  "position", // the predecessor's own
-  "weight", // Hugo
-  "nav_order", // Jekyll / Just-the-Docs
-];
-
-/** Re-exported so every reader of a document agrees where its frontmatter ENDS. */
-export const FRONTMATTER: RegExp = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
-
-const YAML_BOOLS: Record<string, boolean> = {
-  yes: true,
-  Yes: true,
-  YES: true,
-  no: false,
-  No: false,
-  NO: false,
-  true: true,
-  True: true,
-  TRUE: true,
-  false: false,
-  False: false,
-  FALSE: false,
-  on: true,
-  On: true,
-  ON: true,
-  off: false,
-  Off: false,
-  OFF: false,
-};
-
-/**
- * Minimal PyYAML-compatible frontmatter reader. It parses every top-level
- * scalar; the adapter consumes `title`, `order` and `sor_id`, and reads the rest
- * only to WARN about them (see FOREIGN_ORDER_KEYS). The wording here named
- * `position` and `sidebar_position` until now, which is what this adapter read
- * before ordering became one governed key — the keys it names are the ones it
- * stopped reading. The
- * kernel discards every other frontmatter key at build time (taxonomy comes
- * from the manifest), so a YAML dependency would buy nothing (guard rule 5).
- * Scope, deliberately narrow pending a shared markdown module: top-level
- * `key: scalar` pairs only; nested/indented structure is ignored. Mirroring
- * the oracle's error path (`parse_frontmatter` catches YAMLError → `{}`), a
- * document PyYAML would refuse — an UNQUOTED value containing ": ", a block
- * scalar, an anchor/alias/tag, a non-mapping line — yields an EMPTY meta, so
- * titles fall back to the humanized filename instead of a half-read mapping.
- */
-export function frontmatterMeta(text: string): Record<string, unknown> {
-  const block = FRONTMATTER.exec(text)?.[1];
-  if (block === undefined) return {};
-  const meta: Record<string, unknown> = {};
-  for (const line of block.split(/\r?\n/)) {
-    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
-    if (/^[ \t]/.test(line)) continue; // nested structure — no top-level scalar to read
-    const kv = /^([^\s:]+):(?:[ \t]+(.*))?$/.exec(line);
-    const key = kv?.[1];
-    if (key === undefined) return {}; // PyYAML would fail the whole document here
-    const parsed = scalarValue((kv?.[2] ?? "").trim());
-    if (!parsed.ok) return {}; // poison: the oracle's YAMLError path empties the meta
-    meta[key] = parsed.value;
-  }
-  return meta;
-}
-
-interface ScalarResult {
-  readonly ok: boolean;
-  readonly value: unknown;
-}
-
-function scalarValue(raw: string): ScalarResult {
-  if (raw === "") return { ok: true, value: null };
-  const dq = /^"(.*)"$/.exec(raw);
-  if (dq !== null)
-    return { ok: true, value: (dq[1] ?? "").replace(/\\"/g, '"').replace(/\\\\/g, "\\") };
-  const sq = /^'(.*)'$/.exec(raw);
-  if (sq !== null) return { ok: true, value: (sq[1] ?? "").replace(/''/g, "'") };
-  const plain = raw.replace(/[ \t]+#.*$/, "").trim(); // a trailing comment ends a plain scalar
-  if (Object.hasOwn(YAML_BOOLS, plain)) return { ok: true, value: YAML_BOOLS[plain] };
-  if (plain === "~" || /^(?:null|Null|NULL)$/.test(plain)) return { ok: true, value: null };
-  if (/^[-+]?[0-9][0-9_]*$/.test(plain)) {
-    return { ok: true, value: Number.parseInt(plain.replaceAll("_", ""), 10) };
-  }
-  if (/^[-+]?(?:\.[0-9]+|[0-9][0-9_]*\.[0-9_]*)(?:[eE][-+]?[0-9]+)?$/.test(plain)) {
-    return { ok: true, value: Number.parseFloat(plain.replaceAll("_", "")) };
-  }
-  // VALID YAML this reader does not model: a flow sequence or mapping, a block
-  // scalar, an anchor/alias/tag. PyYAML parses every one — the DOCUMENT is fine
-  // and only this KEY is beyond the reader, so it must not empty the map.
-  // Checked BEFORE the ": " test, because a flow mapping legitimately contains
-  // one (`meta: {a: 1}`).
-  //
-  // Refusing them used to poison the whole meta, which cost four documents in a
-  // real book their titles: "The System of Context: Connecting the Records to
-  // Real Work" was served as "System Of Context" because one `authors: [...]`
-  // line sat beside the title (issue #78). Recorded as a non-string, so
-  // `stableIdOf` still declines to take it as an override — which is what keeps
-  // this in step with the site (see denial-rule.ts).
-  if (/^[|>&*!{[]/.test(plain)) return { ok: true, value: null };
-  // INVALID: PyYAML raises on a plain scalar carrying ": " or ending in ":", so
-  // the oracle's error path empties the whole meta and so does this.
-  if (/:[ \t]/.test(plain) || plain.endsWith(":")) return { ok: false, value: null };
-  // VALID, but not modelled here: a flow sequence or mapping, a block scalar, an
-  // anchor/alias/tag. PyYAML parses every one of these — so the document is fine
-  // and only this KEY is beyond the reader. Refusing them used to poison the
-  // whole meta, which cost four documents in a real book their titles: "The
-  // System of Context: Connecting the Records to Real Work" was served as
-  // "System Of Context", because one `authors: [...]` line sat beside the title
-  // (issue #78). The key is recorded present-with-unknown-value; the keys this
-  // adapter actually consumes survive.
-  return { ok: true, value: plain };
 }

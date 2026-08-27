@@ -4,11 +4,16 @@
  * The registration file is adopter-owned code. It can rename tools, drop them,
  * add its own — all intended. What it must not do is serve a ksor tool that has
  * quietly stopped carrying a guarantee: a `search` whose description no longer
- * says "do not fall back on model knowledge", or whose output schema no longer
- * carries `provenance`. Both would look completely healthy — tools/list answers,
- * searches return hits, every database oracle stays green — and the only symptom
- * is an agent that stops abstaining and starts obeying instructions written into
- * the corpus.
+ * says "do not fall back on model knowledge". That would look completely healthy
+ * — tools/list answers, searches return hits, every database oracle stays green
+ * — and the only symptom is an agent that stops abstaining and starts obeying
+ * instructions written into the corpus.
+ *
+ * The DESCRIPTION is what is inspected. This used to claim it also checked "an
+ * output schema that no longer carries `provenance`", which it has never done:
+ * an output schema is read only to RECOGNISE which ksor tool a record renamed,
+ * never for its contents (security review, 2026-08-25). The envelope's shape is
+ * held by the handlers, which the record cannot rewrite.
  *
  * So the guarantee is VERIFIED rather than prevented. That is this codebase's
  * posture everywhere else (assertGovernanceServable, decision 19's both-surfaces
@@ -27,7 +32,7 @@ import {
 } from "@modelcontextprotocol/server";
 
 import { GatewayConfigError } from "./gateway-load.js";
-import { FLOOR } from "./tools.js";
+import { FLOOR, type HandlerKind } from "./tools.js";
 
 interface JsonRpcReply {
   readonly id?: number | string;
@@ -39,6 +44,7 @@ interface JsonRpcReply {
 interface ListedTool {
   readonly name: string;
   readonly description?: string | undefined;
+  readonly inputSchema?: { readonly properties?: Record<string, unknown> } | undefined;
   readonly outputSchema?: { readonly properties?: Record<string, unknown> } | undefined;
 }
 
@@ -121,14 +127,34 @@ export async function listServedTools(server: McpServer): Promise<readonly Liste
  * `"description" in tool` test passes for a tool that has none, and then differs
  * from the wire, where serialization drops it.
  */
-export function assertSurfaceGoverned(tools: readonly ListedTool[]): void {
+export function assertSurfaceGoverned(
+  tools: readonly ListedTool[],
+  registered?: Readonly<Record<HandlerKind, number>>,
+): void {
   for (const { kind, marker, floor } of EXPECTED) {
-    const tool = tools.find(
-      (t) => t.outputSchema?.properties !== undefined && marker in t.outputSchema.properties,
-    );
-    // A record is allowed to drop a tool entirely; only a tool that IS served
-    // has to be intact.
-    if (tool === undefined) continue;
+    const tool = servedAs(tools, marker);
+    if (tool === undefined) {
+      // A record is allowed to drop a tool entirely — no handler, nothing to
+      // verify. But if it CREATED the handler and no served tool carries that
+      // kind's marker, the tool is being served through a surface this check
+      // cannot inspect, and skipping it would mean the floor was never checked
+      // on a door that boots clean. Proved by execution: a registration that
+      // renamed `hits` to `results`, and one that omitted `outputSchema`
+      // entirely, both booted with the floor deleted.
+      if (registered !== undefined && registered[kind] > 0) {
+        throw new GatewayConfigError(
+          "ksor-gateway-unverifiable",
+          `this registration creates the ksor ${kind} handler, but no served tool carries the ` +
+            `\`${marker}\` property its output schema is recognised by — so the door cannot ` +
+            "check that the tool still carries its framework description, which is what tells " +
+            "an agent to abstain rather than fall back on model knowledge and that hit content " +
+            "is untrusted. Declare the tool's `outputSchema` as the framework's " +
+            `(${kind.toUpperCase()}_OUTPUT), or drop the handler if you no longer serve it. ` +
+            "Renaming the TOOL is fine; the output schema is what identifies it",
+        );
+      }
+      continue;
+    }
 
     if (typeof tool.description !== "string" || !tool.description.includes(floor)) {
       throw new GatewayConfigError(
@@ -143,8 +169,71 @@ export function assertSurfaceGoverned(tools: readonly ListedTool[]): void {
   }
 }
 
+/**
+ * The tool a shape marker recognises, whatever the record called it.
+ *
+ * Split out because both the refusal and the notice ask the same question, and
+ * two copies of "which one is the search tool" is how a rename starts being
+ * handled correctly in one place and not the other.
+ */
+function servedAs(tools: readonly ListedTool[], marker: string): ListedTool | undefined {
+  return tools.find(
+    (t) => t.outputSchema?.properties !== undefined && marker in t.outputSchema.properties,
+  );
+}
+
+/**
+ * What the door tells an operator about — without refusing.
+ *
+ * The distinction is the point. A missing FLOOR is a broken guarantee and
+ * refuses; a missing `min_trust_tier` is a MISSING CAPABILITY, and every
+ * guarantee still holds without it: the handler supplies `unverified` and the
+ * deployment's own floor is untouched. Refusing would take a working record
+ * off the air for a parameter that did not exist when its registration was
+ * emitted — and the registration is adopter-owned code (decision 23), so
+ * "regenerate it" is not something this package may do on their behalf.
+ *
+ * What IS lost is the only way a caller can ask to be answered from reviewed
+ * material, and an absence nobody is told about is one nobody fixes.
+ */
+export function noticeSurface(tools: readonly ListedTool[], report: (line: string) => void): void {
+  const search = servedAs(tools, "hits");
+  if (search === undefined) return;
+  if (
+    search.inputSchema?.properties !== undefined &&
+    "min_trust_tier" in search.inputSchema.properties
+  ) {
+    return;
+  }
+  report(
+    `notice: the search tool is served as "${search.name}" without a \`min_trust_tier\` ` +
+      "parameter, so a caller cannot ask to be answered only from documents someone has " +
+      "reviewed. Nothing is weakened by this — the handler still applies `unverified` and this " +
+      "deployment's own floor — but the capability is absent. Add it to that tool's inputSchema:\n" +
+      "    min_trust_tier: z.enum(TRUST_TIERS).optional(),\n" +
+      "  (import TRUST_TIERS from the same place as FLOOR; delete system/gateways/content.ts to " +
+      "take the current default registration instead)",
+  );
+}
+
+export interface VerifyOptions {
+  /** Where boot NOTICES go. Defaults to stderr, beside every other boot line. */
+  readonly report?: (line: string) => void;
+  /**
+   * How many ksor handlers the registration actually created (`tallyHandlers`).
+   *
+   * Omitted means the caller could not observe it and the unverifiable check is
+   * skipped — which is how the in-tree suites that build a server directly still
+   * work. `compose` always supplies it, so the production boot is covered.
+   */
+  readonly registered?: Readonly<Record<HandlerKind, number>>;
+}
+
 /** Build, inspect, refuse — the whole boot check, in one call. */
-export async function verifyGatewaySurface(server: McpServer): Promise<readonly ListedTool[]> {
+export async function verifyGatewaySurface(
+  server: McpServer,
+  options: VerifyOptions = {},
+): Promise<readonly ListedTool[]> {
   const tools = await listServedTools(server);
   if (tools.length === 0) {
     throw new GatewayConfigError(
@@ -154,6 +243,7 @@ export async function verifyGatewaySurface(server: McpServer): Promise<readonly 
         "system/gateways/content.ts to take the default registration",
     );
   }
-  assertSurfaceGoverned(tools);
+  assertSurfaceGoverned(tools, options.registered);
+  noticeSurface(tools, options.report ?? console.error);
   return tools;
 }
