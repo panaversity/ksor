@@ -323,9 +323,9 @@ That model in one picture:
                             Postgres + pgvector
 ```
 
-Identity (OAuth/OIDC), publication integrity (SLSA/Sigstore), and
-observability (OpenTelemetry) cut across every surface without becoming
-knowledge stores.
+Identity (OAuth/OIDC) cuts across every surface. Publication integrity
+(SLSA/Sigstore) and observability (OpenTelemetry) will, without becoming
+knowledge stores — both are bound and neither is built; see below.
 
 ### The nine responsibilities
 
@@ -356,9 +356,9 @@ row's own wording — *without becoming another knowledge store*. Default
 auto-instrumentation would break it immediately, because `pg` captures statement
 text and a trace backend is a different security boundary from the MCP response;
 for a non-`public` audience that is a governance bypass through the observability
-layer. What survives careless instrumentation added later is an allowlist span
-processor — attributes not explicitly permitted are dropped, so traces carry
-decisions and counts and never content.
+layer. What would survive careless instrumentation added later is an allowlist
+span processor — attributes not explicitly permitted are dropped, so traces
+would carry decisions and counts and never content.
 
 The same architecture can be explained as a dependency stack. This is not a second list of responsibilities; it shows how the pieces relate, and why OKF sits _under_ KSoR rather than beside it:
 

@@ -185,10 +185,14 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     // (research/okf-native.md §2 item 8, decision 26).
     [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "yaml", `${P}ksor-postgres`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
-    // The ONE published kernel package (decision 12, publish revision
-    // 2026-08-19): platform/content/gateway-kit are BUNDLED in (workspace
-    // devDeps, noExternal in tsdown) — never separate npm packages — so their
-    // external runtime deps surface HERE as this package's own dependencies.
+    // The kernel package that carries the DOOR's external runtime deps.
+    // postgres/content/gateway-kit are bundled into it (workspace devDeps,
+    // noExternal in tsdown), so their external deps surface HERE rather than in
+    // their own manifests. It is `private: true` and is itself bundled into
+    // `@panaversity/ksor` — this comment used to call it "the ONE published
+    // kernel package", which was the superseded 2026-08-19 arrangement;
+    // decision 12's 2026-08-20 revision says the kernel packages stay private
+    // forever, and `@panaversity/ksor` above is the only published one.
     [
       `${P}ksor-content-gateway`,
       new Set([

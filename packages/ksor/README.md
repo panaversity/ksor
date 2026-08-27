@@ -82,8 +82,10 @@ agent surface at all.
 The architecture: **one governed record** — Markdown in the KSoR Profile of
 the Open Knowledge Format (OKF) — behind **one governance boundary**,
 projected through open standards: MCP for agents, `llms.txt` for AI
-discovery, OAuth/OIDC for identity, SLSA/Sigstore for publication integrity,
-OpenTelemetry for observability.
+discovery, and OAuth/OIDC for identity. Two more are bound and not yet built —
+SLSA/Sigstore for publication integrity, OpenTelemetry for observability — and
+they name which standard owns each boundary rather than a surface that runs
+today.
 
 Full concept, design goals, and project status:
 **<https://github.com/panaversity/ksor>**

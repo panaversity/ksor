@@ -131,7 +131,7 @@ jobs:
   scaffold-e2e:
     name: Scaffold walkthrough (browser)
     runs-on: ubuntu-latest
-    # 8-10 min normally (playwright install + 3 browser suites) — measured
+    # ~8-11 min normally (playwright install + 3 browser suites) — measured
     # 8.3 and 10.2 min on main and 8.5 on a branch, 2026-08-27. The comment
     # here said "~5 min" and had been wrong for a while; the cap is the thing
     # it justifies, so a stale number quietly makes 25 look like 5x headroom
@@ -150,9 +150,11 @@ jobs:
       # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, 2026-08-18).
       - run: pnpm --dir packages/ksor exec playwright install chromium --with-deps
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts
-      # The shell swap seam, proven with two implementations: the Fumadocs
-      # reference as emitted, and the workbench Docusaurus shell via its swap
-      # recipe — one suite, identical assertions (surface contract clauses 1-4).
+      # The surface contract (clauses 1-4), asserted against the emitted
+      # Fumadocs shell. It ran against two implementations until decision 9's
+      # 2026-08-24 revision retired `workbench/shells/docusaurus/`; the suite
+      # keeps its `.each(SHELLS)` shape so adding one back needs no
+      # restructuring, but it proves the seam against ONE shell today.
       - run: KSOR_E2E=1 pnpm exec vitest run --config vitest.integration.config.ts packages/ksor/src/shell-conformance.integration.test.ts
       # The visibility canary sweep (specs/ksor/visibility): a restricted
       # document leaves no trace below its tier, with positive controls so

@@ -273,12 +273,20 @@ export async function applySchema(
  * (audit finding 20).
  */
 export async function storedTextSearchConfig(pool: pg.Pool): Promise<string | null> {
-  // Queried with the pool's OWN role and outside `withGuardedClient`, the same
-  // declaration `assertSchemaCompatible` carries and for the same reason: this
-  // reads the catalog (`pg_attrdef`/`pg_attribute`), which carries no RLS and
-  // no tenant GUC to scope, and it runs at boot before any serving role is
-  // assumed. Declared rather than left to be inferred — an undeclared bypass of
-  // the guarded path is indistinguishable from an oversight.
+  // Outside `withGuardedClient`, declared rather than left to be inferred: an
+  // undeclared bypass of the guarded path is indistinguishable from an
+  // oversight. What that costs is named too, because the first version of this
+  // comment justified the bypass with a reason that is not this function's —
+  // GUC scoping belongs to `scopedTxn`, not to the guard.
+  //
+  // What is given up is `acquire`'s classification: a connect timeout raised
+  // through `pool.query` arrives as a bare `Error` that `isOperationalError`
+  // matches by neither code nor message, so the `withPgRetry` wrapping the boot
+  // checks does not retry THIS shape — and a cold serverless compute taking
+  // 4-10s to wake is exactly the shape it was added for. The failure degrades
+  // (the door reports NOT READY and the next probe succeeds) rather than
+  // crashing, which is why it has not bitten; routing this through the guarded
+  // path would remove the gap.
   const r = await pool.query(
     "SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attrdef d " +
       "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum " +
