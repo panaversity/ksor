@@ -73,12 +73,18 @@ async function freePort(): Promise<number> {
 interface Fixture {
   readonly base: string;
   readonly child: ChildProcess;
+  /** The tmp root, so a test can remove a file out from under the server. */
+  readonly root: string;
   /** Everything the child has written to stderr so far. */
   readonly errText: () => string;
 }
 
 /** A preview server over an export built to order. `index` false omits `out/index.html`. */
-async function preview(opts: { index: boolean; locked?: boolean }): Promise<Fixture> {
+async function preview(opts: {
+  index: boolean;
+  locked?: boolean;
+  vanishing?: boolean;
+}): Promise<Fixture> {
   const root = mkdtempSync(path.join(tmpdir(), "ksor-preview-"));
   roots.push(root);
   // `preview.mjs` resolves its ROOT as `out/` beside ITSELF, so the copy and the
@@ -88,6 +94,7 @@ async function preview(opts: { index: boolean; locked?: boolean }): Promise<Fixt
   mkdirSync(out, { recursive: true });
   writeFileSync(path.join(out, "marker.txt"), "inside-the-export\n");
   if (opts.index) writeFileSync(path.join(out, "index.html"), "<!doctype html><title>ok</title>\n");
+  if (opts.vanishing === true) writeFileSync(path.join(out, "vanishes.txt"), "gone soon\n");
   if (opts.locked === true) {
     writeFileSync(path.join(out, "locked.txt"), "unreadable\n");
     chmodSync(path.join(out, "locked.txt"), 0o000);
@@ -119,7 +126,7 @@ async function preview(opts: { index: boolean; locked?: boolean }): Promise<Fixt
       reject(new Error(`preview exited before it served (${String(code)}): ${errText}`));
     });
   });
-  return { base: `http://127.0.0.1:${port}`, child, errText: () => errText };
+  return { base: `http://127.0.0.1:${port}`, child, root, errText: () => errText };
 }
 
 /** The status, or null when the connection failed — which is what a dead server looks like. */
@@ -267,6 +274,37 @@ describe("the preview server refuses a bad environment, and says which", () => {
     30_000,
   );
 
+  /** Start the shipped preview and return the line it printed when it came up. */
+  async function spawnPreviewServing(env: Record<string, string>): Promise<{ log: string }> {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-preview-host-"));
+    roots.push(root);
+    copyFileSync(PREVIEW, path.join(root, "preview.mjs"));
+    mkdirSync(path.join(root, "out"), { recursive: true });
+    writeFileSync(path.join(root, "out", "index.html"), "<!doctype html>\n");
+    const port = await freePort();
+    const child = spawn(process.execPath, [path.join(root, "preview.mjs")], {
+      cwd: root,
+      env: { ...process.env, KSOR_PREVIEW_HOST: "", PORT: String(port), ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    started.push(child);
+    const log = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("preview did not start")), 15_000);
+      child.stdout?.on("data", (b: Buffer) => {
+        const line = b.toString();
+        if (line.includes("serving")) {
+          clearTimeout(timer);
+          resolve(line);
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error(`preview exited before it served: ${String(code)}`));
+      });
+    });
+    return { log };
+  }
+
   it("refuses an occupied port with exit 3, and names the dev collision", async () => {
     const holder = createServer();
     const port = await new Promise<number>((resolve) =>
@@ -287,22 +325,64 @@ describe("the preview server refuses a bad environment, and says which", () => {
     }
   }, 30_000);
 
-  it("binds loopback by default, and HOST is the way out", async () => {
-    // The bind is a behaviour change to a shipped file: it was every interface
-    // while the log said `localhost`. Asserted from a non-internal address so
-    // "refused" cannot be confused with "not running".
+  it("binds loopback by default", async () => {
+    // A behaviour change to a shipped file: it was every interface while the
+    // log said `localhost`. Asserted from a non-internal address so "refused"
+    // cannot be confused with "not running".
     const external = Object.values(os.networkInterfaces())
       .flatMap((entries) => entries ?? [])
       .find((entry) => entry.family === "IPv4" && !entry.internal);
     const { base } = await preview({ index: true });
     expect(await status(base, "/"), "loopback still serves").toBe(200);
-    if (external === undefined) return; // nothing to reach it from
+    if (external === undefined) {
+      // A silent `return` here would be a green tick asserting nothing, so say
+      // what happened instead: this machine has no non-internal IPv4 to try.
+      expect(true, "skipped: no external IPv4 on this machine").toBe(true);
+      return;
+    }
     const port = new URL(base).port;
-    const reachable = await fetch(`http://${external.address}:${port}/`)
+    // Timed: with the fix reverted AND a packet-dropping firewall in front, an
+    // untimed fetch hangs to the suite timeout and reports as a timeout rather
+    // than as the defect.
+    const reachable = await fetch(`http://${external.address}:${port}/`, {
+      signal: AbortSignal.timeout(5_000),
+    })
       .then(() => true)
       .catch(() => false);
     expect(reachable, `${external.address}:${port} must NOT answer — the log says localhost`).toBe(
       false,
+    );
+  }, 60_000);
+
+  it("KSOR_PREVIEW_HOST is the way out, and a BLANK one is not", async () => {
+    // The escape hatch exists because loopback breaks `docker run -p`, a cloud
+    // dev box, and the built site on a phone. A blank value must not take it:
+    // `listen(port, "")` binds every interface, which is the same shape `PORT`
+    // is guarded against and the same way to reach it.
+    const wide = await spawnPreviewServing({ KSOR_PREVIEW_HOST: "0.0.0.0" });
+    expect(wide.log, "an explicit host is honoured AND printed").toContain("http://0.0.0.0:");
+    const blank = await spawnPreviewServing({ KSOR_PREVIEW_HOST: "  " });
+    expect(blank.log, "a blank host falls back to loopback rather than widening").toContain(
+      "http://localhost:",
+    );
+  }, 60_000);
+
+  it("refuses a host nothing here can bind, naming the variable", async () => {
+    // 203.0.113.0/24 is TEST-NET-3 — reserved for documentation, never local.
+    const { code, err } = await spawnPreview({ KSOR_PREVIEW_HOST: "203.0.113.1" });
+    expect(code, err).toBe(3);
+    expect(err, "the refusal names the knob to turn").toContain("KSOR_PREVIEW_HOST");
+  }, 30_000);
+
+  it("answers 404 for a file that VANISHED and 500 for one it cannot read", async () => {
+    // The two open failures are different facts and had one message. ENOENT is
+    // the ordinary case — the export was rebuilt under an open page — and "500,
+    // the file is there" states the opposite of what happened.
+    const { base, root } = await preview({ index: true, locked: true, vanishing: true });
+    rmSync(path.join(root, "out", "vanishes.txt"), { force: true });
+    expect(await status(base, "/vanishes.txt"), "a resource that has gone is 404").toBe(404);
+    expect(await status(base, "/locked.txt"), "a file that is there and unreadable is 500").toBe(
+      500,
     );
   }, 60_000);
 });

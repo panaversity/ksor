@@ -45,11 +45,15 @@ export was reachable from the whole network. It is loopback now, with `HOST` as
 the way out for the cases where reaching it from elsewhere is the point — a
 container published with `-p`, a cloud dev box, or the built site on a phone.
 
-Stated precisely, because a governance claim is the one thing not to overstate:
-a DEFAULT build carries no drafts at all (record spec §2.5 admits them to no
-surface of a build), so what was exposed is the published record, and drafts
-only where someone had built with `KSOR_DRAFTS=show`. `pnpm dev`, which is where
-drafts do live, is `next dev` and unchanged by this.
+Stated precisely, because a governance claim is the one thing to get exactly
+right in both directions. A DEFAULT build carries no drafts at all (record spec
+§2.5 admits them to no surface of a build), so what a default `out/` exposed is
+the published record. The case that mattered is the one this first missed:
+`KSOR_AUDIENCE=public,<audience> pnpm build`, whose output holds
+audience-restricted documents and which the scaffold README says "belongs behind
+that audience's own access control, never on a public host" — that `out/` was
+network-reachable from a preview. `KSOR_DRAFTS=show` is the other. `pnpm dev`,
+where drafts live, is `next dev` and unchanged by this.
 
 Alongside this, the containment check moved from once-per-request to
 per-candidate. `resolve()` tries three filename shapes, and the third,

@@ -136,8 +136,18 @@ function send(res, file, status, type) {
       res.destroy();
       return;
     }
-    res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    res.end("500 — the file is there and could not be read; see the preview log\n");
+    // ENOENT is the ORDINARY case, not the exotic one: the export was rebuilt
+    // while a page was open and a hashed asset it re-requests has gone. That is
+    // a resource that no longer exists — 404 — and answering 500 "the file is
+    // there" would state the opposite of what happened. Anything else (EACCES,
+    // EISDIR, EMFILE) is the server failing on a file that IS there.
+    const gone = error.code === "ENOENT";
+    res.writeHead(gone ? 404 : 500, { "content-type": "text/plain; charset=utf-8" });
+    res.end(
+      gone
+        ? "404 — that file is no longer in the export; rebuild finished? reload\n"
+        : "500 — the file is there and could not be read; see the preview log\n",
+    );
   });
   // A client that navigates away leaves the source with no consumer: `pipe()`
   // unpipes on the destination's close but never destroys the readable, so
@@ -151,7 +161,10 @@ const server = createServer((req, res) => {
   if (file === null) {
     const notFound = path.join(ROOT, "404.html");
     try {
-      statSync(notFound);
+      // `.isFile()`, the check `resolve()` already applies: `open()` succeeds on
+      // a DIRECTORY, so a directory named `404.html` used to write a head and
+      // then fail the first read.
+      if (!statSync(notFound).isFile()) throw new Error("not a file");
       send(res, notFound, 404, "text/html; charset=utf-8");
       return;
     } catch {
@@ -169,9 +182,19 @@ const server = createServer((req, res) => {
 // elsewhere is the point — `docker run -p`, a cloud dev box addressed by IP,
 // or opening the built site on a phone on the same wifi — and those fail as a
 // refused connection, which reaches no process and so can document nothing.
-// `HOST` is the escape hatch, `PORT` was already one, and the log prints
-// whichever was used.
-const HOST = process.env.HOST ?? "127.0.0.1";
+//
+// `KSOR_PREVIEW_HOST`, not `HOST`: the door already spells this
+// `KSOR_MCP_HOST`, so the bare word would be a second name for one concept
+// (working rule 8) — and tcsh and csh export `HOST` as the machine's hostname,
+// which would make `preview` stop working on those shells for a variable
+// nobody set on purpose.
+//
+// An EMPTY value binds every interface, because `listen(port, "")` takes
+// Node's falsy-host branch — the same shape `PORT` is guarded against three
+// dozen lines up, and the same way to reach it (`KSOR_PREVIEW_HOST=` in a
+// shell or a compose file). So blank falls back to loopback rather than
+// silently widening what this file just narrowed.
+const HOST = (process.env.KSOR_PREVIEW_HOST ?? "").trim() || "127.0.0.1";
 
 let listening = false;
 server.on("error", (error) => {
@@ -184,7 +207,10 @@ server.on("error", (error) => {
       console.error(`preview: port ${PORT} is already in use — set PORT to a free one.`);
       console.error("  `dev` uses 3000 too, so stop it first or run `PORT=3001 preview`.");
     } else if (error.code === "EADDRNOTAVAIL") {
-      console.error(`preview: nothing here can bind ${HOST} — check HOST.`);
+      console.error(`preview: nothing here can bind ${HOST} — check KSOR_PREVIEW_HOST.`);
+    } else if (error.code === "EACCES") {
+      console.error(`preview: not allowed to bind ${HOST}:${PORT}.`);
+      console.error("  ports below 1024 need privileges — use PORT=3000 or another high one.");
     } else {
       console.error(`preview: could not listen on ${HOST}:${PORT} — ${error.message}`);
     }
@@ -193,7 +219,9 @@ server.on("error", (error) => {
   // AFTER it is up, an error is an accept-path condition (EMFILE and friends),
   // and exiting on it would be the very thing this file exists to stop: one
   // transient ending the session.
-  console.error(`preview: ${error.message} — still serving.`);
+  console.error(
+    `preview: ${error.message}${server.listening ? " — still serving." : " — no longer listening."}`,
+  );
 });
 
 server.listen(PORT, HOST, () => {
