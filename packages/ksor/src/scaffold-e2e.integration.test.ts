@@ -211,9 +211,9 @@ ${body}
       ".svg": "image/svg+xml",
       ".txt": "text/plain",
     };
-    // DECODE and CONTAIN — the PAIR the shipped `preview.mjs` uses (`:54-59`),
-    // because this stand-in must not be a weaker server than the one adopters
-    // actually run.
+    // DECODE and CONTAIN — the pair the shipped `preview.mjs` uses in its own
+    // `resolve()`, because this stand-in must not be a weaker server than the
+    // one adopters actually run.
     //
     // Decode, because Next's webpack output puts a route group's chunk under
     // its literal directory (`_next/static/chunks/app/docs/[[...slug]]/page-*.js`
