@@ -275,18 +275,20 @@ export async function applySchema(
 export async function storedTextSearchConfig(pool: pg.Pool): Promise<string | null> {
   // Outside `withGuardedClient`, declared rather than left to be inferred: an
   // undeclared bypass of the guarded path is indistinguishable from an
-  // oversight. What that costs is named too, because the first version of this
-  // comment justified the bypass with a reason that is not this function's —
-  // GUC scoping belongs to `scopedTxn`, not to the guard.
+  // oversight. Two earlier versions of this comment each invented a DIFFERENT
+  // reason — GUC scoping (which is `scopedTxn`'s) and then a lost retry
+  // classification (which does not happen) — so this one says only what was
+  // traced.
   //
-  // What is given up is `acquire`'s classification: a connect timeout raised
-  // through `pool.query` arrives as a bare `Error` that `isOperationalError`
-  // matches by neither code nor message, so the `withPgRetry` wrapping the boot
-  // checks does not retry THIS shape — and a cold serverless compute taking
-  // 4-10s to wake is exactly the shape it was added for. The failure degrades
-  // (the door reports NOT READY and the next probe succeeds) rather than
-  // crashing, which is why it has not bitten; routing this through the guarded
-  // path would remove the gap.
+  // The hazard `withGuardedClient` exists for does not apply: `pool.query`
+  // attaches its own `client.once('error', …)` for the duration of the query,
+  // so a socket dying mid-statement has a listener and is not an uncaught
+  // exception. And a connect timeout IS still retried by the `withPgRetry`
+  // around the boot checks — pg-pool raises "Connection terminated due to
+  // connection timeout" on that path, which `isOperationalError` matches on
+  // `connection terminated`. The one shape it would not match, "timeout
+  // exceeded when trying to connect", needs a saturated pool, and the boot
+  // checks run sequentially from one caller.
   const r = await pool.query(
     "SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attrdef d " +
       "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum " +

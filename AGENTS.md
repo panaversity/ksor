@@ -1303,6 +1303,22 @@ gateway` package, serve-by-spawn) is superseded._
     adopter might" is not an adopter, and the reversal condition is an event
     that can be observed rather than forecast.
 
+    _Note 2026-08-27 (found by the #151/#180 sweep, NOT a reversal — this is a
+    correction of the evidence, and what to do about it is the owner's).
+    This entry's premise reads "`migrate` has never shipped at all
+    (`docs/status.md`)", and it cites the document that contradicts it:
+    `docs/status.md` records `ksor migrate` as implemented and RELEASED in
+    0.0.41, and lists it among the verbs shipping in the published package. So
+    that half of the justification is false, and by authority rule 3
+    `docs/status.md` is the authority on what is built. What survives is the
+    other half — the owner's confirmation that there are no external adopters —
+    which is a real basis but a weaker one, because it is a statement about
+    today rather than about what the tool makes possible. The decision is left
+    STANDING and unaltered: its reversal condition is a record we do not operate
+    being built by a published release, and migrate having shipped is not that
+    event. It is recorded here so the next removal made under this rule is made
+    knowing what actually backs it._
+
 29. **The deploy REGENERATES the lock; it does not verify it** (owner,
     2026-08-26). `vercel.json` builds the site with `pnpm build`, which is
     `ksor build && <site build>`, so a host regenerates every `index.md` and

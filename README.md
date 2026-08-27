@@ -324,8 +324,9 @@ That model in one picture:
 ```
 
 Identity (OAuth/OIDC) cuts across every surface. Publication integrity
-(SLSA/Sigstore) and observability (OpenTelemetry) will, without becoming
-knowledge stores — both are bound and neither is built; see below.
+(SLSA/Sigstore) covers the published PACKAGE and not yet the record's own lock,
+and observability (OpenTelemetry) is bound and unbuilt — see below, where both
+are stated exactly.
 
 ### The nine responsibilities
 
@@ -343,7 +344,7 @@ it:
 | Agent interaction     | MCP                                 | search, retrieval, citation, and abstention for agents                        |
 | Knowledge exchange    | OKF                                 | the same native representation moves governed knowledge between systems       |
 | Identity              | OAuth / OIDC                        | who is asking — KSoR governance then decides what they may see                |
-| Publication integrity | SLSA / Sigstore                     | proof of which source and build produced a published artifact                 |
+| Publication integrity | SLSA / Sigstore _(package only)_    | proof of which source and build produced a published artifact                 |
 | Observability         | OpenTelemetry _(not yet emitted)_   | what the infrastructure did, without becoming another knowledge store         |
 
 **Two of the nine are bindings, not behaviour, and both say so.** `ksor build`
@@ -370,7 +371,7 @@ The same architecture can be explained as a dependency stack. This is not a seco
 > **`llms.txt` lets AI discover it.**  
 > **MCP lets agents interact with it.**  
 > **OAuth/OIDC establishes identity; KSoR governs access.**  
-> **SLSA/Sigstore proves what was published.**  
+> **SLSA/Sigstore proves what package was published; the record's lock is next.**  
 > **OpenTelemetry will tell us what happened.**
 
 Governance is deliberately not one of the nine. It is the **boundary** the

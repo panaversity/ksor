@@ -151,7 +151,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   const P = "@panaversity/";
   const perPackageRuntimeDeps = new Map([
     // The ONE published package (decision 12, publish revision 2026-08-20,
-    // owner): the kernel is BUNDLED into the CLI (platform/content/gateway-kit/
+    // owner): the kernel is BUNDLED into the CLI (postgres/content/gateway-kit/
     // content-gateway inlined via tsdown noExternal), so their external runtime
     // deps surface HERE. This reverses the decision-1/13 zero-dep guarantee by
     // owner call — every `npx @panaversity/ksor init` now pulls this set, and
