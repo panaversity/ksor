@@ -89,9 +89,23 @@ export function provenanceNotice(
         "  fix: commit the record (git add knowledge && git commit) and re-run"
       );
     case "no-repo":
+      // TWO causes, and only one of them is "you never made a repository".
+      // The other is a record that IS committed and pushed, on a machine the
+      // `.git` directory never reached: an upload-based deploy excludes it,
+      // and Vercel's CLI is the one adopters meet (issue #197, hit live on a
+      // 205-document record). To that reader "fix: git init" reads as "you
+      // forgot to use git" when they did not — in the one message that governs
+      // provenance, and on the deploy path that is the ONLY one able to record
+      // a commit at all. So both are named, ordered by which the reader can
+      // rule out fastest. Deliberately NOT branched on `CI`/`VERCEL`: this
+      // suite's own assertions run under `CI=true`, so an environment-shaped
+      // message would read one way locally and another way where it matters.
       return (
         `source: unspecified — knowledge/ is not in a git repository, ${why}.\n` +
-        "  fix: git init, commit the record, and re-run"
+        "  fix: git init, commit the record, and re-run\n" +
+        "  if it IS committed: .git did not reach this machine — an upload-based deploy\n" +
+        "    excludes it (Vercel's CLI does). Deploy from the Git connection instead, or\n" +
+        "    pass --source-commit <sha>"
       );
     case "no-git":
       return (

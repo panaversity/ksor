@@ -133,13 +133,55 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > every dashboard import until Vercel's detection changes — the layout that
 > triggers it, code under `system/`, is decision 8 and is not moving.
 >
-> Also confirm **Application Preset is `Services`**; with any other preset the
-> `services` key is ignored and `/mcp` never exists. Vercel Services is in Beta.
+> Also confirm **Application Preset is `Services`**. Vercel Services is in Beta,
+> and a project imported from Git comes back `Other` with `outputDirectory`,
+> `buildCommand` and `installCommand` all `null` — which **ignores the
+> `services` block entirely**.
 >
-> **If it still argues, deploy the site alone** — it needs no preset and no
-> services: build command `pnpm -C system/site build`, output directory
-> `system/site/out`. That is the stricter posture decision 29 describes, and
-> the door can be deployed separately.
+> **That failure is silent, and it is worse than a missing `/mcp`.** The install
+> runs, `ksor build` runs, every route prerenders, and then Vercel collects
+> nothing: the deployment reports **Ready**, takes the production alias, and
+> serves `404: NOT_FOUND` at every path — `llms.txt` included. The only signal
+> anywhere is one line in the build log:
+>
+> ```
+> WARNING! Build output contains no "functions" or "static" directory;
+> the build may not have produced any deployable output.
+> ```
+>
+> If you are reading that line, this is what you have. Observed on a 205-document
+> record, 2026-08-26 (issue #197).
+>
+> **Setting the project's fields does not fix it.** Patching `outputDirectory`,
+> `buildCommand` and `installCommand` on the imported project, confirming the
+> values read back, and then creating a fresh Git-sourced production deployment
+> — not a redeploy, which reuses the original settings snapshot and proves
+> nothing — produced the same warning, the same empty output and the same 404.
+> **`vercel.json` is what Vercel reads**, so the fix has to be in that file.
+>
+> **If it still argues, deploy the site alone** — replace the `services` block in
+> `vercel.json` with the classic top-level keys, which need no preset:
+>
+> ```json
+> {
+>   "$schema": "https://openapi.vercel.sh/vercel.json",
+>   "installCommand": "pnpm install --no-frozen-lockfile",
+>   "buildCommand": "pnpm build",
+>   "outputDirectory": "system/site/out"
+> }
+> ```
+>
+> Verified live on the same repository and machine: root `200`, `llms.txt` with
+> every entry, deep pages `200`, `source_commit` stamped. That is the stricter
+> posture decision 29 describes, and the door is deployed separately from the
+> same `Dockerfile` — the classic keys cannot express two services, which is the
+> whole reason the emitted file uses `services`.
+>
+> **Prefer the Git connection over `vercel deploy` while you work this out.** A
+> CLI upload excludes `.git`, so `ksor build` cannot resolve a commit and every
+> deploy publishes a record whose `build.lock.json` says `source: unspecified` —
+> on a product whose claim is governed provenance. The Git path is the one that
+> keeps it.
 
 The emitted `vercel.json` declares both services and routes between them:
 

@@ -71,6 +71,16 @@ describe("provenanceNotice", () => {
     expect(provenanceNotice("no-git")).toContain("--source-commit");
   });
 
+  it("no-repo names the OTHER cause: a committed record whose .git never arrived", () => {
+    // An upload-based deploy strips `.git`, so a record that is committed and
+    // pushed still reads as "not a git repository" on the builder — and
+    // "fix: git init" then tells someone to do what they have already done, in
+    // the message that governs provenance (issue #197, hit live on Vercel).
+    const notice = provenanceNotice("no-repo", "build");
+    expect(notice, "the second cause is named").toContain("did not reach this machine");
+    expect(notice, "and its remedy is not `git init` again").toContain("--source-commit");
+  });
+
   it("always says WHY it matters — this is the provenance message", () => {
     for (const gap of ["no-commit", "no-repo", "no-git", "not-asked"] as const) {
       expect(provenanceNotice(gap), gap).toContain("cannot be traced back to a reviewed commit");

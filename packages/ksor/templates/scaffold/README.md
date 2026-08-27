@@ -274,8 +274,18 @@ declared`. The services ARE declared, in `vercel.json` at the repo root,
 3. **Set three environment variables** in Vercel: `KSOR_DB_URL`,
    `GEMINI_API_KEY`, and `KSOR_AUTH=disabled-public`.
 
-Two things catch people here, and both are the system being deliberate:
+Three things catch people here. Two are the system being deliberate; the first
+is not, and it is the one that fails without saying so:
 
+- **A green deployment that 404s at every path means Vercel ignored
+  `vercel.json`.** Confirm **Application Preset is `Services`** — an imported
+  project can come back as `Other`, which ignores the `services` block, collects
+  nothing, reports **Ready**, takes your domain and serves `404: NOT_FOUND`
+  everywhere. The only signal is one build-log line: `WARNING! Build output
+  contains no "functions" or "static" directory`. Setting the project's own
+  build/output fields does **not** override `vercel.json`. The whole diagnosis,
+  and the site-only `vercel.json` that needs no preset, is in
+  `node_modules/@panaversity/ksor/docs/deploying.md`.
 - **`disabled-local` will not deploy.** The container sets `$PORT`, so the door
   binds `0.0.0.0` — a PUBLIC bind — and refuses that value by design, saying so
   in as many words. `disabled-public` is you saying you know the door is
