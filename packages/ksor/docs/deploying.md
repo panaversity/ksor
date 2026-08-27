@@ -157,7 +157,9 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > values read back, and then creating a fresh Git-sourced production deployment
 > — not a redeploy, which reuses the original settings snapshot and proves
 > nothing — produced the same warning, the same empty output and the same 404.
-> **`vercel.json` is what Vercel reads**, so the fix has to be in that file.
+> **For those three keys, `vercel.json` wins over the project's own fields**, so
+> the fix has to be in that file. (What the preset governs is different and is
+> not contradicted by this: it decides whether the `services` key is read at all.)
 >
 > **If it still argues, deploy the site alone** — replace the `services` block in
 > `vercel.json` with the classic top-level keys, which need no preset:
@@ -172,16 +174,30 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > ```
 >
 > Verified live on the same repository and machine: root `200`, `llms.txt` with
-> every entry, deep pages `200`, `source_commit` stamped. That is the stricter
-> posture decision 29 describes, and the door is deployed separately from the
-> same `Dockerfile` — the classic keys cannot express two services, which is the
-> whole reason the emitted file uses `services`.
+> every entry, deep pages `200`, `source_commit` stamped.
+>
+> **This moves the door off your domain, and two values have to move with it.**
+> The classic keys cannot express two services — which is the whole reason the
+> emitted file uses `services` — so dropping the block also drops the rewrites
+> for `/mcp`, `/health`, `/ready` and `/.well-known/oauth-protected-resource`.
+> The door is then deployed separately from the same `Dockerfile`, on its own
+> hostname, and `KSOR_MCP_RESOURCE_URL` plus the API Identifier registered with
+> your SSO provider must both name that new origin, character for character —
+> see [Authorization](./authorization.md), where a mismatch there is the failure
+> that costs an afternoon.
+>
+> This is `buildCommand: "pnpm build"`, so it is still the DEFAULT posture of
+> decision 29 — the host regenerates the lock on every deploy. The stricter one,
+> where the shipped `build_id` is a reviewed one, is a different command and is
+> [below](#the-site-build-runs-ksor-build-first).
 >
 > **Prefer the Git connection over `vercel deploy` while you work this out.** A
 > CLI upload excludes `.git`, so `ksor build` cannot resolve a commit and every
-> deploy publishes a record whose `build.lock.json` says `source: unspecified` —
-> on a product whose claim is governed provenance. The Git path is the one that
-> keeps it.
+> deploy publishes a record whose `build.lock.json` carries
+> `"source_commit": null` — on a product whose claim is governed provenance. It
+> is not labelled `unspecified` in the artefact; that word appears only in the
+> build's own stderr summary, so `null` is what to look for. The Git path is the
+> one that keeps the commit.
 
 The emitted `vercel.json` declares both services and routes between them:
 

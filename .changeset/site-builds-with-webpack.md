@@ -5,11 +5,9 @@
 **The emitted site builds with webpack, so a real record still deploys.**
 
 The scaffold's site build was `next build`, which under the pinned Next 16.2.9
-means Turbopack. Turbopack evaluates the Tailwind PostCSS transform in a
-separate process and waits on a deadline for the reply, and on Vercel's default
-build machine (4 cores, 8 GB) that process stops answering once a record is big
-enough to prerender a few hundred routes. Measured on a real 205-document
-record — 435 routes — the build ran about seven minutes and died:
+means Turbopack — and on Vercel's default build machine (4 cores, 8 GB) that
+does not survive a record big enough to prerender a few hundred routes.
+Measured on a real 205-document record, 435 routes: about seven minutes, then
 
 ```
 FATAL: An unexpected Turbopack error occurred:
@@ -19,8 +17,10 @@ Failed to write app endpoint /icon.png/route
 ```
 
 Nothing in that points at the build command, and it names `/icon.png/route`,
-which is not the problem. The same record compiled in 86s with
-`next build --webpack`, a supported Next 16 flag rather than a workaround.
+which is not the problem — the trace's own middle is the PostCSS step. The same
+record compiled in 86s with `next build --webpack`, which is Next 16's
+documented opt-out rather than a workaround: the v16 upgrade guide ships exactly
+this `package.json` line for a project that needs webpack.
 
 The scaffold now emits `next build --webpack`. `dev` is unchanged and still
 Turbopack — the failure is production-only, where every route is prerendered at

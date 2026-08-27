@@ -23,12 +23,20 @@ extended: the docs said a wrong preset meant "`/mcp` never exists" (it means the
 whole site is empty), and offered a site-only fallback as project settings (which
 cannot override `vercel.json`).
 
-**And `source: unspecified` no longer tells you to `git init` a repository you
-already have.** That state has two causes, and only one is "you never made a
-repository": the other is a record that IS committed and pushed, on a machine the
-`.git` directory never reached, because an upload-based deploy excludes it —
-Vercel's CLI does. Both are now named, which matters because the Git path is the
-only one that can record a commit at all, and this is the message that governs
-provenance.
+**And `source: unspecified` now names both of its causes.** Only one is "you
+never made a repository"; the other is a record that IS committed and pushed, on
+a machine the `.git` directory never reached, because an upload-based deploy
+excludes it — Vercel's CLI does. `git init` is still offered first, because it is
+still right for the reader who has not made one; what is new is the second line,
+for the reader who has, and who was previously being told to redo work they had
+already done in the one message that governs provenance.
+
+**A remedy also stops naming a flag the verb refuses.** `--source-commit` is an
+`ingest` flag; `ksor build` rejects it as an unknown argument and exits 1. Every
+notice printed by `build` therefore offered an escape hatch that would have
+turned a provenance warning into a failed build for whoever followed it —
+including the reader this change is for, whose upload stripped `.git` on the
+deploy path. The flag is now offered only by the verb that accepts it, and a test
+asserts that across every gap rather than only the one that had the bug.
 
 The emitted `vercel.json` is unchanged.

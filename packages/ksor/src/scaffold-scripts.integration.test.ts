@@ -195,16 +195,22 @@ describe("the scaffold's npm scripts are all reachable", () => {
 /**
  * The site's PRODUCTION build compiles with webpack, not Turbopack.
  *
- * Under the pinned Next 16.2.9, a bare `next build` means Turbopack, which
- * evaluates the Tailwind PostCSS transform in a separate process and waits on
- * a deadline for the reply. On Vercel's DEFAULT build machine (4 cores, 8 GB)
- * that process stops answering once a record is large enough to prerender a
- * few hundred routes: measured on a real 205-document record — 435 routes —
- * the build ran ~7 minutes and died with `FATAL: An unexpected Turbopack
- * error occurred … timeout while receiving message from process`, blaming
- * `/icon.png/route`, which is not the problem. `next build --webpack` — a
- * supported Next 16 flag, not a workaround — compiled the same record on the
- * same machine class in 86s (issue #196).
+ * Under the pinned Next 16.2.9 a bare `next build` means Turbopack, and on
+ * Vercel's DEFAULT build machine (4 cores, 8 GB) it does not survive a record
+ * large enough to prerender a few hundred routes. Measured on a real
+ * 205-document record — 435 routes — the build ran ~7 minutes and died with
+ * `FATAL: An unexpected Turbopack error occurred`, blaming `/icon.png/route`,
+ * which is not the problem. What the trace actually shows is the PostCSS step:
+ * `PostCssTransformedAsset::process` → `evaluate_webpack_loader` →
+ * `timeout while receiving message from process` → `deadline has elapsed`.
+ * That is read off the failure, not asserted about Turbopack's internals; the
+ * MEASUREMENT is what justifies the change either way.
+ *
+ * `next build --webpack` compiled the same record on the same machine class in
+ * 86s. It is Next 16's own documented opt-out rather than a workaround flag —
+ * the v16 upgrade guide ships exactly this `package.json` line for a project
+ * that needs webpack (`docs/01-app/02-guides/upgrading/version-16.mdx`,
+ * checked 2026-08-27) — so this is not a pin with a known end date.
  *
  * Nothing else goes red when this regresses: the 5-document starter every
  * suite here builds is far under the size that triggers it, so the failure

@@ -277,14 +277,17 @@ declared`. The services ARE declared, in `vercel.json` at the repo root,
 Three things catch people here. Two are the system being deliberate; the first
 is not, and it is the one that fails without saying so:
 
-- **A green deployment that 404s at every path means Vercel ignored
-  `vercel.json`.** Confirm **Application Preset is `Services`** — an imported
-  project can come back as `Other`, which ignores the `services` block, collects
-  nothing, reports **Ready**, takes your domain and serves `404: NOT_FOUND`
-  everywhere. The only signal is one build-log line: `WARNING! Build output
-  contains no "functions" or "static" directory`. Setting the project's own
-  build/output fields does **not** override `vercel.json`. The whole diagnosis,
-  and the site-only `vercel.json` that needs no preset, is in
+- **A green deployment that 404s at every path means Vercel ignored the
+  `services` block.** A project imported from Git can come back with Application
+  Preset `Other`, which reads that block not at all: the build succeeds, Vercel
+  collects nothing, and the deployment reports **Ready**, takes your domain and
+  serves `404: NOT_FOUND` everywhere. The only signal is one build-log line —
+  `WARNING! Build output contains no "functions" or "static" directory`. Check
+  the preset first. What is *verified* to fix it is replacing the `services`
+  block with the classic top-level keys, which need no preset and which also move
+  the door off your domain — patching the project's own `outputDirectory`,
+  `buildCommand` and `installCommand` does not, because `vercel.json` wins for
+  those. Both, and what has to move with the door, are in
   `node_modules/@panaversity/ksor/docs/deploying.md`.
 - **`disabled-local` will not deploy.** The container sets `$PORT`, so the door
   binds `0.0.0.0` — a PUBLIC bind — and refuses that value by design, saying so

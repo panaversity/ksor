@@ -78,7 +78,36 @@ describe("provenanceNotice", () => {
     // the message that governs provenance (issue #197, hit live on Vercel).
     const notice = provenanceNotice("no-repo", "build");
     expect(notice, "the second cause is named").toContain("did not reach this machine");
-    expect(notice, "and its remedy is not `git init` again").toContain("--source-commit");
+    expect(notice, "with the remedy that actually restores provenance").toContain(
+      "Deploy from the Git connection",
+    );
+  });
+
+  /**
+   * A remedy may only name a flag the verb printing it ACCEPTS.
+   *
+   * `--source-commit` is an `ingest` flag; `ksor build` refuses it as an unknown
+   * argument and exits 1 (verified: `ksor build --source-commit <sha>` →
+   * `error: bad-args`). So a build-subject notice naming it turned a provenance
+   * warning into a failed build for whoever followed it — which is the opposite
+   * of "errors are documentation", and precisely the reader this message exists
+   * for: the one whose CLI upload stripped `.git` on the deploy path.
+   *
+   * Asserted across EVERY gap, not just the one that had the bug, because the
+   * next remedy someone adds is the one that would repeat it.
+   */
+  it("never offers a `build` reader a flag `ksor build` refuses", () => {
+    for (const gap of ["no-commit", "no-repo", "no-git", "no-input-commit", "not-asked"] as const) {
+      expect(
+        provenanceNotice(gap, "build"),
+        `${gap}: ${JSON.stringify(provenanceNotice(gap, "build"))}`,
+      ).not.toContain("--source-commit");
+    }
+  });
+
+  it("…and still offers it to `ingest`, which does accept it", () => {
+    expect(provenanceNotice("no-git", "generation")).toContain("--source-commit");
+    expect(provenanceNotice("no-repo", "generation")).toContain("--source-commit");
   });
 
   it("always says WHY it matters — this is the provenance message", () => {

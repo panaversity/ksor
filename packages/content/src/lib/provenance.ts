@@ -74,14 +74,25 @@ export function provenanceGap(knowledgeDir: string | undefined): ProvenanceGap {
 /**
  * The remedy for each, because the reader's next command differs.
  *
- * `subject` is the artefact whose provenance is missing — the noun is the only
- * thing that differs between the verbs, so it is the only thing parameterised.
+ * `subject` is the artefact whose provenance is missing. It began as the noun
+ * alone — "the only thing that differs between the verbs" — and that was wrong:
+ * the ESCAPE HATCH differs too. `--source-commit` is an `ingest` flag
+ * (`commands.ts`); `ksor build`'s `parseArgs` refuses it as an unknown argument
+ * and exits 1. So a remedy that named it unconditionally told a `build` reader
+ * to run `ksor build --source-commit <sha>` and get `error: bad-args` — turning
+ * a provenance WARNING into a failed build for anyone who followed it, in the
+ * message product principle 4 asks to be documentation. Both are parameterised
+ * now, and a verb that gains the flag renders the escape by declaring so here.
  */
+const escapeFor = (subject: "generation" | "build"): string =>
+  subject === "generation" ? " or pass --source-commit <sha>" : "";
+
 export function provenanceNotice(
   gap: ProvenanceGap,
   subject: "generation" | "build" = "generation",
 ): string {
   const why = `so this ${subject} cannot be traced back to a reviewed commit`;
+  const escape = escapeFor(subject);
   switch (gap) {
     case "no-commit":
       return (
@@ -104,13 +115,12 @@ export function provenanceNotice(
         `source: unspecified — knowledge/ is not in a git repository, ${why}.\n` +
         "  fix: git init, commit the record, and re-run\n" +
         "  if it IS committed: .git did not reach this machine — an upload-based deploy\n" +
-        "    excludes it (Vercel's CLI does). Deploy from the Git connection instead, or\n" +
-        "    pass --source-commit <sha>"
+        `    excludes it (Vercel's CLI does). Deploy from the Git connection instead${escape}`
       );
     case "no-git":
       return (
         `source: unspecified — git is not installed, ${why}.\n` +
-        "  fix: install git, or pass --source-commit <sha> if the record is versioned elsewhere"
+        `  fix: install git${escape ? `,${escape} if the record is versioned elsewhere` : ""}`
       );
     case "no-input-commit":
       return (
