@@ -1,379 +1,498 @@
 # Tutorial 1: KSoR — One Governed Knowledge Record for Humans and AI Agents
 
-A **Knowledge System of Record (KSoR)** gives an organization one governed place to define the knowledge that people and AI agents are expected to follow.
+A **Knowledge System of Record (KSoR)** is an authoritative and governed knowledge layer that humans, AI agents, and software can all use.
 
-That sounds simple, but it solves an important problem:
+That sounds technical, but the basic idea is simple:
 
-> **AI can find information. It cannot decide which information your organization has declared authoritative unless you define that authority.**
+> **An AI agent may be able to find information, but it cannot reliably know which information your organization considers official.**
 
-This tutorial explains that idea from the beginning. We will use one hospital example throughout, introduce the eight core KSoR concepts, look at enterprise and education use cases, and then run a KSoR locally.
+Your organization has to make that decision.
 
-You do not need to understand vector databases, MCP, OAuth, or knowledge standards before starting. We will introduce those terms only when they become useful.
+A KSoR gives AI systems a trusted place to find the knowledge they are expected to use.
 
-> 🎥 This tutorial follows the live introduction session:  
+In this tutorial, you will learn:
+
+- why AI agents can give different answers to the same question,
+- why this is more than a search or RAG problem,
+- how a KSoR differs from a traditional System of Record,
+- the eight core ideas behind KSoR,
+- what belongs inside a KSoR,
+- how governance, provenance, citation, and abstention work,
+- how the same governed knowledge can serve humans and AI agents,
+- and how to create your first KSoR project.
+
+At the end, you will build a small KSoR locally.
+
+> 🎥 This tutorial follows the live introduction session:
 > [KSoR — Introduction and the Eight Concepts (YouTube)](https://www.youtube.com/watch?v=EeTGuQJbHCg)
 
 ---
 
 ## What you will learn
 
-By the end of this tutorial, you should understand:
+By the end of this tutorial, you should be able to explain:
 
 - why AI agents can give different answers to the same question,
-- why this is often an **authority problem**, not just a search problem,
-- the difference between a traditional System of Record and a Knowledge System of Record,
-- the eight core KSoR concepts,
-- what belongs in a KSoR and what does not,
-- how governance, provenance, citation, and abstention fit together,
-- how one governed record can serve people and AI systems through different interfaces,
-- and how to create your first KSoR project.
+- why those differences can be dangerous,
+- how a KSoR differs from a traditional System of Record,
+- why an AI-native organization may need both,
+- the eight concepts behind the KSoR mental model,
+- what belongs inside a KSoR and what does not,
+- how governance determines what an agent may use,
+- why important answers should include citations,
+- why an AI agent must sometimes say **"I don't know,"**
+- and how to create and run your first KSoR.
 
 ---
 
 # 1. Start with the problem: three AI helpers, three answers
 
-Imagine a hospital introduces three AI helpers.
+Imagine a hospital uses three different AI helpers.
 
 A nurse asks all three the same question:
 
 > **"How much medicine is safe for a six-year-old?"**
 
-The three helpers give different answers.
+The first AI gives one amount.
 
-- **Helper A** uses an old book.
-- **Helper B** finds something on the web.
-- **Helper C** uses an old message or its model memory.
+The second gives a different amount.
+
+The third gives yet another amount.
+
+![Three helpers give three different answers to the same dosage question](01-assets/01-three-helpers.png)
 
 All three answers sound confident.
 
-But the nurse has a problem: **which answer is the hospital's approved answer?**
-
-The AI helpers cannot tell her.
-
 Why?
 
-Because each helper found information, but nobody told them which source was official.
+Because each AI may be using different information.
 
-Maybe the old book is outdated.
+One might be relying on:
 
-Maybe the web page describes another hospital.
+- an old medical book,
+- a hospital wiki,
+- something it found online,
+- an old chat message,
+- an outdated policy,
+- or information remembered by the language model itself.
 
-Maybe the message was never approved.
+![Each helper learned from a different place — none of them official](01-assets/02-why-did-this-happen.png)
 
-Maybe the model remembers a general medical answer that does not match this hospital's policy.
+The problem is not that the AI systems are unable to find information.
 
-The computers are not necessarily broken.
+They can find plenty of information.
 
-**The hospital is missing a rule about authority.**
+The problem is that they do not know **which information the hospital considers authoritative**.
 
-This is the key idea behind KSoR.
+None of the documents automatically says:
 
-The problem is not only:
+> "I am the official hospital policy. If another source disagrees with me, use me."
 
-> "Can the AI find relevant information?"
+That decision has to come from the hospital.
 
-The more important question is:
+So the real problem is not simply a **search problem**.
 
-> **"Which knowledge has this organization approved as the knowledge we operate from?"**
+It is an **authority problem**.
 
-That is an authority problem.
+> **A computer can guess what looks relevant. It cannot guess what your organization has officially approved.**
 
-A search engine can rank documents.
+The organization must decide:
 
-A language model can explain them.
+> **Which knowledge are we willing to operate from?**
 
-But the organization still has to decide which policy, procedure, version, or rule is authoritative.
-
-> **A computer can guess what looks useful. It cannot guess what your organization has made official.**
-
-A Knowledge System of Record exists to make that authority explicit.
+That is the problem KSoR is designed to solve.
 
 ---
 
-# 2. Why AI helpers can disagree
+# 2. Why AI helpers disagree
 
-Several things can cause AI systems to answer the same question differently.
+There are four important reasons AI systems can disagree.
 
-## 2.1 Language models are probabilistic
+## Reason 1 — LLMs are probabilistic
 
-Large language models do not behave like calculators.
+Large Language Models are not ordinary deterministic programs.
 
-They generate likely responses from the context they receive. The wording, reasoning path, and even the conclusion can vary between runs.
+If you ask the same model the same question several times, it may answer differently.
 
-You may ask the same model the same question twice and receive two different explanations.
+One response may use one example or reasoning path, while another uses a different one.
 
-That variability is normal.
+This flexibility is useful.
 
-## 2.2 Training data can be wrong or outdated
+But it becomes dangerous when the subject is something that should not change, such as:
 
-Models are trained on very large collections of material.
+- company policy,
+- medical rules,
+- accounting policy,
+- approval limits,
+- course requirements,
+- legal procedures.
 
-Some of that material may be:
+---
+
+## Reason 2 — Training data can be wrong
+
+AI models are trained on enormous collections of information.
+
+Some of that information is:
 
 - correct,
 - incorrect,
-- old,
+- outdated,
 - incomplete,
-- or in conflict with other sources.
+- or contradictory.
 
-A model can repeat incorrect information confidently because confident wording is not proof of correctness.
+If incorrect information existed in the training material, a model may repeat it confidently.
 
-## 2.3 Models can hallucinate
+The introduction session gives a real example: a frontier model confidently attributed a famous Urdu poem to the wrong book because an incorrect web page had published that information.
 
-When a model does not have enough reliable information, it may still generate an answer.
+The model sounded confident.
 
-The answer may sound reasonable even when it is unsupported.
-
-For an informal conversation, that may be inconvenient.
-
-For medicine, finance, compliance, education, or business operations, it can be dangerous.
-
-## 2.4 The model cannot be assumed to know your current institutional knowledge
-
-Your organization may have private or local knowledge such as:
-
-- company policies,
-- internal procedures,
-- approval limits,
-- hospital protocols,
-- course curricula,
-- grading rules,
-- engineering standards,
-- or operating methods.
-
-A foundation model cannot be assumed to know the current, approved version of those rules.
-
-Even if it has seen an older or public version, it still does not know which version **your organization currently treats as authoritative**.
-
-So the real requirement is not simply "give the AI more documents."
-
-It is:
-
-> **Give the AI a governed source of institutional truth.**
+The source was still wrong.
 
 ---
 
-# 3. AI workers need two kinds of record
+## Reason 3 — LLMs can hallucinate
 
-Organizations already understand the idea of a **System of Record**.
+Sometimes a model does not have enough information to answer a question.
 
-A System of Record is the system that wins when different copies of operational data disagree.
+Instead of stopping, it may generate something that sounds reasonable.
+
+For example, it might invent:
+
+- a policy that was never approved,
+- a medicine that does not exist,
+- a rule that nobody wrote,
+- or a procedure that sounds plausible but is not official.
+
+This is called **hallucination**.
+
+---
+
+## Reason 4 — Your organization's knowledge is private and constantly changing
+
+A foundation model cannot be assumed to know your organization's current internal knowledge.
+
+For example, it cannot automatically know:
+
+- your company's latest travel policy,
+- your hospital's approved dosage rules,
+- your university's current curriculum,
+- your accounting department's capitalization policy,
+- or which version of a procedure is currently in force.
+
+Even if the model has seen *some version* of that information, it does not know whether that version is the one your organization currently recognizes as authoritative.
+
+---
+
+## What this means
+
+If an organization wants predictable AI behavior, it needs a governed source of knowledge that tells AI agents:
+
+> **This is the knowledge you are allowed to operate from.**
+
+That is the role of a KSoR.
+
+---
+
+# 3. Organizations already have two kinds of truth
+
+The term **System of Record** is not new.
+
+Organizations have used Systems of Record for decades.
 
 For example:
 
-- the accounting system is authoritative for financial transactions,
-- the CRM is authoritative for customer records,
-- the HRIS is authoritative for employee records,
-- the student information system is authoritative for enrollments and grades.
+- an accounting system records financial transactions,
+- a CRM records customers and sales opportunities,
+- an HRIS records employees,
+- a university system records enrollments and grades.
 
-These systems answer questions such as:
+If a spreadsheet says a customer owes $10,000 but the accounting ledger says $12,000, the ledger normally wins.
 
-- What is the customer's balance right now?
+Why?
+
+Because the accounting system has been designated as the authoritative system.
+
+These systems mainly answer:
+
+> **What is true right now?**
+
+Examples include:
+
+- What is the customer's current balance?
+- How many products are in inventory?
 - Which invoices are unpaid?
-- How much inventory is available?
 - Which students are enrolled?
+- How much cash is in the bank?
 
-These are questions about **current state**.
-
-But people inside organizations have always needed another kind of information: **knowledge about how to operate**.
-
-That knowledge may live in:
-
-- policy manuals,
-- procedure guides,
-- textbooks,
-- standards,
-- training material,
-- internal documents,
-- or the experience of senior employees.
-
-For example, an accountant may know:
-
-- which accounting policy applies,
-- what approval is required,
-- how a special transaction is handled,
-- and when an exception must be escalated.
-
-That is not the current state of the business.
-
-It is **operating knowledge**.
-
-| | Traditional System of Record | Knowledge System of Record |
-| --- | --- | --- |
-| Holds | Current operational state | Governed knowledge |
-| Examples | Customers, orders, balances, inventory | Policies, methods, procedures, definitions |
-| Main question | **What is true right now?** | **How should we operate?** |
-| Typical consumers | Applications, reports, people | People, AI agents, software |
-
-When AI agents begin doing work that people used to do, they need both.
-
-> **A traditional System of Record tells the agent what is happening. A Knowledge System of Record tells the agent how the organization says it should operate.**
-
-For example, an accounting agent may need:
-
-- the invoice amount from the accounting system,
-- the current project status from an operational system,
-- and the capitalization policy from the KSoR.
-
-The operational systems provide the facts.
-
-The KSoR provides the governed rule.
-
-The agent uses both.
+These are questions about **state**.
 
 ---
 
-# 4. Education has the same problem
+## But organizations also depend on knowledge
 
-The same idea applies to education.
+Organizations have always had another kind of information.
 
-A capable AI model may know a great deal about mathematics, programming, accounting, medicine, or history.
+They have:
 
-But capability is not authority.
+- policy manuals,
+- procedure manuals,
+- textbooks,
+- operating guides,
+- standards,
+- rules,
+- methods,
+- and human expertise.
 
-A model can create a reasonable course.
+For example, an experienced accountant may know:
 
-It cannot decide which course is **this institution's course**.
+- which accounting policy applies,
+- when an expense may be capitalized,
+- which approvals are required,
+- what exceptions exist,
+- and when human judgment is required.
 
-The institution still has to define:
+That knowledge tells people:
+
+> **How should we operate?**
+
+Traditionally, this knowledge was written mainly for humans.
+
+AI agents change that.
+
+AI agents are increasingly being asked to perform work that humans once performed.
+
+Those agents need both **current state** and **operating knowledge**.
+
+| Type | What it holds | Main question |
+| --- | --- | --- |
+| Traditional System of Record | Current operational data | **What is true right now?** |
+| Knowledge System of Record | Rules, methods, policies, procedures | **How should we operate?** |
+
+![Every AI worker needs two Systems of Record: a KSoR for governed knowledge and a traditional SoR for current state](01-assets/two-systems-of-record.png)
+
+For example:
+
+> **A traditional System of Record tells the agent what is happening. A Knowledge System of Record tells the agent how the organization says it should operate.**
+
+An AI-native organization needs both.
+
+---
+
+# 4. "But hasn't the model already read every textbook?"
+
+This is a reasonable question.
+
+Modern frontier models have been trained on enormous amounts of public educational and professional material.
+
+So why give an AI agent a specific textbook or knowledge base?
+
+Because there is a major difference between **capability** and **authority**.
+
+---
+
+## Capability is not authority
+
+A powerful model may be capable of designing a good AI course.
+
+But it cannot decide:
+
+> **What is this institution's official AI course?**
+
+The institution still has to decide:
 
 - the learning objectives,
-- the approved concepts and definitions,
 - the course sequence,
-- the required source material,
+- the canonical material,
 - the assessment rules,
-- the grading rules,
-- and the current course version.
+- the grading policy,
+- and the version currently in use.
 
-This matters when several AI tutors teach students in the same program.
+Ask several AI models:
 
-Without an authoritative academic record, different tutors may teach:
+> "How should I learn to build an AI agent?"
 
-- different definitions,
-- different topic sequences,
-- different source material,
-- or different versions of the course.
+You may get several excellent answers.
 
-Personalization can then turn into curricular inconsistency.
+But those answers may recommend different:
 
-A KSoR solves the academic-authority problem.
-
-The tutor may still personalize:
-
-- explanations,
+- frameworks,
+- tools,
+- sequences,
 - examples,
-- pacing,
-- language,
-- difficulty,
-- practice,
-- and remediation.
+- and levels of depth.
 
-But it should not independently change the institution's approved curriculum.
+Any of them might be reasonable.
 
-> **Personalization should change the teaching path, not the authoritative curriculum.**
+None becomes **your institution's curriculum** until the institution designates it as such.
 
-An education system may therefore use two different records:
+---
 
-1. a **Knowledge System of Record** for the approved curriculum and teaching knowledge,
-2. a **learner System of Record** for the student's progress, history, and current state.
+## Consistency requires an authoritative source
 
-One tells the tutor **what should be taught**.
+This becomes especially important in education.
 
-The other tells the tutor **where this learner currently is**.
+Imagine two students taking the same course.
+
+Student A's AI tutor teaches one set of concepts.
+
+Student B's AI tutor teaches a different set.
+
+Both explanations may be individually reasonable.
+
+But now the institution no longer has one curriculum.
+
+Personalization has quietly turned into inconsistency.
+
+Panaversity experienced this problem when major AI labs introduced study modes. Different AI tutors could start students at different places and teach the same subject at different depths.
+
+Each approach could be defensible.
+
+But the institution still needed one authoritative curriculum.
+
+---
+
+## Learning also needs a record
+
+An educational institution actually needs two different systems of record.
+
+### 1. Knowledge SoR
+
+The governed curriculum and textbook.
+
+For Panaversity, an example is [The AI Agent Factory](https://agentfactory.panaversity.org/).
+
+### 2. Learner SoR
+
+A system that records:
+
+- who the learner is,
+- what the learner has completed,
+- what the learner is currently studying,
+- and how far the learner has progressed.
+
+The Knowledge SoR governs **what is taught**.
+
+The learner SoR records **what has happened with the learner**.
 
 ---
 
 # 5. The eight concepts behind KSoR
 
-The introductory KSoR presentation explains the framework through eight simple ideas.
+The easiest way to understand KSoR is through eight simple ideas.
 
-We will keep using the hospital example.
+We will continue using the hospital example.
 
 Each concept answers one question.
+
+![The eight ideas, each answering one question](01-assets/03-the-eight-ideas.png)
 
 ---
 
 ## Concept 1 — One official book
 
-### The question
+![Concept 1 slide](01-assets/concept-1-one-official-book.png)
+
+### Question
 
 **Which page is the real one?**
 
-The hospital may have many sources:
+Imagine the hospital has many documents containing medication rules.
 
-- an old manual,
-- a PDF,
-- a wiki,
-- a chat message,
-- a website,
-- and model memory.
+Someone has to decide which one is official.
 
-The hospital now makes one important decision:
+So the hospital selects one governed record and says:
 
-> **This is our official record.**
+> **This is the authoritative source.**
 
-Every AI helper must use that governed record when answering questions about hospital policy.
+Every AI helper must answer from that source.
 
-If the model remembers something different, the hospital's authoritative record wins.
+If the AI remembers something different, the authoritative record wins.
 
-The phrase **"one official book"** is a metaphor.
+Think of it like a referee using the official rule book instead of relying on memory.
 
-It does not mean everything must be stored in one giant document.
+---
 
-It means there is **one authoritative governed record**.
+### One record does not mean one giant file
+
+"One official book" is a metaphor.
+
+It does **not** mean all organizational knowledge has to live inside one enormous document.
+
+It means there is **one canonical governed record**.
+
+If another copy disagrees with the governed record, the governed record wins.
+
+---
 
 ### In KSoR
 
-The authoritative record is stored as plain Markdown under:
+The authoritative knowledge lives in the governed Markdown corpus under:
 
 ```text
 knowledge/
 ```
 
-The files can be read by people, reviewed in Git, checked by software, and used by AI agents.
+These are ordinary files.
 
-### Remember
+Humans can:
 
-> **A computer cannot choose which page is official. The organization has to decide.**
+- open them,
+- read them,
+- edit them,
+- compare changes,
+- and print them.
+
+The authoritative knowledge does not require a proprietary database format.
+
+### Principle
+
+> **A computer cannot choose which page is real. A person has to.**
 
 ---
 
 ## Concept 2 — What goes in the book?
 
-### The question
+![Concept 2 slide](01-assets/concept-2-what-goes-in.png)
+
+### Question
 
 **What kind of information belongs in a KSoR?**
 
-Not every fact belongs there.
+The simplest answer is:
 
-Consider the hospital again.
+> **Governed knowledge belongs in the KSoR. Rapidly changing operational state does not.**
 
-These belong in the KSoR:
+For example:
 
-- How do we treat a fever?
-- What dosage rule is approved?
-- Who may approve this procedure?
-- What is the hospital's escalation policy?
+- "What dosage rule is approved?" belongs in the KSoR.
+- "How many beds are available right now?" does not.
 
-These are governed rules and methods.
+Why?
 
-Now consider:
+Because the dosage rule is something the organization deliberately:
 
-- How many beds are free right now?
-- Who is currently in room 4?
-- How much medicine is left in inventory?
+- decides,
+- reviews,
+- approves,
+- versions,
+- and expects people to follow.
 
-These facts change constantly.
+The number of available hospital beds changes continuously.
 
-They belong in operational Systems of Record.
+That belongs in an operational system.
 
-A useful test is:
+---
 
-> **Is this something the organization deliberately decides, reviews, approves, versions, and expects people or agents to follow?**
+### A simple test
 
-If yes, it is a strong candidate for the KSoR.
+Ask:
 
-If it is rapidly changing operational state, it usually belongs somewhere else.
+> **Is this something the organization decides, reviews, approves, versions, and expects humans or agents to follow?**
+
+If the answer is yes, it is probably a good candidate for the KSoR.
+
+If it is a rapidly changing operational fact, it probably belongs in a traditional System of Record.
 
 | Question | Where it belongs |
 | --- | --- |
@@ -382,447 +501,630 @@ If it is rapidly changing operational state, it usually belongs somewhere else.
 | What is our capitalization policy? | KSoR |
 | What is the current ledger balance? | Accounting SoR |
 | What is the grading policy for this course? | KSoR |
-| Which students are enrolled today? | Student information system |
+| Which students are currently enrolled? | Student information system |
 
-The important distinction is not **Markdown versus database**.
+The important distinction is not:
 
-It is:
+**text versus database**
 
-> **Governed knowledge versus operational state.**
+The distinction is:
 
-### Remember
+**governed knowledge versus operational state**
 
-> **The KSoR holds what we have decided. Operational systems hold what is happening.**
+This prevents the KSoR from becoming another ERP or transactional database.
+
+### Principle
+
+> **The book holds what we decided. Other systems hold what is happening.**
 
 ---
 
 ## Concept 3 — Stamps
 
-### The question
+![Concept 3 slide](01-assets/concept-3-stamps.png)
+
+### Question
 
 **How do I know a page can be trusted?**
 
-Suppose the hospital has a page called:
+Imagine a hospital policy page contains these facts:
 
-> **Safe amounts for children**
+- **Written by:** Dr Sana Malik
+- **Approved by:** Medicines Committee
+- **Effective from:** 3 March 2026
+- **Version:** 4
+- **Audience:** Nurses and doctors
 
-The words on the page are not enough.
+Those facts are like stamps on the page.
 
-We also want to know:
+Without them, you only have some text.
 
-- Who owns this knowledge?
-- Who approved it?
-- When did it become effective?
-- Which version is current?
-- Who may read it?
-- What source supports it?
+You do not know:
 
-The presentation calls these facts **stamps**.
+- who wrote it,
+- who approved it,
+- whether it is current,
+- whether it has been replaced,
+- or who is allowed to use it.
 
-Think of the difference between:
+The governance information turns ordinary writing into controlled institutional knowledge.
 
-> "Someone wrote this."
-
-and:
-
-> "Dr Sana Malik owns this policy. The Medicines Committee approved it. Version 4 is current. It took effect on 3 March 2026. Nurses and doctors may read it."
-
-The second statement tells us why the page should be trusted.
+---
 
 ### In KSoR
 
-These "stamps" are represented by governance and provenance metadata.
+Each governed concept can carry metadata such as:
 
-KSoR can validate that metadata against the governance rules for the knowledge system.
+- ownership,
+- approval authority,
+- lifecycle status,
+- effective date,
+- version,
+- audience,
+- source,
+- provenance.
 
-A useful security principle is:
+The KSoR validates this metadata against its governance policy.
 
-> **If access has not been explicitly allowed, do not assume that it is allowed.**
+That means governance can be mechanically checked rather than existing only as informal documentation.
 
-In the presentation this is summarized as:
+There is also an important security rule:
+
+> If a page does not say who may read it, that does not mean everyone may read it.
+
+In other words:
 
 > **Quiet never means yes.**
 
-### Remember
+### Principle
 
-> **No authority information, no institutional trust.**
+> **No stamps, no trust. A page nobody signed is only a note.**
 
 ---
 
 ## Concept 4 — The door
 
-### The question
+![Concept 4 slide](01-assets/concept-4-the-door.png)
 
-**Should this knowledge be allowed out?**
+### Question
 
-Knowing an answer and being allowed to disclose it are different things.
+**Should this answer be allowed out?**
 
-A nurse asks:
+Finding information and being allowed to disclose it are two different things.
 
-> "What is the approved dosage rule?"
+Imagine a nurse asks:
 
-The rule exists.
+> "What is the approved dosage?"
 
-The nurse is allowed to read it.
+The information exists.
 
-The answer may be returned.
+The nurse is allowed to see it.
 
-Now a visitor asks for restricted information.
+So the system returns the answer.
 
-The information may also exist in the system.
+Now imagine a visitor asks:
+
+> "What is written in the private notes for the patient in room 4?"
+
+The information might exist.
 
 But the visitor is not allowed to see it.
 
-So nothing should be returned.
+So the system returns nothing.
 
-This is why KSoR needs a **governance boundary**.
+The important point is:
 
-The system checks not only:
+> **The system may know something without being allowed to disclose it.**
 
-> "Do we have this knowledge?"
-
-but also:
-
-> **"May this requester receive this knowledge?"**
+---
 
 ### In KSoR
 
-The KSoR architecture separates identity from governance.
+This is the **governance boundary**.
 
-Identity answers:
+Governance information such as:
 
-> **Who is asking?**
+- audiences,
+- ownership,
+- approval,
+- and takedown authority
 
-Technologies such as OAuth/OIDC can provide identity.
+lives in:
 
-KSoR governance then answers:
+```text
+.ksor/governance.yaml
+```
 
-> **What is this identity allowed to receive?**
+In the architecture, identity comes from OAuth/OIDC.
 
-The current beta does not necessarily implement every part of the full architecture. [`docs/status.md`](../status.md) is the authority on what is implemented today.
+Then KSoR applies the governance rules.
 
-### Remember
+A core rule is:
 
-> **Knowledge should cross a serving or publication boundary only after the applicable governance check passes.**
+> **No knowledge crosses a serving or publication boundary without first passing the applicable governance decision.**
+
+This matters even if the search system is technically excellent.
+
+A very fast search engine operating over ungoverned knowledge simply retrieves ungoverned knowledge faster.
+
+### Principle
+
+> **The book does not just store answers. It decides who may hear them.**
 
 ---
 
 ## Concept 5 — "I don't know"
 
-### The question
+![Concept 5 slide](01-assets/concept-5-i-dont-know.png)
 
-**What if the answer is not in the KSoR?**
+### Question
 
-Suppose the hospital has an approved dosage rule for children over two years old.
+**What happens when the answer is not in the governed record?**
 
-But it has no approved rule for infants.
+Suppose the hospital KSoR contains medication rules for children over two years old.
+
+But it contains no approved dosage rule for infants.
 
 An unsafe AI might say:
 
 > "It is probably about this much."
 
-That sounds helpful.
+That answer may sound helpful.
 
-But it is unsupported.
+But it is a guess.
 
-A governed system should instead say something like:
+The governed response is:
 
-> **"The Knowledge System of Record does not contain an approved answer for this case."**
+> **"The Knowledge System of Record does not contain enough information to answer this."**
 
-It can then:
+The agent can then escalate the situation to the appropriate person or workflow.
 
-- ask for human review,
-- escalate the case,
-- request more information,
-- or stop.
+This ability to refuse to answer is called **abstention**.
 
-This behavior is called **abstention**.
+---
 
-Abstention means the system deliberately refuses to invent an answer when the governed record does not support one.
+### Why abstention matters
 
-That is not a weakness.
+An AI system that is expected to answer every question will eventually invent answers.
 
-It is an important safety property.
+An AI system that is allowed to say:
 
-### Remember
+> "I don't know based on the approved knowledge"
 
-> **A confident guess can be more dangerous than an honest "I don't know."**
+makes the boundary of organizational knowledge visible.
+
+That boundary is valuable information.
+
+### In KSoR
+
+**Abstention is a first-class feature, not a failure mode.**
+
+### Principle
+
+> **A guess that sounds right is more dangerous than no answer at all.**
 
 ---
 
 ## Concept 6 — Show the page
 
-### The question
+![Concept 6 slide](01-assets/concept-6-show-the-page.png)
 
-**How can I check the answer?**
+### Question
 
-Imagine the AI says:
+**How can I verify the answer?**
 
-> "This expense requires CFO approval."
+An important AI answer should not appear without evidence.
 
-A useful next question is:
+Instead of only saying:
 
-> **"Which policy says that?"**
+> "Here is the safe amount."
 
-The AI should be able to point back to the governed knowledge that supports its answer.
+the system should be able to say something like:
 
-For the hospital example, the answer might say:
+> "Here is the safe amount — from Medicine Rules, page 7, version 4."
 
-> "Medicine Rules, version 4."
+Now someone can follow the evidence backwards.
 
-You should be able to follow the trail back to:
+They can inspect:
 
-- the retrieved passage,
-- the knowledge document,
-- the version,
-- the source,
-- and the approval history.
+1. the AI answer,
+2. the passage used,
+3. the knowledge document,
+4. its version,
+5. the source,
+6. the approval,
+7. and eventually the person or authority responsible for it.
 
-This trail is called **provenance**.
+This is far more useful than:
 
-Provenance means:
+> "I think this is correct."
 
-> **Where did this come from?**
+---
 
-A citation tells you where to look.
+### In KSoR
 
-Provenance lets you trace the answer back through the governed record.
+The technical term is **provenance**.
 
-### Remember
+The trace can run from:
 
-> **Citation before confidence.**
+**AI answer → retrieved passage → knowledge document → build → git commit → reviewed source**
 
-A fluent answer sounds good.
+This makes the answer inspectable.
 
-A traceable answer can be checked.
+### Principle
+
+> **Citation before confidence. A fluent answer is not evidence; a traceable answer can be inspected.**
 
 ---
 
 ## Concept 7 — Getting a page into the book
 
-### The question
+![Concept 7 slide](01-assets/concept-7-getting-a-page-in.png)
+
+### Question
 
 **How does new knowledge become authoritative?**
 
-A document does not become an official rule merely because someone created a file.
+Imagine Dr Sana writes a new medication policy on Monday.
 
-Imagine one hospital policy moving through a week.
+Does that make it official?
 
-**Monday:** Dr Sana writes a draft.
+No.
 
-It is not yet authoritative.
+On Tuesday, the head nurse reviews it.
 
-**Tuesday:** the head nurse reviews it.
+Is it official now?
 
-It is still not authoritative.
+Still no.
 
-**Friday:** the authorized committee approves it.
+On Friday, the authorized committee approves it.
 
-Now it may become part of the governed record according to the lifecycle rules.
+Now something important has changed.
 
-The important point is that **storage is not authority**.
+The text may be identical to what existed on Monday.
 
-Putting a document in a folder is easy.
+But its **authority** is different.
 
-Making it an approved institutional rule requires governance.
+From Friday onward, the AI helpers may use it as governed knowledge.
 
-A simple lifecycle might look like:
+---
 
-```text
-draft
-  ↓
-review
-  ↓
-approval
-  ↓
-stable
-```
+### Storage does not create authority
 
-In KSoR, approval and lifecycle state are deliberately separate concepts.
+A document does not become official because:
 
-Imported knowledge also does not automatically become authoritative.
+- somebody uploaded it,
+- somebody copied it,
+- someone put "POLICY" at the top,
+- or it exists in a database.
 
-If another hospital sends you its approved policy, that policy was approved **there**.
+It becomes authoritative through an approved governance process.
 
-Your organization must still decide whether to adopt it **here**.
+---
 
-### Remember
+### In KSoR
+
+Approval is an authority event recorded through change control.
+
+`stable` is the lifecycle state that may be served.
+
+These are intentionally separate ideas.
+
+Imported knowledge also does not automatically inherit authority.
+
+If one hospital copies a policy from another hospital, the copied policy does not automatically become authoritative in the new hospital.
+
+The receiving organization must govern it for itself.
+
+### Principle
 
 > **Knowledge becomes authoritative through governance, not through storage.**
 
 ---
 
-## Concept 8 — Many doors, one book
-
-### The question
-
-**How do different users and systems reach the same governed knowledge?**
-
-People and machines do not all need the same interface.
-
-A person may want a website.
-
-An AI system may need a machine-readable discovery file.
-
-An AI agent may need a query interface.
-
-Another knowledge system may need a portable exchange format.
-
-KSoR therefore supports different **projections** of the same governed record.
-
-Think of them as different doors into the same building.
-
-In the KSoR architecture:
-
-| Consumer | Reference interface |
-| --- | --- |
-| Humans | Fumadocs website |
-| AI discovery | `llms.txt` |
-| AI agents | MCP |
-| Other knowledge systems | OKF exchange |
-
-The important point is that these should not become four independently maintained knowledge stores.
-
-You update the authoritative record.
-
-The different projections are then rebuilt, refreshed, or served from that governed source.
-
-### Remember
-
-> **Not four books. Four doors into one book.**
-
-And the operating principle is:
-
-> **Govern knowledge once. Project it many ways.**
+![The write side of authority: source material → draft → review → approval → stable](01-assets/governance-lifecycle.png)
 
 ---
 
-# 6. Not every door gives the same guarantee
+## Concept 8 — Many doors, one book
 
-The four doors do not provide the same level of control.
+![Concept 8 slide](01-assets/concept-8-many-doors.png)
 
-KSoR describes this as a **trust ladder**.
+### Question
 
-You do not need to memorize the terminology yet. Just understand the trade-off.
+**How can different users and systems access the same knowledge?**
+
+Different consumers need different interfaces.
+
+A human may want a website.
+
+An AI system may want a machine-readable discovery file.
+
+An AI agent may want an MCP interface.
+
+Another organization may need a safe packaged copy.
+
+That does **not** mean you should maintain four separate knowledge bases.
+
+Instead, you maintain:
+
+> **One governed record with multiple projections.**
+
+Think of it as one book with several doors.
+
+For example:
+
+- a **website** for humans,
+- a **list file** that lets AI discover available knowledge,
+- an **agent interface** for searching, reading, citing, and abstaining,
+- a **portable package** for exchanging governed knowledge with another system.
+
+All of those surfaces come from the same authoritative record.
+
+---
+
+### Why this matters
+
+Suppose you discover an error.
+
+You correct the authoritative knowledge once.
+
+After the relevant projections are refreshed or republished, every interface receives the correction.
+
+Without this model, you may end up maintaining:
+
+- one copy for the website,
+- one for the chatbot,
+- one for an agent,
+- and another for another application.
+
+Eventually those copies drift apart.
+
+That brings us back to the original problem:
+
+**three AI helpers, three different answers.**
+
+### In KSoR
+
+These different access methods are **projections** of the governed record.
+
+### Principle
+
+> **Not four books. Four doors into one book. Govern knowledge once — project it many ways.**
+
+---
+
+![One governed record behind the governance boundary, projected through four doors](01-assets/one-record-many-doors.png)
+
+---
+
+# 6. The trust ladder: every door does not provide the same guarantee
+
+![Some doors give a stronger promise than others](01-assets/trust-ladder.png)
+
+Concept 8 introduced multiple ways of accessing the same governed knowledge.
+
+But those access methods do not all provide the same level of control.
+
+KSoR makes that trade-off explicit.
+
+A simple way to understand it is as a **trust ladder**.
+
+> **The wider the reach, the weaker the guarantees.**
+
+---
 
 ## Rung 1 — Discovery
 
-Examples:
+Examples include:
 
-- the public website,
+- the website,
 - `llms.txt`,
-- published Markdown.
+- per-page Markdown.
 
-These have wide reach.
+These surfaces have the broadest reach.
 
-The content can be governed before publication, but after an external AI system reads it, KSoR cannot control what that external system does with it.
+The content passed through governance when it was published.
 
-It may:
+But once an external AI system reads that material, KSoR cannot control what the external system does with it afterward.
 
-- cache it,
-- summarize it,
-- forget to cite it,
-- or use an older copy later.
+Think of it like taking a photograph.
 
-So the reach is broad, but the runtime guarantee is limited.
+The photograph may have been accurate when it was taken.
+
+That does not guarantee it represents the current situation forever.
+
+---
 
 ## Rung 2 — Governed interaction
 
-Example:
+This is the MCP level.
 
-- MCP.
+Here the agent interacts directly with the governed system.
 
-Here the agent queries KSoR at interaction time.
+Retrieval can be governance-filtered before ranking.
 
-This allows stronger controls around:
+Results can be:
 
-- what may be retrieved,
-- who may retrieve it,
-- which published generation is being used,
-- citations,
-- and abstention.
+- cited,
+- pinned to a published generation,
+- and subject to abstention rules.
+
+This is more like asking the official desk for the answer right now.
+
+---
 
 ## Rung 3 — Computation attestation
 
-This is a proposed and experimental part of the architecture.
+This is proposed and experimental.
 
-It is intended for cases where a critical value must be tied to a sanctioned computation and mechanically checked.
+It is intended for specific critical computations.
 
-Most beginners do not need this rung on day one.
+For example, a number might only be displayed if it was:
 
-### Remember
+1. produced using the sanctioned computation,
+2. mechanically checked,
+3. and verified successfully.
 
-> **Different access paths provide different guarantees. Know which one you are using.**
+Otherwise, it is not shown.
 
 ---
 
-# 7. KSoR does not make the language model deterministic
+## Choosing the correct rung
 
-This point is important.
+The organization decides which knowledge requires which level of guarantee.
 
-KSoR does **not** turn an LLM into a deterministic program.
+The tooling does not make that business or governance decision for you.
+
+A KSoR should state what each access surface guarantees instead of pretending that every access method provides identical control.
+
+### Principle
+
+> **The wider a door opens, the smaller the promise. Always know which door you used.**
+
+---
+
+# 7. KSoR does not make an LLM deterministic
+
+This distinction is very important.
+
+KSoR does **not** turn a Large Language Model into a deterministic program.
 
 The model may still:
 
-- explain the same idea differently,
+- phrase an answer differently,
 - choose different examples,
-- use different wording,
-- take different reasoning paths,
-- or personalize the answer.
+- follow different reasoning paths,
+- adjust the level of detail,
+- adapt to the user,
+- or explain the same concept in different ways.
 
-That is expected.
+That variability can be useful.
 
-What KSoR makes more controlled is the **knowledge environment around the model**.
+KSoR controls something different.
 
-It helps define:
+It controls the **knowledge authority around the model**.
 
-- which source is authoritative,
-- which version is current,
-- who owns it,
-- who approved it,
-- who may see it,
-- what the system may retrieve,
-- what evidence supports the answer,
-- and when the system should abstain.
+For example:
 
-So think of KSoR this way:
+- Which source is authoritative?
+- Which version is current?
+- Who owns it?
+- Who approved it?
+- Who may see it?
+- What may be retrieved?
+- What evidence supports it?
+- When must the system abstain?
 
-> **The model may vary in how it reasons and explains. The institution should not vary arbitrarily in which policy or curriculum it treats as authoritative.**
+You can think of KSoR as putting the model inside a governed **envelope**.
+
+The reasoning can vary.
+
+The authoritative knowledge boundary should not.
 
 ---
 
-# 8. Where can KSoR be used?
+## Example: education
 
-KSoR is general-purpose knowledge infrastructure.
+A tutor can personalize:
 
-It can be used anywhere an organization wants humans and AI agents to operate from the same governed knowledge.
+- explanations,
+- examples,
+- language,
+- pacing,
+- difficulty,
+- exercises,
+- practice.
+
+But it should not freely change:
+
+- learning objectives,
+- canonical definitions,
+- prerequisites,
+- course sequence,
+- approved sources,
+- assessment rules,
+- or the current curriculum version.
+
+> **Personalization should vary the teaching path, not the authoritative curriculum. It can teach you your way. It cannot change what is true.**
+
+The same idea applies inside a business.
+
+An agent's reasoning or wording may vary.
+
+The organization's approved policy should not change from one invocation to the next.
+
+---
+
+![What the helper may change, and what it may not](01-assets/helper-not-a-robot.png)
+
+---
+
+# 8. Major use cases
+
+Where might you use a KSoR?
+
+Three broad categories cover many situations.
+
+---
 
 ## Enterprise
 
-An accounting agent must decide whether a $42,000 implementation cost can be capitalized.
+Imagine an accounting agent receives a $42,000 software implementation cost.
 
-The agent needs two kinds of information.
+The agent must determine whether the cost can be capitalized.
 
-From operational systems:
+It needs two kinds of information.
 
-- the invoice,
-- the project facts,
-- the ledger,
-- the current balances.
+### From the KSoR
 
-From KSoR:
+The governed accounting knowledge:
 
-- the capitalization policy,
+- capitalization policy,
 - definitions,
 - approval criteria,
 - exceptions,
-- and relevant procedures.
+- accounting methods.
 
-The operational systems tell the agent **what happened**.
+### From traditional Systems of Record
 
-The KSoR tells it **which governed rule to apply**.
+The operational facts:
 
-If the policy does not cover the case, the agent should abstain or escalate.
+- invoice,
+- ledger,
+- transaction data,
+- vendor information,
+- current balances.
+
+The agent combines:
+
+> **governed rules + current facts**
+
+It then applies the policy and cites the rule it used.
+
+If the approved policy does not cover the situation, the agent should abstain rather than inventing a policy.
+
+---
+
+### The Forward Deployed Engineer example
+
+This is also useful for understanding the work of a Forward Deployed Engineer.
+
+Imagine an FDE enters a bank to build an AI worker for credit approval.
+
+Before building the agent, the FDE needs to understand and govern the bank's credit knowledge:
+
+- rules,
+- thresholds,
+- analysis methods,
+- approval requirements,
+- exceptions.
+
+That becomes the credit Knowledge SoR.
+
+Without a governed knowledge layer, even a highly capable digital twin of an expert may give different answers because its knowledge is scattered across many sources and no source has been declared authoritative.
+
+---
 
 ## Education
 
@@ -830,171 +1132,241 @@ An education KSoR can govern:
 
 - curriculum,
 - learning objectives,
-- canonical definitions,
-- approved teaching material,
-- topic sequence,
+- canonical explanations,
+- sequencing,
 - assessment rules,
-- grading rules,
-- and course versions.
+- grading rules.
 
-Different AI tutors can still personalize how they teach while using the same academic truth.
+Several AI tutors can then personalize how they teach while staying inside the same academic truth.
 
-## Vertical or domain KSoRs
-
-A KSoR can focus on one profession or industry.
-
-Examples:
-
-- Accounting KSoR
-- Government Contracting KSoR
-- Healthcare KSoR
-- Legal KSoR
-- Banking KSoR
-- Insurance KSoR
-- Supply Chain KSoR
-- Sales KSoR
-
-A Vertical KSoR is not a different product.
-
-It is simply a KSoR whose authoritative scope is a particular domain.
-
-## Method KSoRs
-
-A KSoR can also govern a reusable method, such as:
-
-- an architecture method,
-- a design system,
-- API standards,
-- an implementation method,
-- or an operating model.
-
-An agent can then use more than one KSoR.
-
-For example:
-
-- a **Method KSoR** tells the agent how to work,
-- a **Banking KSoR** tells the agent what is authoritative in banking.
-
-This allows knowledge systems to be composed instead of copied.
+Panaversity's own [Agent Factory](https://agentfactory.panaversity.org/) is the working example, paired with a learner SoR that tracks each student's progress.
 
 ---
 
-# 9. What KSoR is — and is not
+## Vertical KSoRs
 
-Beginners often confuse KSoR with several existing technologies.
+A KSoR can be built for a specific profession or industry.
 
-The differences are important.
+Examples include:
 
-## KSoR is not just RAG
+- accounting,
+- government contracting,
+- healthcare,
+- legal,
+- banking,
+- insurance,
+- supply chain,
+- sales.
 
-RAG asks:
+A **Vertical KSoR** is not a different type of technology.
 
-> **How can I retrieve relevant information and put it into model context?**
+It is simply a KSoR whose authoritative scope is a particular domain.
 
-KSoR asks a broader question:
+---
 
-> **What knowledge is authoritative enough that the organization allows people and AI agents to operate from it?**
+## Method KSoRs
 
-RAG can help retrieve information from a KSoR.
+A KSoR can also govern a reusable method.
 
-But retrieval alone does not establish:
+For example:
+
+- a design system,
+- API standards,
+- an operating model,
+- an engineering method.
+
+Agents can then combine several KSoRs.
+
+For example:
+
+> **The Method KSoR tells the agent how to work.**
+
+while:
+
+> **The Vertical KSoR tells the agent what is authoritative in the domain.**
+
+This allows governed knowledge systems to be composed.
+
+---
+
+# 9. What KSoR is — and what it is not
+
+Before building one, it helps to clear up four common misunderstandings.
+
+---
+
+## KSoR is more than RAG
+
+RAG usually asks:
+
+> **How can I retrieve relevant information and place it into the model's context?**
+
+KSoR asks a different question:
+
+> **What knowledge is authoritative enough that the organization permits humans, AI agents, and software to operate from it?**
+
+A vector database can find similar chunks of text.
+
+But similarity search does not establish:
 
 - ownership,
 - approval,
 - lifecycle,
 - audience,
 - provenance,
-- version,
+- authority,
 - or abstention rules.
 
-So:
+RAG can therefore be a retrieval component **inside** a KSoR.
 
-> **RAG can be part of a KSoR. RAG by itself is not a KSoR.**
+But RAG itself is not the KSoR.
+
+The same is true of:
+
+- a wiki,
+- a CMS,
+- a document repository,
+- an MCP wrapper.
 
 See [KSoR and RAG](../../README.md#ksor-and-rag).
 
-## KSoR does not replace your ERP, CRM, HRIS, or accounting system
+---
 
-Those systems remain authoritative for operational state.
+## KSoR does not replace operational Systems of Record
 
-KSoR adds the governed knowledge layer.
+Your existing systems still have important jobs.
 
-AI agents often need both.
+Your:
 
-## KSoR is not a proprietary knowledge silo
+- CRM,
+- ERP,
+- HRIS,
+- accounting system,
+- student information system
 
-KSoR is designed as open, vendor-neutral knowledge infrastructure.
+remain authoritative for their operational state.
 
-The architecture separates responsibilities instead of making one product the owner of everything.
+KSoR adds another layer:
 
-At a high level:
+> **the governed knowledge that explains how to interpret that state and what to do with it.**
 
-> **Markdown is the authoritative medium.**  
-> **OKF makes the record open and portable.**  
-> **KSoR governance makes it authoritative.**  
-> **Postgres + pgvector make it retrievable.**  
-> **Fumadocs serves humans.**  
-> **`llms.txt` helps AI discover it.**  
-> **MCP lets agents interact with it.**  
-> **OAuth/OIDC establishes identity; KSoR governs access.**  
-> **SLSA/Sigstore can prove what was published.**  
-> **OpenTelemetry can record what happened.**
+---
 
-You do **not** need to learn all of these technologies before using KSoR.
+## KSoR is open, vendor-neutral infrastructure
 
-They are separate responsibilities in the architecture.
+The reference architecture separates responsibilities so that institutional knowledge does not depend completely on one vendor.
 
-The named technologies are reference choices where applicable. The important KSoR principle is:
+The architecture can be summarized in ten lines:
 
-> **One governance policy across every surface.**
+> **Markdown is the authoritative medium.**
+>
+> **OKF makes that record open and portable.**
+>
+> **KSoR governance makes it authoritative.**
+>
+> **Postgres + pgvector make it retrievable.**
+>
+> **Fumadocs serves humans.**
+>
+> **`llms.txt` lets AI discover it.**
+>
+> **MCP lets agents interact with it.**
+>
+> **OAuth/OIDC establishes identity; KSoR governs access.**
+>
+> **SLSA/Sigstore proves what was published.**
+>
+> **OpenTelemetry tells us what happened.**
 
-For the current beta implementation, always check [`docs/status.md`](../status.md).
+This describes the KSoR architecture.
 
-For the full architectural explanation, see [The KSoR Framework: Nine Responsibilities](../../README.md#the-ksor-framework-nine-responsibilities).
+How much of this architecture the current beta implements is recorded in [`docs/status.md`](../status.md).
+
+The named technologies are replaceable reference bindings.
+
+The essential part is the governance semantics:
+
+> **One policy, every surface.**
+
+For more detail, see [The Nine Responsibilities](../../README.md#the-ksor-framework-nine-responsibilities) and the [KSP-001 standard proposal](../../research/).
+
+---
 
 ## Knowledge as Code
 
-KSoR stores the authoritative record in Markdown and works naturally with Git.
+The authoritative record is Markdown stored in Git.
 
-That gives institutional knowledge useful engineering properties:
+That allows knowledge governance to use familiar engineering capabilities such as:
 
 - history,
 - authorship,
 - diffs,
-- review,
 - pull requests,
 - approvals,
 - releases,
 - rollback,
-- and reproducible builds.
+- reproducible builds.
 
-The knowledge is still knowledge.
+This does **not** mean policy owners have to become software engineers.
 
-"Knowledge as Code" means that the organization can manage knowledge with some of the same discipline used to manage software.
+The goal is to make institutional knowledge:
+
+- readable,
+- inspectable,
+- reviewable,
+- versioned,
+- portable,
+- and automatable.
+
+The knowledge remains knowledge.
+
+It is simply stored in a form that both humans and machines can manage.
 
 ---
 
 # 10. Run your first KSoR
 
-Now that the mental model is clear, run the framework.
+Now we will create a small KSoR locally.
 
-You need:
+You need **Node.js 24 or newer**.
 
-- **Node.js 24 or newer**
-- npm, pnpm, or bun
-
-Check your Node version:
+Check your installed version:
 
 ```bash
 node --version
 ```
 
-The examples below use pnpm.
+The examples below use **pnpm**.
 
-Create a project:
+If you use npm, replace the first command with:
 
 ```bash
-pnpm dlx @panaversity/ksor@latest init my-knowledge-sor
+npx @panaversity/ksor init …
+```
+
+and later use:
+
+```bash
+npm install
+npm run dev
+```
+
+If you use Bun, use:
+
+```bash
+bunx …
+bun install
+bun run dev
+```
+
+---
+
+## Create the project
+
+Run:
+
+```bash
+pnpm dlx @panaversity/ksor init my-knowledge-sor
 cd my-knowledge-sor
 pnpm install
 pnpm dev
@@ -1006,58 +1378,84 @@ Then open:
 http://localhost:3000
 ```
 
-You should now see a working knowledge site.
+You now have a working KSoR project.
 
-The site reloads when you edit Markdown files under:
+You should see a human-readable knowledge website.
+
+When you edit Markdown files inside:
 
 ```text
 knowledge/
 ```
 
-Your generated project is an ordinary project that you own.
+the site reloads with your changes.
 
-Nothing needs to be downloaded at build time, and the generated project does not phone home.
+The generated project is ordinary source code that you own.
+
+Nothing is downloaded at build time, and nothing phones home.
 
 ---
 
-## Let your coding agent help
+## The important next step
 
-Open the project in the coding agent you already use, for example:
+Creating the project is not what makes it a real KSoR.
+
+You now need to define:
+
+> **What knowledge is this KSoR authoritative for?**
+
+Open the project in the coding agent you already use.
+
+For example:
 
 - Claude Code,
 - Cursor,
 - Copilot,
 - or another coding agent.
 
-Tell the agent what this KSoR is for.
+Tell the agent what the knowledge base is for.
 
-For example:
+The project includes:
 
-> "This KSoR will contain the approved expense policies and approval rules for Example Corporation."
+```text
+AGENTS.md
+```
 
-The generated project includes `AGENTS.md`, which gives coding agents instructions for working with the KSoR safely.
+which contains the working rules for the agent.
 
-The agent can then help you replace the placeholder in `instance.md` and work with the governed structure.
+The agent will interview you and help replace the placeholder information in:
 
-You do not need to memorize every file format before starting.
+```text
+instance.md
+```
+
+Day to day, you can write your knowledge in ordinary Markdown and in whatever human language you normally use.
+
+The coding agent can help with the structure and checks around it.
 
 ---
 
-## Two commands to know
+## Two commands you should know
 
-Before sharing a change, validate the knowledge:
+Run:
 
 ```bash
 pnpm check
 ```
 
-To build the human-readable site:
+before sharing a change.
+
+This validates your knowledge files.
+
+Run:
 
 ```bash
 pnpm build
 ```
 
-The static output is written to:
+to build the static site.
+
+The output goes into:
 
 ```text
 system/site/out/
@@ -1065,51 +1463,82 @@ system/site/out/
 
 ---
 
-## Orient yourself in the project
+## Understand the project structure
 
-A generated project looks roughly like this:
+Your project looks roughly like this:
 
 ```text
 my-knowledge-sor/
 │
 ├── knowledge/              # authoritative governed record
 ├── .ksor/
-│   └── governance.yaml     # governance policy
+│   └── governance.yaml     # audiences, ownership, approval, takedown
 ├── system/
-│   └── site/               # human-readable projection
+│   └── site/               # reference human projection (Next.js + Fumadocs)
 ├── .agents/
 │   └── skills/             # skills for coding agents
-├── AGENTS.md               # instructions for coding agents
+├── AGENTS.md               # working constitution agents read first
 └── instance.md             # what this KSoR is authoritative for
 ```
 
-You only need to understand a few things at first.
+Let's understand each part.
 
 ### `knowledge/`
 
-This contains the authoritative knowledge.
+This is the authoritative governed record.
 
-### `instance.md`
+The knowledge is:
 
-This explains what this KSoR is for and what its authoritative scope is.
+- readable by humans,
+- diffable through Git,
+- usable by agents.
+
+---
 
 ### `.ksor/governance.yaml`
 
-This contains governance rules such as audiences, ownership, approval, and takedown authority.
+This contains the portable governance policy.
+
+It can define things such as:
+
+- audiences,
+- ownership,
+- approval,
+- takedown authority.
+
+The publisher validates the knowledge against this policy.
+
+---
+
+### `instance.md`
+
+This defines the identity and authoritative scope of the KSoR.
+
+In simple language, it answers:
+
+> **What is this KSoR the official knowledge source for?**
+
+---
 
 ### `system/site/`
 
-This is the reference human-readable projection.
+This is the human-readable projection of the knowledge.
 
-It displays the governed knowledge.
+It is **not** another source of truth.
 
-It is not a second source of truth.
+The source of truth remains the governed record.
+
+---
 
 ### `AGENTS.md` and `.agents/`
 
-These help coding agents maintain the project correctly.
+These files help coding agents maintain the project.
 
-They are maintenance infrastructure, not the institution's authoritative knowledge.
+They are maintenance infrastructure.
+
+They are **not** authoritative institutional knowledge.
+
+That distinction is important.
 
 ---
 
@@ -1117,128 +1546,189 @@ They are maintenance infrastructure, not the institution's authoritative knowled
 
 Do not start by trying to model an entire company.
 
-Choose one small area.
+Start with one small knowledge boundary.
 
 For example:
 
 > **Employee Expense Approval KSoR**
 
-First, edit `instance.md` so the scope is clear.
+First, edit:
 
-Then choose three to five pieces of knowledge.
+```text
+instance.md
+```
+
+and clearly define the scope.
+
+Then identify three to five pieces of governed knowledge.
 
 For example:
 
 - meal expense limit,
-- hotel limit,
 - travel approval rule,
-- manager approval threshold,
+- hotel limit,
+- approval threshold,
 - exception procedure.
 
-For each piece of knowledge, ask:
+---
 
-1. **Who owns it?**
+## Ask seven governance questions
+
+For every knowledge concept, ask:
+
+1. **Who owns this knowledge?**
 2. **What source supports it?**
 3. **Who may approve it?**
 4. **Who may read it?**
-5. **When does it take effect?**
+5. **When does it become effective?**
 6. **What happens when it changes?**
-7. **What should the agent do if the rule does not cover the situation?**
+7. **What should the agent do if the rule does not cover a situation?**
 
-Then use the generated project's agent instructions to add the knowledge in the format expected by the current KSoR release.
+These questions force you to think beyond simply writing documents.
 
-Validate it:
+You are defining the authority around the knowledge.
+
+---
+
+## Add the knowledge
+
+Use the scaffold and its agent instructions to create the knowledge in the format expected by the current release.
+
+Then validate it:
 
 ```bash
 pnpm check
 ```
 
-Build the site:
+Then build it:
 
 ```bash
 pnpm build
 ```
 
-At this point, something important has changed.
+You have now crossed an important architectural boundary.
 
-You no longer have:
+Before, you had:
 
-> "some documents an AI might read."
+> **some documents an AI might read**
 
-You have started defining:
+Now you are beginning to define:
 
-> **the knowledge your organization declares authoritative.**
+> **the knowledge your organization declares authoritative**
 
-That is the beginning of a Knowledge System of Record.
+That is the important shift.
 
 ---
 
-# 12. Later: let AI agents query the KSoR
+## Later: serve the record directly to AI agents
 
-The website is only one way to reach the governed record.
+The human website is only one projection of the KSoR.
 
-Later, you can let AI agents query the KSoR directly through MCP.
+Later, you may want AI agents to query the KSoR directly through MCP.
 
-The reference retrieval implementation uses Postgres + pgvector.
+That allows features such as:
 
-When you are ready, the basic flow is:
+- governed retrieval,
+- citations,
+- abstention.
+
+To do that, you add:
+
+- Postgres,
+- pgvector,
+- an embedding key.
+
+Then run:
 
 ```bash
 pnpm provision
-pnpm refresh
-pnpm serve
 ```
 
-Think of the commands this way:
+once to provision the infrastructure.
 
-- `provision` prepares the retrieval infrastructure,
-- `refresh` publishes the current governed corpus,
-- `serve` makes the published record available to agents.
-
-The separation is deliberate.
-
-> **Publishing institutional truth should be an intentional action, not an accidental side effect of starting a server.**
-
-After changing governed knowledge, publish a new generation with:
+Use:
 
 ```bash
 pnpm refresh
 ```
 
-The detailed walkthrough is in [Serve to AI Agents](../../README.md#serve-to-ai-agents).
+to publish the knowledge.
 
-KSoR is under active development, so always check [`docs/status.md`](../status.md) for what the current release supports.
+Then use:
+
+```bash
+pnpm serve
+```
+
+to serve it.
+
+These commands are deliberately separate.
+
+Why?
+
+Because:
+
+> **Publishing institutional truth should be a deliberate event, not an accidental side effect of starting a server.**
+
+The full walkthrough is in [Serve to AI Agents](../../README.md#serve-to-ai-agents), and it is the subject of a later tutorial in this series.
+
+> **Status note:** KSoR is in active development (beta). [`docs/status.md`](../status.md) is always authoritative for what the current release supports. Star and watch the [repo](https://github.com/panaversity/ksor) to follow along.
 
 ---
 
-# 13. The mental model to remember
+# 12. The mental model to remember
 
-If you remember only four things from this tutorial, remember these:
+There are many technical details in KSoR.
 
-1. **Decide which pages are the real ones.**
-2. **Make AI helpers operate from those pages instead of choosing their own institutional truth.**
-3. **Make important answers traceable to the page that supports them.**
-4. **Let the system say "I don't know" when the governed record does not contain the answer.**
+But if you are a beginner, remember these four ideas first.
 
-Now return to the hospital.
+## 1. Decide which pages are real
+
+Your organization must explicitly decide which knowledge is authoritative.
+
+---
+
+## 2. Make every AI helper answer from those pages
+
+Do not allow every AI system to choose its own institutional truth.
+
+---
+
+## 3. Make the AI show you the page
+
+Important answers should be connected to the knowledge that supports them.
+
+That makes them traceable and inspectable.
+
+---
+
+## 4. Let the AI say "I don't know"
+
+If the authoritative knowledge does not contain an answer, the AI should not invent one.
+
+Abstention is safer than a confident guess.
+
+---
+
+Return to our hospital example.
 
 At the beginning, three AI helpers gave three different answers.
 
-After the hospital defined:
+After the hospital establishes its governed knowledge, the nurse asks the same question again.
 
-- one authoritative record,
-- governance,
-- approval,
-- access rules,
-- provenance,
-- citations,
-- and abstention,
+Now all three helpers can point to the same authoritative rule:
 
-the helpers no longer had to choose their own source of institutional truth.
+> *Medicine Rules, page 7, version 4.*
 
-> **Nothing had to make the model magically smarter. The hospital decided which knowledge was authoritative.**
+![The same question, asked again — same cited answer from all three helpers](01-assets/same-question-again.png)
 
-The architecture can be summarized in one line:
+The important change was not that the AI suddenly became smarter.
+
+The organization decided which knowledge was authoritative.
+
+> **Nothing got smarter. Somebody just decided which page was real.**
+
+The architecture in one line is:
 
 > **One authoritative record. One governance boundary. Many open projections.**
 
@@ -1248,51 +1738,43 @@ And the operating principle is:
 
 ---
 
-# 14. Where to go next
+# 13. Where to go next
 
-This tutorial introduced the idea.
+After completing this tutorial, useful next tutorials would be:
 
-The next tutorials can move from the mental model to implementation.
+1. **Build a Real Governed KSoR** — take the small exercise from section 11 further: grow it into a real corpus, apply governance metadata properly, resolve a conflict between two concepts, and publish the human site for others to use.
 
-1. **Build a Real Governed KSoR**  
-   Create a small real corpus, add governed concepts, validate them, and publish the human-readable site.
+2. **KSoR Governance in Practice** — ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
 
-2. **KSoR Governance in Practice**  
-   Work with ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
+3. **Serve a KSoR to AI Agents with MCP** — provision Postgres + pgvector, publish a generation, connect an MCP client, retrieve citations, and test abstention.
 
-3. **Serve a KSoR to AI Agents with MCP**  
-   Provision the retrieval layer, publish a generation, connect an MCP client, retrieve citations, and test abstention.
+4. **Combine KSoR with Traditional Systems of Record** — build an agent that combines governed policy with current operational facts from an ERP, CRM, or accounting system.
 
-4. **Combine KSoR with Traditional Systems of Record**  
-   Build an agent that combines governed policy from KSoR with current facts from an ERP, CRM, accounting system, or application database.
-
-5. **Exchange Governed Knowledge with OKF**  
-   Move governed knowledge between knowledge systems without creating another independent source of truth.
+5. **Exchange Governed Knowledge with OKF** — package and move governed knowledge between knowledge systems without creating a second source of truth.
 
 ---
 
 ## Related material
 
-- [Repository README](../../README.md)
-- [Current implementation status](../status.md)
-- [KSoR Standard Proposal (KSP-001)](../../research/ksor-standard-proposal-001-v0.1-draft9.md)
-- [KSoR repository](https://github.com/panaversity/ksor)
-- [KSoR — Introduction and the Eight Concepts (YouTube)](https://www.youtube.com/watch?v=EeTGuQJbHCg)
+- Repository README: [`../../README.md`](../../README.md)
+- Current implementation status: [`../status.md`](../status.md)
+- KSoR repository: [https://github.com/panaversity/ksor](https://github.com/panaversity/ksor)
+- Introductory presentation video: [https://www.youtube.com/watch?v=EeTGuQJbHCg](https://www.youtube.com/watch?v=EeTGuQJbHCg)
 
 ---
 
 ## Final thought
 
-AI models can reason over enormous amounts of information.
+AI models are extraordinarily capable at reasoning over information.
 
-But reasoning ability and institutional authority are different things.
+But **reasoning capability** and **institutional authority** are not the same thing.
 
-The model can help decide:
+The model can help determine:
 
-> **What follows from this rule?**
+> **What follows from a rule?**
 
-The organization must still decide:
+But the organization must still decide:
 
 > **Which rule is the rule?**
 
-That is the role of a Knowledge System of Record.
+That is the role of a **Knowledge System of Record**.
