@@ -138,7 +138,10 @@ const MIME: Readonly<Record<string, string>> = {
 // busy machine (review finding, 2026-08-18).
 function serveStatic(outDir: string): Promise<{ server: Server; port: number }> {
   const server = createServer((req, res) => {
-    const url = (req.url ?? "/").split("?")[0] ?? "/";
+    // DECODE, like the shipped `preview.mjs` does — see the same note in
+    // `scaffold-e2e.integration.test.ts`. A stand-in weaker than the server
+    // adopters run fails builds every real host serves.
+    const url = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
     for (const candidate of [url, `${url}/index.html`, `${url}index.html`, `${url}.html`]) {
       try {
         const body = readFileSync(path.join(outDir, candidate));

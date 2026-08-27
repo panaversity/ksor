@@ -212,7 +212,16 @@ ${body}
       ".txt": "text/plain",
     };
     const server = createServer((req, res) => {
-      const url = (req.url ?? "/").split("?")[0] ?? "/";
+      // DECODE, like the shipped `preview.mjs` does — this stand-in must not be
+      // a weaker server than the one adopters actually run, or it fails builds
+      // every real host serves. Next's webpack output puts a route group's
+      // chunk under its literal directory
+      // (`_next/static/chunks/app/docs/[[...slug]]/page-*.js`), which a browser
+      // requests percent-encoded; without this the read looked for a file
+      // named `%5B%5B...slug%5D%5D`, 404'd, and the page rendered "This page
+      // couldn't load". Turbopack emitted no bracketed path, so the gap was
+      // invisible until the compiler changed (issue #196).
+      const url = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
       const candidates = [url, `${url}/index.html`, `${url}index.html`, `${url}.html`];
       for (const candidate of candidates) {
         try {
