@@ -9,20 +9,28 @@ updated: 2026-09-02.
 `@panaversity/ksor` **0.0.58** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
-`ksor build`, `ksor migrate`, `ksor serve`, `ksor ingest`, `ksor schema`,
-`ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc` all run from the
-one `ksor` binary. The scaffold ships THREE skills — `intake-interview`,
-`add-sources`, `format-checker`; `make-slides` and `make-summary` were removed
-after 0.0.55 (they remain in the history below as what 0.0.38 added).
-`add-sources` 2.0.0 takes a file or a person as its source and ships
-`verify.mjs`. A fourth test tier, `pnpm test:agent`, runs a skill by a real
-coding agent with and without it (decision 31); **it needs an
+`ksor build`, `ksor migrate`, `ksor dev`, `ksor serve`, `ksor ingest`,
+`ksor schema`, `ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc`
+all run from the one `ksor` binary. The scaffold ships THREE skills —
+`intake-interview`, `add-sources`, `format-checker`; `make-slides` and
+`make-summary` were removed after 0.0.55 (they remain in the history below as
+what 0.0.38 added). `add-sources` 2.0.0 takes a file or a person as its source
+and ships `verify.mjs`. A fourth test tier, `pnpm test:agent`, runs a skill by
+a real coding agent with and without it (decision 31); **it needs an
 `ANTHROPIC_API_KEY` repository secret, which is a pending owner action** —
-until then `skill-evals.yml` runs and reports itself skipped. **`ksor dev` is the only verb still unimplemented**: it
-reports "designed but not implemented" and exits `2`. An unknown verb is
-refused with exit `1` and a stable `error: unknown-verb` stderr slug. The
-package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship
-inside the tarball under `docs/`.
+until then `skill-evals.yml` runs and reports itself skipped. `ksor dev` is
+the dev loop described below, not a stub. An unknown verb is refused with exit
+`1` and a stable `error: unknown-verb` stderr slug. The package root exports
+`exitCodes`, `verbs`, and `resolveCommand`, and docs ship inside the tarball
+under `docs/`.
+
+`ksor dev` (dev spec §1) starts the local knowledge site (`next dev` over
+`system/site`) with live governance: every save re-runs the record checker in
+`check` mode and prints refusals without writing `build.lock.json`, and when a
+`ksor serve` is already running it proxies `/mcp` to it so the dev server is
+the one URL for humans and agents. Startup preconditions (`ksor-instance-missing`,
+`ksor-dev-no-site`) refuse with exit `1`; a missing runtime (`next`, the
+watcher) exits `3`.
 
 0.0.36 emitted the invoking package manager's scaffold (decision 25); 0.0.37
 stated the KSoR architecture in the package README; 0.0.38 added the
@@ -926,14 +934,16 @@ date`. The same badge marks the row in the sidebar, in every listing and in
 
 ## Designed, not implemented
 
-- `ksor dev` — still exits `2` with an honest notice; the scaffold's own
-  `pnpm dev` works today without it. `ksor serve`, `ksor ingest`,
-  `ksor schema`, `ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc`
-  ARE implemented and released — the bundled kernel provides them from the one
-  `ksor` binary. `serve` runs the MCP server in-process (reads
-  `./instance.md`; exits `3` with a remedy when it is missing). `ksor build`
-  and `ksor migrate` are both implemented and released (0.0.41); run outside a
-  record they refuse with exit `1` and `error: ksor-instance-missing`, which is
+- `ksor dev` — **implemented** (dev spec §1): starts the local site with live
+  governance checks and an MCP proxy to a running `ksor serve`. The scaffold's
+  own `pnpm dev` still works without it, and `ksor dev` is the recommended
+  local loop. `ksor serve`, `ksor ingest`, `ksor schema`, `ksor grant`,
+  `ksor takedown`, `ksor calibrate` and `ksor gc` are implemented and released —
+  the bundled kernel provides them from the one `ksor` binary. `serve` runs the
+  MCP server in-process (reads `./instance.md`; exits `3` with a remedy when it
+  is missing). `ksor build` and `ksor migrate` are both implemented and released
+  (0.0.41); run outside a record they refuse with exit `1` and
+  `error: ksor-instance-missing`, which is
   a real verb declining a real state. `ksor dev` is the one verb that still
   answers "designed but not implemented" with exit `2`. The two codes are a
   contract (product principle 4) — `2` says designed and coming, `1` says

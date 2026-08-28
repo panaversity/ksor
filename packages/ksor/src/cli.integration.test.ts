@@ -64,10 +64,26 @@ describe("ksor CLI (built artifact)", () => {
     expect(result.stderr, "the remedy, not just the fault").toContain("--help");
   });
 
-  it("names the verb it refuses to fake", () => {
-    const result = runCli(["dev"]);
-    expect(result.status).toBe(2);
-    expect(result.stdout).toContain("ksor dev: designed but not implemented");
+  it("dev refuses a missing record root with exit 1 and a stable slug", () => {
+    // `dev` is now implemented; without an instance.md it hits the same
+    // precondition `build` does — a refused startup, not a hang.
+    const cwd = mkdtempSync(path.join(tmpdir(), "ksor-dev-"));
+    try {
+      const result = spawnSync(process.execPath, [distCli, "dev"], { cwd, encoding: "utf8" });
+      expect(result.status, result.stdout + result.stderr).toBe(1);
+      expect(result.stderr.split("\n")[0]).toBe("error: ksor-instance-missing");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("dev answers its own --help with the flags it reads", () => {
+    const result = runCli(["dev", "--help"]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout, "not the generic verb list").not.toContain("Usage: ksor <verb>");
+    expect(result.stdout).toContain("--site-port");
+    expect(result.stdout).toContain("--serve-port");
+    expect(result.stdout).toContain("--no-mcp");
   });
 
   it("refuses an unknown verb with exit 1 and a stable error slug", () => {

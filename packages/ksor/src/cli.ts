@@ -15,6 +15,7 @@ import { exitCodes, resolveCommand, verbs } from "./index.js";
 import { runBuild } from "./build/index.js";
 import { runMigrate } from "./migrate/index.js";
 import { runInit } from "./init/index.js";
+import { runDev } from "./dev/index.js";
 import { unsupportedPlatform } from "./init/platform.js";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
@@ -85,7 +86,7 @@ const usage =
   "\n" +
   "Usage: ksor <verb>\n" +
   "\n" +
-  `Verbs (dev exits 2 until it ships; the rest are implemented):\n` +
+  `Verbs:\n` +
   "  init       create a new KSoR project\n" +
   "  dev        run the human surface locally, watching\n" +
   "  build      check the record, generate its indexes, write build.lock.json\n" +
@@ -146,10 +147,21 @@ async function main(args: readonly string[]): Promise<number> {
     process.stdout.write(serveUsage);
     return 0;
   }
-  if (wantsHelp && (helpVerb === null || helpVerb === "dev")) {
-    // `dev` is designed and not implemented, so it has no flags of its own to
-    // document; a page describing them would document a verb that does not run.
-    // `init` and the corpus verbs answer their own --help in their dispatchers.
+  if (wantsHelp && helpVerb === "dev") {
+    // `dev` answers its own --help in the dispatcher, which prints DEV_USAGE.
+    // `init` and the corpus verbs do the same.
+    return await runDev(
+      ["--help"],
+      process.cwd(),
+      {
+        out: (text) => process.stdout.write(text),
+        err: (text) => process.stderr.write(text),
+      },
+      { version: pkg.version },
+    );
+  }
+  if (wantsHelp && helpVerb === null) {
+    // A bare `ksor --help` (no verb word) is the generic usage.
     process.stdout.write(usage);
     return 0;
   }
@@ -195,6 +207,20 @@ async function main(args: readonly string[]): Promise<number> {
       process.cwd(),
       { out: (text) => process.stdout.write(text), err: (text) => process.stderr.write(text) },
       { version: pkg.version, drafts: process.env["KSOR_DRAFTS"] === "show" ? "shown" : "hidden" },
+    );
+  }
+
+  if (verb === "dev") {
+    // Local development server (dev spec §1): spawns `next dev` for
+    // `system/site`, watches `knowledge/` and runs the record checker on every
+    // save, and proxies `/mcp` to a running `ksor serve` when one is reachable.
+    // Never writes build.lock.json — it is a view, not a release. process.exitCode
+    // (never process.exit) so buffered stdout always flushes.
+    return await runDev(
+      args.slice(args.indexOf("dev") + 1),
+      process.cwd(),
+      { out: (text) => process.stdout.write(text), err: (text) => process.stderr.write(text) },
+      { version: pkg.version },
     );
   }
 
