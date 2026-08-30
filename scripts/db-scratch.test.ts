@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { REAP_AFTER_MS, SCRATCH_LITERAL, parseScratchName } from "./lib/db-scratch.mjs";
+import { REAP_AFTER_MS, parseScratchName } from "./lib/db-scratch.js";
 
 const NOW = Date.UTC(2026, 7, 30, 12, 0, 0);
 const stamp = (at: number): string => at.toString(36);
@@ -56,20 +56,14 @@ describe("parseScratchName refuses anything it cannot prove is ours", () => {
   });
 });
 
-describe("the literal guard rule 12 requires", () => {
-  it("matches the canonical form", () => {
-    expect(
-      SCRATCH_LITERAL.test(
-        '`ksor_idle_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`',
-      ),
-    ).toBe(true);
-  });
-
-  it("produces a name the reaper can then parse", () => {
-    // The two halves of the contract meeting: the shape the tests must write,
-    // evaluated, is a shape the reaper recognises. Guard rule 12 asserts this
-    // too, so a change to either side fails twice rather than silently leaking.
-    const built = `ksor_idle_${Date.now().toString(36)}_3f2c8e`;
+describe("the shape guard rule 12 requires", () => {
+  it("evaluates to a name the reaper can parse", () => {
+    // The two halves of the contract meeting. Rule 12 makes every suite write
+    // a name carrying `Date.now().toString(36)` and a `randomBytes` suffix;
+    // this is that name, evaluated, being one the reaper recognises. The guard
+    // asserts the same round trip itself, so a change to either side fails
+    // twice rather than silently leaking every scratch database forever.
+    const built = `ksor_idle_${Date.now().toString(36)}_${"3f2c8e"}`;
     expect(parseScratchName(built)).not.toBeNull();
   });
 });

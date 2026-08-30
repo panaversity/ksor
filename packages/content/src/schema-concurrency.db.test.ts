@@ -31,7 +31,7 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
  * UNIQUE per run, and stamped with the instant they were made. Fixed names
  * would have made this suite the thing it is testing for — two concurrent
  * `pnpm test:db` runs force-dropping each other's databases mid-apply, which is
- * issue #166's own symptom. The stamp is what lets `scripts/db-reaper.mjs` drop
+ * issue #166's own symptom. The stamp is what lets `scripts/db-reaper.ts` drop
  * these if the run is interrupted before the `finally` below.
  */
 const scratchName = (n: number): string =>

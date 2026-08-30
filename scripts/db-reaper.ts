@@ -22,9 +22,14 @@
  *   2. that timestamp is at least REAP_AFTER_MS old, so a database a
  *      concurrent run created seconds ago and has not connected to yet is
  *      never a candidate;
- *   3. Postgres reports no backends on it — checked, and then relied on by
- *      dropping WITHOUT (FORCE), so a connection that arrives in between makes
- *      the drop fail rather than making it kill somebody's work.
+ *   3. the drop is issued WITHOUT (FORCE), so a connected database refuses to
+ *      be dropped instead of having its connections terminated.
+ *
+ * The backend count is read too, but it is a COURTESY and not the guarantee:
+ * deleting that check leaves the reaper correct, because the drop still fails
+ * on a busy database — proved by mutation, which is why it is written down
+ * here. What the count buys is a legible log line ("2 connections") instead of
+ * a Postgres error. The absence of FORCE is the thing that must never go.
  *
  * Failures here are reported and swallowed. The reaper is housekeeping: a
  * cluster that will not let us tidy up is not a reason to refuse to run the
@@ -34,31 +39,51 @@
 
 import { createRequire } from "node:module";
 
-import { REAP_AFTER_MS, parseScratchName } from "./lib/db-scratch.mjs";
+import { REAP_AFTER_MS, parseScratchName } from "./lib/db-scratch.js";
 
-// `pg` is a dependency of ksor-postgres, not of the root workspace, and pnpm's
-// strict layout means the root cannot resolve it. Anchoring `require` at that
-// package's manifest borrows its resolution without adding a root devDependency
-// for a housekeeping script.
-const require = createRequire(new URL("../packages/postgres/package.json", import.meta.url));
+/** Exactly the slice of `pg` this file and its test use. */
+export interface Queryable {
+  query(text: string, values?: readonly unknown[]): Promise<{ rows: readonly unknown[] }>;
+  end(): Promise<void>;
+}
+export interface Connectable extends Queryable {
+  connect(): Promise<void>;
+}
+export interface PgSlice {
+  Pool: new (config: { connectionString: string; max?: number }) => Queryable;
+  Client: new (config: { connectionString: string }) => Connectable;
+}
 
-export async function setup() {
+/**
+ * `pg` is a dependency of ksor-postgres, not of the root workspace, and pnpm's
+ * strict layout means `scripts/` cannot resolve it. Anchoring `require` at that
+ * package's manifest borrows its resolution without adding a root
+ * devDependency for a housekeeping script.
+ */
+export const pg: PgSlice = createRequire(
+  new URL("../packages/postgres/package.json", import.meta.url),
+)("pg") as PgSlice;
+
+interface DatabaseRow {
+  readonly name: string;
+  readonly backends: number;
+}
+
+export async function setup(): Promise<void> {
   const adminDsn = process.env["KSOR_DB_URL"] ?? "";
   if (adminDsn === "") return;
 
-  /** @type {import("pg")} */
-  const pg = require("pg");
   const admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
   try {
-    const { rows } = await admin.query(
+    const { rows } = (await admin.query(
       `SELECT d.datname AS name,
               (SELECT count(*)::int FROM pg_stat_activity a WHERE a.datname = d.datname) AS backends
          FROM pg_database d
         WHERE d.datname LIKE 'ksor\\_%' AND NOT d.datistemplate`,
-    );
+    )) as { rows: readonly DatabaseRow[] };
     const now = Date.now();
-    const dropped = [];
-    const skipped = [];
+    const dropped: string[] = [];
+    const skipped: string[] = [];
     for (const row of rows) {
       const parsed = parseScratchName(row.name, now);
       if (parsed === null) continue;

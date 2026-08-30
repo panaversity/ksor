@@ -14,10 +14,9 @@
 import { randomBytes } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import pg from "pg";
 
-import { REAP_AFTER_MS } from "./lib/db-scratch.mjs";
-import { setup as reap } from "./db-reaper.mjs";
+import { REAP_AFTER_MS } from "./lib/db-scratch.js";
+import { type Connectable, type Queryable, pg, setup as reap } from "./db-reaper.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 
@@ -28,9 +27,9 @@ const named = (slug: string, agoMs: number): string =>
 const HOUR = 60 * 60 * 1000;
 
 describe.runIf(adminDsn !== "")("the scratch-database reaper (db)", () => {
-  let admin: pg.Pool;
+  let admin: Queryable;
   /** Held open for the whole suite, so `busy` never has zero backends. */
-  let occupant: pg.Client;
+  let occupant: Connectable;
 
   const leak = named("reapleak", REAP_AFTER_MS + HOUR);
   const young = named("reapyoung", 0);
@@ -63,6 +62,10 @@ describe.runIf(adminDsn !== "")("the scratch-database reaper (db)", () => {
     await admin?.end().catch(() => undefined);
   });
 
+  // What saves `busy` is that the reaper drops WITHOUT (FORCE), not the backend
+  // count it also reads: deleting that count keeps this test green, because the
+  // drop still fails on a connected database. Recorded so nobody deletes the
+  // wrong one of the two.
   it("drops the leak, and spares the young, the busy and the unrecognised", async () => {
     await reap();
 

@@ -16,7 +16,7 @@ export default defineConfig({
     // rule 12), which is what stops two runs dropping each other's — but a run
     // killed with Ctrl-C never reaches its `afterAll`, and a unique name is one
     // nothing will ever reuse. The rename and the reaper are one change.
-    globalSetup: ["scripts/db-reaper.mjs"],
+    globalSetup: ["scripts/db-reaper.ts"],
     // Suites get their own DATABASE, but Postgres ROLES are cluster-global:
     // two suites applying schema.sql concurrently raced its check-then-act
     // CREATE ROLE into a pg_authid duplicate-key error (found live in CI,

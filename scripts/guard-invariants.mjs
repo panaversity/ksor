@@ -10,7 +10,11 @@ import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseScratchName } from "./lib/db-scratch.mjs";
+// A `.ts` module imported from plain node: Node >= 24 (the engines floor)
+// strips types natively, so the grammar can be shared with the TypeScript
+// tests without a build step and without a second copy. This is Node, not
+// the TypeScript compiler API — coding principle 2 is untouched.
+import { parseScratchName } from "./lib/db-scratch.ts";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -463,7 +467,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
 // natural response to flakiness is to re-run and stop believing the tier.
 //
 // The stamp is not decoration. Postgres records no creation time for a
-// database, so without one in the name `scripts/db-reaper.mjs` cannot tell a
+// database, so without one in the name `scripts/db-reaper.ts` cannot tell a
 // database an interrupted run leaked from one a CONCURRENT run made seconds
 // ago — and unique names with no reaper only trade a visible failure for an
 // invisible one.
@@ -526,9 +530,9 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   if (parseScratchName(sample) === null) {
     violate(
       12,
-      `scripts/db-reaper.mjs would not recognise ${sample} as a scratch database`,
+      `scripts/db-reaper.ts would not recognise ${sample} as a scratch database`,
       "the reaper only drops names it can parse, so a grammar it disagrees with means every scratch database leaks forever",
-      "reconcile parseScratchName in scripts/lib/db-scratch.mjs with the literal this rule requires",
+      "reconcile parseScratchName in scripts/lib/db-scratch.ts with the literal this rule requires",
     );
   }
 }

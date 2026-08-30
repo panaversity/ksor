@@ -1585,7 +1585,11 @@ assertion.
   because of what it touches, never because of what it costs.
 - `*.db.test.ts` — real Postgres, gated on `KSOR_DB_URL` (`pnpm test:db`; CI
   provides the service). The kernel's guarantees are SQL, so the tier that runs
-  them against a real database is where they are actually held.
+  them against a real database is where they are actually held. A suite here
+  owns its own scratch DATABASE, named uniquely per run and stamped with the
+  instant it was made (guard rule 12) — a fixed name let two runs on one
+  cluster drop each other's database mid-test, and the stamp is what lets the
+  tier's reaper tell a leak from a live run's database (issue #166).
 
 The tiers are a contract, not a preference: a file that reads the filesystem
 belongs in the second one however small it is. Seven did not, and drifted there

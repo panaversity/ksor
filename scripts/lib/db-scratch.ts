@@ -2,7 +2,7 @@
  * The grammar of a db-tier scratch database name, in ONE place.
  *
  * Two programs read it — guard rule 12, which requires every `.db.test.ts` to
- * name its scratch database this way, and `scripts/db-reaper.mjs`, which drops
+ * name its scratch database this way, and `scripts/db-reaper.ts`, which drops
  * the ones an interrupted run left behind. A reaper that parses a shape the
  * guard does not enforce would either miss leaks or, far worse, drop a database
  * it cannot prove is ours.
@@ -19,7 +19,12 @@
  */
 
 /** Nothing before this could be one of ours; guards against matching an adopter's own name. */
-const EPOCH_FLOOR = Date.UTC(2020, 0, 1);
+const EPOCH_FLOOR: number = Date.UTC(2020, 0, 1);
+
+export interface ScratchName {
+  /** The instant encoded in the name, which is the only age the reaper has. */
+  readonly createdAtMs: number;
+}
 
 /**
  * Parse a scratch name, or answer `null` for anything that is not certainly one.
@@ -29,12 +34,8 @@ const EPOCH_FLOOR = Date.UTC(2020, 0, 1);
  * evidence — an adopter's own database on a shared cluster may well start that
  * way — so acceptance needs the whole shape AND a timestamp that is a plausible
  * instant rather than merely base36.
- *
- * @param {string} name
- * @param {number} [now]
- * @returns {{ createdAtMs: number } | null}
  */
-export function parseScratchName(name, now = Date.now()) {
+export function parseScratchName(name: string, now: number = Date.now()): ScratchName | null {
   if (!name.startsWith("ksor_")) return null;
   const parts = name.split("_");
   // ksor + at least one slug part + stamp + random
@@ -52,16 +53,5 @@ export function parseScratchName(name, now = Date.now()) {
   return { createdAtMs };
 }
 
-/**
- * The literal a `.db.test.ts` must use, as a regular expression.
- *
- * The tests build the name INLINE rather than calling a helper, and guard rule
- * 12 checks the literal. That is the stronger of the two: a helper can be
- * bypassed by the next suite that writes its own string and nothing goes red,
- * whereas the guard fails on exactly that file.
- */
-export const SCRATCH_LITERAL =
-  /^`ksor_[a-z0-9]+(?:_[a-z0-9]+)*_\$\{Date\.now\(\)\.toString\(36\)\}_\$\{randomBytes\(3\)\.toString\("hex"\)\}`$/;
-
 /** How long a scratch database must have existed before the reaper will drop it. */
-export const REAP_AFTER_MS = 3 * 60 * 60 * 1000;
+export const REAP_AFTER_MS: number = 3 * 60 * 60 * 1000;
