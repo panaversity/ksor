@@ -38,7 +38,7 @@ import {
   type TrustTier,
 } from "@panaversity/ksor-content";
 
-import { readHandler, searchHandler, type SearchArgs } from "./tools.js";
+import { outlineHandler, readHandler, searchHandler, type SearchArgs } from "./tools.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
@@ -118,10 +118,10 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
   const searchAs = async (
     ctx: ServiceContext,
     args: Omit<SearchArgs, "query" | "k"> = {},
-  ): Promise<{ ok: boolean; hits?: WireHit[] }> => {
+  ): Promise<{ ok: boolean; hits?: WireHit[]; top_cosine?: number }> => {
     const reply = await searchHandler(ctx)({ query: QUERY, k: 10, ...args });
     expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
-    return reply.structuredContent as { ok: boolean; hits?: WireHit[] };
+    return reply.structuredContent as { ok: boolean; hits?: WireHit[]; top_cosine?: number };
   };
 
   /** `read`, the way the registration calls it. */
@@ -334,6 +334,83 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     // The query text and the passages, by the two things they would contain.
     expect(serialized).not.toContain("compensation");
     expect(serialized).not.toContain(QUERY);
+  });
+
+  it("an outline records the generation it served from, as its siblings do", async () => {
+    // R20 / working rule 10: the trail exists so an auditor can say WHAT an act
+    // was allowed to see. `similarity_searched` and `content_served` both pin a
+    // generation; `outline_served` wrote NULL, so the one act that hands an
+    // agent the shape of the record could not be joined to the publication it
+    // described. The projection carried no generation to write — `OutlineRow`
+    // is a fixed width with a guard — so this is a column, not a call.
+    await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+    const reply = await outlineHandler(doorAt(undefined))({ limit: 50 });
+    expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
+
+    const rows = await pool.query<{ action: string; generation: string | null }>(
+      "SELECT action, generation FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+      [TENANT],
+    );
+    expect(rows.rows.length, JSON.stringify(rows.rows)).toBe(1);
+    expect(rows.rows[0]!.action).toBe("outline_served");
+    expect(
+      rows.rows[0]!.generation,
+      `outline_served wrote generation=${String(rows.rows[0]!.generation)}`,
+    ).toBe("1");
+  });
+
+  it("a drill-down onto a LEAF still records the generation it resolved", async () => {
+    // The commonest empty outline is not "matched nothing": it is an agent
+    // following the tool description into a document with no children. That
+    // resolves an anchor and pins its generation, then returns [] — so reading
+    // the generation off `rows[0]` recorded NULL for a routine call, leaving
+    // every "this node has no children" answer unjoinable to the publication it
+    // was made about. `content_served` sets the precedent: pin what was
+    // resolved, however little came back.
+    await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+    const reply = await outlineHandler(doorAt(undefined))({ node: "unverified", limit: 50 });
+    expect(reply.isError, JSON.stringify(reply)).not.toBe(true);
+    expect(
+      (reply.structuredContent as { nodes?: unknown[] }).nodes,
+      "the fixture leaf must actually have no children, or this asserts nothing",
+    ).toEqual([]);
+
+    const rows = await pool.query<{ action: string; generation: string | null }>(
+      "SELECT action, generation FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+      [TENANT],
+    );
+    expect(rows.rows[0]!.action).toBe("outline_served");
+    expect(
+      rows.rows[0]!.generation,
+      `empty leaf outline wrote generation=${String(rows.rows[0]!.generation)}`,
+    ).toBe("1");
+  });
+
+  it("an ANSWERED search records the score that decided it, as the abstention does", async () => {
+    // The abstained row carries `top_cosine`; the answered row did not — so the
+    // ledger held the deciding score only for queries the gate REFUSED. That is
+    // exactly the half that cannot show a floor drifting as a record grows
+    // (issue #182): every answer above the floor was unrecorded, so nothing in
+    // the trail says how close to it the record has been running.
+    await pool.query("DELETE FROM retrieval_log WHERE tenant_id = $1", [TENANT]);
+    const reply = await searchAs(doorAt(undefined));
+
+    const rows = await pool.query<{ action: string; detail: Record<string, unknown> }>(
+      "SELECT action, detail FROM retrieval_log WHERE tenant_id = $1 ORDER BY created_at",
+      [TENANT],
+    );
+    const row = rows.rows[0]!;
+    expect(row.action).toBe("similarity_searched");
+    expect(row.detail["abstained"]).toBe(false);
+    // The VALUE, not just the shape. The same call's envelope carries
+    // `top_cosine`, so a regression that logged the RRF score or the keyword
+    // score would record a plausible float and pass a typeof check — while
+    // making the trail useless for the one thing it is for, watching the floor
+    // drift as a record grows.
+    expect(
+      row.detail["top_cosine"],
+      `logged ${JSON.stringify(row.detail["top_cosine"])} vs served ${JSON.stringify(reply.top_cosine)}`,
+    ).toBe(reply.top_cosine);
   });
 
   it("an abstention records the same scope, and says it abstained", async () => {

@@ -116,7 +116,7 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
       pool,
       TENANT,
       async (c) =>
-        (await outline(c, scope, { root: null, depth: 5, limit: 200 })).map((r) => r.slug),
+        (await outline(c, scope, { root: null, depth: 5, limit: 200 })).rows.map((r) => r.slug),
       audienceGucs(viewer),
     ).then((s) => s.sort());
 

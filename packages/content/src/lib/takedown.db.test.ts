@@ -193,7 +193,10 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
       );
 
       // outline browse: docs' children exclude legal; child_count drops it
-      const rows = await readWhole(TENANT, (c) => outline(c, rscope, { depth: 3 }));
+      const rows = await readWhole(
+        TENANT,
+        async (c) => (await outline(c, rscope, { depth: 3 })).rows,
+      );
       const paths = rows.map((r) => r.headingPath);
       expect(paths, JSON.stringify(paths)).not.toContain("docs/legal");
       expect(paths).not.toContain("docs/legal/policy");
