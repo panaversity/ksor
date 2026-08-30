@@ -195,7 +195,7 @@ describe("the scaffold's npm scripts are all reachable", () => {
 /**
  * The site's PRODUCTION build compiles with webpack, not Turbopack.
  *
- * Under the pinned Next 16.2.9 a bare `next build` means Turbopack, and on
+ * Under the pinned Next 16 a bare `next build` means Turbopack, and on
  * Vercel's DEFAULT build machine (4 cores, 8 GB) it does not survive a record
  * large enough to prerender a few hundred routes. Measured on a real
  * 205-document record — 435 routes — the build ran ~7 minutes and died with
