@@ -180,7 +180,7 @@ For example, it cannot automatically know:
 - your accounting department's capitalization policy,
 - or which version of a procedure is currently in force.
 
-Even if the model has seen *some version* of that information, it does not know whether that version is the one your organization currently recognizes as authoritative.
+Even if the model has seen _some version_ of that information, it does not know whether that version is the one your organization currently recognizes as authoritative.
 
 ---
 
@@ -264,10 +264,10 @@ AI agents are increasingly being asked to perform work that humans once performe
 
 Those agents need both **current state** and **operating knowledge**.
 
-| Type | What it holds | Main question |
-| --- | --- | --- |
-| Traditional System of Record | Current operational data | **What is true right now?** |
-| Knowledge System of Record | Rules, methods, policies, procedures | **How should we operate?** |
+| Type                         | What it holds                        | Main question               |
+| ---------------------------- | ------------------------------------ | --------------------------- |
+| Traditional System of Record | Current operational data             | **What is true right now?** |
+| Knowledge System of Record   | Rules, methods, policies, procedures | **How should we operate?**  |
 
 ![Every AI worker needs two Systems of Record: a KSoR for governed knowledge and a traditional SoR for current state](01-assets/two-systems-of-record.png)
 
@@ -494,14 +494,14 @@ If the answer is yes, it is probably a good candidate for the KSoR.
 
 If it is a rapidly changing operational fact, it probably belongs in a traditional System of Record.
 
-| Question | Where it belongs |
-| --- | --- |
-| What is our medication dosage policy? | KSoR |
-| How many beds are available right now? | Operational SoR |
-| What is our capitalization policy? | KSoR |
-| What is the current ledger balance? | Accounting SoR |
-| What is the grading policy for this course? | KSoR |
-| Which students are currently enrolled? | Student information system |
+| Question                                    | Where it belongs           |
+| ------------------------------------------- | -------------------------- |
+| What is our medication dosage policy?       | KSoR                       |
+| How many beds are available right now?      | Operational SoR            |
+| What is our capitalization policy?          | KSoR                       |
+| What is the current ledger balance?         | Accounting SoR             |
+| What is the grading policy for this course? | KSoR                       |
+| Which students are currently enrolled?      | Student information system |
 
 The important distinction is not:
 
@@ -1718,7 +1718,7 @@ After the hospital establishes its governed knowledge, the nurse asks the same q
 
 Now all three helpers can point to the same authoritative rule:
 
-> *Medicine Rules, page 7, version 4.*
+> _Medicine Rules, page 7, version 4._
 
 ![The same question, asked again — same cited answer from all three helpers](01-assets/same-question-again.png)
 
