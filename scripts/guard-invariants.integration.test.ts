@@ -39,10 +39,11 @@ function harness(): string {
 
   mkdirSync(path.join(root, "scripts", "lib"), { recursive: true });
   copyFileSync(script, path.join(root, "scripts", "guard-invariants.mjs"));
-  copyFileSync(
-    path.join(scriptsDir, "lib", "frontmatter.mjs"),
-    path.join(root, "scripts", "lib", "frontmatter.mjs"),
-  );
+  // Every module the guard imports, or it dies on resolution before a single
+  // rule runs — which is how this harness noticed rule 12's new import.
+  for (const lib of ["frontmatter.mjs", "db-scratch.ts"]) {
+    copyFileSync(path.join(scriptsDir, "lib", lib), path.join(root, "scripts", "lib", lib));
+  }
 
   writeFileSync(path.join(root, "AGENTS.md"), "# Agents\n");
   symlinkSync("AGENTS.md", path.join(root, "CLAUDE.md"));

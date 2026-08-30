@@ -117,7 +117,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
   let totalChunks = 0;
 
   beforeAll(async () => {
-    dbName = `ksor_ing_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_ing_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);
@@ -211,7 +211,7 @@ describe.runIf(adminDsn !== "")("ingest pipeline db acceptance", () => {
     // Drop a database, apply the schema, then remove node_centroids.embedding
     // — the half-applied shape. The guard must NAME the missing table so the
     // ingest CLI refuses BEFORE embedding the whole corpus (double spend).
-    const halfName = `ksor_half_${randomBytes(4).toString("hex")}`;
+    const halfName = `ksor_half_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     await admin.query(`CREATE DATABASE ${halfName}`);
     const halfUrl = new URL(adminDsn);
     halfUrl.pathname = `/${halfName}`;
@@ -615,7 +615,7 @@ describe.runIf(adminDsn === "")("ingest pipeline db acceptance (gated)", () => {
  * is expressed by order rather than by exclusion.
  */
 describe.runIf(adminDsn !== "")("carry-forward across an interrupted run (db)", () => {
-  const DB2 = `ksor_carry_${randomBytes(4).toString("hex")}`;
+  const DB2 = `ksor_carry_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
   const T2 = "carry";
   const C2 = "carry-rulebook";
   const fake2 = buildShippedProvider("fake", { apiKey: null, dim: DIM });

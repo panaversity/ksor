@@ -14,6 +14,7 @@
  * same path the adopter does.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ import { profileDoc, writeRecord } from "./fixtures/record-fixture.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_flip_guard";
+const DB = `ksor_flip_guard_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 
 let work = "";
 let dsn = "";
@@ -76,7 +77,6 @@ describe.runIf(adminDsn !== "")("ksor ingest --flip refuses what serving would (
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

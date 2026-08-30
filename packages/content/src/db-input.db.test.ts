@@ -23,6 +23,7 @@
  * connection afterwards — neither of which a hand-built error can show.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ContentInputError, ContentStoreError, contentPool, runRead } from "./db.js";
@@ -31,7 +32,7 @@ import { WHOLE_RECORD_SCOPE } from "./lib/audience.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_input_error";
+const DB = `ksor_input_error_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "input-corp";
 const NUL = String.fromCharCode(0);
 
@@ -42,7 +43,6 @@ describe.runIf(adminDsn !== "")("a malformed argument is not an outage (db)", ()
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

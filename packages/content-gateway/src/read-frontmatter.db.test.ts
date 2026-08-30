@@ -89,7 +89,7 @@ describe.runIf(adminDsn !== "")("`read` returns the frontmatter intact (db)", ()
     });
 
   beforeAll(async () => {
-    dbName = `ksor_fm_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_fm_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);

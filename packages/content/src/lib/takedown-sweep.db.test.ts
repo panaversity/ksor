@@ -73,7 +73,7 @@ describe.runIf(adminDsn !== "")("a withdrawn document leaks through no request s
   let queryVector: string;
 
   beforeAll(async () => {
-    dbName = `ksor_sweep_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_sweep_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);
