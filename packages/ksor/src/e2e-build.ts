@@ -1,25 +1,14 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 
 /**
- * `pnpm build` for a scaffolded site, with ONE retry on a known upstream
- * Turbopack flake and nothing else.
+ * `pnpm build` for a scaffolded site. One spawn, no retry.
  *
- * Turbopack's static-image metadata pipeline intermittently fails a production
- * build with `TurbopackInternalError: Input image not found` — the scaffold's
- * home page imports `app/icon.png` as its mark, and that `StructuredImageFileSource`
- * read is nondeterministic under the conformance suites' repeated builds (the
- * same scaffold builds clean on a retry; observed 2026-08-19). The retry fires
- * ONLY on that exact signature, so a real build break still fails on the first
- * try. The DURABLE fix is scaffold-side (drop the static image import) and is
- * an owner call — this keeps the browser CI job reliable meanwhile.
+ * No retry deliberately: this carried one for a Turbopack static-image flake
+ * until the emitted site moved to `next build --webpack` (issue #196), which
+ * takes that pipeline off the production path entirely. A shim that survives
+ * the failure it was written for is what stops a suite reporting a real
+ * regression, so it went with it rather than staying as a leftover.
  */
-const TURBOPACK_IMAGE_FLAKE = /TurbopackInternalError|Input image not found/;
-
 export function buildScaffold(cwd: string, env?: Record<string, string>): SpawnSyncReturns<string> {
-  const once = (): SpawnSyncReturns<string> =>
-    spawnSync("pnpm", ["build"], { cwd, encoding: "utf8", env: { ...process.env, ...env } });
-  const first = once();
-  if (first.status === 0) return first;
-  const output = `${first.stdout ?? ""}\n${first.stderr ?? ""}`;
-  return TURBOPACK_IMAGE_FLAKE.test(output) ? once() : first;
+  return spawnSync("pnpm", ["build"], { cwd, encoding: "utf8", env: { ...process.env, ...env } });
 }
