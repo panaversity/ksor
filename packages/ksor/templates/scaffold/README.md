@@ -134,6 +134,15 @@ export, so nothing serves it at runtime. `pnpm preview` is `node:http` and
 nothing else — no dependency, no network fetch — so it works offline and behind
 a firewall, like the build itself.
 
+It binds loopback, so it is reachable from this machine only. To open the built
+site from a container published with `-p`, a cloud dev box, or a phone on the
+same wifi, name the address on the command line — `preview` is plain `node` and
+does not read `.env`:
+
+```sh
+KSOR_PREVIEW_HOST=0.0.0.0 pnpm preview
+```
+
 ---
 
 ## Serving to agents
@@ -595,7 +604,7 @@ map rather than a substitute.
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `pnpm check` refuses a document                                      | `status: stable` without both `generated` and `ksor.approval`, or an approval earlier than the text it approves | add both keys; approval cannot precede what it approves                                |
 | `start` — missing script                                             | there is none: the site is a static export, so nothing serves it at runtime                                | `pnpm preview`, or upload the folder                                                   |
-| `pnpm preview` exits `3`                                             | there is no `system/site/out/` yet                                                                         | run the build first                                                                    |
+| `pnpm preview` exits `3`                                             | no `system/site/out/` yet, `PORT` is not a port number, the port is taken, or `KSOR_PREVIEW_HOST` cannot be bound — it says which | build first; or set a free `PORT` (`dev` uses 3000 too). `preview` binds loopback; set `KSOR_PREVIEW_HOST` to reach it from a container or another device |
 | `pnpm serve` refuses to boot                                         | it will not run unauthenticated by accident                                                                | `KSOR_AUTH=disabled-local` in `.env` for a loopback run                                |
 | the deployed or containerised door refuses with `disabled-local`     | it binds `0.0.0.0` — a public bind                                                                         | `KSOR_AUTH=disabled-public` in the host environment, or configure the SSO variables    |
 | the agent answers questions 2 and 3 instead of declining             | no floor is measured, so the gate is off (`abstain OFF`, `gate: "off"`) — step 3's `calibrate` was skipped  | `pnpm exec ksor calibrate --instance instance.md`, paste the block, restart             |
