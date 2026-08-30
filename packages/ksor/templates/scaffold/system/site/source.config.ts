@@ -230,7 +230,7 @@ export default defineConfig({
      * apply to every group on the page and persist to the next visit. The
      * `Tabs` branch drops the attribute silently, so a reader with a
      * ten-section document would pick their tool ten times (verified against
-     * fumadocs-core 16.14.5, remark-code-tab.js).
+     * fumadocs-core 16.15.4, remark-code-tab.js).
      */
     remarkPlugins: [[remarkCodeTab, { Tabs: "CodeBlockTabs" }]],
   },
