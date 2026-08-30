@@ -22,7 +22,8 @@ function violate(rule, message, why, fix) {
 function isSymlinkTo(linkPath, expectedTarget) {
   try {
     if (!lstatSync(linkPath).isSymbolicLink()) return false;
-    return readlinkSync(linkPath) === expectedTarget;
+    const actual = readlinkSync(linkPath).replaceAll("\\", "/");
+    return actual === expectedTarget;
   } catch {
     return false;
   }
