@@ -34,6 +34,13 @@ const RESTRICTED_TITLE = "Zebra Bands CANARYTITLE9F3A";
 const RESTRICTED_DESC = "CANARYDESC4A8C restricted only";
 const RESTRICTED_BODY = "CANARYBODY7B2E1";
 const INTERNAL_BODY = "INTERNALCANARY7A1D";
+// The review surface (`/review`) enumerates every BADGED document, so it is a
+// listing — the shape research/visibility.md §4-§5 says leaks. These two make
+// the sweep exercise it rather than pass over an empty page: one restricted
+// document that must never be listed, and one public document that must be, so
+// "filtered" can never be mistaken for "the page rendered nothing".
+const REVIEW_RESTRICTED_TITLE = "Retired Bands CANARYREVIEW5C2B";
+const REVIEW_PUBLIC_TITLE = "Retired Welcome REVIEWCONTROL8D4E";
 // A concept declaring TWO audiences: visible to a viewer holding either, and
 // to neither's public build. Before the overlap rule a document carried one
 // ordered tier and this shape could not be written at all.
@@ -233,6 +240,23 @@ takedown_authorities:
         }),
       );
       writeFileSync(path.join(knowledge, "comp-chart.png"), ASSET_PNG);
+      // Badged by a `stale_after` in the past: human-visible, machine-excluded
+      // (record spec §2.5), which is exactly what `/review` lists.
+      for (const [file, title, audience] of [
+        ["retired-comp.md", REVIEW_RESTRICTED_TITLE, "restricted"],
+        ["retired-welcome.md", REVIEW_PUBLIC_TITLE, "public"],
+      ] as const) {
+        writeFileSync(
+          path.join(knowledge, file),
+          concept({
+            title,
+            description: `${title} description.`,
+            audience: [audience],
+            body: `Body of ${title}.`,
+            order: 9,
+          }).replace("status: stable\n", "status: stable\nstale_after: 2020-01-01T00:00:00Z\n"),
+        );
+      }
       writeFileSync(
         path.join(knowledge, "compensation.summary.md"),
         `---\ntype: Summary\n---\n\nBands run to 240000 ${SUMMARY_BODY}.\n`,
@@ -291,6 +315,7 @@ takedown_authorities:
         RESTRICTED_TITLE,
         RESTRICTED_DESC,
         RESTRICTED_BODY,
+        REVIEW_RESTRICTED_TITLE,
         INTERNAL_BODY,
         BOTH_BODY,
         SUMMARY_BODY,
@@ -313,6 +338,19 @@ takedown_authorities:
       expect(llms).not.toContain("board-minutes");
       // No audience label on the public build.
       expect(filesContaining(outDir, "not for publication")).toEqual([]);
+
+      // The REVIEW surface: it renders (control), and it lists only what this
+      // viewer may see. A listing that walked its own tree instead of the
+      // staged one is exactly how the leak recurred four times.
+      const review = path.join(outDir, "review", "index.html");
+      expect(existsSync(review), "the review surface must be built").toBe(true);
+      const reviewHtml = readFileSync(review, "utf8");
+      expect(reviewHtml, "control: the public badged document is listed").toContain(
+        REVIEW_PUBLIC_TITLE,
+      );
+      expect(reviewHtml, "a restricted document was listed on the review surface").not.toContain(
+        REVIEW_RESTRICTED_TITLE,
+      );
     }, 300_000);
 
     it("public,internal: the internal concepts appear, the restricted one does not, label present", () => {
@@ -337,6 +375,13 @@ takedown_authorities:
 
     it("public,restricted (the control): every restricted canary present — and INTERNAL still absent", () => {
       mustPass(build("public,restricted"), "restricted build");
+      // The other half of the review canary: a viewer who HOLDS the audience
+      // sees it there, so the public build's absence is filtering rather than
+      // a page that lists nothing.
+      expect(
+        readFileSync(path.join(outDir, "review", "index.html"), "utf8"),
+        "a restricted viewer's review surface must list their badged document",
+      ).toContain(REVIEW_RESTRICTED_TITLE);
       for (const canary of [RESTRICTED_TITLE, RESTRICTED_BODY, BOTH_BODY]) {
         expect(
           filesContaining(outDir, canary).length,

@@ -349,6 +349,18 @@ A new document is `status: draft`, and `pnpm build` admits a draft to no surface
 at all: no page, no sidebar row, no `/llms.txt` entry, nothing for an agent to
 read. `pnpm dev` shows it, marked — the preview is where drafts live.
 
+### `/review` — what still wants your eyes
+
+One page lists everything the record is not simply publishing: drafts, documents
+past their `stale_after`, documents not yet effective, and deprecated ones, each
+with its owner and the date that explains it. It is not linked from the navbar —
+it is a maintainer's page and it is `noindex` — so open `/review` directly.
+
+It offers no approve button, and never will: approving is `status: stable` with
+an actor, in a pull request. And on a BUILT site it cannot list drafts, because
+a build excludes them from every surface; the page says so instead of showing an
+empty list. `pnpm dev` is where you review those.
+
 ### Publishing adds two keys
 
 Beside `status: stable`, name what produced the text and who approved it. Both,

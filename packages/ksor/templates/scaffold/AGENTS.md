@@ -595,6 +595,16 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   reviewed since its `stale_after` — a reader handed one of those with no word
   of it has been misled, and the sidebar, the listings and the search results
   say it whatever this key is set to.
+- **`/review` lists everything that wants a human's eyes**, in one page:
+  drafts, documents past their `stale_after`, documents not yet effective, and
+  deprecated ones — each with its owner and the date that explains it. It is
+  the record-level half of "preview and review"; the per-page half is the
+  chip below. It is not linked from the navbar (it is a maintainer's page, and
+  `noindex`), so go to `/review` directly. It offers no approve button and
+  never will: approving is `status: stable` with an actor, in a pull request.
+  On a BUILT site it cannot list drafts, because a build excludes them from
+  every surface — the page says so rather than showing an empty list; run
+  `pnpm dev` to review those.
 - **`status` is shown only when it is a caveat.** `deprecated` appears as a
   small label; `stable` shows nothing, because a reader already assumes a
   document in the record is current — so the label stays rare enough to be

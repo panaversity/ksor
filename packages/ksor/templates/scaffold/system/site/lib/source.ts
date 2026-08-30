@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { agentFrontmatter, badgeLabel, readGovernance, stampLines } from "./governance";
 import { dirOfRoute, listingOf, readingOrder } from "./index-routes";
 import type { LifecycleBadge } from "./lifecycle-rule";
+import type { ReviewItem } from "./review";
 import { appName, appTitle, appDescription, showGovernance } from "./shared";
 import {
   readStagedIndex,
@@ -170,6 +171,46 @@ export function getSortedPages(): KnowledgePage[] {
       (order.get(a.url) ?? Number.POSITIVE_INFINITY) -
         (order.get(b.url) ?? Number.POSITIVE_INFINITY) || a.url.localeCompare(b.url),
   );
+}
+
+/**
+ * Every document this build can see that carries a lifecycle badge — the
+ * review surface's input (`/review`).
+ *
+ * Reads `getSortedPages()`, which is the SAME staged, audience-filtered set
+ * the sidebar and the home page read, so this page can never enumerate a
+ * document the rest of the site hides. That is the property the visibility
+ * canary asserts about it; a listing built from its own walk of the tree is
+ * how the leak in research/visibility.md §4-§5 keeps happening.
+ *
+ * The instant is whichever one explains the badge, as the record wrote it —
+ * never reformatted, because a rendered date is a claim about a timezone the
+ * record did not make.
+ */
+export function reviewItems(): ReviewItem[] {
+  const out: ReviewItem[] = [];
+  for (const page of getSortedPages()) {
+    const badge = stagePageOf(pathOf(page))?.badge ?? null;
+    if (badge === null) continue;
+    const governance = readGovernance(page.data, page.path);
+    const at =
+      badge === "effective-from"
+        ? governance.effectiveFrom
+        : badge === "stale"
+          ? governance.staleAfter
+          : badge === "deprecated"
+            ? (governance.deprecated?.at ?? null)
+            : null;
+    out.push({
+      url: page.url,
+      title: page.data.title,
+      description: page.data.description?.trim() || null,
+      badge,
+      owner: showGovernance ? governance.owner : null,
+      at,
+    });
+  }
+  return out;
 }
 
 /**
