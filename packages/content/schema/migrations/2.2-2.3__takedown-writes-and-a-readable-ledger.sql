@@ -32,11 +32,14 @@ CREATE POLICY takedown_write ON takedown_denylist FOR ALL TO sor_content_ingest
                         AND g.tenant_id = takedown_denylist.tenant_id));
 
 -- ── retrieval_log: a role that can actually read the ledger ──────────────────
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sor_content_auditor') THEN
-    CREATE ROLE sor_content_auditor NOLOGIN;
-  END IF;
+-- Concurrency-tolerant for the same reason `schema.sql` is: roles are
+-- CLUSTER-GLOBAL, so `IF NOT EXISTS` is check-then-act across every database on
+-- the instance, and the loser raises `unique_violation` (23505) on
+-- pg_authid_rolname_index — not `duplicate_object` (42710). Two `ksor schema
+-- --apply` runs reach this migration exactly as they reach the fresh DDL.
+DO $$ BEGIN
+  CREATE ROLE sor_content_auditor NOLOGIN;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
 GRANT USAGE ON SCHEMA public TO sor_content_auditor;

@@ -324,12 +324,36 @@ CREATE TABLE ingest_tenant_grants (
     PRIMARY KEY (role_name, tenant_id)
 );
 
+-- Roles are CLUSTER-GLOBAL, so `IF NOT EXISTS` is check-then-act across every
+-- database on the instance: two concurrent applies both see the role absent and
+-- both create it. Measured on Postgres 17.7 — six concurrent runs against an
+-- empty cluster, FIVE failed. Two `ksor schema --apply` runs, or two `pnpm
+-- test:db` runs, are all it takes.
+--
+-- The raised SQLSTATE is `unique_violation` (23505) on pg_authid_rolname_index,
+-- NOT `duplicate_object` (42710) — catching only the latter is the intuitive
+-- fix and does not work. Both are caught, because which one surfaces depends on
+-- where in the create the loser lands.
+--
+-- ONE BLOCK PER ROLE, deliberately: a `DO` block is a single statement, so an
+-- exception anywhere in it rolls back the whole block. Three roles in one block
+-- means a loser on the first role never creates the other two, and the apply
+-- continues to GRANT against roles that do not exist.
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_runtime') THEN CREATE ROLE sor_content_runtime NOLOGIN; END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_ingest')  THEN CREATE ROLE sor_content_ingest NOLOGIN;  END IF;
-  -- The ledger's READER (2.3). Without it retrieval_log was write-only under
-  -- every credential ksor ships: FORCE RLS, an INSERT policy, and no way back in.
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sor_content_auditor') THEN CREATE ROLE sor_content_auditor NOLOGIN; END IF;
+  CREATE ROLE sor_content_runtime NOLOGIN;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE ROLE sor_content_ingest NOLOGIN;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+END $$;
+
+-- The ledger's READER (2.3). Without it retrieval_log was write-only under
+-- every credential ksor ships: FORCE RLS, an INSERT policy, and no way back in.
+DO $$ BEGIN
+  CREATE ROLE sor_content_auditor NOLOGIN;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 
 -- Explicit in-schema membership for the APPLYING role, so SET LOCAL ROLE works from day one
