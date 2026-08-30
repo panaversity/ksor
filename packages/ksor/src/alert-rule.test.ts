@@ -40,7 +40,7 @@ describe("the rule", () => {
   });
 
   it("uses only types fumadocs' Callout defines", () => {
-    // CalloutType in fumadocs-ui@16.14.5, dist/components/callout.d.ts. An
+    // CalloutType in fumadocs-ui@16.15.4, dist/components/callout.d.ts. An
     // unknown value renders as plain `info` with nothing going red.
     const defined = ["info", "warn", "error", "success", "warning", "idea"];
     for (const kind of ALERT_KINDS) expect(defined).toContain(kind.type);
