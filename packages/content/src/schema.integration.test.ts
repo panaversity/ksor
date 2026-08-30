@@ -63,7 +63,7 @@ describe("renderSchema against the shipped DDL", () => {
     // The refusal must say WHICH shape 2000 applies to. It used to read
     // "(pgvector vector + HNSW ceiling)", which reads as pgvector's own limit —
     // and pgvector indexes a `halfvec` to 4000 via an expression index on the
-    // cast, verified live against a real database (2026-08-21, issue #49). An
+    // cast, verified live against a real database (2026-08-21; decision 30). An
     // adopter reading the old wording could conclude their model was
     // unusable over a wall that is not one.
     expect(message, `the ceiling must be scoped to the vector column: ${message}`).toMatch(

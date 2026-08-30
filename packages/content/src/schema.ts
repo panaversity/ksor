@@ -31,11 +31,15 @@ import { ContentStoreError } from "./db.js";
  * Raising it is a decision, not a constant: every query site would have to use
  * the same cast as the index or fall silently back to a sequential scan, and
  * the halfvec arm's float16 rounding lands on the score the abstention gate
- * reads. Recorded in issue #49, along with the evidence for staying at 1536 —
- * Google's published MTEB table runs 128..2048 and is FLAT at the top of that
- * range (1536 scores 68.17, 2048 scores 68.16), so there is no gradient to
- * climb toward the ceiling. It carries no 3072 row, so the cost of the
- * truncation itself is unpublished; do not infer one.
+ * reads. AGENTS.md decision 30 records the choice; the measurement behind it
+ * lives HERE, beside the constant it constrains, and this is its only copy.
+ *
+ * Google's per-dimension table
+ * (https://ai.google.dev/gemini-api/docs/embeddings, retrieved 2026-08-27)
+ * runs 128..2048 and is FLAT at the top of that range: 1536 scores 68.17 MTEB
+ * against 2048's 68.16. So there is no gradient to climb toward the ceiling
+ * from where we sit. It carries no 3072 row, so the cost of the truncation
+ * itself is unpublished; do not infer one.
  */
 export const EMBED_DIM_MAX = 2000;
 

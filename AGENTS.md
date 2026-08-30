@@ -1328,6 +1328,50 @@ gateway` package, serve-by-spawn) is superseded._
     not a forecast, and when it arrives the change is a default flip plus a
     migration note, not new machinery.
 
+30. **The shipped DEFAULT stays `gemini-embedding-001` at 1536 dimensions**
+    (2026-08-27, from the evidence in issue #49). Serves the claim that a
+    surface offers "a measured floor under which it declines": that floor is a
+    threshold INSIDE one embedding space, so which space ships decides what
+    every adopter must re-measure when it changes.
+
+    Binds `EMBED_MODEL` and `EMBED_DIM` in `packages/content/src/config.ts` and
+    nothing else — `embedding.model` and `embedding.dim` stay per-instance keys,
+    and raising `EMBED_DIM_MAX` is priced here, not forbidden
+    (`instance.test.ts` holds its two declarations equal). The measurement
+    behind it lives beside the constant it constrains, in
+    `packages/content/src/schema.ts`, with its source and retrieval date; this
+    entry does not restate it.
+
+    **Moving is not a version bump.** A different model is a different embedding
+    space: a re-embed of the whole corpus, and every calibrated `vector_floor`
+    invalidated — ours and every adopter's — by the same argument the product
+    invariant makes about copying a constant between corpora. And this record's
+    gold has no margin to spend on quantisation: the near-miss at 0.683
+    outscores the weaker in-corpus question at 0.671
+    (`evals/behavioural.db.test.ts`), the NOT-separable shape `ksor calibrate`
+    refuses to emit a floor for (`calibrate/math.test.ts`).
+
+    **Reversed by either of two things.**
+
+    1. **0.1 MTEB points or more**, with both numbers from ONE table or one
+       benchmark revision — differencing a successor's published score against a
+       truncation table's row is not a comparison at this resolution. Ten times
+       the 0.01 the default rests on. Stated in MTEB and never in cosine:
+       decision 20 uses a hundredth of a cosine to mean something load-bearing.
+    2. **A reproduced CJK failure.** `-001` takes 2048 input tokens and
+       `HARD_MAX_CHARS = 4000` can exceed that, surfacing as failed chunks
+       rather than an error — bounded by `MAX_FAILED_FRACTION = 0.02`, and
+       visible below that in `chunks.embed_error` and the run's failed count.
+       Reproduce it before choosing a remedy: `HARD_MAX_CHARS` and `MAX_CHARS`
+       bound different paths, both are eval-locked globals rather than
+       per-instance knobs, so re-chunking is not the cheap local fix it looks
+       like — and `-2`'s 8192-token window is a different embedding space with
+       the price above.
+
+    A successor model shipping is not, by itself, evidence for either. The `-2`
+    figures cited above come from `research/i18n.md`, whose own frontmatter says
+    nothing in it is implemented or decided; check them before acting.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as
