@@ -14,6 +14,7 @@
  * one (found live 2026-08-21).
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -31,7 +32,7 @@ import type { ContentInstance } from "../instance.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_calibrate_run";
+const DB = `ksor_calibrate_run_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "calib-corp";
 
 const DOC = (title: string, order: number): string =>
@@ -57,7 +58,6 @@ describe.runIf(adminDsn !== "")("runCalibration against a real store (db)", () =
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

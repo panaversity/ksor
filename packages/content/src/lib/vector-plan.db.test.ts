@@ -67,6 +67,7 @@
  * file is what proved they had not.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runRead } from "../db.js";
@@ -76,7 +77,7 @@ import { WHOLE_RECORD_SCOPE } from "./audience.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_vector_plan";
+const DB = `ksor_vector_plan_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "planned";
 /** Enough rows that a sequential scan is genuinely the wrong answer. */
 const ROWS = 20_000;
@@ -88,7 +89,6 @@ describe.runIf(adminDsn !== "")("the serving query opens the vector index (db)",
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

@@ -9,6 +9,7 @@
  * could not be rebuilt survive.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -29,7 +30,7 @@ import type { ContentInstance } from "./instance.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_migrate_test";
+const DB = `ksor_migrate_test_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "migrate-corp";
 
 /** What 2.2 added and 2.5 still carries (2.5 drops `visibility` for `audience`). */
@@ -68,7 +69,6 @@ describe.runIf(adminDsn !== "")("forward migration (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const dsn = new URL(adminDsn);
     dsn.pathname = `/${DB}`;

@@ -10,6 +10,7 @@
  * where they disagree is the one decision 19 exists to prevent.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,7 +27,7 @@ import { applySchema } from "./schema.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_takedown_verb";
+const DB = `ksor_takedown_verb_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "takedown-corp";
 const DSN_ENV = "KSOR_TAKEDOWN_TEST_DSN";
 const ACTOR = "human:ciso";
@@ -100,7 +101,6 @@ describe.runIf(adminDsn !== "")("ksor takedown (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

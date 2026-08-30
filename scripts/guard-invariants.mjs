@@ -10,6 +10,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync } from "
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { parseScratchName } from "./lib/db-scratch.mjs";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -451,9 +452,90 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
+// Rule 12 — every scratch database a `.db.test.ts` creates is named uniquely
+// per RUN, and stamped with the instant it was made.
+//
+// Fixed names are what issue #166 opens with: a suite that bootstraps
+// `ksor_idle_test` and drops it `WITH (FORCE)` terminates the connections of
+// any OTHER run using that name — a second `pnpm test:db` on the same cluster,
+// a CI matrix job, an agent running the tier while a person does. It surfaces
+// as a missing table or a row count short, which reads as flakiness, and the
+// natural response to flakiness is to re-run and stop believing the tier.
+//
+// The stamp is not decoration. Postgres records no creation time for a
+// database, so without one in the name `scripts/db-reaper.mjs` cannot tell a
+// database an interrupted run leaked from one a CONCURRENT run made seconds
+// ago — and unique names with no reaper only trade a visible failure for an
+// invisible one.
+//
+// Checked as TEXT rather than by tracing a declaration, and deliberately: the
+// alternative was a shared `scratchDb()` helper, which the next suite can
+// simply not call, with nothing going red. This fails on the file that wrote
+// the name.
+{
+  const dbTests = [];
+  const walkTests = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "dist") continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walkTests(full);
+      else if (entry.name.endsWith(".db.test.ts")) dbTests.push(full);
+    }
+  };
+  // Both roots the db tier collects from (vitest.db.config.ts).
+  for (const root of ["packages", "scripts"]) {
+    const dir = path.join(repoRoot, root);
+    if (existsSync(dir)) walkTests(dir);
+  }
+
+  const WHY =
+    "a fixed or unstamped scratch name lets two runs on one cluster drop each other's database mid-test (#166), and leaves the reaper unable to tell a leak from a live run's database";
+  const FIX =
+    'name it `ksor_<slug>_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}` — see any .db.test.ts';
+
+  for (const file of dbTests) {
+    const rel = path.relative(repoRoot, file);
+    // Comments are stripped first: a doc comment that QUOTES the shape it is
+    // warning about is not a violation, and failing on prose would teach
+    // authors to stop writing the prose.
+    const text = readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+
+    // A plain string is never a legitimate scratch name any more. Role names in
+    // this tier are `sor_`-prefixed, so `ksor_` in quotes is always this defect.
+    for (const match of text.matchAll(/"(ksor_[a-z0-9_]*)"/g)) {
+      violate(12, `${rel} names a scratch database with the fixed string "${match[1]}"`, WHY, FIX);
+    }
+
+    // …and a template literal starting `ksor_` must carry both halves.
+    for (const match of text.matchAll(/`ksor_[^`]*`/g)) {
+      const literal = match[0];
+      const missing = [];
+      if (!literal.includes("Date.now().toString(36)")) missing.push("the run stamp");
+      if (!literal.includes("randomBytes(")) missing.push("the random suffix");
+      if (missing.length > 0) {
+        violate(12, `${rel} builds ${literal} without ${missing.join(" or ")}`, WHY, FIX);
+      }
+    }
+  }
+
+  // The reaper reads names the guard admits, so a change to either that stops
+  // them agreeing is caught here rather than by a database nobody drops.
+  const sample = `ksor_idle_${Date.now().toString(36)}_3f2c8e`;
+  if (parseScratchName(sample) === null) {
+    violate(
+      12,
+      `scripts/db-reaper.mjs would not recognise ${sample} as a scratch database`,
+      "the reaper only drops names it can parse, so a grammar it disagrees with means every scratch database leaks forever",
+      "reconcile parseScratchName in scripts/lib/db-scratch.mjs with the literal this rule requires",
+    );
+  }
+}
+
 if (violations.length > 0) {
   console.error(`guard: ${violations.length} invariant violation(s):\n`);
   for (const v of violations) console.error(`  ${v}\n`);
   process.exit(1);
 }
-console.log("guard: ok (11 rules)");
+console.log("guard: ok (12 rules)");

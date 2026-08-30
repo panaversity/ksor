@@ -28,11 +28,14 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 
 /**
  * Scratch databases for this suite: named so a leaked one is obviously ours,
- * and UNIQUE per run. Fixed names would have made this suite the thing it is
- * testing for — two concurrent `pnpm test:db` runs force-dropping each other's
- * databases mid-apply, which is issue #166's own symptom.
+ * UNIQUE per run, and stamped with the instant they were made. Fixed names
+ * would have made this suite the thing it is testing for — two concurrent
+ * `pnpm test:db` runs force-dropping each other's databases mid-apply, which is
+ * issue #166's own symptom. The stamp is what lets `scripts/db-reaper.mjs` drop
+ * these if the run is interrupted before the `finally` below.
  */
-const SCRATCH_PREFIX = `ksor_role_race_${randomBytes(4).toString("hex")}_`;
+const scratchName = (n: number): string =>
+  `ksor_role_race_${n}_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 
 /** The admin DSN with its database swapped — `pg` has no API for this. */
 function dsnFor(dsn: string, database: string): string {
@@ -85,9 +88,8 @@ describe.runIf(adminDsn !== "")("applying the schema concurrently (db)", () => {
     // then on `pg_type_typname_nsp_index`, since every CREATE TABLE makes a row
     // type. Those are different races and not ones `applySchema` promises to
     // survive: its contract is "a fresh database".
-    const names = Array.from({ length: 6 }, (_unused, i) => `${SCRATCH_PREFIX}${i}`);
+    const names = Array.from({ length: 6 }, (_unused, i) => scratchName(i));
     for (const name of names) {
-      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
       await admin.query(`CREATE DATABASE ${name}`);
     }
     const pools = names.map(

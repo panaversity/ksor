@@ -12,13 +12,14 @@
  * what it says, and the cost difference is measured rather than assumed.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { createPool, withGuardedClient } from "./db.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_per_request_test";
+const DB = `ksor_per_request_test_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 
 describe.runIf(adminDsn !== "")("connect-per-request (db)", () => {
   let admin: pg.Pool;
@@ -33,7 +34,6 @@ describe.runIf(adminDsn !== "")("connect-per-request (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

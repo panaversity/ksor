@@ -26,6 +26,7 @@
  * re-run against it and both are caught.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -54,7 +55,7 @@ import type { ServiceContext } from "./service.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_governance_chain";
+const DB = `ksor_governance_chain_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "chain-corp";
 
 /** One shared, unmistakable word, so a leak is visible in any surface's output. */
@@ -182,7 +183,6 @@ describe.runIf(adminDsn !== "")("the governance chain, markdown to answer (db)",
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;
@@ -420,7 +420,7 @@ describe.runIf(adminDsn === "")("the governance chain (db) — gated", () => {
  * withdrawal is not a withdrawal.
  */
 describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () => {
-  const DB2 = "ksor_pin_governance";
+  const DB2 = `ksor_pin_governance_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
   const T = "pincorp";
   let pool2: pg.Pool;
   let admin2: pg.Pool;
@@ -478,7 +478,6 @@ describe.runIf(adminDsn !== "")("a pin does not outlive a restriction (db)", () 
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin2 = new Pool({ connectionString: adminDsn });
-    await admin2.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
     await admin2.query(`CREATE DATABASE ${DB2}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB2}`;

@@ -23,6 +23,7 @@
  * in `aud`, one accepted and one refused.
  */
 
+import { randomBytes } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -40,7 +41,7 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "dist", "cli.mjs");
 /** The write verbs live on the ksor binary; CLI above is the gateway's serve entry. */
 const KSOR_CLI = path.resolve(CLI, "..", "..", "..", "ksor", "dist", "cli.mjs");
-const DB = "ksor_auth_adversarial";
+const DB = `ksor_auth_adversarial_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "auth-corp";
 
 interface TestAs {
@@ -153,7 +154,6 @@ describe.runIf(adminDsn !== "")("the bearer door, adversarially (db)", () => {
 
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

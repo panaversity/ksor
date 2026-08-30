@@ -143,7 +143,7 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
   ): Promise<string[]> => ((await searchAs(ctx, args)).hits ?? []).map((h) => h.slug).sort();
 
   beforeAll(async () => {
-    dbName = `ksor_trust_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_trust_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);

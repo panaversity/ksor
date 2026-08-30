@@ -12,6 +12,7 @@
  * uses the default; the build passes its `as_of`.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool } from "../db.js";
@@ -20,7 +21,7 @@ import { lifecycleAdmits } from "./lifecycle.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_lifecycle_conformance";
+const DB = `ksor_lifecycle_conformance_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 
 describe.runIf(adminDsn !== "")("the lifecycle decision table, in SQL (db)", () => {
   let pool: pg.Pool;
@@ -29,7 +30,6 @@ describe.runIf(adminDsn !== "")("the lifecycle decision table, in SQL (db)", () 
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

@@ -21,6 +21,7 @@
  * and covered it while ingest was broken.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +44,7 @@ import {
 import type { ContentInstance } from "../instance.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_departed_authority";
+const DB = `ksor_departed_authority_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const DIM = 8;
 const TENANT = "handbook";
 const DEPARTED = "human:alice";
@@ -88,7 +89,6 @@ describe.runIf(adminDsn !== "")("a departed takedown authority (db)", () => {
 
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const dsn = new URL(adminDsn);
     dsn.pathname = `/${DB}`;
