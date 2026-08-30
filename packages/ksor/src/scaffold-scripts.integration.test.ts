@@ -195,7 +195,7 @@ describe("the scaffold's npm scripts are all reachable", () => {
 /**
  * The site's PRODUCTION build compiles with webpack, not Turbopack.
  *
- * Under the pinned Next 16.2.9 a bare `next build` means Turbopack, and on
+ * Under the pinned Next 16 a bare `next build` means Turbopack, and on
  * Vercel's DEFAULT build machine (4 cores, 8 GB) it does not survive a record
  * large enough to prerender a few hundred routes. Measured on a real
  * 205-document record — 435 routes — the build ran ~7 minutes and died with
@@ -242,5 +242,37 @@ describe("the emitted site builds with webpack, never Turbopack", () => {
       site.scripts["dev"],
       "the deadline failure is production-only; dev keeps the faster compiler",
     ).not.toContain("--webpack");
+  });
+});
+
+/**
+ * Next must not write agent rule files into the site.
+ *
+ * From Next 16.3, `next dev` that detects a coding agent auto-generates
+ * `AGENTS.md` and `CLAUDE.md` in the Next project root — `agentRules`, default
+ * `true`. In a scaffold that root is `system/site`, and markdown there is
+ * refused by the record's own hygiene rule `ksor-site-holds-content`: the site
+ * RENDERS the record and never holds it, because content there silently forks
+ * it. So an adopter running `pnpm dev` turned their own `pnpm check` red
+ * without touching anything — caught by the scaffold walkthrough within the
+ * hour of pinning 16.3.3, and invisible to every other tier.
+ *
+ * The scaffold already answers what the feature is for: AGENTS.md at the REPO
+ * root is the coding agent's first read. Two of them, one inside the site,
+ * is one record speaking with two voices.
+ */
+describe("the emitted site never lets Next author agent rules", () => {
+  const config = readFileSync(
+    path.join(here, "..", "templates", "scaffold", "system", "site", "next.config.mjs"),
+    "utf8",
+  );
+
+  it("sets agentRules: false", () => {
+    expect(
+      /^\s*agentRules:\s*false\s*,/m.test(config),
+      "next.config.mjs must set `agentRules: false` — without it `pnpm dev` writes " +
+        "system/site/AGENTS.md and system/site/CLAUDE.md, which `pnpm check` refuses " +
+        "with ksor-site-holds-content",
+    ).toBe(true);
   });
 });
