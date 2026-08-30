@@ -1,5 +1,78 @@
 # @panaversity/ksor
 
+## 0.0.51
+
+### Patch Changes
+
+- 6478ca4: Test infrastructure only — nothing an adopter installs behaves differently.
+
+  Every database-tier suite now bootstraps its scratch database under a name
+  unique to the run (`ksor_<slug>_<base36 ms>_<6 hex>`) instead of a fixed one.
+  Fixed names meant two runs against one Postgres — a second `pnpm test:db`, a CI
+  matrix job, an agent running the tier alongside a person — dropped each other's
+  database `WITH (FORCE)` mid-test, which surfaced as a missing table or a short
+  row count and read as flakiness. A new reaper (`scripts/db-reaper.ts`, the
+  tier's globalSetup) drops what an interrupted run leaks, and guard rule 12 keeps
+  the naming from drifting back.
+
+- c466d4b: The scaffold moves to Fumadocs `16.15.4` (`fumadocs-core`, `fumadocs-ui`) and
+  `fumadocs-mdx` `15.4.0`.
+
+  Maintenance, not a fix — no advisory pushed it, and `npm audit` was already
+  clean. It is taken now because the four behaviours the scaffold cites BY VERSION
+  were re-verified against the new bytes rather than assumed, and each holds:
+  `CalloutType` is still the same six values (`fumadocs-ui/dist/components/callout.d.ts`);
+  `resolveHref` still resolves only the `./` and `../` forms and returns everything
+  else untouched, which is why the record keeps its own resolver; `remark-code-tab`
+  still honours `tab-group` on the `CodeBlockTabs` branch only, which is why the
+  scaffold picks that branch; and the search engine is still ZBSearch, so the
+  `language` option stays absent. Those citations now name `16.15.4`.
+
+  `fumadocs-ui` pins `fumadocs-core` exactly, so the two always move together;
+  `fumadocs-mdx@15.4.0` requires `fumadocs-core ^16.15.3`, which is what makes this
+  one change rather than three. Nothing else moves with it — Fumadocs peers Next as
+  a range (`16.x.x`). The committed pnpm lockfile is regenerated to match.
+
+- 69d57f2: `ksor migrate --write-site` no longer deletes dependencies the adopter added to
+  their site.
+
+  Every file under `system/site` is offered as a whole-file replacement, which is
+  right for the copied rule modules and wrong for `system/site/package.json` — a
+  register ksor and the adopter both write in. Copying it whole removed anything
+  they had added, inside the same hunk that carried a pin bump, so a project could
+  stop building on the release meant to fix it. It is now merged per section: the
+  entries ksor ships move to this release's versions, the adopter's own survive,
+  and an entry ksor no longer ships is left alone rather than deleted (the tool
+  cannot tell one it retired from one they added).
+
+  Adds `docs/upgrading.md`, which ships in the tarball: the four-step path, the
+  table of what migrate carries, the list of files it does not — so an adopter
+  knows what to diff by hand — and the refusals to expect.
+
+- 4b077aa: The scaffold pins Next `16.3.3`, clearing three high-severity advisories a
+  fresh `npm install` reported (#207).
+
+  `next@16.2.9` pulled `sharp@0.34.5` and `postcss@8.4.31`; the advisories are
+  against those, not against anything the scaffold declares, so the bump that
+  fixes them is Next's own. Measured on a fresh scaffold from the published CLI:
+  `npm audit` goes from **3 high to 0**, the static build takes 41.8s and emits
+  its 22 pages, and `llms.txt` carries its 5 entries unchanged. `16.3.3` is not
+  semver-major and Fumadocs peers Next as a range (`16.x.x`), so nothing else
+  moves with it. The committed pnpm lockfile is regenerated to match — the half
+  that would otherwise break an adopter whose CI installs frozen.
+
+  An existing project takes both across with
+  `ksor migrate --write-site`, which offers every file of `system/site` this
+  release emits — the pin and the config among them. It prints the diff and
+  changes nothing without `--write`.
+
+  The scaffold's `next.config.mjs` also sets `agentRules: false`. From Next 16.3,
+  a `next dev` that detects a coding agent writes `AGENTS.md` and `CLAUDE.md` into
+  the Next project root — which here is `system/site`, where the record's own
+  hygiene rule refuses markdown (`ksor-site-holds-content`: the site renders the
+  record, it never holds it). Left on, an adopter's `pnpm dev` turned their own
+  `pnpm check` red without their touching anything.
+
 ## 0.0.50
 
 ### Patch Changes
