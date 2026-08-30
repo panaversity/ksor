@@ -116,7 +116,6 @@ what it climbs is the trust tiers (product principle 7).
 | `packages/{postgres,content,gateway-kit,content-gateway}/` | the kernel (decision 11): Postgres access discipline (pooling, scoped transactions, retry classification), the content corpus store + retrieval + abstention, serving postures, and the content MCP door (one gateway per record — `content-gateway` today; `identity-gateway`, `praxis-gateway` follow). BUNDLED into `@panaversity/ksor` — the CLI inlines all four and exposes one `ksor` binary; the kernel packages stay private, never published (decision 12 publish revision 2026-08-20) |
 | `packages/ksor/docs/`                                      | user docs, shipped inside the npm tarball                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `workbench/example-corpus/`                                | living KSoR fixture: dev target, test + eval surface                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `workbench/shells/`                                        | alternative site shells proving the swap seam (decision 9)                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `docs/status.md`                                           | the only authority on what is implemented (npm links it)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `research/`                                                | plans and records; frontmatter is guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `specs/`                                                   | one-page feature contracts; frontmatter is guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -401,7 +400,7 @@ reverse it, and a reversed decision keeps its entry with a revision note.
     vendor, is the contract. `jose` for the gateway kit's public-door JWT
     verification. `@modelcontextprotocol/server` (SDK v2, the 2026-07-28 revision; `@modelcontextprotocol/client` is a devDep for the acceptance walk) for the MCP surface. Guard
     rule 5 now scans every workspace package against this list; install
-    scripts stay denied (three denials recorded in `pnpm-workspace.yaml`
+    scripts stay denied (recorded in `pnpm-workspace.yaml`
     with verified why-comments). _Revision 2026-08-20 (ONE package, owner):
     the kernel is BUNDLED INTO the published CLI — `@panaversity/ksor` inlines
     `postgres` + `content` + `gateway-kit` + `content-gateway` (workspace
@@ -457,10 +456,11 @@ gateway` package, serve-by-spawn) is superseded._
     `WebStandardStreamableHTTPServerTransport` (`Request → Response`,
     stateless) behind Hono, with Host validation as middleware (the shape the
     SDK's deprecation of its transport-level option points to) and
-    `secureHeaders` / `bodyLimit` middleware replacing the hand-rolled
-    hardening. `hono` and `@hono/node-server` are declared runtime deps of
-    the content-gateway — already the MCP SDK's own transitive deps, so zero
-    new install bytes. What stays ours because it is good: `buildAuth` and the
+    `bodyLimit` middleware replacing the hand-rolled BODY-SIZE cap
+    (`secureHeaders` was proposed here for the header hardening and never
+    adopted, so that half is still hand-written — see the 2026-08-27 revision).
+    `hono` and `@hono/node-server` are declared runtime deps of
+    the content-gateway. What stays ours because it is good: `buildAuth` and the
     fail-closed boot posture, the three probes, and the whole content kernel.
     Reversed only if the SDK drops the Web-standard transport. _Revision
     2026-08-20: the transport choice stands unchanged. The packaging
@@ -488,6 +488,24 @@ gateway` package, serve-by-spawn) is superseded._
     external middleware — which is what this door already does. Dependency
     weight falls (`server` → `zod` + `core`; the Node middleware is
     `@hono/node-server`, already carried) rather than rising._
+
+    _Revision 2026-08-27 (issue #151): two sentences above describe a door that
+    was never built, and one of them was still being repeated in a guard
+    comment. **`bodyLimit` is real** — imported and applied at
+    `content-gateway/src/http.ts:26,522` — but **`secureHeaders` was never
+    adopted**: nothing in the tree imports it, and the door sets its own pair by
+    hand (`http.ts:330-331`, HSTS + `x-content-type-options: nosniff`, "nothing
+    else"). The CODE is right and this entry was wrong, so the entry is
+    corrected rather than the code. **And hono is not free.** "Already the MCP
+    SDK's own transitive deps, so zero new install bytes" was true of the 1.x
+    monolith and false from the moment the same revision above moved to v2,
+    which depends on `zod` and `@modelcontextprotocol/core` and nothing else
+    (checked against the installed tree, 2026-08-27); `@hono/node-server` is
+    likewise carried by nothing but the door itself. The reason that survives is
+    the one this decision already gives — the SDK's only HTTP shape is
+    Web-standard, and hono is the shape that needs no bridge to it — so the
+    weight is a cost paid deliberately, not an absence of cost. Guard rule 5's
+    why-comment carried the same false sentence and is corrected with it._
 
 14. **Takedown denial is scoped — per-node by default, subtree by explicit
     opt-in** (owner, 2026-08-19). A review found the ported denial was
@@ -1240,8 +1258,8 @@ gateway` package, serve-by-spawn) is superseded._
 
 28. **A retired surface is REMOVED, never deprecated** (owner, 2026-08-26).
     Pre-1.0, and the whole population of built records is ours — `migrate` has
-    never shipped at all (`docs/status.md`), and the owner confirmed there are
-    no external adopters. A deprecation window therefore buys nobody anything
+    never shipped at all (`docs/status.md`) — **false; see the 2026-08-27
+    revision** — and the owner confirmed there are no external adopters. A deprecation window therefore buys nobody anything
     and costs everybody the second code path coding principle 4 forbids. So a
     surface this project retires is gone in the release that retires it, and
     what replaces it is a REFUSAL naming the fix, never a fallback that keeps
@@ -1284,6 +1302,24 @@ gateway` package, serve-by-spawn) is superseded._
     runs unattended, or waits for a major. Not reversible by convenience: "an
     adopter might" is not an adopter, and the reversal condition is an event
     that can be observed rather than forecast.
+
+    _Revision 2026-08-27 (found by the #151/#180 sweep; a correction of the
+    EVIDENCE, not a reversal — what to do about it is the owner's). The premise
+    cited the document that contradicts it: `docs/status.md` records
+    `ksor migrate` as implemented and RELEASED in 0.0.41 and lists it among the
+    published verbs, and by authority rule 3 that file is the authority on what
+    is built. **The correction cuts both ways.** It removes half the
+    justification — what survives there is the owner's confirmation that there
+    are no external adopters, a real basis but a statement about today rather
+    than about what the tool now makes possible. It also REPAIRS the safety
+    clause: "what makes this safe rather than merely fast is that removal is
+    paired with a MIGRATION" requires `ksor migrate` to exist and ship, so the
+    entry had been leaning on a shipped migrate while asserting it had never
+    shipped. That clause is true now rather than aspirational. The decision is
+    left STANDING and unaltered — its reversal condition is a record we do not
+    operate being built by a published release, and migrate shipping is not that
+    event — and this is recorded so the next removal under this rule is made
+    knowing what actually backs it._
 
 29. **The deploy REGENERATES the lock; it does not verify it** (owner,
     2026-08-26). `vercel.json` builds the site with `pnpm build`, which is

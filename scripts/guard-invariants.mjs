@@ -151,7 +151,7 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   const P = "@panaversity/";
   const perPackageRuntimeDeps = new Map([
     // The ONE published package (decision 12, publish revision 2026-08-20,
-    // owner): the kernel is BUNDLED into the CLI (platform/content/gateway-kit/
+    // owner): the kernel is BUNDLED into the CLI (postgres/content/gateway-kit/
     // content-gateway inlined via tsdown noExternal), so their external runtime
     // deps surface HERE. This reverses the decision-1/13 zero-dep guarantee by
     // owner call — every `npx @panaversity/ksor init` now pulls this set, and
@@ -185,18 +185,29 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
     // (research/okf-native.md §2 item 8, decision 26).
     [`${P}ksor-content`, new Set(["pg", "@types/pg", "zod", "yaml", `${P}ksor-postgres`])],
     [`${P}ksor-gateway-kit`, new Set(["jose"])],
-    // The ONE published kernel package (decision 12, publish revision
-    // 2026-08-19): platform/content/gateway-kit are BUNDLED in (workspace
-    // devDeps, noExternal in tsdown) — never separate npm packages — so their
-    // external runtime deps surface HERE as this package's own dependencies.
+    // The kernel package that carries the DOOR's external runtime deps.
+    // postgres/content/gateway-kit are bundled into it (workspace devDeps,
+    // noExternal in tsdown), so their external deps surface HERE rather than in
+    // their own manifests. It is `private: true` and is itself bundled into
+    // `@panaversity/ksor` — this comment used to call it "the ONE published
+    // kernel package", which was the superseded 2026-08-19 arrangement;
+    // decision 12's 2026-08-20 revision says the kernel packages stay private
+    // forever, and `@panaversity/ksor` above is the only published one.
     [
       `${P}ksor-content-gateway`,
       new Set([
         "@modelcontextprotocol/server",
-        // hono + node-server: the SDK's own Web-standard transport shape, and
-        // both are ALREADY the SDK's transitive deps (zero new install bytes)
-        // — declared directly so the door composes them instead of
-        // hand-rolling the HTTP layer three findings landed in (decision 13).
+        // hono + node-server: the SDK's only HTTP shape is Web-standard
+        // (`Request` -> `Response`), and hono is the shape that needs no bridge
+        // to it — so the door composes them instead of hand-rolling the HTTP
+        // layer three security findings landed in (decision 13).
+        //
+        // They are NOT free, and this comment used to say they were: "already
+        // the SDK's transitive deps (zero new install bytes)" was true of the
+        // 1.x monolith and false since v2, which depends on `zod` and
+        // `@modelcontextprotocol/core` and nothing else (checked against the
+        // installed tree). The reason above is the one that survives the
+        // upgrade; the weight is a real cost, paid deliberately.
         "hono",
         "@hono/node-server",
         "zod",

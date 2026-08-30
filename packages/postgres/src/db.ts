@@ -1,5 +1,5 @@
 /**
- * The platform database plumbing (oracle SP/db.py, converted under
+ * The Postgres access discipline (oracle SP/db.py, converted under
  * decision 11): one borrowed connection, one explicit transaction, and ONE
  * `SELECT set_config(...)` statement binding `search_path='public'`
  * (unconditional — even a health probe) plus every GUC txn-locally.

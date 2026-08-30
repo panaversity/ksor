@@ -323,9 +323,10 @@ That model in one picture:
                             Postgres + pgvector
 ```
 
-Identity (OAuth/OIDC), publication integrity (SLSA/Sigstore), and
-observability (OpenTelemetry) cut across every surface without becoming
-knowledge stores.
+Identity (OAuth/OIDC) cuts across every surface. Publication integrity
+(SLSA/Sigstore) covers the published PACKAGE and not yet the record's own lock,
+and observability (OpenTelemetry) is bound and unbuilt — see below, where both
+are stated exactly.
 
 ### The nine responsibilities
 
@@ -343,8 +344,23 @@ it:
 | Agent interaction     | MCP                                 | search, retrieval, citation, and abstention for agents                        |
 | Knowledge exchange    | OKF                                 | the same native representation moves governed knowledge between systems       |
 | Identity              | OAuth / OIDC                        | who is asking — KSoR governance then decides what they may see                |
-| Publication integrity | SLSA / Sigstore                     | proof of which source and build produced a published artifact                 |
-| Observability         | OpenTelemetry                       | what the infrastructure did, without becoming another knowledge store         |
+| Publication integrity | SLSA / Sigstore _(package only)_    | proof of which source and build produced a published artifact                 |
+| Observability         | OpenTelemetry _(not yet emitted)_   | what the infrastructure did, without becoming another knowledge store         |
+
+**One of the nine is a binding with nothing behind it yet, and one is half
+built — both say so here.** `ksor build`
+writes `build.lock.json` but signs nothing — SLSA/Sigstore attestation of that
+lock is out of scope in `specs/ksor/build/spec.md` §5 and will land separately.
+**No telemetry is emitted today either**: there is no OpenTelemetry code in the
+tree, and the row above records which standard owns that boundary rather than a
+surface that runs. When it does land, one constraint is already decided by the
+row's own wording — *without becoming another knowledge store*. Default
+auto-instrumentation would break it immediately, because `pg` captures statement
+text and a trace backend is a different security boundary from the MCP response;
+for a non-`public` audience that is a governance bypass through the observability
+layer. What would survive careless instrumentation added later is an allowlist
+span processor — attributes not explicitly permitted are dropped, so traces
+would carry decisions and counts and never content.
 
 The same architecture can be explained as a dependency stack. This is not a second list of responsibilities; it shows how the pieces relate, and why OKF sits _under_ KSoR rather than beside it:
 
@@ -356,8 +372,8 @@ The same architecture can be explained as a dependency stack. This is not a seco
 > **`llms.txt` lets AI discover it.**  
 > **MCP lets agents interact with it.**  
 > **OAuth/OIDC establishes identity; KSoR governs access.**  
-> **SLSA/Sigstore proves what was published.**  
-> **OpenTelemetry tells us what happened.**
+> **SLSA/Sigstore proves what package was published; the record's lock is next.**  
+> **OpenTelemetry will tell us what happened.**
 
 Governance is deliberately not one of the nine. It is the **boundary** the
 nine are arranged around: no knowledge crosses a serving or publication
@@ -551,7 +567,7 @@ The governed record is the authority. Every outward surface is a projection or c
                                 OKF
 ```
 
-OAuth/OIDC establishes identity for protected surfaces, KSoR governance controls access, SLSA/Sigstore can attest what was published, and OpenTelemetry records what the infrastructure did.
+OAuth/OIDC establishes identity for protected surfaces, KSoR governance controls access, SLSA/Sigstore can attest what was published, and OpenTelemetry will record what the infrastructure did.
 
 These surfaces have different jobs:
 

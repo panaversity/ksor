@@ -23,7 +23,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   // verbs delegate to `content`'s `runContentCli`. So the CLI now sits ABOVE
   // the whole kernel graph (one published package).
   "@panaversity/ksor": ["@panaversity/ksor-content-gateway", "@panaversity/ksor-content"],
-  // The kernel conversion's layering (decision 11): platform is the floor,
+  // The kernel conversion's layering (decision 11): postgres is the floor,
   // content stands on it, the gateway composes content behind the kit.
   "@panaversity/ksor-postgres": [],
   "@panaversity/ksor-content": ["@panaversity/ksor-postgres"],
