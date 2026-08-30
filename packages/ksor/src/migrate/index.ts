@@ -995,7 +995,7 @@ function siteChanges(root: string, templatesDir: string, stamps: Stamps): FileCh
         continue;
       }
       if (!SITE_TEXT_EXTENSIONS.has(path.extname(entry.name))) continue;
-      const after = applyProse(
+      const rendered = applyProse(
         readFileSync(abs, "utf8")
           .replaceAll("KSOR-STAMP-NAME", stamps.name)
           .replaceAll("KSOR-STAMP-VERSION", stamps.version),
@@ -1003,11 +1003,89 @@ function siteChanges(root: string, templatesDir: string, stamps: Stamps): FileCh
       );
       const target = path.join(root, child);
       const before = existsSync(target) ? readFileSync(target, "utf8") : null;
+      // The site's MANIFEST is merged, never replaced. Every other file here is
+      // ours to reissue whole; this one is a register the adopter also writes
+      // in, and byte-copying it deleted whatever they had added — walked live
+      // on a scaffold carrying one extra dependency, which the upgrade removed
+      // in the same hunk that carried a security pin, so the site stopped
+      // building on the release that was meant to fix it. Shown as a diff and
+      // gated on --write either way; a removal an adopter has to spot inside a
+      // whole-site diff is not the same as one they chose.
+      const after =
+        child === "system/site/package.json" && before !== null
+          ? mergeSiteManifest(before, rendered)
+          : rendered;
       if (before !== after) out.push({ path: child, before, after });
     }
   };
   walk(from, "system/site");
   return out;
+}
+
+/**
+ * The site manifest, merged: what ksor pins wins, what the adopter added stays.
+ *
+ * Applied per SECTION rather than per file. `dependencies`, `devDependencies`
+ * and `scripts` are registers with two authors — ksor owns the entries it ships
+ * (they are what the emitted site is built and tested against, and a security
+ * bump reaches an existing project through exactly this path), and the adopter
+ * owns everything else in them. A key ksor no longer ships is left alone rather
+ * than deleted: this cannot tell one it retired from one the adopter added.
+ *
+ * Unparseable on either side falls back to the template, which is the same
+ * whole-file offer every other site file gets — a diff, gated on `--write`.
+ */
+function mergeSiteManifest(before: string, template: string): string {
+  const parse = (text: string): Record<string, unknown> | null => {
+    try {
+      const value: unknown = JSON.parse(text);
+      return typeof value === "object" && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  const mine = parse(before);
+  const theirs = parse(template);
+  if (mine === null || theirs === null) return template;
+
+  const section = (key: string): Record<string, unknown> | undefined => {
+    const a = mine[key];
+    const b = theirs[key];
+    const table = (v: unknown): Record<string, unknown> | null =>
+      typeof v === "object" && v !== null && !Array.isArray(v)
+        ? (v as Record<string, unknown>)
+        : null;
+    const ours = table(b);
+    const adopters = table(a);
+    if (ours === null) return adopters ?? undefined;
+    if (adopters === null) return ours;
+    // Adopter's ORDER first, so the diff shows the versions that moved rather
+    // than reordering every line around them.
+    const merged: Record<string, unknown> = {};
+    for (const [name, version] of Object.entries(adopters)) {
+      merged[name] = name in ours ? ours[name] : version;
+    }
+    for (const [name, version] of Object.entries(ours)) {
+      if (!(name in merged)) merged[name] = version;
+    }
+    return merged;
+  };
+
+  const MERGED = ["dependencies", "devDependencies", "scripts"] as const;
+  const out: Record<string, unknown> = { ...mine, ...theirs };
+  for (const key of MERGED) {
+    const value = section(key);
+    if (value === undefined) delete out[key];
+    else out[key] = value;
+  }
+  // The adopter's own formatting, for the reason the root manifest gives: a
+  // re-indented file arrives as an unreviewable whole-file hunk and their next
+  // formatter run reverts it.
+  const eol = before.includes("\r\n") ? "\r\n" : "\n";
+  const rendered = JSON.stringify(out, null, indentOf(before)).replaceAll("\n", eol);
+  return `${rendered}${/\r?\n$/.test(before) ? eol : ""}`;
 }
 
 interface Stamps {
