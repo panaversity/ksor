@@ -372,6 +372,29 @@ approved has to be the text that was written. That act is yours.
 Run `pnpm check` before you commit. It runs the rules as a program, and every
 failure it reports says what is wrong, why the rule exists, and how to fix it.
 
+### Names instead of handles
+
+The record stores actors as identifiers — `human:you`, `team:legal-ops` — and a
+page would otherwise lead with the slug: "Owner · human:bashiraziz". Put the
+name beside the identifier in `.ksor/people.yaml` and pages print that instead:
+
+```yaml
+people:
+  "human:bashiraziz": Bashir Aziz
+  "human:ciso": Ayesha Khan
+```
+
+Keyed by the identifier exactly as the record stores it, quoted because it
+contains a colon. There is no rule that turns a name into a handle — `ciso` is
+nobody's squashed full name — so both are written down, and an actor with no
+entry renders exactly as stored rather than being guessed at.
+
+**This is presentation, and nothing else.** It grants no authority: who may
+approve or withdraw is `.ksor/governance.yaml`, and the two files are not
+checked against each other, because someone who leaves the authority list is
+still the recorded approver of everything they approved. Optional — a record
+that declares no names reads exactly as it did before.
+
 ### Presenting a document
 
 Ask your coding agent for slides and it writes them, from the document, into the
