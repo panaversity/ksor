@@ -1,5 +1,63 @@
 # @panaversity/ksor
 
+## 0.0.52
+
+### Patch Changes
+
+- 1e60b9d: The site prints natural names for the actors a record cites, where the record
+  declares them.
+
+  A governed page led with a slug — "Owner · human:bashiraziz" — on every owner,
+  trust, approval and withdrawal line. `.ksor/people.yaml` maps an actor to the
+  name a page should print, and the site substitutes it at render time. An actor
+  with no entry renders exactly as stored: no splitting, no camelCase guessing,
+  no derivation. A display name is the one thing in a governance line that cannot
+  be computed — `bashiraziz` is equally "Bashir Aziz" and "Bashira Ziz" — so the
+  owner is its only source.
+
+  A MAP keyed by the whole identifier, not a list of names a handle is derived
+  from. The derivation could only ever match a handle that IS somebody's squashed
+  full name, so `human:ciso`, `human:audit-lead` and `human:mjs` — most of the
+  actors in a real record — had no expressible name at all; and it collided, since
+  two different people can squash to one handle.
+
+  Deliberately NOT part of `.ksor/governance.yaml`. That file is the root of
+  authority: its key set is closed so nothing can sit there without being
+  enforced, and its digest is hashed into `build.lock.json` — so a display name
+  living there would mean correcting the spelling of somebody's name refused the
+  next site build as `ksor-lock-stale`. Appearing in `people.yaml` confers no
+  authority; it only changes what is printed, and nothing cross-checks the two
+  lists, because a person who leaves the authority list is still the recorded
+  approver of everything they approved.
+
+- f23cddc: `ksor calibrate --check` reports whether a declared abstention floor is still
+  holding, from the record's own traffic.
+
+  A floor is measured once and the record then grows. As it does, questions that
+  used to be out-of-corpus start scoring above a fixed number, so the record
+  answers what it used to refuse — no error, nothing logged, and the same
+  `gate: { floor: … }` in every envelope. AGENTS.md forbids copying a calibrated
+  constant between corpora; the same reasoning applies across time within one
+  corpus, and nothing enforced it (#182).
+
+  It needs no telemetry and no new dependency: every search already leaves an
+  audit row carrying the gate's own signal, on both sides of the gate, so this is
+  one indexed query — no provider key, no embedding call, no LLM. It reports the
+  abstain rate, the percentiles of answered top scores, and how many answers
+  landed within 0.01 of the floor (the size of the decision in this project's own
+  gold, not a threshold somebody picked).
+
+  **It never fails a run**, and that is the design rather than a limitation. A
+  stale floor wants re-measuring; failing a build for one would make the shortest
+  way out deleting `vector_floor` — turning the abstention gate off entirely to
+  clear the error, which is the escape `build/lifecycle-notice.ts` refuses to
+  create for a passed review date. It is also a monitor and not a measurement: it
+  can say a floor has gone permissive against real traffic, never that it is too
+  strict for questions nobody asked, and it says so rather than reporting a
+  healthy-looking nothing on a record no one queries.
+
+- a403e19: the served envelope now discloses when a §7 audit row could not be written (issue #150)
+
 ## 0.0.51
 
 ### Patch Changes
