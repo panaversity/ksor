@@ -334,9 +334,9 @@ call ~3,541 — an agent pays for a record's tool surface out of its context
 window, so the record's owner decides what it says. Re-measured 2026-08-25
 after the trust floor, the per-hit governance and the trust-tier provenance
 sentences landed: the definitions are
-**16,734 chars / ~4,184 tokens** as transmitted — exact, they depend on the
-code alone — which is `search` 7,932 + `outline` 3,332 + `read` 5,466 =
-**16,730**, plus the four characters the `tools` array itself carries;
+**17,394 chars / ~4,349 tokens** as transmitted — exact, they depend on the
+code alone — which is `search` 8,152 + `outline` 3,552 + `read` 5,686 =
+**17,390**, plus the four characters the `tools` array itself carries;
 the per-call figures were NOT re-measured against that record, and
 `packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
 measurement plus the governance block's exactly-measured 262 chars a hit. The

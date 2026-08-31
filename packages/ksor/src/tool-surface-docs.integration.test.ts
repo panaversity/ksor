@@ -4,8 +4,6 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { releaseNote } from "./release-note.js";
-
 import {
   buildDefaultGateway,
   buildServer,
@@ -25,6 +23,13 @@ import {
  * every document that prints them to also print the reconciliation, so a
  * reader can check the arithmetic and a code change that moves a description
  * fails here instead of quietly making five documents wrong.
+ *
+ * A RELEASED CHANGELOG NOTE IS NOT ONE OF THEM. The list used to include a
+ * consumed changeset, read back out of CHANGELOG.md — which made every future
+ * growth of the surface demand that a shipped release note be rewritten to
+ * match the present. A release note records what was measured THEN; forcing it
+ * to agree with now is how a changelog starts lying. The living documents are
+ * checked; history is left alone.
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -41,6 +46,15 @@ function grouped(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+/**
+ * The rule the published tables already use for their token column: four
+ * characters to the token, halves up. Written down here because it was only
+ * ever implicit in the numbers, which is how one copy of them drifted.
+ */
+function tokens(chars: number): number {
+  return Math.round(chars / 4);
+}
+
 describe("the documented tool-definition sizes", () => {
   it("are two measurements, and the array carries exactly 4 characters no tool's row does", async () => {
     const tools = await listServedTools(buildServer(STUB, "0.0.0", buildDefaultGateway));
@@ -52,8 +66,8 @@ describe("the documented tool-definition sizes", () => {
     const transmitted = JSON.stringify(wire).length;
 
     expect([...per.keys()].sort()).toEqual(["outline", "read", "search"]);
-    expect(sum).toBe(16730);
-    expect(transmitted).toBe(16734);
+    expect(sum).toBe(17390);
+    expect(transmitted).toBe(17394);
     // Named so a failure says WHY the two differ rather than only that they do.
     expect(transmitted - sum).toBe(2 /* brackets */ + (wire.length - 1) /* separators */);
   });
@@ -76,16 +90,27 @@ describe("the documented tool-definition sizes", () => {
       // were the last places the array measure was still attributed to "the
       // three definitions", which is the misreading the whole exercise is about.
       "research/okf-native.md",
-      ".changeset/okf-door-on-the-profile.md",
     ];
     for (const rel of documents) {
-      // A changeset is consumed at release; its prose lives on in CHANGELOG.md.
-      const text = rel.startsWith(".changeset/")
-        ? releaseNote(ROOT, rel).text
-        : readFileSync(path.join(ROOT, rel), "utf8");
+      const text = readFileSync(path.join(ROOT, rel), "utf8");
       expect(text, `${rel} prints the transmitted figure`).toContain(grouped(transmitted));
       expect(text, `${rel} reconciles it with the per-tool sum`).toContain(grouped(sum));
     }
+
+    // The emitted AGENTS.md speaks in TOKENS, not characters — it is the
+    // adopter's file and an agent's budget is tokens — so it is checked against
+    // the same measurement through the published tables' own rule rather than
+    // being made to print a character count it has no use for. Nothing guarded
+    // it before: it still read 4,054 two surface changes after that stopped
+    // being true, in the file a coding agent operating the record reads first.
+    const scaffold = readFileSync(
+      path.join(ROOT, "packages/ksor/templates/scaffold/AGENTS.md"),
+      "utf8",
+    );
+    expect(
+      scaffold,
+      `the emitted AGENTS.md prints the resident cost in tokens (${grouped(tokens(transmitted))})`,
+    ).toContain(`~${grouped(tokens(transmitted))} tokens`);
 
     // The two tables print every tool's own size, so the rows add up on the page.
     for (const rel of ["packages/ksor/docs/tool-surface.md", "specs/ksor/gateway/spec.md"]) {

@@ -333,7 +333,7 @@ governance block every hit now carries:
 
 |                                  |                                |
 | -------------------------------- | ------------------------------ |
-| all three tool definitions       | ~4,054 tokens, always resident |
+| all three tool definitions       | ~4,349 tokens, always resident |
 | one `search` at `k=10` (default) | ~4,196 tokens per call         |
 | one `search` at `k=5`            | ~2,330 tokens per call         |
 

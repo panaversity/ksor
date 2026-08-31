@@ -46,7 +46,7 @@ describe.runIf(adminDsn !== "")("search's audit-degraded signal (db)", () => {
   let ctx: ServiceContext;
 
   beforeAll(async () => {
-    dbName = `ksor_t_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_audit_degraded_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);

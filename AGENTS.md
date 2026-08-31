@@ -817,9 +817,9 @@ gateway` package, serve-by-spawn) is superseded._
     hit and every `read` reply now carries the record's stored `governance`
     block, and `search` takes a `min_trust_tier` parameter. Measured exactly,
     from the served `tools/list` capture rather than an estimate: the three
-    definitions are **16,734 chars ≈ 4,184 tokens, always resident** (was
-    ~2,990) as transmitted — `search` 7,932 + `outline` 3,332 + `read` 5,466 =
-    16,730, plus the four characters the `tools` array itself carries; a search hit
+    definitions are **17,394 chars ≈ 4,349 tokens, always resident** (was
+    ~2,990) as transmitted — `search` 8,152 + `outline` 3,552 + `read` 5,686 =
+    17,390, plus the four characters the `tools` array itself carries; a search hit
     carries ~262 chars more than it did, so a `k=10` call is correspondingly
     dearer. The per-call figure is NOT re-measured here — the live 81-document
     book it was taken against does not exist in this tree, and an estimate
