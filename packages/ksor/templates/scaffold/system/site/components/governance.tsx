@@ -5,6 +5,7 @@ import { Clock } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { displayActor } from "@/lib/actor-display";
+import { peopleBook } from "@/lib/people";
 import {
   badgeAddsToStatus,
   badgeText,
@@ -258,7 +259,7 @@ export function GovernanceMeta({
             <Chip text={trust.tier} />
             {trust.by === null ? null : (
               <span className="font-normal text-fd-muted-foreground">
-                {displayActor(trust.by)}
+                {displayActor(trust.by, peopleBook())}
                 {trust.at === null ? null : <> · {day(trust.at)}</>}
               </span>
             )}
@@ -287,7 +288,7 @@ export function GovernanceMeta({
           Links keep full strength: `Replaces` points at the document this one
           superseded, and that is an action rather than a fact. */}
       <dl className="mt-2.5 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 empty:mt-0 [&_a]:text-fd-foreground [&_dd]:font-normal [&_dd]:text-fd-muted-foreground">
-        {owner === null ? null : <Fact label="Owner">{displayActor(owner)}</Fact>}
+        {owner === null ? null : <Fact label="Owner">{displayActor(owner, peopleBook())}</Fact>}
         {/* Who let this into the record. `ksor.approval` is what makes a `stable`
           document stable at all (record spec §2.2), so a page that showed the
           word and not the signature would be publishing the claim without its
@@ -295,7 +296,7 @@ export function GovernanceMeta({
         {approval === null ? null : (
           <Fact label="Approved">
             <>
-              {displayActor(approval.by)} · {day(approval.at)}
+              {displayActor(approval.by, peopleBook())} · {day(approval.at)}
             </>
           </Fact>
         )}
@@ -308,7 +309,7 @@ export function GovernanceMeta({
         {deprecated === null ? null : (
           <Fact label="Withdrawn">
             <>
-              {displayActor(deprecated.by)} · {day(deprecated.at)}
+              {displayActor(deprecated.by, peopleBook())} · {day(deprecated.at)}
             </>
           </Fact>
         )}

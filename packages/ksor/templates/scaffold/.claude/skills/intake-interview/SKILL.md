@@ -50,10 +50,11 @@ the question — that is what made the last version unanswerable.
 
 > Names or handles, not job titles. If it is just you, say so.
 >
-> Ask for the NATURAL NAME — "Bashir Aziz", not "bashiraziz". The handle is
-> derived by stripping whitespace and lowercasing ("Bashir Aziz" → `bashiraziz`),
-> and the natural name is written to `.ksor/people.yaml` so the site can print
-> it in place of the handle on every page.
+> Ask for BOTH: the handle the record will store (`human:bashiraziz`) and the
+> natural name to print ("Bashir Aziz"). They are not derivable from each other
+> — `human:ciso` and `human:mjs` are not anybody's squashed full name — so the
+> handle goes into the frontmatter and the policy, and the pair goes into
+> `.ksor/people.yaml` for the site to print.
 
 ---
 
@@ -133,14 +134,14 @@ never an email address.
   document is still in `knowledge/`.** Those five are approved by it, so a
   policy rewritten without it refuses the next build by name
   (`ksor-approver-unauthorised`). It leaves when the last sample does.
-- Write `.ksor/people.yaml` from question 3: `version: "0.1"` and every
-  natural name the owner named, one per line under `people:`. Nothing else —
-  the handle for each entry is derived (`name.replace(/\s+/g, "").toLowerCase()`),
-  and the site looks it up at render time so pages read "Owner · Bashir Aziz"
-  instead of "Owner · human:bashiraziz". Every skill that records a governance
+- Write `.ksor/people.yaml` from question 3: `version: "0.1"` and a `people:`
+  MAP from each actor to its natural name — `"human:bashiraziz": Bashir Aziz`.
+  Keyed by the actor exactly as the record stores it, quoted because it
+  contains a colon. Nothing else — the site looks the actor up at render time,
+  so pages read "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz". Every skill that records a governance
   act (this one, add-sources for `verified:` entries, `ksor takedown` for
   withdrawals) asks the owner for a natural name whenever it is about to write
-  a handle that isn't in `people.yaml` yet — the owner is the only source of a
+  an actor that isn't in `people.yaml` yet — the owner is the only source of a
   display name, never a convention-based guess.
 - **Offer to start replacing the starter documents — they are already
   published.** All five ship `status: stable`, approved by
