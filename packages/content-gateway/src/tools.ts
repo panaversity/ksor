@@ -259,6 +259,13 @@ export const SEARCH_OUTPUT: StandardSchemaWithJSON = z.object({
         "floor, so these hits come from keyword search alone and rank differently.",
     ),
   content_advisory: z.string().optional(),
+  audit: z
+    .enum(["degraded"])
+    .optional()
+    .describe(
+      "Present only when the §7 audit row for this act could not be written (shed under " +
+        "saturation). The answer is unaffected; absent means the row landed normally.",
+    ),
 });
 
 export const OUTLINE_OUTPUT: StandardSchemaWithJSON = z.object({
@@ -298,6 +305,13 @@ export const OUTLINE_OUTPUT: StandardSchemaWithJSON = z.object({
   has_more: z
     .boolean()
     .describe("True when rows were cut at limit — the record has more, this list is partial."),
+  audit: z
+    .enum(["degraded"])
+    .optional()
+    .describe(
+      "Present only when the §7 audit row for this act could not be written (shed under " +
+        "saturation). The answer is unaffected; absent means the row landed normally.",
+    ),
 });
 
 export const READ_OUTPUT: StandardSchemaWithJSON = z.object({
@@ -331,6 +345,13 @@ export const READ_OUTPUT: StandardSchemaWithJSON = z.object({
   total_est_tokens: z.number().optional(),
   note: z.string().optional(),
   content_advisory: z.string().optional(),
+  audit: z
+    .enum(["degraded"])
+    .optional()
+    .describe(
+      "Present only when the §7 audit row for this act could not be written (shed under " +
+        "saturation). The answer is unaffected; absent means the row landed normally.",
+    ),
 });
 
 // ── The handlers ────────────────────────────────────────────────────────────

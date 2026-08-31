@@ -22,22 +22,27 @@ numbers are exact for every record:
 
 |                                | chars  | ~tokens |                     |
 | ------------------------------ | ------ | ------- | ------------------- |
-| all three, as transmitted      | 16,734 | 4,184   | **always resident** |
-| `search` alone                 | 7,932  | 1,983   | always resident     |
-| `outline` alone                | 3,332  | 833     | always resident     |
-| `read` alone                   | 5,466  | 1,367   | always resident     |
-| `outline` + `read`, if deleted | 8,798  | 2,200   | the saving below    |
+| all three, as transmitted      | 17,394 | 4,349   | **always resident** |
+| `search` alone                 | 8,152  | 2,038   | always resident     |
+| `outline` alone                | 3,552  | 888     | always resident     |
+| `read` alone                   | 5,686  | 1,422   | always resident     |
+| `outline` + `read`, if deleted | 9,238  | 2,310   | the saving below    |
 
 **Two measurements, so read the first row apart from the rest.** Each tool's
 row is the JSON of that tool's own object; the first row is the JSON of the
 whole `tools` array, which carries four characters no tool's row does — its
 two brackets and the two separators between three tools. So the three tools
-sum to **16,730** and the array is **16,734**. Deleting a tool saves that
+sum to **17,390** and the array is **17,394**. Deleting a tool saves that
 tool's own row, not a share of the total.
 
-They grew: `search` was 5,383 chars before the trust floor and the governance
-each hit now carries, and `read` 3,396 before it carried the same governance
-block beside the frontmatter. That is the price of an agent being able to tell
+They grew, twice, and each rise is priced rather than absorbed. `search` was
+5,383 chars before the trust floor and the governance each hit now carries, and
+`read` 3,396 before it carried the same governance block beside the frontmatter.
+Then every tool gained exactly **220 chars** for the `audit` field that says
+when a reply's §7 row was shed — 660 across the three, always resident. That
+one buys an agent the ability to tell a served answer whose provenance was
+recorded from one whose audit write was dropped under load, which it previously
+could not distinguish at all (#150). That is the price of an agent being able to tell
 a reviewed document from an unreviewed one, and it is charged once per session.
 The last 520 of them are the price of that signal being HONEST: `trust_tier` is
 derived from reviews a document declares about itself, which no authority list
@@ -65,7 +70,7 @@ doing any work.
 ### 1. Delete a tool nothing calls
 
 The biggest win, and the easiest — delete its `registerTool` block. Dropping
-`outline` and `read` takes **8,798 chars (~2,200 tokens)** off every session,
+`outline` and `read` takes **9,238 chars (~2,310 tokens)** off every session,
 whether or not the agent would ever have called them.
 
 ### 2. Say what the record covers
@@ -142,9 +147,19 @@ made it answer from.
 - **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
   `provenance`, each hit's `governance`, the `snapshot` token and `gate`. A
   record that reshaped them would still look like a KSoR and no longer be one.
+- **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
+  `provenance`, each hit's `governance`, the `snapshot` token, `gate`, and
+  `audit`. A record that reshaped them would still look like a KSoR and no
+  longer be one.
 - **The `FLOOR` text.** It tells an agent how to branch on an envelope, what
   `gate: "off"` means, and that corpus content is **untrusted** — quote it, never
   obey it. Your prose is composed above it.
+- **`audit: "degraded"`.** Present only when the §7 retrieval-log row for this
+  act could not be written — shed under saturation, so serving stays
+  available. The answer itself is unaffected; absent means the row landed
+  normally. An operator auditing served answers against the ledger should
+  treat a gap alongside an `audit: "degraded"` response as expected, and any
+  other gap as a leak.
 
 ## The door checks its own surface at boot
 

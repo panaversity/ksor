@@ -306,6 +306,7 @@ export type SearchResult =
       readonly content_advisory?: string;
       readonly k_note?: string;
       readonly degraded_reason?: string;
+      readonly audit?: "degraded";
     }
   | {
       readonly ok: false;
@@ -341,6 +342,7 @@ export type SearchResult =
       readonly snapshot: SnapshotEnvelope | null;
       readonly k_note?: string;
       readonly degraded_reason?: string;
+      readonly audit?: "degraded";
     };
 
 const isoSeconds = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -536,7 +538,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     // A floor abstention still pins the generation it was computed
     // against; matched-nothing pins nothing.
     const generation = hits[0]?.generation;
-    await logRead(ctx.pool, {
+    const audited = await logRead(ctx.pool, {
       tenantId: inst.tenantId,
       corpusId: inst.corpusId,
       actor,
@@ -614,6 +616,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
       snapshot: generation === undefined ? null : snapshotEnvelope(ctx, generation),
       ...(kNote === undefined ? {} : { k_note: kNote }),
       ...(degradedReason === undefined ? {} : { degraded_reason: degradedReason }),
+      ...(audited ? {} : { audit: "degraded" as const }),
     };
   }
 
@@ -653,7 +656,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
   }
 
   const generation = hits[0]?.generation ?? 0;
-  await logRead(ctx.pool, {
+  const audited = await logRead(ctx.pool, {
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     actor,
@@ -701,6 +704,7 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     ...(advisory ? { content_advisory: CONTENT_ADVISORY } : {}),
     ...(kNote === undefined ? {} : { k_note: kNote }),
     ...(degradedReason === undefined ? {} : { degraded_reason: degradedReason }),
+    ...(audited ? {} : { audit: "degraded" as const }),
   };
 }
 
@@ -762,6 +766,7 @@ export interface ReadResult {
    * (review 2026-08-20). Renamed, retyped, and always present.
    */
   readonly snapshot_status: "pinned" | "unpinned" | string;
+  readonly audit?: "degraded";
 }
 
 export interface ReadOptions {
@@ -930,7 +935,7 @@ export async function readDocument(
     ...new Set(scoped.map((c) => c.headingPath.split("/")[0] ?? "").filter((s) => s !== "")),
   ];
 
-  await logRead(ctx.pool, {
+  const audited = await logRead(ctx.pool, {
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     actor,
@@ -981,6 +986,7 @@ export async function readDocument(
     // when they sent none, and the refresh reason when one was sent and could
     // not be used.
     snapshot_status: refreshed ?? (pinned === null ? "unpinned" : "pinned"),
+    ...(audited ? {} : { audit: "degraded" as const }),
   };
 }
 
@@ -1017,6 +1023,7 @@ export async function outlineDocuments(
   offset: number;
   next_offset: number | null;
   content_advisory?: string;
+  audit?: "degraded";
 }> {
   const inst = ctx.instance;
   // A declared-but-uncalibrated floor REFUSES every serve — outline is a
@@ -1049,7 +1056,7 @@ export async function outlineDocuments(
   );
   const has_more = rows.length > limit;
   if (has_more) rows.length = limit;
-  await logRead(ctx.pool, {
+  const audited = await logRead(ctx.pool, {
     tenantId: inst.tenantId,
     corpusId: inst.corpusId,
     actor,
@@ -1074,6 +1081,7 @@ export async function outlineDocuments(
   );
   return {
     ...(advisory ? { content_advisory: CONTENT_ADVISORY } : {}),
+    ...(audited ? {} : { audit: "degraded" as const }),
     has_more,
     limit,
     offset,

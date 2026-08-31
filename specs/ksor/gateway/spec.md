@@ -23,16 +23,16 @@ are exact for every record:
 
 |                                  | chars  | ~tokens |                                |
 | -------------------------------- | ------ | ------- | ------------------------------ |
-| tool definitions, as transmitted | 16,734 | 4,184   | **always resident in context** |
-| `search` alone                   | 7,932  | 1,983   | always resident                |
-| `outline` alone                  | 3,332  | 833     | always resident                |
-| `read` alone                     | 5,466  | 1,367   | always resident                |
-| `outline` + `read`, if deleted   | 8,798  | 2,200   | the delete-both saving         |
+| tool definitions, as transmitted | 17,394 | 4,349   | **always resident in context** |
+| `search` alone                   | 8,152  | 2,038   | always resident                |
+| `outline` alone                  | 3,552  | 888     | always resident                |
+| `read` alone                     | 5,686  | 1,422   | always resident                |
+| `outline` + `read`, if deleted   | 9,238  | 2,310   | the delete-both saving         |
 
 The first row is the JSON of the whole `tools` array; every other row is one
 tool's own object. The array carries four characters no tool's row does — two
-brackets and two separators — so the three tools sum to **16,730** and the
-array is **16,734**. Deleting a tool saves that tool's own row.
+brackets and two separators — so the three tools sum to **17,390** and the
+array is **17,394**. Deleting a tool saves that tool's own row.
 
 **Replies** depend on the record's passages. These are the 2026-08-23
 measurement against the live book record (81 documents, 6,963 chunks) plus the
@@ -58,7 +58,7 @@ record performed.
 
 Two consequences set the scope:
 
-1. **Dropping an unused tool is the largest win** — ~2,200 tokens for the whole
+1. **Dropping an unused tool is the largest win** — ~2,310 tokens for the whole
    session, whether or not the agent would ever have called them.
 2. **`k` is the result lever; `budgets.maximum_response_characters` is not.** It
    defaults to 120,000 and at ~1,700 chars a hit cannot bind before
