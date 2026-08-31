@@ -49,6 +49,12 @@ the question — that is what made the last version unanswerable.
 **3 of 3 — Who signs off on a document, and who can take one down?**
 
 > Names or handles, not job titles. If it is just you, say so.
+>
+> Ask for BOTH: the handle the record will store (`human:bashiraziz`) and the
+> natural name to print ("Bashir Aziz"). They are not derivable from each other
+> — `human:ciso` and `human:mjs` are not anybody's squashed full name — so the
+> handle goes into the frontmatter and the policy, and the pair goes into
+> `.ksor/people.yaml` for the site to print.
 
 ---
 
@@ -120,7 +126,7 @@ never an email address.
   climb, not part of this interview). The strictness answer from question 5
   is the intent behind the `retrieval.vector_floor` on that climb, measured
   by `ksor calibrate` — capture it in the prose now so it is ready.
-- Write `.ksor/governance.yaml` from questions 6 and 7: `version: "0.1"`,
+- Write `.ksor/governance.yaml` from question 3: `version: "0.1"`,
   the `audiences:` registry if there is one, and the two authority sets with
   real actors. That file is the root of authority — every approval, every
   deprecation and every ledger entry is checked against it. **Keep
@@ -128,6 +134,15 @@ never an email address.
   document is still in `knowledge/`.** Those five are approved by it, so a
   policy rewritten without it refuses the next build by name
   (`ksor-approver-unauthorised`). It leaves when the last sample does.
+- Write `.ksor/people.yaml` from question 3: `version: "0.1"` and a `people:`
+  MAP from each actor to its natural name — `"human:bashiraziz": Bashir Aziz`.
+  Keyed by the actor exactly as the record stores it, quoted because it
+  contains a colon. Nothing else — the site looks the actor up at render time,
+  so pages read "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz". Every skill that records a governance
+  act (this one, add-sources for `verified:` entries, `ksor takedown` for
+  withdrawals) asks the owner for a natural name whenever it is about to write
+  an actor that isn't in `people.yaml` yet — the owner is the only source of a
+  display name, never a convention-based guess.
 - **Offer to start replacing the starter documents — they are already
   published.** All five ship `status: stable`, approved by
   `ksor-starter/KSOR-STAMP-VERSION`, so the site and `llms.txt` carry them from

@@ -11,6 +11,7 @@
 # drop the policy from the tarball (found live 2026-08-25).
 scaffold/.ksor/*
 !scaffold/.ksor/governance.yaml
+!scaffold/.ksor/people.yaml
 !scaffold/.ksor/takedowns.yaml
 scaffold/**/node_modules/
 scaffold/system/site/.next/

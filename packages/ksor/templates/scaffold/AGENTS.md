@@ -33,6 +33,36 @@ written by `ksor takedown` — every entry's actor is checked against the
 policy, so a line appended by hand is refused exactly as the verb would refuse
 it, and a deleted line is refused by `ksor build` against the file's history.
 
+Display names for those actors live in `.ksor/people.yaml`, a small phone book
+mapping each actor to the name a page should print — `"human:bashiraziz": Bashir
+Aziz` — so a page reads "Owner · Bashir Aziz" instead of "Owner ·
+human:bashiraziz". The two are not derivable from each other (`human:ciso` is
+nobody's squashed full name), which is why both are written down.
+
+It is a SEPARATE file from `.ksor/governance.yaml` deliberately: the policy is
+the root of authority, its key set is closed so that nothing sits there without
+being enforced, and its digest is hashed into `build.lock.json` — so a display
+name living there would mean correcting the spelling of somebody's name refused
+your next build. Appearing in `people.yaml` confers no authority whatsoever; it
+only changes what is printed.
+
+An actor with no entry renders exactly as stored, and the governance skills
+offer to add one when they are about to write an actor the file does not know.
+
+**The two files list different things, and neither is derived from the other.**
+`governance.yaml` names who MAY act — an actor must be in `approval_authorities`
+to approve a document, or in `takedown_authorities` to withdraw one.
+`people.yaml` names what to PRINT for any actor the record cites. An approver
+usually appears in both, for two different reasons. A document's `ksor.owner`
+and a `verified:` entry's actor appear only in `people.yaml`, because neither
+carries authority — the policy has no verification family at all. And an
+authority whose handle already reads fine needs no entry at all.
+
+Nothing cross-checks them, deliberately: a person who leaves the authority list
+is still the recorded approver of everything they approved, and their name must
+keep rendering on those acts. A governance act is history; the policy is
+current state.
+
 ## Critical rules
 
 1. **The site never contains authored content.** Knowledge goes in

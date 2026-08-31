@@ -1,0 +1,32 @@
+# Natural names for the actors this record cites. The site looks an actor up
+# here at render time and prints the name in its place — so a page reads
+# "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz".
+#
+# A MAP, keyed by the actor exactly as the record stores it. Not a derivation:
+# there is no rule that turns "Bashir Aziz" into `mjs`, `ciso` or `audit-lead`,
+# and most handles in a real record are not somebody's squashed full name. The
+# key is the identifier, the value is what to print, and nothing is guessed.
+#
+#   people:
+#     "human:bashiraziz": Bashir Aziz
+#     "human:ciso": Ayesha Khan
+#     "team:legal-ops": Legal Operations
+#
+# ONE-WAY. The identifier is what the record STORES, cites, and checks against
+# `.ksor/governance.yaml`; the name here is only what a page prints. Nothing
+# reads this file back into an actor, and no authority follows from appearing
+# in it (which is why it is not part of the policy).
+#
+# NOT the same list as `.ksor/governance.yaml`. That file says who MAY approve
+# or withdraw; this one says what to print for anyone the record cites. An
+# approver is usually in both, for two different reasons; a document's owner and
+# a `verified:` entry's actor are only ever here, because neither carries
+# authority. Nothing cross-checks the two, on purpose: someone who leaves the
+# authority list is still the recorded approver of what they approved, and their
+# name has to keep rendering on those acts.
+#
+# Optional. An actor with no entry renders exactly as stored, as it did before
+# this file existed. The intake and add-sources skills offer to add one; the
+# owner can also edit this file by hand — it is theirs.
+version: "0.1"
+people: {}
