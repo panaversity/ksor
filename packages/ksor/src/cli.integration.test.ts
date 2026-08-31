@@ -150,6 +150,58 @@ describe("ksor CLI (built artifact)", () => {
     expect(init.stdout, "the form that scaffolds in place").toContain("ksor init .");
   });
 
+  /**
+   * `calibrate --check` NEVER fails a run.
+   *
+   * A stale abstention floor is a "this wants re-measuring" state. Refusing for
+   * one would make the shortest way out deleting `vector_floor` — turning the
+   * gate off entirely to clear the error — which is the same escape
+   * `build/lifecycle-notice.ts` refuses to create for a passed review date, and
+   * it would destroy the guarantee the check exists to protect (#182).
+   *
+   * Both branches here are asserted against an UNREACHABLE database on purpose:
+   * a record with no floor has nothing to measure, so the check must answer
+   * without opening a connection at all. If it ever starts connecting first,
+   * this goes red rather than becoming slow in an adopter's CI.
+   */
+  it("calibrate --check reports rather than refuses, and does not connect when there is nothing to measure", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-drift-"));
+    try {
+      writeFileSync(
+        path.join(root, "instance.md"),
+        [
+          "---",
+          "format: 2",
+          "name: acme",
+          'title: "Acme"',
+          'description: "One sentence."',
+          "database:",
+          "  dsn_env: KSOR_DB_URL",
+          "---",
+          "",
+          "Body.",
+          "",
+        ].join("\n"),
+      );
+      const r = spawnSync(
+        process.execPath,
+        [distCli, "calibrate", "--instance", path.join(root, "instance.md"), "--check"],
+        {
+          encoding: "utf8",
+          // Unreachable: nothing may connect here, and connecting would hang or
+          // fail rather than exit 0 with a sentence.
+          env: { ...process.env, KSOR_DB_URL: "postgres://nobody@127.0.0.1:1/none" },
+        },
+      );
+      expect(r.status, `${r.stdout}${r.stderr}`).toBe(0);
+      expect(r.stdout).toContain("no floor declared");
+      expect(r.stdout).toContain("ksor calibrate");
+      expect(r.stderr).toBe("");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("every write-plane refusal opens with `error: <slug>`, the contract docs/index.md states", () => {
     // `ksor build` printed `error: ksor-instance-format`; `ksor schema` printed
     // its sentence with no slug at all, so an agent branching on the first
