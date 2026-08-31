@@ -1,5 +1,360 @@
 # @panaversity/ksor
 
+## 0.0.51
+
+### Patch Changes
+
+- 6478ca4: Test infrastructure only — nothing an adopter installs behaves differently.
+
+  Every database-tier suite now bootstraps its scratch database under a name
+  unique to the run (`ksor_<slug>_<base36 ms>_<6 hex>`) instead of a fixed one.
+  Fixed names meant two runs against one Postgres — a second `pnpm test:db`, a CI
+  matrix job, an agent running the tier alongside a person — dropped each other's
+  database `WITH (FORCE)` mid-test, which surfaced as a missing table or a short
+  row count and read as flakiness. A new reaper (`scripts/db-reaper.ts`, the
+  tier's globalSetup) drops what an interrupted run leaks, and guard rule 12 keeps
+  the naming from drifting back.
+
+- c466d4b: The scaffold moves to Fumadocs `16.15.4` (`fumadocs-core`, `fumadocs-ui`) and
+  `fumadocs-mdx` `15.4.0`.
+
+  Maintenance, not a fix — no advisory pushed it, and `npm audit` was already
+  clean. It is taken now because the four behaviours the scaffold cites BY VERSION
+  were re-verified against the new bytes rather than assumed, and each holds:
+  `CalloutType` is still the same six values (`fumadocs-ui/dist/components/callout.d.ts`);
+  `resolveHref` still resolves only the `./` and `../` forms and returns everything
+  else untouched, which is why the record keeps its own resolver; `remark-code-tab`
+  still honours `tab-group` on the `CodeBlockTabs` branch only, which is why the
+  scaffold picks that branch; and the search engine is still ZBSearch, so the
+  `language` option stays absent. Those citations now name `16.15.4`.
+
+  `fumadocs-ui` pins `fumadocs-core` exactly, so the two always move together;
+  `fumadocs-mdx@15.4.0` requires `fumadocs-core ^16.15.3`, which is what makes this
+  one change rather than three. Nothing else moves with it — Fumadocs peers Next as
+  a range (`16.x.x`). The committed pnpm lockfile is regenerated to match.
+
+- 69d57f2: `ksor migrate --write-site` no longer deletes dependencies the adopter added to
+  their site.
+
+  Every file under `system/site` is offered as a whole-file replacement, which is
+  right for the copied rule modules and wrong for `system/site/package.json` — a
+  register ksor and the adopter both write in. Copying it whole removed anything
+  they had added, inside the same hunk that carried a pin bump, so a project could
+  stop building on the release meant to fix it. It is now merged per section: the
+  entries ksor ships move to this release's versions, the adopter's own survive,
+  and an entry ksor no longer ships is left alone rather than deleted (the tool
+  cannot tell one it retired from one they added).
+
+  Adds `docs/upgrading.md`, which ships in the tarball: the four-step path, the
+  table of what migrate carries, the list of files it does not — so an adopter
+  knows what to diff by hand — and the refusals to expect.
+
+- 4b077aa: The scaffold pins Next `16.3.3`, clearing three high-severity advisories a
+  fresh `npm install` reported (#207).
+
+  `next@16.2.9` pulled `sharp@0.34.5` and `postcss@8.4.31`; the advisories are
+  against those, not against anything the scaffold declares, so the bump that
+  fixes them is Next's own. Measured on a fresh scaffold from the published CLI:
+  `npm audit` goes from **3 high to 0**, the static build takes 41.8s and emits
+  its 22 pages, and `llms.txt` carries its 5 entries unchanged. `16.3.3` is not
+  semver-major and Fumadocs peers Next as a range (`16.x.x`), so nothing else
+  moves with it. The committed pnpm lockfile is regenerated to match — the half
+  that would otherwise break an adopter whose CI installs frozen.
+
+  An existing project takes both across with
+  `ksor migrate --write-site`, which offers every file of `system/site` this
+  release emits — the pin and the config among them. It prints the diff and
+  changes nothing without `--write`.
+
+  The scaffold's `next.config.mjs` also sets `agentRules: false`. From Next 16.3,
+  a `next dev` that detects a coding agent writes `AGENTS.md` and `CLAUDE.md` into
+  the Next project root — which here is `system/site`, where the record's own
+  hygiene rule refuses markdown (`ksor-site-holds-content`: the site renders the
+  record, it never holds it). Left on, an adopter's `pnpm dev` turned their own
+  `pnpm check` red without their touching anything.
+
+## 0.0.50
+
+### Patch Changes
+
+- f27f947: The three embed tuning variables now take effect when set in `.env`.
+  `KSOR_EMBED_TIMEOUT_S`, `KSOR_QUERY_EMBED_TIMEOUT_S` and `KSOR_EMBED_CACHE_MAX`
+  were read once at module load — before the CLI applies `.env` in `main()` — so
+  a value set there was silently ignored and the default stood. An adopter who
+  set `KSOR_EMBED_CACHE_MAX` to fit a small runtime, for instance, still got the
+  ~250 MB default cache and could OOM in production with nothing pointing at why.
+  The reads now happen at use. Exported shell variables were unaffected and still
+  are.
+
+## 0.0.49
+
+### Patch Changes
+
+- 5701679: **Three places where the record described a system that was never built.**
+  Nothing an adopter runs changes; what changes is whether the decision log can be
+  trusted without re-checking it against the code (issues #151 and #180).
+
+  Decision 13 said the door composes `secureHeaders` / `bodyLimit` middleware.
+  `bodyLimit` is real — `content-gateway/src/http.ts:26,522` — but `secureHeaders`
+  was never adopted: nothing imports it, and the door sets its own pair by hand
+  (HSTS and `x-content-type-options: nosniff`, "nothing else"). The code is right
+  and the entry was wrong, so the entry is corrected.
+
+  The same decision, and guard rule 5's why-comment, said `hono` and
+  `@hono/node-server` were "already the SDK's transitive deps, so zero new install
+  bytes". True of the 1.x monolith, false since v2 — `@modelcontextprotocol/server`
+  2.0.0 depends on `zod` and `@modelcontextprotocol/core` and nothing else. The
+  reason that survives the upgrade is the one already recorded (the SDK's only HTTP
+  shape is Web-standard and hono needs no bridge to it); the weight is a cost paid
+  deliberately rather than an absence of cost.
+
+  The README stated OpenTelemetry in the present tense — "tells us what happened",
+  "records what the infrastructure did" — with no telemetry code in the tree. It is
+  future tense now, with the constraint the row's own wording already implies:
+  default auto-instrumentation captures `pg` statement text, and a trace backend is
+  a different security boundary from the MCP response.
+
+  SLSA/Sigstore, two rows above, needed the opposite correction. It is not future:
+  `release.yml` sets `id-token: write`, so every release attests the published
+  PACKAGE through npm provenance. What is unbuilt is signing a RECORD's own
+  `build.lock.json`. Both rows now say which half runs.
+
+  Also removed: a `publishConfig` block on `@panaversity/ksor-content-gateway`,
+  which is `private: true` and is bundled rather than published, so the block could
+  never apply.
+
+- 7e72d35: **The embedding dimension ceiling is now held equal in both places it is
+  declared.**
+
+  `EMBED_DIM_MAX` is declared twice — in the instance parser, so a bad `dim:` is
+  refused when `instance.md` is READ, and in the DDL renderer, so it is refused
+  again before any schema is rendered. The split is deliberate and the comment
+  beside one calls it a mirror of the other. Nothing held them equal: before this,
+  the constant appeared in no test anywhere in the repository, so raising the
+  ceiling in one place alone would have left the parser and the renderer refusing
+  at different dimensions — one of the two would still have reddened an existing
+  wording assertion, and an instance-only edit would have passed everything.
+
+  The test asserts EQUALITY and never the number, so the ceiling can still move —
+  which is the point, because the decision that records why it sits at 2000 prices
+  raising it rather than forbidding it.
+
+  Also in the same area: the emitted `AGENTS.md` carried the benchmark figures
+  behind that default with no source and no date, shipped to every adopter. It
+  states the constraint an adopter acts on and points at the decision that holds
+  the numbers, so the measurement now lives beside the constant it constrains,
+  with its provenance, in one place.
+
+- b7a7c5b: **Two audit rows were missing the fact that makes them auditable.**
+
+  `retrieval_log` exists so an operator can say what an act was allowed to see and
+  what it answered from. Two rows could not answer that:
+
+  - **`outline_served` recorded no generation.** Its two siblings,
+    `similarity_searched` and `content_served`, both pin one — so the single act
+    that hands an agent the SHAPE of the record was the one that could not be
+    joined to the publication it described. The projection carried no generation
+    to write, so this is a column rather than an extra query: `walk` already
+    selects it, and `OUTLINE_COLUMNS` moves 9 → 10 under the same width guard that
+    exists because a narrower fixture once hid a truncated projection.
+  - **An ANSWERED search recorded no `top_cosine`.** The abstained row has always
+    carried it, so the ledger held the deciding score only for queries the gate
+    REFUSED — precisely the half that cannot show a floor drifting as a record
+    grows. Both rows now record what the decision turned on, whichever way it
+    went.
+
+  An empty outline still records NULL, deliberately: it served no row from any
+  generation, which is the same reason `search_abstained` records NULL when
+  nothing matched.
+
+  **And `cleanCut` is deleted.** It was exported and documented as the tool the
+  search budget uses to trim an overflowing hit — in the present tense, for a
+  caller that has never existed. It came from the predecessor's grain-expansion
+  path, a feature ksor deliberately never carried, so it was a mechanism brought
+  across without the purpose it existed for.
+
+- 50abe52: **`pnpm preview` no longer dies on a URL it cannot parse or a file it cannot
+  read.**
+
+  Two crashes of one shape, both in the emitted preview server. `pipe()` attaches
+  its error listener to the destination and never to the source, and
+  `decodeURIComponent` throws on a malformed escape — so either failure reached a
+  `node:http` request listener with nobody watching, which is an uncaught
+  exception. The process exited and left the adopter a dead port and a stack trace
+  instead of a page.
+
+  - **`http://localhost:3000/%`** ended the session. So did `/%zz` and any
+    truncated multi-byte escape — the first hostile URL a browser extension or a
+    scanner sends.
+  - **A file the export cannot read** did the same, with no attacker at all: a
+    mode-000 file anywhere under `out/` is a one-request kill, and so is the
+    ordinary loop of rebuilding in another pane while the preview runs, where the
+    export is torn down and a page re-requests an asset that has gone.
+
+  A request that cannot be parsed now resolves to nothing, which is what the 404
+  path is for. And a file that fails to open answers **500 with a reason**, not a
+  blank page: the response head is written on the read stream's `open` event
+  rather than before it, so a file that never opens can still be answered
+  honestly. (A file that vanished BEFORE the request was already a 404 — the
+  resolver stats every candidate — so this is the file that is there and will not
+  open.) Writing it first would have produced a complete, valid, EMPTY `200` —
+  which a browser renders as a blank page and `fetch().text()` reports as `""` —
+  and that is the same silent lie this change exists to stop telling, one layer
+  down. A failure PART WAY through, where the head is already out and no status
+  is left to send, destroys the connection instead of ending it cleanly, so the
+  client sees a truncated response because that is what happened. Either way the
+  reason goes to the console.
+
+  **Two more failures now explain themselves** instead of arriving as stack
+  traces: an occupied port names the collision — `dev` defaults to 3000 as well —
+  and a `PORT` that is not a port number is refused. That covers more than the
+  obvious case: `Number("")` and `Number(" ")` are `0`, so an unset `PORT=` in a
+  shell or a compose file used to bind an arbitrary port and print
+  `http://localhost:0`, exactly as `PORT=abc` printed `:NaN`.
+
+  **And the server binds where it says it binds.** `listen(PORT)` with no host
+  binds every interface while the log has always printed `localhost`, so the built
+  export was reachable from the whole network. It is loopback now, with
+  `KSOR_PREVIEW_HOST` as the way out for the cases where reaching it from
+  elsewhere is the point — a container published with `-p`, a cloud dev box, or
+  the built site on a phone. Set it on the command line: `preview` is plain `node`
+  and does not read `.env`.
+
+  Stated precisely, because a governance claim is the one thing to get exactly
+  right in both directions. A DEFAULT build carries no drafts at all (record spec
+  §2.5 admits them to no surface of a build), so what a default `out/` exposed is
+  the published record. The case that mattered is the one this first missed:
+  `KSOR_AUDIENCE=public,<audience> pnpm build`, whose output holds
+  audience-restricted documents and which the scaffold's AGENTS.md says "belongs
+  behind that audience's own access control, never on a public host" — that `out/`
+  was network-reachable from a preview. `KSOR_DRAFTS=show` is the other. `pnpm dev`,
+  where drafts live, is `next dev` and unchanged by this.
+
+  Alongside this, the containment check moved from once-per-request to
+  per-candidate. `resolve()` tries three filename shapes, and the third,
+  `` `${target}.html` ``, names a sibling of the export root whenever the target
+  IS the root. It is reachable only when the export has no `index.html`, so this
+  is defence in depth rather than a fixed leak — and it is the case the test now
+  builds an export without an index in order to reach, having previously asserted
+  the rule against a fixture that could not.
+
+- 33b6080: **`ksor schema --apply` no longer loses a ROLE when two run at once.**
+
+  `schema.sql` creates three roles, and Postgres roles are CLUSTER-GLOBAL — so
+  `IF NOT EXISTS ... THEN CREATE ROLE` is check-then-act across every database on
+  the instance. Two concurrent applies both see the role absent and both create
+  it. Measured on Postgres 17.7 against an empty cluster: **six concurrent applies,
+  five failed.**
+
+  The SQLSTATE that surfaces is `unique_violation` (23505) on
+  `pg_authid_rolname_index`, **not** `duplicate_object` (42710) — catching only the
+  latter is the obvious fix and does not work. Both are caught now.
+
+  And each role is created in its **own** `DO` block. A `DO` block is a single
+  statement, so an exception anywhere in it rolls the whole block back: three
+  roles in one block meant a loser on the first never created the other two, and
+  the apply then granted against roles that did not exist.
+
+  The same check-then-act sat in the 2.2 → 2.3 migration, which `ksor schema
+--apply` also reaches, and is fixed with it.
+
+  This is not only a test-tier problem, which is why it lives in the DDL: two
+  operators provisioning at once, or a deploy step racing a developer, hit it
+  identically.
+
+  **Scoped honestly:** what is fixed is role creation, which is the part that
+  raced across SEPARATE databases — the shape two concurrent runs actually have.
+  Two applies against the SAME database still race, on `CREATE EXTENSION` and then
+  on table creation; `applySchema`'s contract is a fresh database and that is
+  unchanged here.
+
+- 988d749: **The emitted site builds with webpack, so a real record still deploys.**
+
+  The scaffold's site build was `next build`, which under the pinned Next 16.2.9
+  means Turbopack — and on Vercel's default build machine (4 cores, 8 GB) that
+  does not survive a record big enough to prerender a few hundred routes.
+  Measured on a real 205-document record, 435 routes: about seven minutes, then
+
+  ```
+  FATAL: An unexpected Turbopack error occurred:
+  Failed to write app endpoint /icon.png/route
+  - timeout while receiving message from process
+  - deadline has elapsed
+  ```
+
+  Nothing in that points at the build command, and it names `/icon.png/route`,
+  which is not the problem — the trace's own middle is the PostCSS step. The same
+  record compiled in 86s with `next build --webpack`, which is Next 16's
+  documented opt-out rather than a workaround: the v16 upgrade guide ships exactly
+  this `package.json` line for a project that needs webpack.
+
+  The scaffold now emits `next build --webpack`. `dev` is unchanged and still
+  Turbopack — the failure is production-only, where every route is prerendered at
+  once. An existing project takes the fix with `ksor migrate --write-site`, which
+  already offers `system/site/package.json`.
+
+  This also retires an intermittent CI failure: the conformance suites carried a
+  retry for `TurbopackInternalError: Input image not found`, a flake in
+  Turbopack's static-image metadata pipeline reading the scaffold's `app/icon.png`
+  mark. That pipeline is no longer on the production path, so the retry is gone
+  rather than left in place — a shim retrying quietly is what would stop the suite
+  reporting a real regression.
+
+- 988d749: **A Vercel deployment that reports Ready and 404s everywhere now has a written
+  diagnosis, and the provenance hint stops blaming the reader.**
+
+  A deployment can report **Ready**, take the production alias, and serve
+  `404: NOT_FOUND` at every path, `llms.txt` included — after an install that ran,
+  a `ksor build` that ran, and every route prerendering. The only signal anywhere
+  is one build-log line, `WARNING! Build output contains no "functions" or
+"static" directory`.
+
+  **The cause is not established, and the docs now say so rather than guessing.**
+  The Application Preset was the obvious suspect and is measured NOT to be it: two
+  live Git-linked projects, one preset `Services` and one preset `Other`, both
+  built the `services` block's `site` and `door` and both serve them (`/` 200,
+  `llms.txt` 200, `/mcp` 405 from the door). Naming a wrong cause in the deploy
+  guide would have sent every future reader to a field that is not the problem.
+
+  `deploying.md` and the scaffold README now name that failure, quote the warning
+  so it is searchable, and record two things verified live on a 205-document record
+  (issue #197): patching the project's own `outputDirectory` / `buildCommand` /
+  `installCommand` and taking a fresh Git-sourced deployment does **not** fix it —
+  `vercel.json` is what Vercel reads — and replacing the `services` block with the
+  classic top-level keys does. Two earlier sentences were corrected rather than
+  extended: the docs said a wrong preset meant "`/mcp` never exists", which asserted a
+  mechanism now measured false, and offered a site-only fallback as project
+  settings, which cannot override `vercel.json`.
+
+  **And `source: unspecified` now names both of its causes.** Only one is "you
+  never made a repository"; the other is a record that IS committed and pushed, on
+  a machine the `.git` directory never reached, because an upload-based deploy
+  excludes it — Vercel's CLI does. `git init` is still offered first, because it is
+  still right for the reader who has not made one; what is new is the second line,
+  for the reader who has, and who was previously being told to redo work they had
+  already done in the one message that governs provenance.
+
+  **A remedy also stops naming a flag the verb refuses.** `--source-commit` is an
+  `ingest` flag; `ksor build` rejects it as an unknown argument and exits 1. Two of
+  the five provenance notices offered it regardless of which verb was printing —
+  including the one this change is for, read by someone whose upload stripped
+  `.git` on the deploy path, for whom it would have turned a provenance warning
+  into a failed build. The flag is now offered only by the verb that accepts it,
+  and the same correction is applied to the `(dirty)` notice's `ksor build
+--strict`, which had the defect latently. Both are asserted across every gap,
+  enumerated from the exported list rather than a copy of it.
+
+  The emitted `vercel.json` is unchanged.
+
+## 0.0.48
+
+### Patch Changes
+
+- 4883d2c: A document page gives its text 16px more room: the horizontal padding drops
+  from 32px to 24px. The reading measure itself is unchanged — widening it was
+  tried and reverted, because measuring what the column already is showed it is
+  wider than the comment beside it claimed, not narrower.
+
 ## 0.0.47
 
 ### Patch Changes

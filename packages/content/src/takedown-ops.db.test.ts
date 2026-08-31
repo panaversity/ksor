@@ -9,6 +9,7 @@
  * ONE RECORD, not merely to the tenant.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runIngest } from "./db.js";
@@ -22,7 +23,7 @@ import type { ContentInstance } from "./instance.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_takedown_ops_test";
+const DB = `ksor_takedown_ops_test_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "takedown-corp";
 
 const instance: ContentInstance = instanceOf(TENANT, TENANT);
@@ -58,7 +59,6 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

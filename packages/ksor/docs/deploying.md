@@ -133,13 +133,88 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > every dashboard import until Vercel's detection changes — the layout that
 > triggers it, code under `system/`, is decision 8 and is not moving.
 >
-> Also confirm **Application Preset is `Services`**; with any other preset the
-> `services` key is ignored and `/mcp` never exists. Vercel Services is in Beta.
+> ---
 >
-> **If it still argues, deploy the site alone** — it needs no preset and no
-> services: build command `pnpm -C system/site build`, output directory
-> `system/site/out`. That is the stricter posture decision 29 describes, and
-> the door can be deployed separately.
+> **The emitted `vercel.json` is verified working on the Git path.** Measured on
+> two live Git-linked projects, 2026-08-27: both built the `services` block's
+> `site` and `door`, and both serve — `/` 200, `/llms.txt` 200, and `/mcp` 405,
+> which is the door answering "Method Not Allowed" to a GET rather than a static
+> 404, and is how you tell the door is routed at all.
+>
+> **It does not depend on the Application Preset**, which is the first thing
+> everyone suspects and the reason to say so:
+>
+> | project's preset | `services` block built | serves                                 |
+> | ---------------- | ---------------------- | -------------------------------------- |
+> | `Services`       | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
+> | `Other`          | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
+>
+> **One failure has been seen that none of this explains.** On a 205-document
+> record (2026-08-26, issue #197) the install ran, `ksor build` ran, every route
+> prerendered — and Vercel collected nothing. The deployment reported **Ready**,
+> took the production alias, and served `404: NOT_FOUND` at every path,
+> `llms.txt` included. The only signal anywhere was one build-log line:
+>
+> ```
+> WARNING! Build output contains no "functions" or "static" directory;
+> the build may not have produced any deployable output.
+> ```
+>
+> **Its cause is not established**, and that is written here rather than guessed
+> at, because a wrong cause costs the reader the evening the right one would
+> have saved. What is ruled out: the preset (above), and the project's own
+> `outputDirectory` / `buildCommand` / `installCommand` — patching all three,
+> confirming they read back, and taking a fresh Git-sourced production
+> deployment (not a redeploy, which reuses the original settings snapshot)
+> produced the same warning and the same 404.
+>
+> If you hit it, the one thing worth checking is the **Root Directory** above,
+> because it is the one mechanism known to make a build read a `vercel.json`
+> that is not there — though it normally fails LOUDLY, so it would be a
+> different shape of the same cause rather than a match. Then please add what
+> you saw to issue #197, with the deployment's `services` array from the API if
+> you can: empty means the block genuinely was not read, populated moves the
+> search elsewhere.
+>
+> **The fallback, if you need to ship before that is answered:** replace the
+> `services` block with the classic top-level keys.
+>
+> ```json
+> {
+>   "$schema": "https://openapi.vercel.sh/vercel.json",
+>   "installCommand": "pnpm install --no-frozen-lockfile",
+>   "buildCommand": "pnpm build",
+>   "outputDirectory": "system/site/out"
+> }
+> ```
+>
+> Verified live on the same repository and machine: root `200`, `llms.txt` with
+> every entry, deep pages `200`, `source_commit` stamped.
+>
+> **It moves the door off your domain, and two values have to move with it.**
+> The classic keys cannot express two services — which is the whole reason the
+> emitted file uses `services` — so dropping the block also drops the rewrites
+> for `/mcp`, `/health`, `/ready` and `/.well-known/oauth-protected-resource`.
+> The door is then deployed separately from the same `Dockerfile`, on its own
+> hostname, and `KSOR_MCP_RESOURCE_URL` plus the API Identifier registered with
+> your SSO provider must both name that new origin, character for character —
+> see [Authorization](./authorization.md), where a mismatch there is the failure
+> that costs an afternoon.
+>
+> This is `buildCommand: "pnpm build"`, so it is still the DEFAULT posture of
+> decision 29 — the host regenerates the lock on every deploy. The stricter one,
+> where the shipped `build_id` is a reviewed one, is a different command and is
+> [below](#the-site-build-runs-ksor-build-first).
+>
+> **Prefer the Git connection over `vercel deploy` while you work this out.** A
+> CLI upload excludes `.git`, so `ksor build` cannot resolve a commit and every
+> deploy publishes a record whose `build.lock.json` carries
+> `"source_commit": null` — on a product whose claim is governed provenance.
+> `build.lock.json` never spells it `unspecified`: that word is what the build
+> prints, on **stdout** with the rest of its summary, so a step that inspects
+> only stderr sees nothing at all. (`ksor ingest` is the other way round — a
+> generation stores the literal string `unspecified` in `ingestion_runs`.) The
+> Git path is the one that keeps the commit.
 
 The emitted `vercel.json` declares both services and routes between them:
 

@@ -5,7 +5,7 @@
  * bundle-absolute (`/policies/x.md`, resolved against `knowledge/`) and
  * relative (`x.md`, `./x.md`, `../x.md`, against the document's own
  * directory), with `.md` optional in each. The shell resolves only the `./`
- * and `../` forms (fumadocs-core 16.14.5, `resolveHref` returns anything else
+ * and `../` forms (fumadocs-core 16.15.4, `resolveHref` returns anything else
  * untouched), so a bundle-absolute link left the record's frame entirely and a
  * bare `x.md` was resolved by the browser against the page's ROUTE rather than
  * its directory: both 404'd from every page, found live 2026-08-25 as prefetch

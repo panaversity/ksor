@@ -10,6 +10,7 @@
  * before a single query ran, with a refusal that blamed the database and told
  * the operator to run the command that had just refused.
  */
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -31,14 +32,17 @@ import { runMigrate } from "./migrate/index.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 /**
- * Suffixed with the ADMIN database's own name, so two checkouts of this
- * repository pointed at one cluster do not share a scratch database. A fixed
- * name is not merely untidy here: this suite drops its database `WITH (FORCE)`
- * between runs, which terminates the other checkout's connections mid-INSERT
- * with `terminating connection due to administrator command` — observed live
- * on a shared cluster.
+ * Unique per RUN, not merely per checkout. The incident this name was first
+ * written for is real and worth keeping: this suite used to drop its database
+ * `WITH (FORCE)` before creating it, which terminated another checkout's
+ * connections mid-INSERT with `terminating connection due to administrator
+ * command` — observed live on a shared cluster. Deriving the name from the
+ * admin database narrowed that to one checkout per cluster; the run stamp
+ * closes it, because two runs from the SAME checkout collided just as hard
+ * (issue #166). The pre-emptive drop is gone with it: a name nothing has ever
+ * used cannot have a leftover to clear.
  */
-const DB = `ksor_migrate_denials_${(adminDsn === "" ? "x" : new URL(adminDsn).pathname.slice(1)).replace(/[^a-z0-9_]/gi, "_")}`;
+const DB = `ksor_migrate_denials_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "acme";
 const DSN_ENV = "KSOR_MIGRATE_TEST_DSN";
 const ACTOR = "human:mjs";
@@ -96,7 +100,6 @@ describe.runIf(adminDsn !== "")("ksor migrate reads a declared database (db)", (
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;
@@ -197,7 +200,7 @@ describe.runIf(adminDsn !== "")("ksor migrate reads a declared database (db)", (
  * 2026-08-26).
  */
 describe.runIf(adminDsn !== "")("ksor migrate accounts for every denylist row (db)", () => {
-  const DB2 = `${DB}_repoint`;
+  const DB2 = `ksor_migrate_repoint_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
   const DSN_ENV2 = "KSOR_MIGRATE_REPOINT_DSN";
   const DENIER = "human:ciso";
   const DENIED_AT = "2026-07-01T09:00:00Z";
@@ -267,7 +270,6 @@ describe.runIf(adminDsn !== "")("ksor migrate accounts for every denylist row (d
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin2 = new Pool({ connectionString: adminDsn });
-    await admin2.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
     await admin2.query(`CREATE DATABASE ${DB2}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB2}`;

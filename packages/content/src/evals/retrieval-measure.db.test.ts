@@ -22,6 +22,7 @@
  *     would rank a classifier that admits everything as the winner
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -48,7 +49,7 @@ const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const apiKey = process.env["GEMINI_API_KEY"] ?? "";
 /** A real embedding space, or the measurement measures nothing. */
 const canMeasure = adminDsn !== "" && apiKey !== "";
-const DB = "ksor_retrieval_measure";
+const DB = `ksor_retrieval_measure_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "handbook-eval";
 const KS = [1, 3, 5] as const;
 
@@ -75,7 +76,6 @@ describe.runIf(canMeasure)("what a handbook-shaped record can be asked (db, live
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

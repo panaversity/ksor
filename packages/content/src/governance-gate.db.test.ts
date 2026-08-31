@@ -9,6 +9,7 @@
  * entry never merged is reported.
  */
 
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +26,7 @@ import { applySchema } from "./schema.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_governance_gate";
+const DB = `ksor_governance_gate_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "gate-corp";
 
 describe.runIf(adminDsn !== "")("the governance boot gate (db)", () => {
@@ -84,7 +85,6 @@ describe.runIf(adminDsn !== "")("the governance boot gate (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;
@@ -211,7 +211,7 @@ describe.runIf(adminDsn === "")("the governance boot gate (db) — gated", () =>
 describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () => {
   let pool: pg.Pool;
   let admin: pg.Pool;
-  const DB2 = "ksor_gate_takedown";
+  const DB2 = `ksor_gate_takedown_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
   const T = "gatetd";
   const instance = instanceOf(T, T);
 
@@ -239,7 +239,6 @@ describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () =>
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB2}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB2}`;
@@ -321,7 +320,7 @@ describe.runIf(adminDsn !== "")("a takedown that no longer resolves (db)", () =>
  * them: every piece was locally correct and `expected` simply never crossed.
  */
 describe.runIf(adminDsn !== "")("a denial whose document was deliberately deleted (db)", () => {
-  const DB3 = "ksor_gate_removed";
+  const DB3 = `ksor_gate_removed_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
   const T3 = "removed-corp";
   const instance = instanceOf(T3, T3);
   let pool: pg.Pool;
@@ -372,7 +371,6 @@ describe.runIf(adminDsn !== "")("a denial whose document was deliberately delete
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB3} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB3}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB3}`;

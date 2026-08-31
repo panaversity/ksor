@@ -17,6 +17,7 @@
  * the new one. That is a boot refusal, asserted here too.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool } from "../db.js";
@@ -24,15 +25,14 @@ import { applySchema, storedTextSearchConfig } from "../schema.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const EN = "ksor_ts_english";
-const ES = "ksor_ts_spanish";
+const EN = `ksor_ts_english_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
+const ES = `ksor_ts_spanish_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 
 describe.runIf(adminDsn !== "")("the record's text-search configuration (db)", () => {
   let admin: pg.Pool;
   const pools: pg.Pool[] = [];
 
   const provision = async (db: string, config: string): Promise<pg.Pool> => {
-    await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${db}`);
     const url = new URL(adminDsn);
     url.pathname = `/${db}`;

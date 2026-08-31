@@ -191,3 +191,88 @@ describe("the scaffold's npm scripts are all reachable", () => {
     }
   });
 });
+
+/**
+ * The site's PRODUCTION build compiles with webpack, not Turbopack.
+ *
+ * Under the pinned Next 16 a bare `next build` means Turbopack, and on
+ * Vercel's DEFAULT build machine (4 cores, 8 GB) it does not survive a record
+ * large enough to prerender a few hundred routes. Measured on a real
+ * 205-document record — 435 routes — the build ran ~7 minutes and died with
+ * `FATAL: An unexpected Turbopack error occurred`, blaming `/icon.png/route`,
+ * which is not the problem. What the trace actually shows is the PostCSS step:
+ * `PostCssTransformedAsset::process` → `evaluate_webpack_loader` →
+ * `timeout while receiving message from process` → `deadline has elapsed`.
+ * That is read off the failure, not asserted about Turbopack's internals; the
+ * MEASUREMENT is what justifies the change either way.
+ *
+ * `next build --webpack` compiled the same record on the same machine class in
+ * 86s. It is Next 16's own documented opt-out rather than a workaround flag —
+ * the v16 upgrade guide ships exactly this `package.json` line for a project
+ * that needs webpack (`docs/01-app/02-guides/upgrading/version-16.mdx`,
+ * checked 2026-08-27) — so this is not a pin with a known end date.
+ *
+ * Nothing else goes red when this regresses: the 5-document starter every
+ * suite here builds is far under the size that triggers it, so the failure
+ * ships and surfaces only in an adopter's deploy. That is what this assertion
+ * is for.
+ *
+ * `dev` stays on Turbopack deliberately — the failure is production-only,
+ * where every route is prerendered at once, and `next.config.mjs` keeps its
+ * `turbopack.root` for that path.
+ */
+describe("the emitted site builds with webpack, never Turbopack", () => {
+  const site = JSON.parse(
+    readFileSync(
+      path.join(here, "..", "templates", "scaffold", "system", "site", "package.json"),
+      "utf8",
+    ),
+  ) as { scripts: Record<string, string> };
+
+  it("the production build passes --webpack", () => {
+    expect(
+      site.scripts["build"],
+      "a bare `next build` is Turbopack under Next 16, which dies on Vercel's " +
+        "default machine once a record prerenders a few hundred routes (#196)",
+    ).toContain("--webpack");
+  });
+
+  it("dev is left on Turbopack", () => {
+    expect(
+      site.scripts["dev"],
+      "the deadline failure is production-only; dev keeps the faster compiler",
+    ).not.toContain("--webpack");
+  });
+});
+
+/**
+ * Next must not write agent rule files into the site.
+ *
+ * From Next 16.3, `next dev` that detects a coding agent auto-generates
+ * `AGENTS.md` and `CLAUDE.md` in the Next project root — `agentRules`, default
+ * `true`. In a scaffold that root is `system/site`, and markdown there is
+ * refused by the record's own hygiene rule `ksor-site-holds-content`: the site
+ * RENDERS the record and never holds it, because content there silently forks
+ * it. So an adopter running `pnpm dev` turned their own `pnpm check` red
+ * without touching anything — caught by the scaffold walkthrough within the
+ * hour of pinning 16.3.3, and invisible to every other tier.
+ *
+ * The scaffold already answers what the feature is for: AGENTS.md at the REPO
+ * root is the coding agent's first read. Two of them, one inside the site,
+ * is one record speaking with two voices.
+ */
+describe("the emitted site never lets Next author agent rules", () => {
+  const config = readFileSync(
+    path.join(here, "..", "templates", "scaffold", "system", "site", "next.config.mjs"),
+    "utf8",
+  );
+
+  it("sets agentRules: false", () => {
+    expect(
+      /^\s*agentRules:\s*false\s*,/m.test(config),
+      "next.config.mjs must set `agentRules: false` — without it `pnpm dev` writes " +
+        "system/site/AGENTS.md and system/site/CLAUDE.md, which `pnpm check` refuses " +
+        "with ksor-site-holds-content",
+    ).toBe(true);
+  });
+});

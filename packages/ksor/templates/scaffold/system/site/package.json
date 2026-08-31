@@ -4,17 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "next build",
+    "build": "next build --webpack",
     "dev": "next dev"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "fumadocs-core": "16.14.5",
-    "fumadocs-mdx": "15.3.0",
-    "fumadocs-ui": "16.14.5",
+    "fumadocs-core": "16.15.4",
+    "fumadocs-mdx": "15.4.0",
+    "fumadocs-ui": "16.15.4",
     "lucide-react": "1.31.0",
-    "next": "16.2.9",
+    "next": "16.3.3",
     "radix-ui": "1.6.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",

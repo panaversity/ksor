@@ -13,6 +13,7 @@
  * floor, would still have carried their audience lists.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { scopedTxn } from "@panaversity/ksor-postgres";
@@ -24,7 +25,7 @@ import { trustGucs } from "./trust.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_admit_seam";
+const DB = `ksor_admit_seam_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "t-admit";
 const DAY = 86_400_000;
 
@@ -138,7 +139,6 @@ describe.runIf(adminDsn !== "")("the admission seam (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

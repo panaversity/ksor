@@ -211,12 +211,46 @@ ${body}
       ".svg": "image/svg+xml",
       ".txt": "text/plain",
     };
+    // DECODE and CONTAIN — the pair the shipped `preview.mjs` uses in its own
+    // `resolve()`, because this stand-in must not be a weaker server than the
+    // one adopters actually run.
+    //
+    // Decode, because Next's webpack output puts a route group's chunk under
+    // its literal directory (`_next/static/chunks/app/docs/[[...slug]]/page-*.js`
+    // and the `md` route's twin), which a browser requests percent-encoded.
+    // Without it the read looked for a file named `%5B%5B...slug%5D%5D`, 404'd,
+    // and the page rendered "This page couldn't load". Turbopack emitted no
+    // bracketed path at all, so the gap was invisible until the compiler
+    // changed (issue #196).
+    //
+    // Contain, because decoding WITHOUT containment is strictly worse than not
+    // decoding: `%2e%2e%2f` reaches the filesystem as `../` and escapes the
+    // export, which the raw-URL version could not do. The two belong together
+    // and `preview.mjs` keeps them together.
+    const root = path.resolve(outDir);
     const server = createServer((req, res) => {
-      const url = (req.url ?? "/").split("?")[0] ?? "/";
-      const candidates = [url, `${url}/index.html`, `${url}index.html`, `${url}.html`];
-      for (const candidate of candidates) {
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/");
+      } catch {
+        // `decodeURIComponent` throws on a malformed escape, and a throw from a
+        // request listener is an uncaught exception that takes the process with
+        // it — here that is the vitest worker, reporting an unhandled error
+        // instead of whatever the suite was actually asserting.
+        res.writeHead(400);
+        res.end("bad request");
+        return;
+      }
+      const target = path.resolve(root, `.${decoded}`);
+      for (const candidate of [target, path.join(target, "index.html"), `${target}.html`]) {
+        // Per CANDIDATE, not once per request: `${target}.html` for `/` is the
+        // sibling `out.html`, outside the export, and a single check on
+        // `target` would have waved it through. The shipped `preview.mjs` still
+        // checks once; #202 brings it here, along with surviving a decode that
+        // throws — so this stand-in is briefly STRICTER than its reference.
+        if (candidate !== root && !candidate.startsWith(root + path.sep)) continue;
         try {
-          const body = readFileSync(path.join(outDir, candidate));
+          const body = readFileSync(candidate);
           res.writeHead(200, {
             "content-type": mime[path.extname(candidate)] ?? "application/octet-stream",
           });
@@ -878,7 +912,10 @@ ${body}
     } finally {
       rmSync(doc, { force: true });
     }
-  });
+    // A full scaffold build, so it needs a build-sized timeout rather than the
+    // tier's 30s default — like every other clause here that builds. Ran 41.8s
+    // under webpack and timed out at 30s; it had been passing on the margin.
+  }, 300_000);
 
   it("serves a sim the record carries, from this site, under the record's own path", () => {
     const outDir = path.join(project, "system", "site", "out");
@@ -932,7 +969,10 @@ ${body}
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
+    // A full scaffold build, so it needs a build-sized timeout rather than the
+    // tier's 30s default — like every other clause here that builds. Ran 41.8s
+    // under webpack and timed out at 30s; it had been passing on the margin.
+  }, 300_000);
 
   it("renders code tabs from a fence's info string, and carries the group", () => {
     const knowledge = path.join(project, "knowledge");

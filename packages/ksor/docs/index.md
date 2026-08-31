@@ -51,6 +51,11 @@ instead of their training memory. The corpus grows with each implemented verb.
     current. Serving does not publish, so a first deploy with no ingest serves
     an empty record; this is the page that explains why, where ingest belongs
     (never inside the container), and how the abstention gate gets turned on.
+  - **[upgrading.md](./upgrading.md)** — moving an existing record onto a newer
+    ksor. `ksor migrate` offers a diff and changes nothing without `--write`;
+    `--write-site` is the one flag to remember, because it is the only path by
+    which a dependency bump reaches a project already scaffolded. Includes the
+    list of files migrate does NOT carry, so you know what to diff by hand.
   - **[authorization.md](./authorization.md)** — putting the record behind an
     authorization server, with worked recipes for two of them, executed rather
     than written. `ksor serve` refuses to boot unauthenticated on a public bind,

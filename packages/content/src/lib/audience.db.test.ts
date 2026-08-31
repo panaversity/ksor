@@ -9,6 +9,7 @@
  * predicate, and that a viewer holding a list sees exactly the overlap.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, runRead } from "../db.js";
@@ -19,7 +20,7 @@ import { keywordSearch } from "./search.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_audience_test";
+const DB = `ksor_audience_test_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "audience-corp";
 
 /** A viewer is a LIST; the ranked model's tiers become the lists a viewer of that tier holds. */
@@ -42,7 +43,6 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;
@@ -116,7 +116,7 @@ describe.runIf(adminDsn !== "")("audience filtering (db)", () => {
       pool,
       TENANT,
       async (c) =>
-        (await outline(c, scope, { root: null, depth: 5, limit: 200 })).map((r) => r.slug),
+        (await outline(c, scope, { root: null, depth: 5, limit: 200 })).rows.map((r) => r.slug),
       audienceGucs(viewer),
     ).then((s) => s.sort());
 

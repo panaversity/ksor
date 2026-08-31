@@ -22,6 +22,7 @@
  * than no refusal.
  */
 
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +43,7 @@ import {
 import type { ContentInstance } from "../instance.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_unledgered";
+const DB = `ksor_unledgered_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const DIM = 8;
 const TENANT = "handbook";
 const DENIED = "knowledge/notes/withdrawn";
@@ -83,7 +84,6 @@ describe.runIf(adminDsn !== "")("an unledgered denial stops ingest where it happ
 
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const dsn = new URL(adminDsn);
     dsn.pathname = `/${DB}`;

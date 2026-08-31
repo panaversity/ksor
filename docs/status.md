@@ -106,8 +106,13 @@ takedown` may have appended to it — but a row nothing accounts for is
 APPENDED, including the one a repointed denial leaves behind, which is the
 state `ksor ingest` and `ksor serve` refuse as `ksor-takedown-unledgered` and
 name this command as the remedy for. Without `--write` it prints a
-unified diff and changes nothing. `--write-site` UPDATES the byte-copied rule
-modules where a `system/site` exists; it never creates one. It refuses by name (`ksor-migrate-underivable`) rather
+unified diff and changes nothing. `--write-site` UPDATES every file of
+`system/site` this release emits — the byte-copied rule modules, the site's
+`next.config.mjs`, and its `package.json`, which is the only path by which a
+dependency bump reaches a record already scaffolded. It never creates a site.
+That manifest is MERGED rather than reissued: the entries ksor ships move to
+this release's versions and anything the adopter added stays, because copying
+it whole deleted their own dependencies (walked live, 2026-08-30). It refuses by name (`ksor-migrate-underivable`) rather
 than author a title, a description, a `generated.at` or the actor behind a
 takedown — and rather than DERIVE either of the two values a re-run can no
 longer know: an audience, once the `audiences:` model it deleted is gone (it

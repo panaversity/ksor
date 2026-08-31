@@ -262,7 +262,8 @@ SELECT w.slug, w.kind, w.title, w.heading_path,
        EXISTS (SELECT 1 FROM sources s
                 WHERE s.tenant_id = $1 AND s.generation = w.generation
                   AND s.node_id = w.node_id) AS has_content,
-       w.permalink
+       w.permalink,
+       w.generation
 FROM walk w
 JOIN content_nodes n ON n.node_id = w.node_id AND n.tenant_id = $1
                     AND n.generation = w.generation
@@ -497,9 +498,24 @@ export interface OutlineRow {
    * re-base copies whole rows so a new column cannot be lost in one branch.
    */
   readonly permalink: string | null;
+  /**
+   * Column index 9. The act's own generation, so the §7 audit row can pin what
+   * it served from — `similarity_searched` and `content_served` both did and
+   * `outline_served` wrote NULL, leaving the one act that hands an agent the
+   * SHAPE of the record unjoinable to the publication it described (#19).
+   * Carried on the row rather than re-queried: `walk` already selects it.
+   */
+  readonly generation: number;
 }
 
-export const OUTLINE_COLUMNS = 9;
+export const OUTLINE_COLUMNS = 10;
+
+/** An outline, with the generation it was served from — which [] cannot carry. */
+export interface OutlineResult {
+  readonly rows: OutlineRow[];
+  /** Null only when nothing was ever published: no generation exists to pin. */
+  readonly generation: number | null;
+}
 
 export function outlineRows(result: pg.QueryArrayResult): OutlineRow[] {
   if (result.fields.length !== OUTLINE_COLUMNS) {
@@ -518,6 +534,7 @@ export function outlineRows(result: pg.QueryArrayResult): OutlineRow[] {
     childCount: toNumber(row[6], "child_count"),
     hasContent: Boolean(row[7]),
     permalink: row[8] === null ? null : String(row[8]),
+    generation: toNumber(row[9], "generation"),
   }));
 }
 
@@ -582,12 +599,19 @@ export interface OutlineOptions {
  * ROOT-ABSOLUTE depth + breadcrumb (the wire contract: rows are
  * self-locating; a leaf with no children returns an empty list — the
  * anchor itself is never echoed back).
+ *
+ * Returns the GENERATION it served from alongside the rows, because [] cannot
+ * carry one. A drill-down onto a leaf resolves its anchor and pins that
+ * generation, then returns no rows — and the tool description tells an agent to
+ * drill in, so that is a routine call, not an edge case. Reading the generation
+ * off `rows[0]` recorded NULL for every one of them. `content_served` sets the
+ * precedent: pin what was RESOLVED, however little came back.
  */
 export async function outline(
   client: pg.PoolClient,
   scope: ReadScope,
   options: OutlineOptions = {},
-): Promise<OutlineRow[]> {
+): Promise<OutlineResult> {
   const root = options.root ?? null;
   const depth = Math.max(0, options.depth ?? 0);
   const limit = Math.max(1, Math.min(options.limit ?? 200, OUTLINE_CEILING));
@@ -631,7 +655,11 @@ export async function outline(
     values: [scope.tenantId, scope.corpusId, pinned, anchor, depth, limit, offset],
   });
   const rows = outlineRows(result);
-  if (root === null) return rows;
+  // A BROWSE carries no pin — `OUTLINE_SQL` resolves the active generation
+  // itself from the `g` CTE, so the rows are where it surfaces. A DRILL-DOWN
+  // has `pinned` set from the resolved anchor and needs it, because a leaf
+  // returns no rows to read it off. Null only when neither exists.
+  if (root === null) return { rows, generation: pinned ?? rows[0]?.generation ?? null };
 
   const up = await arrayQuery(client, {
     text: UP_WALK_SQL,
@@ -646,5 +674,8 @@ export async function outline(
       `no node with slug ${JSON.stringify(root)} — browse from the root with outline() (omit node=)`,
     );
   }
-  return rebaseOutlineRows(rows, String(anchorRow[0]), toNumber(anchorRow[1], "climbed"));
+  return {
+    rows: rebaseOutlineRows(rows, String(anchorRow[0]), toNumber(anchorRow[1], "climbed")),
+    generation: pinned ?? rows[0]?.generation ?? null,
+  };
 }

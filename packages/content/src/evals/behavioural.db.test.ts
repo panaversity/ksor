@@ -25,6 +25,7 @@
  * already described correctly — round-9 review of PR 43.)
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool } from "../db.js";
@@ -51,7 +52,7 @@ const canMeasure = adminDsn !== "" && apiKey !== "";
 const PROVIDER = apiKey === "" ? "fake" : "gemini";
 const MODEL = apiKey === "" ? "fake-embed-001" : "gemini-embedding-001";
 
-const DB = "ksor_eval_behavioural";
+const DB = `ksor_eval_behavioural_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "example-corpus";
 const CORPUS = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -89,7 +90,6 @@ describe.runIf(canRun)("behavioural evals", () => {
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

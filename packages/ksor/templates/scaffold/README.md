@@ -134,6 +134,15 @@ export, so nothing serves it at runtime. `pnpm preview` is `node:http` and
 nothing else — no dependency, no network fetch — so it works offline and behind
 a firewall, like the build itself.
 
+It binds loopback, so it is reachable from this machine only. To open the built
+site from a container published with `-p`, a cloud dev box, or a phone on the
+same wifi, name the address on the command line — `preview` is plain `node` and
+does not read `.env`:
+
+```sh
+KSOR_PREVIEW_HOST=0.0.0.0 pnpm preview
+```
+
 ---
 
 ## Serving to agents
@@ -274,8 +283,20 @@ declared`. The services ARE declared, in `vercel.json` at the repo root,
 3. **Set three environment variables** in Vercel: `KSOR_DB_URL`,
    `GEMINI_API_KEY`, and `KSOR_AUTH=disabled-public`.
 
-Two things catch people here, and both are the system being deliberate:
+Three things catch people here. Two are the system being deliberate; the first
+is not, and it is the one that fails without saying so:
 
+- **A deployment can report Ready and serve nothing.** The build succeeds,
+  Vercel collects nothing, and the deployment takes your domain and answers
+  `404: NOT_FOUND` everywhere — with one build-log line as the only signal:
+  `WARNING! Build output contains no "functions" or "static" directory`. Seen
+  once, on a large record, and **the cause is not established**; it is *not* the
+  Application Preset, which was measured. The emitted `vercel.json` itself is
+  verified working on the Git path. If you hit this, the fallback is the
+  classic-keys form in `node_modules/@panaversity/ksor/docs/deploying.md` — read
+  it there rather than guessing, because it **moves the door off your domain**
+  and `KSOR_MCP_RESOURCE_URL` and your SSO API Identifier both have to move with
+  it.
 - **`disabled-local` will not deploy.** The container sets `$PORT`, so the door
   binds `0.0.0.0` — a PUBLIC bind — and refuses that value by design, saying so
   in as many words. `disabled-public` is you saying you know the door is
@@ -595,7 +616,7 @@ map rather than a substitute.
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `pnpm check` refuses a document                                      | `status: stable` without both `generated` and `ksor.approval`, or an approval earlier than the text it approves | add both keys; approval cannot precede what it approves                                |
 | `start` — missing script                                             | there is none: the site is a static export, so nothing serves it at runtime                                | `pnpm preview`, or upload the folder                                                   |
-| `pnpm preview` exits `3`                                             | there is no `system/site/out/` yet                                                                         | run the build first                                                                    |
+| `pnpm preview` exits `3`                                             | no `system/site/out/` yet, `PORT` is not a port number, the port is taken, or `KSOR_PREVIEW_HOST` cannot be bound — it says which | build first; or set a free `PORT` (`dev` uses 3000 too). `preview` binds loopback; set `KSOR_PREVIEW_HOST` to reach it from a container or another device |
 | `pnpm serve` refuses to boot                                         | it will not run unauthenticated by accident                                                                | `KSOR_AUTH=disabled-local` in `.env` for a loopback run                                |
 | the deployed or containerised door refuses with `disabled-local`     | it binds `0.0.0.0` — a public bind                                                                         | `KSOR_AUTH=disabled-public` in the host environment, or configure the SSO variables    |
 | the agent answers questions 2 and 3 instead of declining             | no floor is measured, so the gate is off (`abstain OFF`, `gate: "off"`) — step 3's `calibrate` was skipped  | `pnpm exec ksor calibrate --instance instance.md`, paste the block, restart             |

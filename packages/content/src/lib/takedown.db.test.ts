@@ -67,7 +67,7 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
   let dbName: string;
 
   beforeAll(async () => {
-    dbName = `ksor_td_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_td_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);
@@ -193,7 +193,10 @@ describe.runIf(adminDsn !== "")("scoped takedown (db)", () => {
       );
 
       // outline browse: docs' children exclude legal; child_count drops it
-      const rows = await readWhole(TENANT, (c) => outline(c, rscope, { depth: 3 }));
+      const rows = await readWhole(
+        TENANT,
+        async (c) => (await outline(c, rscope, { depth: 3 })).rows,
+      );
       const paths = rows.map((r) => r.headingPath);
       expect(paths, JSON.stringify(paths)).not.toContain("docs/legal");
       expect(paths).not.toContain("docs/legal/policy");

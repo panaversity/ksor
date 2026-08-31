@@ -1050,6 +1050,63 @@ describe("ksor migrate --write-site", () => {
     expect(version).not.toContain("KSOR-STAMP-VERSION");
   });
 
+  /**
+   * The site's package.json is a register with TWO authors, so it is merged
+   * rather than reissued.
+   *
+   * Byte-copying it deleted whatever the adopter had added — walked live on a
+   * scaffold carrying one extra dependency, which the upgrade removed inside
+   * the same hunk that carried a security pin, so the site stopped building on
+   * the release meant to fix it. The diff shows the removal, but a line an
+   * adopter has to spot inside a whole-site diff is not a line they chose.
+   */
+  it("merges the site manifest: ksor's pins win, the adopter's own entries stay", () => {
+    const template = JSON.parse(
+      readFileSync(
+        path.join(repoRoot, "packages/ksor/templates/scaffold/system/site/package.json"),
+        "utf8",
+      ),
+    ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
+
+    const root = repo([
+      ["instance.md", "---\nformat: 1\nname: acme\n---\n\n# Acme\n\nOne sentence of scope.\n"],
+      ["knowledge/a.md", "---\ntitle: A\ndescription: A doc.\nstatus: draft\n---\n\nBody.\n"],
+      [
+        "system/site/package.json",
+        `${JSON.stringify(
+          {
+            name: "site",
+            private: true,
+            type: "module",
+            scripts: { build: "next build", dev: "next dev", "check:css": "stylelint ." },
+            dependencies: { next: "16.0.0", "date-fns": "4.1.0" },
+          },
+          null,
+          2,
+        )}\n`,
+      ],
+    ]);
+
+    const r = run(root, "migrate", "--write", "--actor", ACTOR, "--write-site");
+    expect(r.status, r.stderr).toBe(0);
+    const after = JSON.parse(read(root, "system/site/package.json")) as {
+      dependencies: Record<string, string>;
+      scripts: Record<string, string>;
+    };
+
+    expect(after.dependencies["next"], "ksor owns the pin it ships").toBe(
+      template.dependencies["next"],
+    );
+    expect(after.dependencies["date-fns"], "the adopter's own dependency survives").toBe("4.1.0");
+    expect(after.dependencies["fumadocs-core"], "a pin they were missing is added").toBe(
+      template.dependencies["fumadocs-core"],
+    );
+    expect(after.scripts["build"], "ksor owns the build script it ships").toBe(
+      template.scripts["build"],
+    );
+    expect(after.scripts["check:css"], "the adopter's own script survives").toBe("stylelint .");
+  });
+
   // An update, never a creation: a record with no site of its own does not
   // want one conjured into it by a migration.
   it("offers nothing to a record that has no site", () => {

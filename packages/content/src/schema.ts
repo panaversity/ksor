@@ -31,11 +31,15 @@ import { ContentStoreError } from "./db.js";
  * Raising it is a decision, not a constant: every query site would have to use
  * the same cast as the index or fall silently back to a sequential scan, and
  * the halfvec arm's float16 rounding lands on the score the abstention gate
- * reads. Recorded in issue #49, along with the evidence for staying at 1536 —
- * Google's published MTEB table runs 128..2048 and is FLAT at the top of that
- * range (1536 scores 68.17, 2048 scores 68.16), so there is no gradient to
- * climb toward the ceiling. It carries no 3072 row, so the cost of the
- * truncation itself is unpublished; do not infer one.
+ * reads. AGENTS.md decision 30 records the choice; the measurement behind it
+ * lives HERE, beside the constant it constrains, and this is its only copy.
+ *
+ * Google's per-dimension table
+ * (https://ai.google.dev/gemini-api/docs/embeddings, retrieved 2026-08-27)
+ * runs 128..2048 and is FLAT at the top of that range: 1536 scores 68.17 MTEB
+ * against 2048's 68.16. So there is no gradient to climb toward the ceiling
+ * from where we sit. It carries no 3072 row, so the cost of the truncation
+ * itself is unpublished; do not infer one.
  */
 export const EMBED_DIM_MAX = 2000;
 
@@ -259,6 +263,14 @@ export async function applySchema(
   dim: number,
   textSearchConfig?: string,
 ): Promise<void> {
+  // Bare `pool.query`, declared rather than left to be inferred — the same
+  // reason as `storedTextSearchConfig` below, and ONLY that one: this is not on
+  // the boot path, so nothing here is wrapped by `withPgRetry` and that
+  // paragraph's retry reasoning does not transfer. A fourth invented
+  // justification stood here briefly ("DDL must not run inside a transaction"),
+  // which is false — Postgres has transactional DDL, `schema.sql` contains
+  // nothing that refuses a transaction block, and the simple query protocol
+  // wraps this multi-statement string in one regardless.
   await pool.query(renderSchema(dim, undefined, textSearchConfig));
 }
 
@@ -273,6 +285,32 @@ export async function applySchema(
  * (audit finding 20).
  */
 export async function storedTextSearchConfig(pool: pg.Pool): Promise<string | null> {
+  // Outside `withGuardedClient`, declared rather than left to be inferred: an
+  // undeclared bypass of the guarded path is indistinguishable from an
+  // oversight. Two earlier versions of this comment each invented a DIFFERENT
+  // reason — GUC scoping (which is `scopedTxn`'s) and then a lost retry
+  // classification (which does not happen) — so this one says only what was
+  // traced.
+  //
+  // The hazard `withGuardedClient` exists for does not apply: `pool.query`
+  // attaches its own `client.once('error', …)` for the duration of the query,
+  // so a socket dying mid-statement has a listener and is not an uncaught
+  // exception. And a connect timeout IS still retried by the `withPgRetry`
+  // around the boot checks — pg-pool raises "Connection terminated due to
+  // connection timeout" on that path, which `isOperationalError` matches on
+  // `connection terminated`. The one shape it would not match, "timeout
+  // exceeded when trying to connect", needs a saturated pool, and the boot
+  // checks run sequentially from one caller.
+  //
+  // What IS given up, since three versions of this comment have now claimed to
+  // name the cost: `search_path`. `'chunks'::regclass` is unqualified, and the
+  // binding to `public` is applied by `scopedTxn`, which this bypasses. Behind
+  // a transaction pooler carrying another session's `search_path`, this either
+  // raises 42P01 on a healthy database or resolves a DIFFERENT schema's
+  // `chunks` and reports a stemming config that is not this record's. Unlikely
+  // — and `db.ts` calls that binding unconditional "even a health probe",
+  // because a leaked `search_path` once took a serving surface dark while
+  // /health stayed green.
   const r = await pool.query(
     "SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attrdef d " +
       "JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum " +

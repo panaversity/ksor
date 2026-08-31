@@ -46,6 +46,19 @@ const config = {
   // Hosting under a sub-path (e.g. a GitHub Pages project site):
   //   KSOR_BASE_PATH="/my-repo" pnpm build
   basePath: process.env.KSOR_BASE_PATH ?? "",
+  // Next >= 16.3 writes AGENTS.md and CLAUDE.md into the Next project root
+  // whenever `next dev` detects a coding agent (`agentRules`, default true).
+  // Here that root is system/site, and a markdown file there is refused by the
+  // record's own hygiene rule (`ksor-site-holds-content`): the site RENDERS the
+  // record, it never holds it, so content there silently forks it. Left on, an
+  // adopter's `pnpm dev` made their own `pnpm check` go red — reproduced by the
+  // scaffold walkthrough the hour Next 16.3.3 was pinned.
+  //
+  // The scaffold already answers what the feature is for: AGENTS.md at the repo
+  // root is the coding agent's first read, and one record must not speak with
+  // two voices about one thing. Turn it back on only if you also move those two
+  // files out of system/site.
+  agentRules: false,
   turbopack: {
     root: repoRoot,
   },

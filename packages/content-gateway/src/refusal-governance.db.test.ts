@@ -17,6 +17,7 @@
  * not of one a test built.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -32,7 +33,7 @@ import type pg from "pg";
 import { refusalBody } from "./refusal-body.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_refusal_governance_test";
+const DB = `ksor_refusal_governance_test_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "refusal-corp";
 
 /** Shaped like real withdrawals, because the point is that these never leave. */
@@ -72,7 +73,6 @@ describe.runIf(adminDsn !== "")("a governance refusal names no withdrawn documen
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;

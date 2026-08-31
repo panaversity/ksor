@@ -84,10 +84,10 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    later means re-embedding the whole corpus. Keep `dim` at or below 2000 — the
    schema indexes a `vector` column directly and pgvector's HNSW takes a
    `vector` to 2000. `gemini-embedding-001` emits 3072 by default, so ksor asks
-   it for 1536. Google's published MTEB table runs 128–2048 and is flat at the
-   top of it — 1536 scores 68.17 against 2048's 68.16 — so there is no gradient
-   to climb toward the ceiling; going the other way, 768 costs 0.18 if you want
-   the storage back.
+   it for 1536, which the provider's own dimensionality table shows costs
+   nothing measurable against the ceiling — going the other way trades a little
+   quality for storage. Whether to move is priced in ksor's decision 30, which
+   carries the figures and their source.
 
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
@@ -222,6 +222,22 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    measurement beside the number. Writing `vector_floor: uncalibrated` declares
    the intent to gate WITHOUT a measurement, and every serve refuses until a
    number replaces it; that is the fail-closed posture, not a starting point.
+
+   **The same applies across TIME, not only across corpora.** A floor measured
+   against 5 documents is a copied constant once the record holds 200, and it
+   weakens in silence: questions that used to be out-of-corpus start scoring
+   above a fixed number, so the record answers what it used to refuse.
+
+   ```sh
+   pnpm exec ksor calibrate --instance instance.md --check
+   ```
+
+   reads the record's own logged searches and reports how the declared floor is
+   holding — no provider key, no LLM, one query, and it always exits 0. Run it
+   on a schedule; when it says WATCH, re-run `ksor calibrate` to get a new
+   number. It is a monitor, not a measurement: it can say the floor has gone
+   permissive against real traffic, never that it is too strict for questions
+   nobody asked.
 
 ```sh
 pnpm schema      # apply the DDL (once)

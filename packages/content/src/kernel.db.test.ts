@@ -60,7 +60,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
   let dbName: string;
 
   beforeAll(async () => {
-    dbName = `ksor_t_${randomBytes(4).toString("hex")}`;
+    dbName = `ksor_t_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     admin = new pg.Pool({ connectionString: adminDsn, max: 1 });
     await admin.query(`CREATE DATABASE ${dbName}`);
     const url = new URL(adminDsn);
@@ -553,7 +553,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     const rows = await runRead(
       pool,
       TENANT,
-      (c) => outline(c, readScope, { depth: 3, limit: 100 }),
+      async (c) => (await outline(c, readScope, { depth: 3, limit: 100 })).rows,
       WHOLE_RECORD_SCOPE,
     );
     const outlined = rows.map((r) => r.slug);
@@ -597,7 +597,7 @@ describe.runIf(adminDsn !== "")("kernel db acceptance", () => {
     // A reachable database with no schema at all (schema_meta absent → 42P01)
     // must REFUSE, not fall through to the caller's "unreachable" warning and
     // then error per-request (review 2026-08-19).
-    const emptyName = `ksor_empty_${randomBytes(4).toString("hex")}`;
+    const emptyName = `ksor_empty_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
     await admin.query(`CREATE DATABASE ${emptyName}`);
     const emptyUrl = new URL(adminDsn);
     emptyUrl.pathname = `/${emptyName}`;

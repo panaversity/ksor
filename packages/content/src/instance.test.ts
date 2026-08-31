@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { InstanceParseError, NoDatabaseDeclared, parseInstanceText } from "./instance.js";
+import {
+  EMBED_DIM_MAX,
+  InstanceParseError,
+  NoDatabaseDeclared,
+  parseInstanceText,
+} from "./instance.js";
+import { EMBED_DIM_MAX as SCHEMA_EMBED_DIM_MAX } from "./schema.js";
 
 /** The slug a refusal CARRIES — it is no longer spelled inside the message (see below). */
 function refusalOf(fn: () => unknown): InstanceParseError {
@@ -206,5 +212,31 @@ database:`,
     expect(refusalOf(() => parseInstanceText("---\nformat: 2\n")).slug).toBe(
       "ksor-frontmatter-invalid",
     );
+  });
+});
+
+/**
+ * The dimension ceiling is declared twice — here and in `schema.ts` — and the
+ * comment beside this one says it "mirrors" the other. This is what makes that
+ * true.
+ *
+ * The split is deliberate: the parser refuses a bad `dim:` when `instance.md`
+ * is READ, so an adopter hears about it before any DDL is rendered. Two
+ * constants that must agree with nothing between them is how decision 18's
+ * failure mode starts. Raising the ceiling is priced by decision 30 and not
+ * forbidden — so this asserts EQUALITY, never the number, and both may move
+ * together.
+ *
+ * It is load-bearing in one direction. A `schema.ts`-only edit already reddens
+ * the `/1\.\.2000/` assertion in `schema.integration.test.ts`; an
+ * `instance.ts`-only edit reddens nothing else.
+ */
+describe("the embedding dimension ceiling", () => {
+  it("is the same number in the instance parser and in the DDL renderer", () => {
+    expect(
+      EMBED_DIM_MAX,
+      `instance.ts declares ${EMBED_DIM_MAX}, schema.ts declares ${SCHEMA_EMBED_DIM_MAX} — ` +
+        "the parser and the DDL renderer would refuse at different dims",
+    ).toBe(SCHEMA_EMBED_DIM_MAX);
   });
 });

@@ -27,6 +27,7 @@
  *                      by nothing.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runMigrations } from "./migrate.js";
@@ -34,8 +35,8 @@ import { applySchema, schemaVersion } from "./schema.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const FRESH_DB = "ksor_parity_fresh";
-const MIGRATED_DB = "ksor_parity_migrated";
+const FRESH_DB = `ksor_parity_fresh_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
+const MIGRATED_DB = `ksor_parity_migrated_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 
 /** What 2.2 added to `content_nodes` and 2.5 still carries. */
 const V22_NODE_COLUMNS = ["corpus_id", "doc_status", "owner", "provenance", "superseded_by"];
@@ -104,7 +105,6 @@ describe.runIf(adminDsn !== "")(
 
     const create = async (db: string): Promise<pg.Pool> => {
       const { Pool } = (await import("pg")).default;
-      await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`).catch(() => undefined);
       await admin.query(`CREATE DATABASE ${db}`);
       const pool = new Pool({ connectionString: dsnFor(db) });
       await applySchema(pool, 1536);

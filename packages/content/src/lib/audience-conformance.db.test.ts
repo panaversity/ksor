@@ -19,6 +19,7 @@
  * one hand-written INSERT away from being served.
  */
 
+import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { scopedTxn } from "@panaversity/ksor-postgres";
@@ -31,7 +32,7 @@ import { REFUSAL_SLUGS } from "../record/refusal.js";
 import type pg from "pg";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
-const DB = "ksor_audience_conformance";
+const DB = `ksor_audience_conformance_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
 const TENANT = "t-audience";
 
 describe.runIf(adminDsn !== "")("the audience decision table, in SQL (db)", () => {
@@ -41,7 +42,6 @@ describe.runIf(adminDsn !== "")("the audience decision table, in SQL (db)", () =
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
     admin = new Pool({ connectionString: adminDsn });
-    await admin.query(`DROP DATABASE IF EXISTS ${DB} WITH (FORCE)`).catch(() => undefined);
     await admin.query(`CREATE DATABASE ${DB}`);
     const url = new URL(adminDsn);
     url.pathname = `/${DB}`;
