@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import pg from "pg";
 
-import { contentPool, ContentStoreError, INGEST_ROLE, runIngest } from "./db.js";
+import { contentPool, ContentStoreError, INGEST_ROLE, runAuditRead, runIngest } from "./db.js";
 import { assertGovernanceServable } from "./governance-gate.js";
 import { flip } from "./ingest/generation.js";
 import {
@@ -68,6 +68,13 @@ import { buildGeneration, flipRefusal, RecordRefused, type BuildReport } from ".
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
+import {
+  DRIFT_LIMIT,
+  DRIFT_SQL,
+  driftReport,
+  renderDrift,
+  type DriftSample,
+} from "./calibrate/drift.js";
 import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
 import { widestViewer } from "./lib/policy-row.js";
 import { overlapAdvice } from "./calibrate/overlap.js";
@@ -94,9 +101,14 @@ Usage:
       when the tree is in a repository; --source-commit overrides it.
   ksor calibrate --instance PATH [--queries-file PATH] [--ooc-file PATH]
                  [--generation N] [--per-node N] [--min-chars N]
+  ksor calibrate --instance PATH --check [--days N]
       Measure the abstention floor for this corpus and report it. A
       measurement that does not separate in-corpus from out-of-corpus prints
       the diagnosis and NO floor: there is no safe number to paste.
+      --check reads the record's OWN logged searches instead and reports how
+      the declared floor is holding against them — no provider key, no
+      embedding call, no LLM. A monitor, never a gate: it says what to
+      re-measure and always exits 0.
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.
@@ -709,12 +721,15 @@ async function calibrateCommand(args: string[]): Promise<number> {
       generation: { type: "string" },
       "per-node": { type: "string" },
       "min-chars": { type: "string" },
+      check: { type: "boolean", default: false },
+      days: { type: "string" },
     },
   });
   const instance = loadInstance(values.instance);
   if (typeof instance === "number") return instance;
   const dsn = resolveDsn(instance);
   if (typeof dsn === "number") return dsn;
+  if (values.check === true) return await checkFloorDrift(instance, dsn, values.days);
   const provider = composeProvider(instance);
   if (typeof provider === "number") return provider;
 
@@ -763,6 +778,70 @@ async function calibrateCommand(args: string[]): Promise<number> {
   process.stdout.write(renderReport(report, GATE_PREDICATE_DIGEST) + "\n");
   const advice = overlapAdvice(report);
   if (advice !== null) process.stdout.write(advice);
+  return 0;
+}
+
+/** How many days of traffic one --check reads. Bounded so a busy record cannot make it expensive. */
+const DRIFT_DEFAULT_DAYS = 30;
+
+interface DriftRow {
+  readonly top_cosine: number;
+  readonly abstained: boolean;
+}
+
+/**
+ * `ksor calibrate --check` — is the declared floor still holding?
+ *
+ * Reads the record's OWN logged searches (`retrieval_log.detail.top_cosine`,
+ * which is written on both sides of the gate) instead of measuring the corpus
+ * again, so it needs no provider key, no embedding call and no LLM. That is
+ * why it runs BEFORE the provider is composed: a check that demanded a vendor
+ * key would be one an adopter never puts in CI.
+ *
+ * ALWAYS EXITS 0. A stale floor wants re-measuring; failing a run for one would
+ * make the shortest way out deleting `vector_floor`, which turns the abstention
+ * gate off entirely to clear the error — the same escape `lifecycle-notice.ts`
+ * refuses to create for a passed review date.
+ */
+async function checkFloorDrift(
+  instance: ContentInstance,
+  dsn: string,
+  daysArg: string | undefined,
+): Promise<number> {
+  const floor = instance.abstain.vectorFloor;
+  if (floor === null) {
+    // Honest absence, never silent weakness: nothing has drifted because
+    // nothing is gating, and the surface already says so at boot.
+    process.stdout.write(
+      "floor drift: no floor declared — this record's gate is OFF, so out-of-corpus questions are answered rather than refused.\n" +
+        "  fix: run `ksor calibrate` and paste the retrieval block it prints\n",
+    );
+    return 0;
+  }
+  if (floor === "uncalibrated") {
+    process.stdout.write(
+      "floor drift: vector_floor is `uncalibrated` — the door refuses every search until a measured number replaces it.\n" +
+        "  fix: run `ksor calibrate` and paste the retrieval block it prints\n",
+    );
+    return 0;
+  }
+  const days = daysArg === undefined ? DRIFT_DEFAULT_DAYS : intFlag("--days", daysArg);
+  const rows = await withPool(dsn, (pool) =>
+    runAuditRead<readonly DriftRow[]>(pool, instance.tenantId, async (client) => {
+      const result = await client.query<DriftRow>(DRIFT_SQL, [
+        instance.tenantId,
+        instance.corpusId,
+        String(days),
+        DRIFT_LIMIT,
+      ]);
+      return result.rows;
+    }),
+  );
+  const samples: DriftSample[] = rows.map((row) => ({
+    topCosine: row.top_cosine,
+    abstained: row.abstained,
+  }));
+  process.stdout.write(renderDrift(driftReport(floor, samples), `last ${days} day(s)`));
   return 0;
 }
 

@@ -215,6 +215,22 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    the intent to gate WITHOUT a measurement, and every serve refuses until a
    number replaces it; that is the fail-closed posture, not a starting point.
 
+   **The same applies across TIME, not only across corpora.** A floor measured
+   against 5 documents is a copied constant once the record holds 200, and it
+   weakens in silence: questions that used to be out-of-corpus start scoring
+   above a fixed number, so the record answers what it used to refuse.
+
+   ```sh
+   pnpm exec ksor calibrate --instance instance.md --check
+   ```
+
+   reads the record's own logged searches and reports how the declared floor is
+   holding — no provider key, no LLM, one query, and it always exits 0. Run it
+   on a schedule; when it says WATCH, re-run `ksor calibrate` to get a new
+   number. It is a monitor, not a measurement: it can say the floor has gone
+   permissive against real traffic, never that it is too strict for questions
+   nobody asked.
+
 ```sh
 pnpm schema      # apply the DDL (once)
 pnpm grant       # authorize ingest for this corpus (once)

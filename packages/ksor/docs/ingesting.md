@@ -230,6 +230,53 @@ belongs on the in-corpus side — moving it separates the measurement. Sometimes
 it is a genuine near-miss the corpus cannot separate, and then the floor
 correctly stays uncalibrated.
 
+### The floor goes stale as the record grows
+
+A floor is measured once, against the corpus as it stood that day, and then the
+record grows. As it does, questions that used to be out-of-corpus start scoring
+above a fixed number — so the record answers what it used to refuse, with no
+error, nothing logged, and the same `gate: { floor: … }` in every envelope. The
+guarantee weakens in silence, in the dangerous direction.
+
+You do not need telemetry to see it. Every search already leaves a row carrying
+the gate's own signal, on both sides of it, so the check reads the record's own
+traffic:
+
+```sh
+pnpm exec ksor calibrate --instance instance.md --check
+```
+
+No provider key, no embedding call, no LLM — one indexed query:
+
+```
+floor drift — last 30 day(s)
+  declared vector_floor  0.550
+  searches logged        112  (100 answered, 12 abstained)
+  abstain rate           10.7%
+  answered top score     p05 0.552  p50 0.810  p95 0.890
+  within 0.01 of floor    40  (40.0% of answers)
+  verdict                WATCH — 40 of 100 answers scored within 0.01 of the floor
+```
+
+Two numbers carry it. The **abstain rate**: a gate that has stopped refusing
+anything is either serving a record that now covers its traffic, or a floor that
+has fallen behind it. And the **share of answers within 0.01 of the floor** —
+the ones that would flip if the number moved at all, 0.01 being the size of the
+decision in this project's own gold rather than a threshold somebody picked.
+
+Run it on a schedule, or in your own CI beside `ksor build`. Three things to
+know about what it is:
+
+- **It never fails a run.** It always exits 0. A stale floor wants
+  re-measuring, and failing a build for one would make the shortest way out
+  deleting `vector_floor` — turning the gate off entirely to clear the error.
+- **It reads traffic, so it needs traffic**, and it says so rather than
+  reporting a healthy-looking nothing. It also cannot see questions nobody
+  asked: it can tell you the floor has gone permissive, never that it is too
+  strict.
+- **It is not a calibration.** When it says WATCH, re-run `ksor calibrate` —
+  that is the measurement, and it is the thing that produces a new number.
+
 ## Withdrawing a document
 
 A takedown is a committed ledger entry FIRST and a database row second, written
