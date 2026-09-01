@@ -17,12 +17,12 @@ is described as what it is: a read-only example record that is **not** the
 adopter's and that nothing in the project depends on.
 
 The Neon step also said only that the server exists. It acts on the Neon
-*account* — an agent holding it can create and delete projects and branches — so
+_account_ — an agent holding it can create and delete projects and branches — so
 the README and AGENTS.md now say that before handing over a prompt that runs
 against real infrastructure, and point at Neon's own documentation for the
 scopes rather than paraphrasing them.
 
-And the "Test the door with an actual agent" section told the adopter to *write*
+And the "Test the door with an actual agent" section told the adopter to _write_
 `.mcp.json` with a file containing only `test-record` — overwriting the Neon
 entry the same README depends on two sections earlier — and then closed with
 "Delete `.mcp.json`, or keep it". It now shows the entry to **add**, and says not
