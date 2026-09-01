@@ -37,6 +37,7 @@ import {
   type ContentInstance,
   type ServiceContext,
   instancePathOf,
+  providerKeyEnv,
 } from "@panaversity/ksor-content";
 
 import { bootHeader, bootLine } from "./boot-report.js";
@@ -132,7 +133,9 @@ export async function compose(rawInstancePath: string, version: string): Promise
   let provider;
   try {
     provider = buildShippedProvider(instance.embeddingProvider, {
-      apiKey: process.env["GEMINI_API_KEY"] ?? null,
+      // The provider names its own key variable (#25) — this root no longer
+      // spells one vendor's, so a record that declares `openai` gets its key.
+      apiKey: process.env[providerKeyEnv(instance.embeddingProvider) ?? ""] ?? null,
       modelId: instance.embeddingModel,
       dim: instance.embeddingDim,
     });

@@ -20,6 +20,7 @@ import { EMBED_TIMEOUT_S, QUERY_EMBED_TIMEOUT_S } from "../embedding.js";
 import type { EmbeddingProvider } from "../embedding.js";
 import { FakeEmbeddingProvider } from "./fake.js";
 import { GeminiEmbeddingProvider } from "./gemini.js";
+import { OpenAiEmbeddingProvider } from "./openai.js";
 
 export interface ProviderBuildOptions {
   apiKey: string;
@@ -37,6 +38,19 @@ export interface ProviderBuildOptions {
 export interface ProviderEntry {
   build: (opts: ProviderBuildOptions) => EmbeddingProvider;
   needsApiKey: boolean;
+  /**
+   * The environment variable holding this provider's key, ASKED OF THE
+   * REGISTRY rather than spelled in a composition root.
+   *
+   * `GEMINI_API_KEY` was written into three composition roots, so a second
+   * provider could not obtain a key even though the registry would happily
+   * build it — the wiring re-bound a seam that was vendor-neutral in shape
+   * (issue #25). This is the pattern the record already uses one layer up:
+   * `instance.md` names the DSN variable rather than hardcoding it.
+   *
+   * `null` for a provider that needs no key.
+   */
+  keyEnv: string | null;
 }
 
 /**
@@ -61,6 +75,18 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
   gemini: {
     build: (opts: ProviderBuildOptions): EmbeddingProvider => new GeminiEmbeddingProvider(opts),
     needsApiKey: true,
+    keyEnv: "GEMINI_API_KEY",
+  },
+  // The second real vendor, and the proof the seam holds: it needed no change
+  // to `EmbeddingProvider`, to normalization, to the degeneracy check, or to
+  // the persisted identity of a space (`modelId` + column width, never the
+  // vendor). SYMMETRIC — no task type, so both labels are empty, the case
+  // `lib/embedding.ts` anticipated. Switching to it is a re-embed of the whole
+  // corpus and a re-measured floor: a different provider is a different space.
+  openai: {
+    build: (opts: ProviderBuildOptions): EmbeddingProvider => new OpenAiEmbeddingProvider(opts),
+    needsApiKey: true,
+    keyEnv: "OPENAI_API_KEY",
   },
   // ksor addition: deterministic and key-free, so the DB tier and CI exercise
   // ingest + retrieval without a vendor key. Its model id is always
@@ -68,6 +94,7 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
   fake: {
     build: (opts: ProviderBuildOptions): EmbeddingProvider => new FakeEmbeddingProvider(opts),
     needsApiKey: false,
+    keyEnv: null,
   },
 };
 
@@ -89,6 +116,14 @@ function entryFor(name: string): ProviderEntry {
  * and still fail on a typo. */
 export function providerNeedsApiKey(name: string): boolean {
   return entryFor(name).needsApiKey;
+}
+
+/**
+ * The environment variable this provider's key comes from, or null when it
+ * needs none. Unknown name → the same loud error as building it.
+ */
+export function providerKeyEnv(name: string): string | null {
+  return entryFor(name).keyEnv;
 }
 
 /**
