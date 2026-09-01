@@ -27,3 +27,13 @@ The text model moves `gemini-2.5-flash` → `gemini-3.7-flash`. Cheap, unlike th
 embedding model: it only writes probe questions, so nothing stored is
 re-computed and no floor is invalidated — and the door is recorded beside every
 number, which is what stops two measurements being compared as one experiment.
+
+**And calibration now embeds on the patient retry.** It used the READ plane's
+door, which never retries a 429 — correct for a live search, which should
+degrade to keyword-only in under a second rather than stall a reader behind
+backoff, and wrong for a measurement nobody is waiting on. So a free-tier key
+that rate-limited mid-run refused the whole calibration. The intent stays
+`query` (a floor must be measured through the label the door searches with);
+only the retry policy moves, to the one `isRetryable`'s own comment describes
+for batch work. Calibration's text generation already took that path, so this
+was the two halves of one act disagreeing.

@@ -24,7 +24,7 @@ import { ADMITTED, ADMITTED_CTE } from "../lib/admit.js";
 // because an unbound scope now denies (the seam fails closed).
 import { audienceGucs, WHOLE_RECORD_SCOPE } from "../lib/audience.js";
 import { NO_TRUST_FLOOR } from "../lib/trust.js";
-import { aembedIntent, type EmbeddingProvider, type TextGenerator } from "../lib/embedding.js";
+import { embedIntent, type EmbeddingProvider, type TextGenerator } from "../lib/embedding.js";
 import { topOneScore, VECTOR_TXN_GUCS, type SearchScope } from "../lib/search.js";
 
 import { DENIED_CTE, DENY } from "../lib/takedown.js";
@@ -148,7 +148,23 @@ async function scoreQueries(
 ): Promise<ScoredQuery[]> {
   const out: ScoredQuery[] = [];
   for (const query of queries) {
-    const [vector] = await aembedIntent([query], { provider, intent: "query" });
+    // The QUERY intent, on the INGEST plane's patient retry — deliberately not
+    // `aembedIntent`. Both matter and they are different axes: the intent must
+    // stay "query", because a floor has to be measured through the same vendor
+    // task label the door will use, or the number describes a space nothing
+    // serves. But the RETRY policy must be the patient one, because this is
+    // build-plane batch work with nobody waiting — the case
+    // `isRetryable`'s own comment describes.
+    //
+    // `aembedIntent` never retries a 429, correctly: a rate-limited search
+    // should degrade to keyword-only in under a second rather than stall a
+    // reader behind backoff. Calibration inherited that and it is wrong here —
+    // a free-tier key rate-limits mid-measurement and the whole run is refused,
+    // so the one command that turns on this product's headline feature failed
+    // on the tier most first records are on (walked live, 2026-09-01). Note
+    // that calibration's TEXT generation already takes the patient path
+    // (`generateText`), so this was the two halves of one act disagreeing.
+    const [vector] = await embedIntent([query], { provider, intent: "query" });
     const score = await runRead(
       pool,
       scope.tenantId,
