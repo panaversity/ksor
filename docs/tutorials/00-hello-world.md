@@ -32,6 +32,9 @@ cd handbook
 that scaffolds is the run that knows your toolchain — so the choice should be
 yours, not whatever your agent's shell reached for.
 
+The commands below are npm's, to match the `npx` above. On a `pnpm dlx` or
+`bunx` project, substitute your own manager throughout.
+
 It is also the moment your agent gets its instructions: `AGENTS.md`, five
 skills, and `.mcp.json` all arrive here. Before this command there is nothing
 for an agent to read.
@@ -44,8 +47,8 @@ for an agent to read.
 <details><summary>Do it yourself</summary>
 
 ```sh
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 </details>
@@ -68,7 +71,7 @@ Create `knowledge/refund-policy.md`:
 
 ```markdown
 ---
-type: Policy
+type: Document
 title: Refund policy
 description: Customers may return an item within 30 days with a receipt.
 status: draft
@@ -83,6 +86,13 @@ days. Items must be unused and in their original packaging. Faulty goods are
 outside this window entirely.
 ```
 
+`type: Document` is the one type the profile promises never to reserve. Reserved
+types — `Policy`, `Procedure`, `Control` and the rest — carry governance meaning,
+so the record demands `sources` and an owner before it will accept one. If your
+agent reaches for `type: Policy` here, it will meet that refusal and can either
+add `sources` or fall back to `Document`; tutorial 2 is where reserved types
+earn their keep.
+
 </details>
 
 Refresh the browser. Your document is there — with a **draft** badge.
@@ -95,14 +105,24 @@ Refresh the browser. Your document is there — with a **draft** badge.
 <details><summary>Do it yourself</summary>
 
 ```sh
-pnpm exec ksor build
+npx ksor build
 ```
 
 </details>
 
 ```
-ksor build: 6 document(s), 5 admitted to a machine surface
+ksor build: 6 document(s), 5 admitted to a machine surface at 2026-09-01T19:34:49.422Z
+source: unspecified — knowledge/ is in a git repository with no commits yet, so this build cannot be traced back to a reviewed commit.
+  fix: commit the record (git add knowledge && git commit) and re-run
+  wrote knowledge/index.md
+  wrote build.lock.json — build_id sha256:70dae2f92647c0cdc9d98fcc681185d985a8ffa5f2ed40be47f93c9880480f92
 ```
+
+Your timestamp will differ; the `build_id` will not. Same record, same
+toolchain, same `build_id` — that is a testable claim this project holds itself
+to, and you just reproduced it. The `source: unspecified` line is the record
+telling you it cannot trace this build back to a reviewed commit, because you
+have not made one yet. We fix that in a moment.
 
 **Six documents. Five admitted.** Yours is not one of them — it is absent from
 `llms.txt`, from the markdown twins, from everything an AI agent would read.
@@ -125,12 +145,24 @@ ksor:
   approval: { by: "human:you", at: 2026-09-01T10:00:00Z }
 ```
 
-Then `pnpm exec ksor build` again.
+Then commit the record and build again — the commit is what turns that
+`source: unspecified` into something an auditor can follow:
+
+```sh
+git add -A && git commit -m "Add and approve the refund policy"
+npx ksor build
+```
+
 </details>
 
 ```
-ksor build: 6 document(s), 6 admitted to a machine surface
+ksor build: 6 document(s), 6 admitted to a machine surface at 2026-09-01T19:37:32.457Z
+source: b3a9e18b51c21fb266f8cc5b959fcf3d58c3ce3b
+  wrote build.lock.json — build_id sha256:6af6a2ee49346bc1546af9071e39646e677375f7feddf8802dc814e7f5ad01af
 ```
+
+`source` is now your commit — the build traces to a reviewed change. Your sha
+will be your own; the `build_id` is still everyone's.
 
 That is the product. A draft reaches no machine surface, an approval is an act
 with a name and a time attached to it, and the count moved because a human
@@ -195,13 +227,13 @@ how you get a local server.
 ### 7. Publish to the door
 
 > **Ask your agent:**
-> Run `pnpm provision`, then `pnpm refresh`.
+> Run `npm run provision`, then `npm run refresh`.
 
 <details><summary>Do it yourself</summary>
 
 ```sh
-pnpm provision   # schema + ingest authorization — once
-pnpm refresh     # build, embed, publish a generation
+npm run provision   # schema + ingest authorization — once
+npm run refresh     # build, embed, publish a generation
 ```
 
 </details>
@@ -224,17 +256,18 @@ every answer will cite.
 <details><summary>Do it yourself</summary>
 
 ```sh
-pnpm serve
+npm run serve
 ```
 
 If port 8080 is taken, the refusal tells you so and offers
-`KSOR_MCP_PORT=8081 pnpm serve`.
+`KSOR_MCP_PORT=8081 ksor serve`.
 </details>
 
 ```
 ksor serve · handbook
   db        direct endpoint · local
   audience  public
+  trust     unverified
   auth      DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
   abstain   OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
   serving   http://127.0.0.1:8080/mcp
@@ -309,14 +342,14 @@ agent to run it.
 
 ## Reference
 
-| command          | what it does                                         |
-| ---------------- | ---------------------------------------------------- |
-| `pnpm dev`       | the site, hot-reloading, drafts visible and marked   |
-| `pnpm check`     | the record checker — run before every commit         |
-| `pnpm build`     | check the record, regenerate indexes, write the lock |
-| `pnpm provision` | apply the schema, authorize ingest — once            |
-| `pnpm refresh`   | build, embed, publish a generation                   |
-| `pnpm serve`     | the MCP server, over what you published              |
+| command             | what it does                                         |
+| ------------------- | ---------------------------------------------------- |
+| `npm run dev`       | the site, hot-reloading, drafts visible and marked   |
+| `npm run check`     | the record checker — run before every commit         |
+| `npm run build`     | check the record, regenerate indexes, write the lock |
+| `npm run provision` | apply the schema, authorize ingest — once            |
+| `npm run refresh`   | build, embed, publish a generation                   |
+| `npm run serve`     | the MCP server, over what you published              |
 
 `docs/status.md` is authoritative on what the current release supports. If it
 and this tutorial ever disagree, it wins.
