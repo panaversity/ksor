@@ -16,18 +16,38 @@ import {
 } from "./registry.js";
 
 describe("the registry rows", () => {
-  it("ships exactly the two entries with the right key posture", () => {
+  it("ships exactly these entries, with the right key posture and key variable", () => {
     expect(Object.keys(PROVIDERS).sort(), JSON.stringify(Object.keys(PROVIDERS))).toEqual([
       "fake",
       "gemini",
+      "openai",
     ]);
     expect(PROVIDERS["gemini"]?.needsApiKey).toBe(true);
+    expect(PROVIDERS["openai"]?.needsApiKey).toBe(true);
     expect(PROVIDERS["fake"]?.needsApiKey).toBe(false);
+
+    // The variable is the registry's to name, not a composition root's — the
+    // defect issue #25 records. A key-free provider names none, so a root that
+    // reads `process.env[keyEnv]` cannot accidentally require one.
+    expect(PROVIDERS["gemini"]?.keyEnv).toBe("GEMINI_API_KEY");
+    expect(PROVIDERS["openai"]?.keyEnv).toBe("OPENAI_API_KEY");
+    expect(PROVIDERS["fake"]?.keyEnv).toBeNull();
+  });
+
+  it("gives every key-needing provider a DISTINCT variable", () => {
+    // Two vendors sharing one variable would silently hand one vendor's key to
+    // the other, which fails as an authentication error naming the wrong
+    // product.
+    const envs = Object.values(PROVIDERS)
+      .filter((e) => e.needsApiKey)
+      .map((e) => e.keyEnv);
+    expect(envs.every((e) => typeof e === "string" && e.length > 0)).toBe(true);
+    expect(new Set(envs).size, JSON.stringify(envs)).toBe(envs.length);
   });
 
   it("refuses an unknown name loudly, naming the registered set", () => {
-    expect(() => buildShippedProvider("openai", { apiKey: "k" })).toThrow(
-      'unknown embedding provider "openai" — registered: fake, gemini',
+    expect(() => buildShippedProvider("anthropic", { apiKey: "k" })).toThrow(
+      'unknown embedding provider "anthropic" — registered: fake, gemini, openai',
     );
     expect(() => providerNeedsApiKey("typo")).toThrow(/unknown embedding provider/);
   });

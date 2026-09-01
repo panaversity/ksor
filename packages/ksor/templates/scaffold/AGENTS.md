@@ -100,8 +100,11 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    ```
 
    That is enough. `embedding:` is optional and already defaults to
-   `provider: gemini`, `model: gemini-embedding-001`, `dim: 1536`; write it out
-   only to pin the space explicitly or to change it — and note that model and
+   `provider: gemini`, `model: gemini-embedding-001`, `dim: 1536`. The other
+   shipped vendor is OpenAI — `provider: openai`, `model:
+text-embedding-3-small`, `dim: 1536`, key in `OPENAI_API_KEY` — and each
+   provider names its own key variable, so nothing else changes. Write the block
+   out only to pin the space explicitly or to change it — and note that model and
    dim are the PERSISTED identity of the embedding space, so changing either
    later means re-embedding the whole corpus. Keep `dim` at or below 2000 — the
    schema indexes a `vector` column directly and pgvector's HNSW takes a

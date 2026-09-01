@@ -90,6 +90,7 @@ export {
 } from "./service.js";
 export {
   buildShippedProvider,
+  providerKeyEnv,
   providerNeedsApiKey,
   PROVIDERS,
   MissingProviderKeyError,

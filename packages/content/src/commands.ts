@@ -61,7 +61,11 @@ import {
   writesLedger,
   type VerbRefusal,
 } from "./takedown-verb.js";
-import { buildShippedProvider, providerNeedsApiKey } from "./lib/providers/registry.js";
+import {
+  buildShippedProvider,
+  providerKeyEnv,
+  providerNeedsApiKey,
+} from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
 import { buildGeneration, flipRefusal, RecordRefused, type BuildReport } from "./ingest/build.js";
@@ -253,12 +257,18 @@ function composeProvider(instance: ContentInstance): EmbeddingProvider | number 
   try {
     let apiKey: string | null = null;
     if (providerNeedsApiKey(instance.embeddingProvider)) {
-      apiKey = process.env["GEMINI_API_KEY"] || null;
+      // ASKED of the registry, not spelled here. `GEMINI_API_KEY` was written
+      // into this root and two others, so a second provider could not obtain a
+      // key even though the registry would build it — a seam that is
+      // vendor-neutral in shape, re-bound to one vendor by its wiring (#25).
+      const keyEnv = providerKeyEnv(instance.embeddingProvider) ?? "";
+      apiKey = process.env[keyEnv] || null;
       if (apiKey === null) {
         return fail(
           ENVIRONMENT,
-          "GEMINI_API_KEY is required (the instance's embedding provider needs a key)\n" +
-            "  fix: export GEMINI_API_KEY=... and rerun",
+          `${keyEnv} is required (the instance's embedding provider ` +
+            `${JSON.stringify(instance.embeddingProvider)} needs a key)\n` +
+            `  fix: export ${keyEnv}=... and rerun`,
         );
       }
     }
