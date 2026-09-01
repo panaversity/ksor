@@ -49,6 +49,23 @@ jobs:
         with:
           # v2 renamed these inputs from publish/version to *-script.
           publish-script: pnpm changeset publish
-          version-script: pnpm changeset version
+          # Scope: all 6 workspace projects
+✓ Lockfile passes supply-chain policies (verified 6d ago)
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+. prepare$ git config core.hooksPath .githooks || echo hooks-skipped
+. prepare: Done
+Done in 593ms using pnpm v11.22.0
+🦋 changeset v3.0.0
+
+No unreleased changesets found.
+🦋 Exited with code 1
+
+[ELIFECYCLE] Command failed with exit code 1. is  PLUS the sync that points
+          # docs/status.md at what is about to publish. They are one act: the
+          # docs-truth assertion holds the two equal, and a bump that left the
+          # document behind blocked the release (found live, 0.0.54).
+          version-script: pnpm run version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

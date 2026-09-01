@@ -25,6 +25,7 @@
     "test:db": "vitest run --config vitest.db.config.ts",
     "publint": "pnpm -r publint",
     "changeset": "changeset",
+    "version": "pnpm changeset version && node scripts/sync-status-version.mjs",
     "prepare": "git config core.hooksPath .githooks || echo hooks-skipped"
   },
   "devDependencies": {
