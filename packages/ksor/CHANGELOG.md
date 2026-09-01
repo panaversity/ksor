@@ -1,5 +1,184 @@
 # @panaversity/ksor
 
+## 0.0.55
+
+### Patch Changes
+
+- 4ecf549: Test infrastructure only — nothing an adopter installs behaves differently.
+
+  The behavioural evals scored a missing `top_cosine` as `-1`. When a provider
+  rate-limits, the read plane degrades to keyword-only by design, so searches
+  answer with no score — and the assertions then compared sentinels, reporting a
+  vendor outage as "the abstention floor is broken". Four CI failures in a day
+  read that way before anyone looked past the assertion. A missing score now
+  refuses, naming the cause, and never invents the number that is absent.
+
+- e476197: Fix the hello-world tutorial, which could not be completed as written.
+
+  Three defects, all found by walking the published 0.0.54 rather than by reading:
+
+  - Step 3's document declared `type: Policy`. `Policy` is a reserved type, so the
+    record demands `sources` — `ksor build`, `npm run check` and the dev server all
+    refused it, and steps 4 through 10 were unreachable. It is now `type: Document`,
+    the type the profile promises never to reserve, with a note on why and on what
+    an agent should do when it reaches for a reserved one.
+  - Step 1 scaffolds with `npx`, which emits an **npm** project, and every command
+    after it said `pnpm`. On that project `pnpm install && pnpm dev` fails with
+    `sh: next: command not found`. All sixteen commands are npm's now, and the step
+    that explains manager detection says which one the rest of the tutorial speaks.
+  - The captured outputs had been trimmed after capture, in a document whose second
+    paragraph promises they were "pasted as it appeared": `ksor serve`'s boot report
+    was missing the `trust` line it has always printed, the build outputs were
+    missing their timestamp, `source:` and `wrote` lines, and the port-conflict
+    refusal was quoted offering `pnpm serve` where it says `ksor serve`.
+
+  The walk also surfaced that `ksor init` leaves a repo with no commits, so every
+  reader's first build prints `source: unspecified`. Rather than hide it, the
+  tutorial now shows it and folds `git commit` into the approval step — which is
+  where provenance belongs anyway, and which lets the second build print a real
+  commit sha.
+
+  The tutorial also said `.mcp.json`'s "first is Neon's" and named the second
+  server nowhere, and said nothing about the Neon server acting on the whole Neon
+  account. Both are fixed here for the tutorial; the emitted scaffold's copies of
+  the same two defects are fixed separately.
+
+  Only the tutorial and the test that pins its prompts changed; nothing an adopter
+  installs behaves differently.
+
+- ae49524: Stop a spent OpenAI balance from quarantining content and flipping a generation,
+  and name the right variable when a provider key is missing.
+
+  **The serious one.** `insufficient_quota` — OpenAI's answer to an exhausted
+  balance, which arrives as 429 like an ordinary rate limit — was classified
+  non-retryable, correctly, because no amount of waiting adds credit. But
+  "non-retryable" is what the ingest drain reads as **poison chunk**: it
+  binary-splits the batch down to singletons and marks each `failed`. A spent
+  balance arrives on _every_ chunk, so a run walked the queue quarantining
+  everything it touched; if the failed fraction stayed under
+  `MAX_FAILED_FRACTION` (2%), `generationReady` admitted it and the generation
+  **flipped** — publishing a record in which exactly the passages the owner had
+  just edited were unsearchable, `ksor ingest` exit 0, the billing reason visible
+  only in `chunks.embed_error`. The same event on Gemini aborts the run, so
+  switching provider silently changed what a spent quota does.
+
+  The drain now has three answers instead of two: retryable (abort, chunks stay
+  pending), **fatal** (abort the same way, but without spending five backoffs
+  first — the account is what is wrong, not the passage), and everything else
+  (binary-split to the poison chunk). `isFatal` is optional on `EmbeddingProvider`,
+  so a provider that cannot tell keeps the old two-kind behaviour and Gemini's
+  path is unchanged.
+
+  **The missing-key refusal names the variable.** `ksor serve` on an
+  `embedding.provider: openai` record said `embedding provider "openai" needs an
+API key and none was supplied` and stopped — while `ksor serve --help`,
+  `env.example` and `docs/deploying.md` all named `GEMINI_API_KEY`, which that
+  door does not read. The registry row already held `keyEnv`; it now reaches the
+  operator (`— set OPENAI_API_KEY`), and all three documents describe the choice
+  instead of one vendor.
+
+  **`ksor calibrate`'s Gemini requirement is stated rather than papered over.**
+  Question synthesis is Gemini-only today, so a record embedding with
+  `OPENAI_API_KEY` is still refused for a Google key when calibrating through the
+  synthesized door. That gap is now said plainly in the refusal and in
+  `docs/ingesting.md`, which taught calibration without mentioning it. The
+  `--queries-file` door avoids it entirely.
+
+  **The OpenAI live test announces itself.** It is gated on `OPENAI_API_KEY`, no
+  workflow supplied one, and a false `describe.runIf` contributes nothing to a run
+  — so the suite its own header calls "the tripwire for vendor drift" was absent
+  from CI and reported as absent by nobody. It now prints `skipped — set
+OPENAI_API_KEY`, the way Gemini's does, and CI passes the secret so the tripwire
+  arms the moment one is added.
+
+  Found by an adversarial review of this week's commits.
+
+- ff99eb5: Hash `.ksor/people.yaml` into `build_id`, so the two surfaces of one build
+  cannot publish different provenance.
+
+  The phone book added in 0.0.53 rewrites the actor printed on every Owner,
+  Approved, Withdrawn and Trust row — `displayActor` replaces `human:contractor-a`
+  with "Human: Jane Doe, VP Compliance", and the identifier does not appear on the
+  page at all. It was hashed by nothing. `.ksor/governance.yaml` and
+  `.ksor/takedowns.yaml` are both in `build_id`; this one was left out, on the
+  stated reasoning that including it would refuse the next site build after a
+  spelling correction.
+
+  That is the trade critical rule 1 forbids, and the consequence was reachable
+  without doing anything unusual: edit a name, `pnpm check` stays green,
+  `ksor build` emits a byte-identical lock, and the deployed page publishes an
+  approver the `/md/` twin stamped with that same `build_id` contradicts. An
+  auditor reconciling the page against the lock finds nothing wrong, because the
+  string they are auditing was never covered by it.
+
+  Now: `people_sha256` joins `policy_sha256` and `ledger_sha256` in the lock and
+  in `build_id`; `.ksor/people.yaml` joins the inputs that move `source_commit`;
+  and the site's staleness gate compares it like the other three, so an edit the
+  lock never saw refuses with `ksor-lock-stale` naming the file. Refusing until
+  `ksor build` is re-run is the behaviour, not a regression — it is what every
+  other published byte already does.
+
+  Two things found alongside it, in the same file:
+
+  - `people.ts` claimed "duplicate keys are refused by the parser rather than
+    resolved by whichever came last". They were not. `uniqueKeys: true` makes the
+    parser RECORD a duplicate; `toJS()` still resolves last-wins, and nothing read
+    the errors — so two entries for one actor published the second person's name
+    on the first person's approval, the precise collision the map replaced a name
+    derivation to avoid. A duplicate now drops the whole book, and identifiers are
+    published instead.
+  - The rule lived behind a module that reads `instance.md` on import, so it could
+    only be tested by building a record on disk — which is why it shipped asserted
+    by a comment. It is now a leaf, `lib/people-rule.ts`, with the shipped
+    function under test.
+
+  **Upgrading:** a lock written before this refuses with `ksor-lock-invalid`
+  naming `people_sha256`; run `ksor build` and commit the lock it writes.
+
+  Found by an adversarial review of this week's commits.
+
+- b45d477: Say what the scaffold's `.mcp.json` attaches to an adopter's coding agent, and
+  stop the README telling them to destroy it.
+
+  `ksor init` emits `.mcp.json` with two servers. The emitted README and AGENTS.md
+  both said "the first is Neon" and named the second nowhere — so
+  `agentfactory-system-of-record`, a Panaversity-operated endpoint, was wired into
+  every adopter's coding agent with no emitted document mentioning it. `.mcp.json`
+  attaches servers to the agent that OPERATES the record; a server nobody
+  documented is a capability nobody reviewed.
+
+  Both are now named, with what each is and that either may be deleted. The second
+  is described as what it is: a read-only example record that is **not** the
+  adopter's and that nothing in the project depends on.
+
+  The Neon step also said only that the server exists. It acts on the Neon
+  _account_ — an agent holding it can create and delete projects and branches — so
+  the README and AGENTS.md now say that before handing over a prompt that runs
+  against real infrastructure, and point at Neon's own documentation for the
+  scopes rather than paraphrasing them.
+
+  And the "Test the door with an actual agent" section told the adopter to _write_
+  `.mcp.json` with a file containing only `test-record` — overwriting the Neon
+  entry the same README depends on two sections earlier — and then closed with
+  "Delete `.mcp.json`, or keep it". It now shows the entry to **add**, and says not
+  to delete the file.
+
+  A guard derived from `mcp.json` itself asserts every server key appears in both
+  emitted documents, so adding a server and saying nothing fails on the server
+  that was added. Mutation-tested: unnaming the second server turns both red.
+
+  Found by an adversarial review of this week's commits. Whether the scaffold
+  should ship a second, vendor-operated MCP record at all is an owner question and
+  is untouched here.
+
+- 5283084: Test infrastructure only — nothing an adopter installs behaves differently.
+
+  A skill's `description` is its trigger and nothing measured it (#30). Every
+  prompt the hello world tells a reader to say is now matched to a shipped skill
+  or recorded as needing none, and each skill's trigger phrases are pinned — so
+  narrowing one, the failure mode where a skill silently stops firing, goes red
+  naming the phrase. The model-scored half of that issue is untouched.
+
 ## 0.0.54
 
 ### Patch Changes
