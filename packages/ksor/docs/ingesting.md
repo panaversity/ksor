@@ -39,7 +39,7 @@ created for you.
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **The corpus**       | `knowledge/` at your repo root — CommonMark `.md`, one document per file, in the KSoR Profile of OKF: `type`, `title`, `description`, `status` and `ksor.audience` in frontmatter | `pnpm check` validates it and explains any violation; `ksor build` must have written a current `build.lock.json` before ingest will run |
 | **The database**     | Postgres with **pgvector** — `CREATE EXTENSION vector;`                                                                                                                           | any managed host; the DDL below needs a role that can create tables                                                                     |
-| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                                                                                       | [aistudio.google.com](https://aistudio.google.com/apikey); the free tier covers a first corpus                                          |
+| **The provider key** | `GEMINI_API_KEY` — the default embedding provider is `gemini-embedding-001`                                                                                                       | [aistudio.google.com](https://aistudio.google.com/apikey); free tier — embedding input is free of charge                                |
 | **The DSN**          | `KSOR_DB_URL`, named by `instance.md`'s `database.dsn_env`                                                                                                                        | already named by `instance.md`'s `database:` block                                                                                      |
 
 Both variables go in `.env` beside `instance.md` — `ksor` reads it automatically,
@@ -197,8 +197,25 @@ measure until the corpus is in there.
 pnpm exec ksor calibrate --instance instance.md
 ```
 
-It ends with a block to paste into **`instance.md`**'s frontmatter, exactly as
-printed — the floor, the measurement recorded beside it as a comment, and
+**On a free-tier key, use the zero-LLM door instead.** The command above is the
+SYNTHESIZED door: it writes one probe question per sampled passage with an LLM,
+and a free key allows only a few generations a minute — a bigger corpus makes
+that worse, not better. Write your own in-corpus questions, one per line, and
+pass them:
+
+```sh
+pnpm exec ksor calibrate --instance instance.md --queries-file questions.txt
+```
+
+Six to ten real questions is enough. They should be things this record answers,
+in the words someone would actually ask — the floor is set by the WEAKEST of
+them, so a vague question drags it down and a question the record does not
+answer invalidates the measurement. The door is recorded beside the number
+(`door: queries-file`), because floors from the two doors are measured against
+different distributions and must never be compared as interchangeable.
+
+Either way it ends with a block to paste into **`instance.md`**'s frontmatter,
+exactly as printed — the floor, the measurement recorded beside it as a comment, and
 `floor_digest`, the digest of the retrieval predicate the floor was measured
 through. Paste it, then restart `ksor serve`: the floor is read at boot.
 
