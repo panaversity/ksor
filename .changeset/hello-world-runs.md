@@ -27,5 +27,10 @@ tutorial now shows it and folds `git commit` into the approval step — which is
 where provenance belongs anyway, and which lets the second build print a real
 commit sha.
 
+The tutorial also said `.mcp.json`'s "first is Neon's" and named the second
+server nowhere, and said nothing about the Neon server acting on the whole Neon
+account. Both are fixed here for the tutorial; the emitted scaffold's copies of
+the same two defects are fixed separately.
+
 Only the tutorial and the test that pins its prompts changed; nothing an adopter
 installs behaves differently.

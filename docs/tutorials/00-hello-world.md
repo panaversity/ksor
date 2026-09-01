@@ -185,7 +185,15 @@ This is the half that answers questions. It needs two things, both free:
 ### 5. Get the database
 
 `.mcp.json` at the project root declares the MCP servers your agent may reach.
-The first is Neon's.
+It ships with two: **Neon**, used below, and
+**agentfactory-system-of-record** — a read-only KSoR record Panaversity
+operates, there as an example of the surface you are building. The second is not
+your record and nothing here needs it; delete the entry if you would rather your
+agent not have it.
+
+The Neon server acts on your Neon **account**, not on one database: an agent
+holding it can create and delete projects and branches. That is why the prompt
+below asks to see the plan first.
 
 > **Ask your agent:**
 > Using the Neon MCP server, create a project called `handbook` and enable the
