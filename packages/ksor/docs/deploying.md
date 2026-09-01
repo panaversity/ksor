@@ -141,13 +141,37 @@ What the image deliberately does NOT contain (see `.dockerignore`):
 > which is the door answering "Method Not Allowed" to a GET rather than a static
 > 404, and is how you tell the door is routed at all.
 >
-> **It does not depend on the Application Preset**, which is the first thing
-> everyone suspects and the reason to say so:
+> **Set the Framework Preset to `Services` on the import screen.** Vercel's own
+> guide states it as one of two necessary conditions:
+>
+> > "A project builds as services only when two conditions are both true: the
+> > project's framework is set to Services, and `vercel.json` contains a
+> > `services` key. If either is missing, Vercel falls back to its default
+> > framework detection and ignores your services configuration."
+> > — [vercel.com/kb/guide/vercel-services](https://vercel.com/kb/guide/vercel-services)
+>
+> That is the silent-404 shape exactly: preset `Other` → fallback detection →
+> nothing detected → an empty output that deploys, reports Ready and takes the
+> alias. And no file in your repository can set it for you: `framework` is not
+> a valid top-level key while `services` is present, so this is a project
+> setting or nothing.
+>
+> **One measurement here disagrees with that guide, and is recorded rather than
+> reconciled.** On 2026-08-27 two projects were read back from the Vercel API,
+> one reading preset `Services` and one reading `Other`, and BOTH built the
+> `services` block and served:
 >
 > | project's preset | `services` block built | serves                                 |
 > | ---------------- | ---------------------- | -------------------------------------- |
 > | `Services`       | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
 > | `Other`          | `site` + `door`        | `/` 200 · `/llms.txt` 200 · `/mcp` 405 |
+>
+> Both facts are real and they cannot both be the whole rule. Possible readings
+> — the API's `framework` field being derived rather than the project setting,
+> or Beta behaviour changing between the guide's 2026-08-12 revision and that
+> measurement — are unverified, and guessing between them is what produced the
+> earlier version of this page, which told you the preset was RULED OUT and so
+> steered you away from the one step the vendor calls required. Set the preset.
 >
 > **One failure has been seen that none of this explains.** On a 205-document
 > record (2026-08-26, issue #197) the install ran, `ksor build` ran, every route

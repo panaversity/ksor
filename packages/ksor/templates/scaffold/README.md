@@ -297,7 +297,15 @@ Delete `.mcp.json`, or keep it — it holds no secret.
 Both surfaces on one domain, in about ten minutes:
 
 1. **Push the repository to GitHub.**
-2. **Import it in Vercel**, then **set Root Directory to `./`.** Vercel
+2. **Import it in Vercel**, then set **Framework Preset** to **`Services`** and
+   **Root Directory** to `./`. The preset is not cosmetic: Vercel's own guide
+   says a project builds as services only when the preset is `Services` AND
+   `vercel.json` carries a `services` key, and that "if either is missing,
+   Vercel falls back to its default framework detection and ignores your
+   services configuration" — which is the silent 404 below. No file in this
+   repository can set it for you.
+
+   As for Root Directory: Vercel
    auto-fills it with `system/site`, because that is where it finds a framework
    — and the build then reads `system/site/vercel.json`, which does not exist,
    and fails with `Project framework is set to "services", but no services are
@@ -306,6 +314,19 @@ declared`. The services ARE declared, in `vercel.json` at the repo root,
    container from the root `Dockerfile`.
 3. **Set three environment variables** in Vercel: `KSOR_DB_URL`,
    `GEMINI_API_KEY`, and `KSOR_AUTH=disabled-public`.
+4. **Check it actually serves**, before you tell anyone the URL. A Ready
+   deployment that answers 404 everywhere looks identical to a good one from
+   the dashboard:
+
+   ```sh
+   B=https://your-record.vercel.app
+   curl -o /dev/null -w '%{http_code}\n' "$B/"           # expect 200
+   curl -o /dev/null -w '%{http_code}\n' "$B/llms.txt"   # expect 200
+   curl -sI "$B/mcp" | head -1                           # expect 405
+   ```
+
+   `/mcp` answering 405 is the door refusing a GET — that is how you know it is
+   routed at all, and a 404 there means the `services` block was ignored.
 
 Three things catch people here. Two are the system being deliberate; the first
 is not, and it is the one that fails without saying so:
@@ -313,10 +334,13 @@ is not, and it is the one that fails without saying so:
 - **A deployment can report Ready and serve nothing.** The build succeeds,
   Vercel collects nothing, and the deployment takes your domain and answers
   `404: NOT_FOUND` everywhere — with one build-log line as the only signal:
-  `WARNING! Build output contains no "functions" or "static" directory`. Seen
-  once, on a large record, and **the cause is not established**; it is *not* the
-  Application Preset, which was measured. The emitted `vercel.json` itself is
-  verified working on the Git path. If you hit this, the fallback is the
+  `WARNING! Build output contains no "functions" or "static" directory`. That
+  warning is the FALLBACK collector finding nothing, which is what step 2's
+  preset exists to prevent — check it first. One measurement of ours disagrees
+  with the vendor's rule and is recorded in
+  `node_modules/@panaversity/ksor/docs/deploying.md`; the honest state is that
+  the preset is necessary by the vendor's documentation and has once appeared
+  not to be. If you hit this, the fallback is the
   classic-keys form in `node_modules/@panaversity/ksor/docs/deploying.md` — read
   it there rather than guessing, because it **moves the door off your domain**
   and `KSOR_MCP_RESOURCE_URL` and your SSO API Identifier both have to move with
