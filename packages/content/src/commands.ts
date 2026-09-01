@@ -68,6 +68,7 @@ import { buildGeneration, flipRefusal, RecordRefused, type BuildReport } from ".
 import { checkEmbeddingSpace } from "./lib/space.js";
 import { parseQueriesFile, runCalibration } from "./calibrate/run.js";
 import { renderReport } from "./calibrate/math.js";
+import { quotaRemedy } from "./calibrate/quota.js";
 import {
   DRIFT_LIMIT,
   DRIFT_SQL,
@@ -754,31 +755,57 @@ async function calibrateCommand(args: string[]): Promise<number> {
       ? null
       : parseQueriesFile(readFileSync(values["ooc-file"], "utf8"));
 
-  const report = await withPool(dsn, async (pool) =>
-    runCalibration(pool, {
-      tenantId: instance.tenantId,
-      corpusId: instance.corpusId,
-      // The floor is a property of the RECORD, not of one caller's tier, so
-      // calibration measures the widest viewer there is: `public` plus every
-      // audience the ingested policy registers. Named rather than left to the
-      // `*` sentinel, because the sentinel is a scope no door ever binds and a
-      // floor must be measured on a set the door can actually serve.
-      viewer: await widestViewer(pool, instance),
-      provider,
-      generation: parseGeneration(values.generation),
-      queries,
-      textGenerator,
-      oocProbes: ooc,
-      perNode:
-        values["per-node"] === undefined ? undefined : intFlag("--per-node", values["per-node"]),
-      minChars:
-        values["min-chars"] === undefined ? undefined : intFlag("--min-chars", values["min-chars"]),
-    }),
+  const report = await withQuotaRemedy(async () =>
+    withPool(dsn, async (pool) =>
+      runCalibration(pool, {
+        tenantId: instance.tenantId,
+        corpusId: instance.corpusId,
+        // The floor is a property of the RECORD, not of one caller's tier, so
+        // calibration measures the widest viewer there is: `public` plus every
+        // audience the ingested policy registers. Named rather than left to the
+        // `*` sentinel, because the sentinel is a scope no door ever binds and a
+        // floor must be measured on a set the door can actually serve.
+        viewer: await widestViewer(pool, instance),
+        provider,
+        generation: parseGeneration(values.generation),
+        queries,
+        textGenerator,
+        oocProbes: ooc,
+        perNode:
+          values["per-node"] === undefined ? undefined : intFlag("--per-node", values["per-node"]),
+        minChars:
+          values["min-chars"] === undefined
+            ? undefined
+            : intFlag("--min-chars", values["min-chars"]),
+      }),
+    ),
   );
   process.stdout.write(renderReport(report, GATE_PREDICATE_DIGEST) + "\n");
   const advice = overlapAdvice(report);
   if (advice !== null) process.stdout.write(advice);
   return 0;
+}
+
+/**
+ * Run a calibration, turning a quota refusal into the remedy for THAT quota.
+ *
+ * Both failures reach here as the vendor's own sentence, which states what is
+ * wrong and neither why nor how to fix it — and the two need opposite answers
+ * (change door vs wait a minute). Anything `quotaRemedy` does not recognise is
+ * re-thrown untouched: inventing advice for an error nobody has read is worse
+ * than passing the vendor's through.
+ */
+async function withQuotaRemedy<T>(op: () => Promise<T>): Promise<T> {
+  try {
+    return await op();
+  } catch (exc) {
+    const message = exc instanceof Error ? exc.message : String(exc);
+    const remedy = quotaRemedy(message);
+    if (remedy === null) throw exc;
+    throw Object.assign(new Error(`${message}\n  why: ${remedy}`), {
+      slug: "ksor-calibrate-quota",
+    });
+  }
 }
 
 /** How many days of traffic one --check reads. Bounded so a busy record cannot make it expensive. */

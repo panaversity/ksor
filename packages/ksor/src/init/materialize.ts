@@ -30,6 +30,10 @@ const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([
   // so the template ships bare and init restores the dot.
   ["env.example", ".env.example"],
   ["dockerignore", ".dockerignore"],
+  // The MCP servers a coding agent may reach from this project. Ships bare for
+  // the same packing reason, and it carries no secret — both entries
+  // authenticate interactively — so it is committed rather than ignored.
+  ["mcp.json", ".mcp.json"],
 ]);
 
 const TEXT_EXTENSIONS = new Set([

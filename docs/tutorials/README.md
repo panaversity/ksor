@@ -17,6 +17,21 @@ If a tutorial and `docs/status.md` ever disagree about what runs today, `docs/st
 
 ## Start here
 
+### [Hello world — a governed record, in about fifteen minutes](./00-hello-world.md)
+
+Hands on the keyboard from the first line. You write one document, watch the
+record refuse to publish it until a human approves it, then ask your own coding
+agent a question and get an answer that names which document and which
+publication it came from.
+
+Two parts, matching the two surfaces a record serves. **Part 1 needs nothing but
+Node** — no database, no key, no account. Part 2 adds the agent surface and
+needs two more things, both free. Every command and output in it was run and
+pasted as it appeared.
+
+Start here if you want to see what this is. Read the introduction below if you
+want to understand why it exists.
+
 ### [Tutorial 1 — KSoR: One Governed Knowledge Record for Humans and AI Agents](./01-introduction-to-ksor.md)
 
 The introduction. No technical background required.

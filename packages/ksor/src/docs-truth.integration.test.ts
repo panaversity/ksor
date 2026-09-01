@@ -668,26 +668,70 @@ describe("the emitted docs are true about the artefact they ship with", () => {
 });
 
 /**
+ * No document may claim the door decides audience PER REQUEST.
+ *
+ * It does not. `content-gateway/src/compose.ts` reads `KSOR_AUDIENCE` from the
+ * environment once at boot into a per-process viewer; the request path never
+ * touches it, so every caller holding a valid token for a door gets a
+ * byte-identical view of the record. `docs/authorization.md` says exactly that
+ * ("Any caller holding a valid token gets the whole record"), and
+ * `specs/ksor/serve/spec.md` names per-request visibility filtering as out of
+ * scope — and one shipped page said the opposite anyway, under the heading of
+ * the requirement it fails.
+ *
+ * That is the most expensive kind of documentation defect this product can
+ * have: it would walk an adopter with genuinely restricted documents into
+ * pointing every reader at one door and serving them the internal half. The
+ * earlier guards check that a named command EXISTS; this checks the CLAIM,
+ * which is the half that was wrong (the same shape as the scaffold's "no
+ * document claims that serving publishes").
+ */
+describe("no document claims the door scopes audience per request", () => {
+  /** Shapes that assert it, in any phrasing a rewrite is likely to reach for. */
+  const CLAIMS: readonly RegExp[] = [
+    /audience scope\s+(?:\*\*)?per[- ]request/i,
+    /per[- ]request\s+(?:\*\*)?audience/i,
+    /scopes?\s+the\s+audience\s+per\s+request/i,
+    /applies\s+the\s+audience[^.]{0,40}per\s+request/i,
+  ];
+
+  const pages = readdirSync(path.join(repoRoot, "packages/ksor/docs"))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => `packages/ksor/docs/${name}`)
+    .concat([`${SCAFFOLD}/README.md`, `${SCAFFOLD}/AGENTS.md`, "README.md"]);
+
+  it.each(pages)("%s", (rel) => {
+    const text = read(rel);
+    for (const shape of CLAIMS) {
+      const hit = shape.exec(text);
+      expect(
+        hit,
+        `${rel} says the door scopes audience per request: ${JSON.stringify(hit?.[0] ?? "")}. ` +
+          "It does not — compose.ts resolves the viewer once at boot. A reader who believes " +
+          "this points every caller at one door and serves them the restricted half.",
+      ).toBeNull();
+    }
+  });
+});
+
+/**
  * `docs/status.md` names the version an adopter can actually install.
  *
  * Authority rule 3 makes that file "the only authority on what is actually
  * built", and it is the first thing a serious evaluator's coding agent reads.
- * It went ELEVEN releases stale before anyone noticed — which is the failure
- * mode of a fact kept in prose and nowhere else, in a repository shipping
- * several releases a day.
+ * It went ELEVEN releases stale before anyone noticed — the failure mode of a
+ * fact kept in prose and nowhere else, in a repository shipping several
+ * releases a day.
  *
- * Asserted against `packages/ksor/package.json`, the version the tarball
- * carries. A Version PR that bumps one and not the other now fails here rather
- * than shipping a document that misdescribes the artefact beside it.
+ * Anchored on the PUBLISHED-PACKAGE sentence, not on the version appearing
+ * anywhere in the file: the release summary below it names every version ever
+ * shipped, so a bare `toContain` passes while the line an evaluator actually
+ * reads is eleven releases stale. Found by mutation — the first version of this
+ * assertion did not fail on the state it was written for.
  */
 describe("docs/status.md names the version that is actually published", () => {
   it("matches packages/ksor/package.json", () => {
     const version = (JSON.parse(read("packages/ksor/package.json")) as { version: string }).version;
-    // Anchored on the PUBLISHED-PACKAGE sentence, not on the version appearing
-    // anywhere in the file: the release summary below it names every version
-    // ever shipped, so a bare `toContain` passes while the line an evaluator
-    // actually reads is eleven releases stale. Found by mutation — the first
-    // version of this assertion did not fail on the state it was written for.
     const published = /`@panaversity\/ksor`\s+\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*\s+on npm/.exec(
       read("docs/status.md"),
     );
