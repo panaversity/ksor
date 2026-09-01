@@ -180,7 +180,7 @@ export function runBuild(
       io,
       "ksor-governance-ignored",
       `git ignores ${ignored.join(" and ")}, so ${ignored.length === 1 ? "it is" : "they are"} in no commit — the policy and the takedown ledger ARE the record, and a clone (your CI, your deploy) would build without ${ignored.length === 1 ? "it" : "them"}`,
-      "un-ignore them in .gitignore — the directory form `.ksor/` cannot be negated, so use `.ksor/*` plus `!.ksor/governance.yaml` and `!.ksor/takedowns.yaml` — then commit them (`ksor migrate` offers that edit)",
+      "un-ignore them in .gitignore — the directory form `.ksor/` cannot be negated, so use `.ksor/*` plus `!.ksor/governance.yaml`, `!.ksor/people.yaml` and `!.ksor/takedowns.yaml` — then commit them (`ksor migrate` offers that edit)",
     );
   }
   if (parsed.strict && facts.dirty) {
@@ -188,7 +188,7 @@ export function runBuild(
       io,
       "ksor-build-dirty",
       facts.repository
-        ? "an input (knowledge/, instance.md, .ksor/governance.yaml, .ksor/takedowns.yaml) differs from its last commit, and --strict stamps only committed content"
+        ? "an input (knowledge/, instance.md, .ksor/governance.yaml, .ksor/people.yaml, .ksor/takedowns.yaml) differs from its last commit, and --strict stamps only committed content"
         : "the record is not in a git repository, so no input is committed",
       "commit the inputs and rebuild, or drop --strict to stamp a dirty build (the lock says `dirty: true`)",
     );
@@ -266,6 +266,7 @@ export function runBuild(
     drafts: options.drafts,
     instanceText: record.files.get("instance.md") ?? "",
     policyText: record.files.get(".ksor/governance.yaml") ?? "",
+    peopleText: record.files.get(".ksor/people.yaml") ?? null,
     ledgerText,
     ledgerEntries: result.ledgerEntries,
     audiences: result.policy?.audiences ?? [],

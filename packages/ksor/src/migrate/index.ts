@@ -804,11 +804,16 @@ const BARE_DOTKSOR_PATTERNS = new Set([".ksor/", ".ksor", "/.ksor/", "/.ksor"]);
 
 const GOVERNANCE_IGNORE_BLOCK = [
   "# ksor's working directory — build output and scratch, never the record.",
-  "# The two governance files inside it ARE the record (the policy and the",
-  "# takedown ledger) and are un-ignored by name: the directory form `.ksor/`",
-  "# cannot be negated, so the glob is `.ksor/*`.",
+  "# The governance files inside it ARE the record (the policy, the takedown",
+  "# ledger, and the phone book the site publishes names from) and are",
+  "# un-ignored by name: the directory form `.ksor/` cannot be negated, so the",
+  "# glob is `.ksor/*`.",
   ".ksor/*",
   "!.ksor/governance.yaml",
+  // Ignored, this one is invisible to a clone while still changing what the
+  // local site publishes — and it is hashed into `build_id`, so the two would
+  // disagree about the approver on every page.
+  "!.ksor/people.yaml",
   "!.ksor/takedowns.yaml",
 ];
 

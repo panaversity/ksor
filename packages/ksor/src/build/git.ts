@@ -19,6 +19,9 @@ export const INPUTS: readonly string[] = [
   "knowledge",
   "instance.md",
   ".ksor/governance.yaml",
+  // The site publishes the names this file maps, so an edit to it changes
+  // published bytes and must move `source_commit` like any other input.
+  ".ksor/people.yaml",
   ".ksor/takedowns.yaml",
 ];
 
@@ -63,8 +66,8 @@ export function ignoredGovernance(root: string): readonly string[] {
   // Only files that are THERE: `git check-ignore` answers about a pattern, not
   // about a file, so asking about the ledger of a record that has never had a
   // takedown would refuse a level-0 record for a file it does not want.
-  const paths = [".ksor/governance.yaml", ".ksor/takedowns.yaml"].filter((rel) =>
-    existsSync(join(root, rel)),
+  const paths = [".ksor/governance.yaml", ".ksor/people.yaml", ".ksor/takedowns.yaml"].filter(
+    (rel) => existsSync(join(root, rel)),
   );
   if (paths.length === 0) return [];
   const out = run(root, ["check-ignore", "--", ...paths]);

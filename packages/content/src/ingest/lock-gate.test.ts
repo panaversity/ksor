@@ -263,6 +263,7 @@ describe("checkLock accepts what composeLock writes", () => {
         drafts: "hidden",
         instanceText: built.files.get("instance.md") ?? "",
         policyText: built.files.get(".ksor/governance.yaml") ?? "",
+        peopleText: null,
         ledgerText: built.files.get(".ksor/takedowns.yaml") ?? null,
         ledgerEntries: [],
         audiences: [],

@@ -1,7 +1,8 @@
 # ksor's working directory — build output and scratch, never the record.
-# The two governance files inside it ARE the record (the policy and the
-# takedown ledger) and are un-ignored by name: the directory form `.ksor/`
-# cannot be negated, so the glob is `.ksor/*`.
+# The governance files inside it ARE the record (the policy, the takedown
+# ledger, and the phone book the site publishes names from) and are un-ignored
+# by name: the directory form `.ksor/` cannot be negated, so the glob is
+# `.ksor/*`.
 .ksor/*
 !.ksor/governance.yaml
 !.ksor/people.yaml
