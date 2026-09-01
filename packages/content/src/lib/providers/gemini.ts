@@ -191,7 +191,16 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
 
 export interface GeminiTextGeneratorOptions {
   apiKey: string;
-  /** Default "gemini-2.5-flash" (the oracle's build-plane model). */
+  /**
+   * Default `gemini-3.7-flash`, the current stable Flash model.
+   *
+   * Cheap to move, unlike the embedding model: this one only writes the probe
+   * questions the SYNTHESIZED calibration door measures against, so a change
+   * alters future measurements and invalidates nothing stored — no embedding
+   * is re-computed and no `vector_floor` is touched. The door is recorded
+   * beside every floor (`door: synthesized`), which is what keeps two
+   * measurements from being compared as if they were the same experiment.
+   */
   model?: string;
   clientFactory?: () => GeminiTextClient;
 }
@@ -207,7 +216,7 @@ export class GeminiTextGenerator implements TextGenerator {
   private client: GeminiTextClient | null = null;
 
   constructor(opts: GeminiTextGeneratorOptions) {
-    this.model = opts.model ?? "gemini-2.5-flash";
+    this.model = opts.model ?? "gemini-3.7-flash";
     this.clientFactory =
       opts.clientFactory ?? ((): GeminiTextClient => geminiRestTextClient(opts.apiKey));
   }
