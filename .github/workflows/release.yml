@@ -49,6 +49,10 @@ jobs:
         with:
           # v2 renamed these inputs from publish/version to *-script.
           publish-script: pnpm changeset publish
-          version-script: pnpm changeset version
+          # `pnpm run version` is `changeset version` PLUS the sync that points
+          # docs/status.md at what is about to publish. They are one act: the
+          # docs-truth assertion holds the two equal, and a bump that left the
+          # document behind blocked the release (found live, 0.0.54).
+          version-script: pnpm run version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
