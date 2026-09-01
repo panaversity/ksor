@@ -2,11 +2,11 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-08-26.
+updated: 2026-09-01.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.42** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.53** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor build`, `ksor migrate`, `ksor serve`, `ksor ingest`, `ksor schema`,
@@ -29,15 +29,37 @@ schema 2.5 and the governed door described below; **0.0.42** filled in
 `database.dsn_env` in the emitted `instance.md` so climbing to the served rung
 needs no edit, and recorded decision 29.
 
+0.0.43-0.0.48 were the readability and refusal pass — a document page that
+reads at a glance, a `pnpm preview` for the static build to land in, refusals
+that say the right thing to the right audience, and the intake interview asking
+its three questions in the owner's words. **0.0.49** carried six fixes found by
+walking a real record: the site builds with webpack (a bare `next build` dies
+on Vercel's default machine once a record prerenders a few hundred routes),
+`ksor schema --apply` no longer loses a ROLE when two run at once, `pnpm
+preview` survives a URL it cannot parse, and two audit rows gained the field
+that makes them auditable. **0.0.51** pinned Next `16.3.3`, clearing three
+high-severity advisories a fresh `npm install` reported, stopped Next writing
+its own `AGENTS.md` into the site, moved the scaffold to Fumadocs `16.15.4`,
+and stopped `ksor migrate --write-site` deleting dependencies an adopter added.
+**0.0.52** added `ksor calibrate --check` (is a declared floor still holding,
+read from the record's own logged searches — no provider key), disclosed a shed
+audit row in the served envelope, and taught the site to print natural names
+for actors. **0.0.53** documented `.ksor/people.yaml` for the owner.
+
 Everything under the next heading is RELEASED and in adopters' hands as of
 0.0.41. It was developed on the `okf-native-spec` branch, which merged in
 PR #161.
 
 Verified end to end against each published version. The full KERNEL walk was
-last run against **0.0.18** (2026-08-22: fresh `npm install` into a bare
-project, driven by the real `@modelcontextprotocol/client` SDK over live
-Postgres 17.7 + pgvector 0.8.2 with real Gemini embeddings) and has not been
-re-run since. 0.0.19–0.0.22 changed the site surface; 0.0.24–0.0.29 DID change
+**re-run against 0.0.53 on 2026-09-01** — `ksor init` from the published
+package, `pnpm install`, a hand-written document held out of every machine
+surface as a draft (`6 document(s), 5 admitted`) and admitted once approved
+(`6 admitted`), then live Postgres 17.7 + pgvector 0.8.2, real Gemini
+embeddings on a free-tier key (`embedded 23, failed 0`), a flipped generation,
+a calibrated floor measured through the zero-LLM door (`separable`, 0.622), and
+the served door answering an in-corpus question with provenance and ABSTAINING
+on an out-of-corpus one. Before that it had last run against **0.0.18**
+(2026-08-22, driven by the real `@modelcontextprotocol/client` SDK). 0.0.19–0.0.22 changed the site surface; 0.0.24–0.0.29 DID change
 the door's registration and auth surfaces, and those were proven differently —
 live, from claude.ai as a real MCP client against a real deployment (the next
 section). This page says which walk covered what rather than letting a version
