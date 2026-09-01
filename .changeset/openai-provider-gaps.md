@@ -10,7 +10,7 @@ balance, which arrives as 429 like an ordinary rate limit — was classified
 non-retryable, correctly, because no amount of waiting adds credit. But
 "non-retryable" is what the ingest drain reads as **poison chunk**: it
 binary-splits the batch down to singletons and marks each `failed`. A spent
-balance arrives on *every* chunk, so a run walked the queue quarantining
+balance arrives on _every_ chunk, so a run walked the queue quarantining
 everything it touched; if the failed fraction stayed under
 `MAX_FAILED_FRACTION` (2%), `generationReady` admitted it and the generation
 **flipped** — publishing a record in which exactly the passages the owner had
