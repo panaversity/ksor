@@ -221,7 +221,7 @@ describe("GeminiTextGenerator (build plane)", () => {
     expect(out).toBe("a synthesized query");
     const call = calls[0];
     expect(call, "call: " + JSON.stringify(call)).toBeDefined();
-    expect(call?.model).toBe("gemini-2.5-flash"); // the oracle's build-plane default
+    expect(call?.model).toBe("gemini-3.7-flash"); // the current stable Flash model
     expect(call?.contents).toBe("the prompt");
     expect(call?.config.temperature).toBe(0);
     expect(call?.config.maxOutputTokens).toBe(32);
