@@ -37,6 +37,7 @@ const EMITTED_NAMES: ReadonlyMap<string, string> = new Map([
   ["gitignore", ".gitignore"],
   ["env.example", ".env.example"],
   ["dockerignore", ".dockerignore"],
+  ["mcp.json", ".mcp.json"],
 ]);
 
 function emittedPath(templateRel: string): string {
@@ -597,6 +598,10 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
         // The Governance Policy and, once a takedown exists, the ledger —
         // the record's root of authority beside the bundle (record spec §1).
         ".ksor",
+        // The MCP servers a coding agent may reach from this project — the
+        // database it will provision, and a live record to read. Carries no
+        // secret: both entries authenticate interactively.
+        ".mcp.json",
         "AGENTS.md",
         "CLAUDE.md",
         // The MCP door as a portable container — no host named in it
