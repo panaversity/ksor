@@ -666,3 +666,37 @@ describe("the emitted docs are true about the artefact they ship with", () => {
     ).toBe(true);
   });
 });
+
+/**
+ * `docs/status.md` names the version an adopter can actually install.
+ *
+ * Authority rule 3 makes that file "the only authority on what is actually
+ * built", and it is the first thing a serious evaluator's coding agent reads.
+ * It went ELEVEN releases stale before anyone noticed — which is the failure
+ * mode of a fact kept in prose and nowhere else, in a repository shipping
+ * several releases a day.
+ *
+ * Asserted against `packages/ksor/package.json`, the version the tarball
+ * carries. A Version PR that bumps one and not the other now fails here rather
+ * than shipping a document that misdescribes the artefact beside it.
+ */
+describe("docs/status.md names the version that is actually published", () => {
+  it("matches packages/ksor/package.json", () => {
+    const version = (JSON.parse(read("packages/ksor/package.json")) as { version: string }).version;
+    // Anchored on the PUBLISHED-PACKAGE sentence, not on the version appearing
+    // anywhere in the file: the release summary below it names every version
+    // ever shipped, so a bare `toContain` passes while the line an evaluator
+    // actually reads is eleven releases stale. Found by mutation — the first
+    // version of this assertion did not fail on the state it was written for.
+    const published = /`@panaversity\/ksor`\s+\*\*([0-9]+\.[0-9]+\.[0-9]+)\*\*\s+on npm/.exec(
+      read("docs/status.md"),
+    );
+    expect(published, "docs/status.md must name the published package version").not.toBeNull();
+    expect(
+      published?.[1],
+      `docs/status.md says the published package is ${published?.[1]}; package.json says ` +
+        `${version}. It is the authority on what is built, and the first thing an ` +
+        "evaluator's agent reads.",
+    ).toBe(version);
+  });
+});
