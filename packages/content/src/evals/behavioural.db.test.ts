@@ -167,13 +167,42 @@ describe.runIf(canRun)("behavioural evals", () => {
     expect(missed.gate, "the same disclosure on a miss").toBe("off");
   }, 120_000);
 
+  /**
+   * The gate's own signal for one question — and a REFUSAL when there is none.
+   *
+   * `top_cosine ?? -1` used to stand here, which turned "the vector arm did not
+   * answer" into a SCORE of -1. When a provider rate-limits, the read plane
+   * degrades to keyword-only by design (it must not stall a reader behind
+   * backoff), so every question came back scoreless, and the assertions then
+   * compared sentinels: `far-domain -1 must score below every in-corpus
+   * question [0.711, -1]: expected -1 to be less than -1`.
+   *
+   * A vendor blip thereby reported itself as "the abstention floor is broken" —
+   * the scariest false alarm this suite can raise, and one that cost four CI
+   * failures in a day before anyone read past the assertion (2026-09-01). An
+   * infrastructure failure and a measurement are different things and must not
+   * be spelled the same.
+   */
+  const scoreOf = async (q: string): Promise<number> => {
+    const top = (await search(ctx, q, 5)).top_cosine;
+    if (top === null || top === undefined) {
+      throw new Error(
+        `no top_cosine for ${JSON.stringify(q)} — the VECTOR ARM did not answer, so ` +
+          "there is no measurement here to judge. This is an infrastructure failure " +
+          "(an embedding call refused — a provider rate limit is the usual cause, and " +
+          "the read plane degrades to keyword-only rather than retrying it), NOT a " +
+          "retrieval result. Re-run once the provider recovers.",
+      );
+    }
+    return top;
+  };
+
   it.runIf(canMeasure)(
     "the floor MECHANISM gates exactly as declared",
     async () => {
       // The product guarantee: given a floor, everything below it abstains and
       // everything above it answers. That is code, and it gates.
-      const score = async (q: string): Promise<number> =>
-        (await search(ctx, q, 5)).top_cosine ?? -1;
+      const score = scoreOf;
       const inScores = await Promise.all(IN_CORPUS.map(score));
       const oocScores = await Promise.all(OUT_OF_CORPUS.map(score));
       // Just above every out-of-corpus probe: whatever this corpus's separation,
@@ -224,8 +253,7 @@ describe.runIf(canRun)("behavioural evals", () => {
       // declines the hiring question. That is precisely what `ksor calibrate`
       // reports as "NOT separable" — and why it now refuses to hand out a floor
       // in that case. Recorded so the limit is a measurement, not an assumption.
-      const score = async (q: string): Promise<number> =>
-        (await search(ctx, q, 5)).top_cosine ?? -1;
+      const score = scoreOf;
       const inScores = await Promise.all(IN_CORPUS.map(score));
       const oocScores = await Promise.all(OUT_OF_CORPUS.map(score));
       const margin = Math.min(...inScores) - Math.max(...oocScores);
