@@ -51,6 +51,17 @@ export interface ProviderEntry {
    * `null` for a provider that needs no key.
    */
   keyEnv: string | null;
+  /**
+   * The vendor's task labels, which belong to the PROVIDER and not to global
+   * config. `buildShippedProvider` handed every provider Gemini's
+   * `RETRIEVAL_DOCUMENT`/`RETRIEVAL_QUERY`, so an OpenAI run logged its space
+   * as `text-embedding-3-small/d1536/RETRIEVAL_DOCUMENT` — a task label that
+   * vendor has no concept of and never received (caught by a live call,
+   * 2026-09-01). The seam's guarantee is that "a provider whose two vendor
+   * labels are equal can never mis-route a plane"; asserting a distinction for
+   * a vendor that has none is the same defect from the other side.
+   */
+  taskLabels: { document: string; query: string };
 }
 
 /**
@@ -76,6 +87,7 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     build: (opts: ProviderBuildOptions): EmbeddingProvider => new GeminiEmbeddingProvider(opts),
     needsApiKey: true,
     keyEnv: "GEMINI_API_KEY",
+    taskLabels: { document: EMBED_TASK_DOCUMENT, query: EMBED_TASK_QUERY },
   },
   // The second real vendor, and the proof the seam holds: it needed no change
   // to `EmbeddingProvider`, to normalization, to the degeneracy check, or to
@@ -87,6 +99,9 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     build: (opts: ProviderBuildOptions): EmbeddingProvider => new OpenAiEmbeddingProvider(opts),
     needsApiKey: true,
     keyEnv: "OPENAI_API_KEY",
+    // SYMMETRIC: no task type at all, so both labels are empty — the case
+    // `lib/embedding.ts` names as the one that cannot mis-route a plane.
+    taskLabels: { document: "", query: "" },
   },
   // ksor addition: deterministic and key-free, so the DB tier and CI exercise
   // ingest + retrieval without a vendor key. Its model id is always
@@ -95,6 +110,7 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     build: (opts: ProviderBuildOptions): EmbeddingProvider => new FakeEmbeddingProvider(opts),
     needsApiKey: false,
     keyEnv: null,
+    taskLabels: { document: EMBED_TASK_DOCUMENT, query: EMBED_TASK_QUERY },
   },
 };
 
@@ -148,8 +164,8 @@ export function buildShippedProvider(
     apiKey: opts.apiKey ?? "",
     modelId: opts.modelId ?? EMBED_MODEL,
     dim: opts.dim ?? EMBED_DIM,
-    documentTaskLabel: EMBED_TASK_DOCUMENT,
-    queryTaskLabel: EMBED_TASK_QUERY,
+    documentTaskLabel: entry.taskLabels.document,
+    queryTaskLabel: entry.taskLabels.query,
     documentTimeoutS: EMBED_TIMEOUT_S(),
     queryTimeoutS: QUERY_EMBED_TIMEOUT_S(),
   });
