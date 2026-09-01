@@ -174,7 +174,26 @@ the variable name here only if you want a different one.
 ### 2. Get a database — your agent can do this one
 
 `.mcp.json` at the repo root declares the MCP servers this project may reach.
-The first is Neon's. With it connected, ask your coding agent:
+It ships with two, and both are yours to keep or delete — it is your file:
+
+| server                           | what it is                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `Neon`                           | Neon's own hosted MCP server, for provisioning the Postgres the agent surface needs (step 2)     |
+| `agentfactory-system-of-record`  | a KSoR record Panaversity operates, served over MCP — an example of the surface you are building |
+
+The second is **not** your record and is not needed to run this project. It is
+read-only and it answers about the Agent Factory curriculum, not about your
+knowledge. Delete the entry if you would rather your agent not have it; nothing
+here depends on it.
+
+**Before you connect Neon, know what you are granting.** The Neon MCP server
+acts on your Neon *account*, not on one database: an agent holding it can create
+and delete projects and branches. Point it at an account you are willing to let
+an agent change, review the plan it shows you before approving, and read Neon's
+own documentation on the server's scopes and permissions rather than taking this
+paragraph as the whole of it.
+
+With it connected, ask your coding agent:
 
 > Using the Neon MCP server, create a project called `<your-record>` and enable
 > the pgvector extension on it. Then create a branch called `dev`, and save that
@@ -254,17 +273,14 @@ separately](#the-agent-surface-deploys-separately). Any other operation is
 ### Test the door with an actual agent
 
 The MCP door is meant to be read by agents, so check it with one rather than
-with `curl`. With `pnpm serve` running, write `.mcp.json` at the repo root:
+with `curl`. With `pnpm serve` running, **add** an entry to the `.mcp.json` you
+already have — alongside `Neon`, not in place of it:
 
 ```json
-{
-  "mcpServers": {
     "test-record": {
       "type": "http",
       "url": "http://127.0.0.1:8080/mcp"
     }
-  }
-}
 ```
 
 **If you skipped `calibrate`, expect answers where this test wants refusals** —
@@ -288,7 +304,9 @@ Question 2 is the one that matters. Anything can answer questions it has the
 text for; refusing a plausible near-miss is the property that makes a system of
 record worth trusting, and it is the one that breaks quietly.
 
-Delete `.mcp.json`, or keep it — it holds no secret.
+Keep the `test-record` entry or remove it — it points at loopback and holds no
+secret either way. Do not delete `.mcp.json` itself: it is where `Neon` is
+declared, and step 2 above needs it.
 
 ---
 

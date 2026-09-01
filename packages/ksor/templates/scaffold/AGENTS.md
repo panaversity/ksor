@@ -118,7 +118,15 @@ text-embedding-3-small`, `dim: 1536`, key in `OPENAI_API_KEY` — and each
    Turning it on is step 4, AFTER the record is serving.
 
 2. **Get the database — your agent can do this one.** `.mcp.json` at the repo
-   root declares the MCP servers this project may reach, and the first is Neon.
+   root declares the MCP servers this project may reach. It ships with two:
+   `Neon`, which provisions the Postgres this step needs, and
+   `agentfactory-system-of-record`, a read-only KSoR record Panaversity operates
+   as an example of the surface being built here — not this project's record,
+   and not needed by anything below. Either can be deleted; the file is the
+   adopter's.
+
+   The Neon server acts on the whole Neon ACCOUNT, not on one database: it can
+   create and delete projects and branches. Show the plan before running it.
    With it connected, ask:
 
    > Using the Neon MCP server, create a project called `<your-record>` and

@@ -758,3 +758,47 @@ describe("ksor init — scaffold contents (spec: emitted-tree contract)", () => 
     expect(result.stdout).toContain("corepack enable pnpm");
   });
 });
+
+/**
+ * Every MCP server the scaffold wires up is one the adopter can be told about.
+ *
+ * `.mcp.json` attaches servers to the coding agent that OPERATES the record, so
+ * a server nobody documented is a capability nobody reviewed. It shipped in
+ * 0.0.54 with two entries and prose naming one: the emitted README and AGENTS.md
+ * both said "the first is Neon", and `agentfactory-system-of-record` — a
+ * third-party endpoint, in every adopter's repo — appeared in no emitted
+ * document at all.
+ *
+ * Derived from the file rather than listed here, so ADDING a server to
+ * `.mcp.json` and saying nothing about it fails on the server that was added.
+ */
+describe("the MCP servers the scaffold attaches to an agent", () => {
+  const template = (rel: string): string => readFileSync(path.join(templatesDir, rel), "utf8");
+
+  const servers = (): readonly string[] =>
+    Object.keys(
+      (JSON.parse(template("mcp.json")) as { mcpServers: Record<string, unknown> }).mcpServers,
+    );
+
+  it("declares at least one, so the assertions below are not vacuous", () => {
+    expect(servers().length).toBeGreaterThan(0);
+  });
+
+  it.each(["README.md", "AGENTS.md"])("names every one of them in the emitted %s", (doc) => {
+    const prose = template(doc);
+    for (const name of servers()) {
+      expect(
+        prose.includes(name) || prose.includes(name.replace(/-/g, " ")),
+        `${doc} never mentions the \`${name}\` MCP server, which \`ksor init\` wires into ` +
+          `every adopter's coding agent — say what it is and that they may delete it`,
+      ).toBe(true);
+    }
+  });
+
+  it("tells the adopter what the Neon server can reach, not just that it exists", () => {
+    // It acts on the ACCOUNT: an agent holding it can create and delete
+    // projects and branches. The prompt the README hands them is one an agent
+    // executes against real infrastructure.
+    expect(template("README.md")).toMatch(/account/i);
+  });
+});
