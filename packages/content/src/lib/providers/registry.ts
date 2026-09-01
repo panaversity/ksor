@@ -73,12 +73,23 @@ export interface ProviderEntry {
  */
 export class MissingProviderKeyError extends Error {
   readonly providerName: string;
-  constructor(providerName: string) {
+  readonly keyEnv: string | null;
+  /**
+   * `keyEnv` is not decoration. The message named the PROVIDER and nothing
+   * else, so an operator whose `ksor serve` exited 3 on an OpenAI record was
+   * told "provider openai needs an API key" and left to guess which variable —
+   * while `ksor serve --help`, `env.example` and `docs/deploying.md` all named
+   * `GEMINI_API_KEY`, which the door does not read (review, 2026-09-01). The
+   * registry row already held the answer; this is it reaching the operator.
+   */
+  constructor(providerName: string, keyEnv: string | null = null) {
     super(
-      `embedding provider ${JSON.stringify(providerName)} needs an API key and none was supplied`,
+      `embedding provider ${JSON.stringify(providerName)} needs an API key and none was supplied` +
+        (keyEnv === null ? "" : ` — set ${keyEnv}`),
     );
     this.name = "MissingProviderKeyError";
     this.providerName = providerName;
+    this.keyEnv = keyEnv;
   }
 }
 
@@ -158,7 +169,7 @@ export function buildShippedProvider(
 ): EmbeddingProvider {
   const entry = entryFor(name);
   if (entry.needsApiKey && !opts.apiKey) {
-    throw new MissingProviderKeyError(name);
+    throw new MissingProviderKeyError(name, entry.keyEnv);
   }
   return entry.build({
     apiKey: opts.apiKey ?? "",

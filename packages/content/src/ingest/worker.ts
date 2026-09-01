@@ -5,10 +5,23 @@
  * The three quarried rules, carried: read the WHOLE pending set once on a
  * short connection; embed each batch holding NO connection; write each batch
  * through a short transaction (commit per batch — a re-run touches only what
- * is still pending). Failures: a RETRYABLE batch error aborts the run loudly
- * (chunks stay pending — never mass-quarantine on a provider blip); a
- * non-transient error BINARY-SPLITS down to the single poison chunk, which
+ * is still pending).
+ *
+ * Failures come in THREE kinds, because two was one too few. A RETRYABLE batch
+ * error aborts the run loudly (chunks stay pending — never mass-quarantine on
+ * a provider blip). A FATAL one aborts it the same way but without the retry
+ * wrapper's patience first: the ACCOUNT, not the passage, is what is wrong, so
+ * waiting cannot help and quarantining would be a lie about which chunk is bad.
+ * Everything else BINARY-SPLITS down to the single poison chunk, which
  * quarantines as `failed` with its reason.
+ *
+ * The third kind is not decoration. `insufficient_quota` — a spent OpenAI
+ * balance — arrives as 429 on every chunk in the run. Classified merely
+ * non-retryable it took the poison path: each batch split to singletons, each
+ * singleton quarantined, and a run whose failed fraction stayed under
+ * MAX_FAILED_FRACTION then FLIPPED — publishing a generation in which exactly
+ * the passages the owner had just edited were unsearchable, exit 0, with the
+ * billing reason visible only in `chunks.embed_error` (review, 2026-09-01).
  */
 
 import { embedInput } from "../lib/embedding.js";
@@ -72,6 +85,14 @@ export interface DrainIo {
   readonly markFailed: (reason: string, chunkId: string) => Promise<void>;
   /** The ingest plane's PATIENT taxonomy (429 = retry) — the provider's own classifier. */
   readonly isRetryable: (exc: unknown) => boolean;
+  /**
+   * Is this a failure of the ACCOUNT rather than of the passage? Such an error
+   * aborts the run with everything unwritten left pending, exactly like a
+   * retryable one — but it is asked separately because the retry wrapper must
+   * NOT spend five backoffs on it first. Optional: a provider that cannot tell
+   * says nothing and keeps the two-kind behaviour.
+   */
+  readonly isFatal?: (exc: unknown) => boolean;
 }
 
 export interface DrainResult {
@@ -96,6 +117,9 @@ export async function drain(pending: readonly PendingRow[], io: DrainIo): Promis
       literals = await io.embedBatch(batch.map(([, text]) => text));
     } catch (exc) {
       if (io.isRetryable(exc)) throw exc; // abort the RUN; everything unwritten stays pending (resume = rerun)
+      // Not the passage's fault and not a blip: abort with the queue intact, so
+      // a re-run after the account is fixed embeds what this run did not.
+      if (io.isFatal?.(exc) === true) throw exc;
       if (batch.length === 1) {
         await io.markFailed(failureReason(exc), batch[0]![0]);
         failed += 1;

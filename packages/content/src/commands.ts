@@ -755,7 +755,10 @@ async function calibrateCommand(args: string[]): Promise<number> {
       return refuse(
         "bad-args",
         "the synthesized door needs GEMINI_API_KEY (it writes one probe question per sampled " +
-          "passage) — or calibrate with zero LLM: --queries-file PATH (one in-corpus question per line)",
+          "passage) — or calibrate with zero LLM: --queries-file PATH (one in-corpus question per line).\n" +
+          "  note: this is the TEXT generator, not the embedding provider. A record on " +
+          "`embedding.provider: openai` still embeds with OPENAI_API_KEY; only question " +
+          "synthesis is Gemini-only today, and --queries-file avoids it entirely",
       );
     }
     textGenerator = new GeminiTextGenerator({ apiKey });

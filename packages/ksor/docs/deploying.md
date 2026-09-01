@@ -286,8 +286,14 @@ are doing it wrong" — and only the first tier is true.
 | variable                                  | why                                                  |
 | ----------------------------------------- | ---------------------------------------------------- |
 | `KSOR_DB_URL`                             | the record's Postgres store                          |
-| `GEMINI_API_KEY`                          | embeds the incoming query, so retrieval works at all |
+| the provider key                          | embeds the incoming query, so retrieval works at all |
 | `KSOR_AUTH`, **or** a configured SSO door | see below                                            |
+
+The provider key is whichever variable `embedding.provider` in `instance.md`
+names — `GEMINI_API_KEY` for `gemini` (the default), `OPENAI_API_KEY` for
+`openai`. A record reads exactly one, and the boot refusal names the one it
+wanted: `embedding provider "openai" needs an API key and none was supplied —
+set OPENAI_API_KEY`.
 
 `KSOR_AUTH` takes one of two values, and the value IS the decision:
 

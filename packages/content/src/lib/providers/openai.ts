@@ -64,6 +64,15 @@ export function isRetryable(exc: unknown): boolean {
  * project stays rate-limited on the next second, so a search degrades to
  * keyword-only now rather than stalling a reader behind backoff.
  */
+/**
+ * An ACCOUNT-level failure: no amount of waiting and no other passage changes
+ * it. The drain must abort on this rather than quarantine, because the chunk
+ * it happened to be holding is not what is wrong — see `ingest/worker.ts`.
+ */
+export function isFatal(exc: unknown): boolean {
+  return exc instanceof OpenAiHttpError && exc.kind === PERMANENT_QUOTA;
+}
+
 export function isRetryableQuery(exc: unknown): boolean {
   if (isTransportBlip(exc)) return true;
   const status = httpStatusOf(exc);
@@ -141,5 +150,9 @@ export class OpenAiEmbeddingProvider implements EmbeddingProvider {
 
   isRetryableQuery(exc: unknown): boolean {
     return isRetryableQuery(exc);
+  }
+
+  isFatal(exc: unknown): boolean {
+    return isFatal(exc);
   }
 }

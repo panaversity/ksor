@@ -62,6 +62,14 @@ export interface EmbeddingProvider {
   isRetryable(exc: unknown): boolean;
   /** The READ plane's classification — fail-fast; MUST NOT count a rate limit as retryable. */
   isRetryableQuery(exc: unknown): boolean;
+  /**
+   * OPTIONAL third answer: a failure of the ACCOUNT rather than of the passage
+   * — a spent balance, a revoked key. The ingest drain aborts on it with the
+   * queue left pending, because the alternative is quarantining chunks for a
+   * reason that has nothing to do with them. A provider that cannot tell omits
+   * this and keeps the two-kind behaviour.
+   */
+  isFatal?(exc: unknown): boolean;
   /** DROP the stale client reference so the next call builds a fresh one. NEVER
    * close an in-flight client: concurrent callers keep their references and finish. */
   reset(): void;

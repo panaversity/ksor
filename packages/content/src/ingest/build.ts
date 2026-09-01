@@ -939,6 +939,9 @@ export async function buildGeneration(
         await c.query(FAIL_SQL, [reason, chunkId]);
       }),
     isRetryable: (exc) => provider.isRetryable(exc), // the ingest plane's PATIENT taxonomy (429 = retry)
+    // …and the third answer, when the provider has one: abort rather than
+    // quarantine a chunk for a failure that belongs to the account.
+    isFatal: (exc) => provider.isFatal?.(exc) === true,
   });
   log(`embedded ${embedded}, failed ${failed}`);
 

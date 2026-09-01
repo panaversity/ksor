@@ -59,7 +59,9 @@ serves nothing. Runs in this process and holds it; SIGTERM/SIGINT drains.
 Configured by environment — .env beside the record is read automatically:
 
   <database.dsn_env>       the Postgres DSN, under the NAME instance.md gives
-  GEMINI_API_KEY           iff the instance's embedding provider needs a key
+  <provider key>           iff the instance's embedding provider needs one:
+                           GEMINI_API_KEY for gemini, OPENAI_API_KEY for openai.
+                           The refusal names the variable your record needs
   KSOR_AUTH                disabled-local (loopback dev) | disabled-public.
                            Serve REFUSES to boot with neither this nor a
                            configured SSO door — never open by accident

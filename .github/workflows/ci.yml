@@ -186,14 +186,19 @@ jobs:
       - uses: ./.github/actions/setup
       - run: pnpm build
       # The kernel's database tier (decision 11): ingest → retrieve round
-      # trips against real Postgres + pgvector. The Gemini-live suite
-      # (gemini.live.db.test.ts — the one real embedding call, proving the
-      # provider seam and catching vendor API drift) gates separately on
-      # GEMINI_API_KEY and skips without it; the secret is configured.
+      # trips against real Postgres + pgvector. The live provider suites — one
+      # real embedding call each, proving the seam and catching vendor API
+      # drift — gate separately on their own keys and announce themselves as
+      # skipped without one. GEMINI_API_KEY is configured. OPENAI_API_KEY is
+      # passed so the OpenAI tripwire arms the moment that secret is added;
+      # until then its suite reports "skipped — set OPENAI_API_KEY" rather
+      # than vanishing from the run, which is how it went a week unarmed while
+      # its own header called it the proof the seam is vendor-neutral.
       - run: pnpm test:db
         env:
           KSOR_DB_URL: postgresql://ksor:ksor@localhost:5432/ksor
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   init-windows:
     name: Init acceptance (Windows)
