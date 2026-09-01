@@ -16,6 +16,36 @@ pnpm install
 pnpm dev        # the site, live at http://localhost:3000
 ```
 
+Then write a document and publish it:
+
+```console
+$ pnpm exec ksor build
+ksor build: 6 document(s), 5 admitted to a machine surface
+```
+
+**Six documents, five admitted.** The one you just wrote is a `draft`, so it
+reaches nothing an AI agent reads — not `llms.txt`, not the markdown twins —
+until a human approves it. Approve it and the count moves. That is the whole
+product, and it costs nothing: no database, no API key, no account.
+
+Climb one rung and an agent asks the record a question. The answer carries
+where it came from:
+
+```json
+"provenance": { "stable_id": "knowledge/refund-policy", "generation": 1 },
+"governance": { "status": "stable", "approval": { "by": "human:you" } }
+```
+
+…and a question the record does not cover is declined rather than guessed at:
+
+```json
+{ "ok": false, "abstained": true, "gate": { "floor": 0.622 } }
+```
+
+**[Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/00-hello-world.md)**
+walks all of that in about fifteen minutes. Every command and output in it was
+run and pasted as it appeared — including the ones above.
+
 One command emits a complete governed project: the record (`knowledge/`,
 plain CommonMark), a working documentation site with hot reload, offline
 search and `llms.txt`, adopter CI, a dependency-free format checker

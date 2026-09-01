@@ -101,11 +101,29 @@ bunx @panaversity/ksor@latest init my-knowledge-sor
 cd my-knowledge-sor && bun install && bun run dev
 ```
 
-Open `http://localhost:3000`. Your knowledge site is running, and it reloads
-as you edit the Markdown files in `knowledge/`. What you have is a complete,
-ordinary project — your knowledge, a working website, a CI workflow, and
-instructions for coding agents — and it is entirely yours: nothing is
-downloaded at build time, and nothing phones home.
+Open `http://localhost:3000`. The site is running, and it reloads as you edit
+the Markdown files in `knowledge/`. What you have is a complete, ordinary
+project — a working website, a CI workflow, and instructions for coding agents
+— and it is entirely yours: nothing is downloaded at build time, and nothing
+phones home. The five documents in it are KSoR's own starters, there to be
+deleted as your knowledge arrives.
+
+Ask it to publish and you meet the point of all this:
+
+```console
+$ pnpm exec ksor build
+ksor build: 6 document(s), 5 admitted to a machine surface
+```
+
+Six documents, five admitted. The one you just wrote is a `draft`, so it
+reaches no surface an AI agent reads — not `llms.txt`, not the markdown twins,
+nothing — until a human approves it. Approve it and the count moves.
+
+**[Hello world](docs/tutorials/00-hello-world.md) walks that end to end in
+about fifteen minutes**, from an empty directory to your own coding agent
+answering from your own document and naming which document and which
+publication it came from. Every command and output in it was run and pasted as
+it appeared.
 
 **Next, open the project in the coding agent you already use** (Claude Code,
 Cursor, Copilot — any of them) **and tell it what this knowledge base is
