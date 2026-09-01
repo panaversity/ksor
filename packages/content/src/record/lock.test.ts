@@ -26,6 +26,7 @@ const INPUTS: BuildIdInputs = {
   indexes: [{ path: "index.md", sha256: "ee" }],
   instance_sha256: "ii",
   policy_sha256: "pp",
+  people_sha256: "pp",
   ledger_sha256: "ll",
   ksor_version: "0.1.0",
   drafts: "hidden",
@@ -61,6 +62,12 @@ describe("buildIdOf (build spec §2)", () => {
     ["a generated index", { indexes: [{ path: "index.md", sha256: "e2" }] }],
     ["the instance", { instance_sha256: "i2" }],
     ["the policy", { policy_sha256: "p2" }],
+    // The site prints what `.ksor/people.yaml` maps in PLACE of the stored
+    // actor, so an edit to it changes the approver published on every page.
+    // While it sat outside this object, the human surface and the machine
+    // surface of one build could name different approvers under one id, with
+    // `pnpm check` green and the lock byte-identical (review, 2026-09-01).
+    ["the phone book", { people_sha256: "h2" }],
     ["the ledger", { ledger_sha256: "l2" }],
     ["the toolchain", { ksor_version: "0.2.0" }],
     ["the drafts switch", { drafts: "shown" as const }],
@@ -148,6 +155,7 @@ describe("composeLock + parseLock", () => {
     drafts: "hidden",
     instanceText: "---\nformat: 2\n---\n",
     policyText: "version: '0.1'\n",
+    peopleText: null,
     ledgerText: null,
     ledgerEntries: [],
     audiences: ["internal"],
@@ -194,6 +202,9 @@ describe("composeLock + parseLock", () => {
     // section of the lock, so "what was published" stopped short of them.
     expect(lock.indexes).toEqual([{ path: "index.md", sha256: sha256Hex("# R\n") }]);
     expect(lock.ledger_sha256).toBe(sha256Hex(""));
+    // Absent phone book hashes as empty, the same way an absent ledger does —
+    // so "declares no names" is a stated fact rather than a missing key.
+    expect(lock.people_sha256).toBe(sha256Hex(""));
     const parsed = parseLock(JSON.stringify(lock));
     expect(parsed.ok && parsed.lock).toEqual(lock);
   });

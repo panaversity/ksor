@@ -135,6 +135,7 @@ function project(root: string, options: { documents: number; audience: string })
       drafts: "hidden",
       instance_sha256: sha256Text(readFileSync(path.join(root, "instance.md"), "utf8")),
       policy_sha256: sha256Text(readFileSync(path.join(root, ".ksor", "governance.yaml"), "utf8")),
+      people_sha256: sha256Text(""),
       ledger_sha256: sha256Text(""),
       ledger_entries: [],
       audiences: { registry: ["internal"] },

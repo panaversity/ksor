@@ -491,6 +491,10 @@ describe("ksor migrate — what it refuses to invent", () => {
     const after = read(root, ".gitignore");
     expect(after).toContain(".ksor/*");
     expect(after).toContain("!.ksor/governance.yaml");
+    // The phone book too: ignored, it is invisible to a clone while still
+    // changing what the local site publishes, and it is hashed into `build_id`
+    // — so the two would disagree about the approver printed on every page.
+    expect(after).toContain("!.ksor/people.yaml");
     expect(after).toContain("!.ksor/takedowns.yaml");
     expect(after).not.toContain("everything transient lives under one roof");
     expect(after).toContain("node_modules/");

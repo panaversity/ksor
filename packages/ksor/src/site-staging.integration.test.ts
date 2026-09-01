@@ -326,6 +326,7 @@ function writeLock(
         drafts: options.drafts ?? "hidden",
         instance_sha256: sha256Text(controlText("instance.md") ?? ""),
         policy_sha256: sha256Text(controlText(".ksor/governance.yaml") ?? ""),
+        people_sha256: sha256Text(controlText(".ksor/people.yaml") ?? ""),
         ledger_sha256: sha256Text(ledgerText ?? ""),
         ledger_entries: ledgerEntries,
         audiences: { registry: ["internal"], viewers: { public: ["public"] } },
@@ -591,6 +592,30 @@ okf_version: "0.2"
     expect(r.status).not.toBe(0);
     expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
     expect(r.stderr).toContain("public-policy.md");
+    expect(existsSync(fixture.stage)).toBe(false);
+  });
+
+  // `.ksor/people.yaml` is the phone book the SITE publishes names from: it
+  // replaces the stored actor on every Owner, Approved, Withdrawn and Trust
+  // row. It sat outside `build_id` and outside this gate, so an edit to it
+  // republished a different approver with `pnpm check` green, the lock
+  // byte-identical, and the `/md/` twin of the SAME build still naming the
+  // actor as stored (review, 2026-09-01). Provenance is load-bearing, and the
+  // reason it was excluded — that a name correction would refuse the next site
+  // build — is the trade critical rule 1 forbids.
+  it("an edited phone book the lock never saw is refused — ksor-lock-stale", () => {
+    const file = path.join(fixture.root, ".ksor", "people.yaml");
+    const before = existsSync(file) ? readFileSync(file, "utf8") : null;
+    writeFileSync(
+      file,
+      'version: "0.1"\npeople:\n  "human:someone": "A Name Nobody Approved Under"\n',
+    );
+    const r = stage(fixture);
+    if (before === null) rmSync(file);
+    else writeFileSync(file, before);
+    expect(r.status, r.stderr).not.toBe(0);
+    expect(r.stderr.split("\n")[0]).toMatch(/^ksor-lock-stale/);
+    expect(r.stderr).toContain(".ksor/people.yaml");
     expect(existsSync(fixture.stage)).toBe(false);
   });
 

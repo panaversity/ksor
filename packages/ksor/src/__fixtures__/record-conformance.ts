@@ -47,6 +47,7 @@ export function lockWith(
       drafts: "hidden",
       instance_sha256: zero,
       policy_sha256: zero,
+      people_sha256: zero,
       ledger_sha256: zero,
       ledger_entries: ledgerEntries,
       audiences: { registry: [], viewers: {} },

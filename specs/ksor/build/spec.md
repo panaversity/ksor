@@ -90,6 +90,7 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   "drafts": "hidden",
   "instance_sha256": "…",
   "policy_sha256": "…",
+  "people_sha256": "…",
   "ledger_sha256": "…",
   "ledger_entries": [{ "id": "2026-08-01T00:00:00Z-a1b2c3", "digest": "…" }],
   "audiences": {
@@ -148,7 +149,7 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   short of the file that lists what was published.
 - `build_id` = sha256 over everything a projection reads: the sorted
   `documents[]`, `companions[]`, `assets[]` and `indexes[]` `(path, sha256)` pairs, `instance_sha256`,
-  `policy_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each
+  `policy_sha256`, `people_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each
   document's `admitted` list — the canonical viewers whose machine artefacts
   contain it at `as_of` (stable, effective, unexpired, not denied, audience
   overlapping). It excludes `as_of`, `source_commit` and `dirty` themselves.
@@ -164,7 +165,15 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   the two things that makes `ksor-ledger-amended` reachable: an id alone cannot
   tell a committed denial from the same id RETARGETED at another document.
   `ledger_sha256` hashes the file's bytes, or the empty string when no ledger
-  exists.
+  exists. `people_sha256` hashes `.ksor/people.yaml` the same way. _2026-09-01:
+  the phone book was not hashed at all. The site prints what it maps in PLACE
+  of the stored actor on every Owner, Approved, Withdrawn and Trust row, so
+  editing it republished a different approver while `pnpm check` stayed green,
+  `build.lock.json` stayed byte-identical, and the `/md/` twin of the same
+  `build_id` still named the actor as stored — the two surfaces of one build
+  disagreeing about who approved a document. It was excluded so that correcting
+  a name would not refuse the next site build; that is the trade critical rule 1
+  forbids, and refusing until `ksor build` is re-run is the correct behaviour._
   `as_of` is written with millisecond precision (`…T12:00:00.000Z`).
 
 Two identities, never confused in prose: `build_id` is what R14 stamps and
@@ -201,8 +210,9 @@ carries `rel="alternate" type="text/markdown"`; every page carries
 `version`, which is the record's. The site build refuses without a fresh
 lock (`ksor-lock-missing`, `ksor-lock-stale`) outside development.
 **Fresh covers the CONTROL files, not only the documents**: `instance.md`,
-`.ksor/governance.yaml` and `.ksor/takedowns.yaml` are hashed against
-`instance_sha256`, `policy_sha256` and `ledger_sha256`, every asset against
+`.ksor/governance.yaml`, `.ksor/people.yaml` and `.ksor/takedowns.yaml` are
+hashed against `instance_sha256`, `policy_sha256`, `people_sha256` and
+`ledger_sha256`, every asset against
 `assets[]`, every COMMITTED `index.md` against `indexes[]` — the same four
 lists `ksor ingest` compares, so the two surfaces refuse the same tree — and
 the lock's

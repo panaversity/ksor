@@ -286,7 +286,19 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    "CommonMark only, framework-free forever" gains exactly ONE extension, GFM
    footnotes, for the reason decision 27 gives: it is the only extension that
    degrades to readable text in a plain renderer, which is what
-   "framework-free" was protecting._
+   "framework-free" was protecting._ _Revision 2026-09-01: the closed root set is
+   recorded as gaining TWO members it had already gained in silence —
+   `.ksor/people.yaml` (0.0.53) and `.mcp.json` (0.0.54). Both were emitted and
+   asserted in `init.integration.test.ts` with no row in the init spec's
+   emitted-tree contract and no revision here, which is exactly the review step
+   this decision names as where additions are locked. The omission was not
+   cosmetic: `.ksor/people.yaml` publishes the approver printed on every
+   document page and had been left outside `build_id` and outside the site's
+   staleness gate, so the human and machine surfaces of ONE build could name
+   different approvers with nothing red — fixed in the same change that records
+   this. `.mcp.json` ships a second, vendor-operated MCP record into every
+   adopter repo; whether it should is an OWNER question and is left open here
+   rather than settled by the file's existence._
 9. **Site shell: one in core — Next.js + Fumadocs + shadcn** (owner,
    2026-08-18), replacing Docusaurus natively before v1 traffic. No shell
    selector at init (one obvious way; a flag forks every skill, test, and

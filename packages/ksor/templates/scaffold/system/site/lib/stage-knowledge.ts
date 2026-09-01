@@ -48,6 +48,7 @@ import type { Refusal } from "../record/refusal";
 const KNOWLEDGE = "knowledge/";
 const LEDGER_PATH = ".ksor/takedowns.yaml";
 const POLICY_PATH = ".ksor/governance.yaml";
+const PEOPLE_PATH = ".ksor/people.yaml";
 /**
  * Everything this build may publish, as bytes at bundle-relative paths: the
  * admitted concepts (copied), their companions (copied), ONLY the assets those
@@ -177,6 +178,7 @@ function planStage(recordDir: string, development: boolean): StagePlan {
           instance: record.files.get("instance.md") ?? "",
           policy: record.files.get(POLICY_PATH) ?? "",
           ledger: record.files.get(LEDGER_PATH) ?? null,
+          people: record.files.get(PEOPLE_PATH) ?? null,
         },
         { draftsRequested },
       );

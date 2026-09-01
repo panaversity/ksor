@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "build_id": "sha256:22f7f519588e143f3a35e76edb9d0cdddf6cc601c99d152b2f009082af49f030",
-  "ksor_version": "0.0.40",
+  "build_id": "sha256:f5b0d62ae2aab8cde3f6658c9e198a64a60cf562fcdc9f171fc4e1d6c5bae785",
+  "ksor_version": "0.0.54",
   "okf": {
     "version": "0.2",
     "commit": "ad30107c31c06aec8a7d5636e0d1058118604e6f",
@@ -13,6 +13,7 @@
   "drafts": "hidden",
   "instance_sha256": "04952385a9e0d0350673a13053b815d429d74890528db8910877de566bae231b",
   "policy_sha256": "41b63d4d203785563e4d821c4f30b11e06f13740ddd4f9a4e84e1ad83a60a3a5",
+  "people_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "ledger_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "ledger_entries": [],
   "audiences": {

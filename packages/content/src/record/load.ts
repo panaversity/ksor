@@ -11,7 +11,17 @@ import path from "node:path";
 import type { RecordFiles } from "./check.js";
 import type { ScaffoldStructure } from "./hygiene.js";
 
-const CONTROL_FILES = ["instance.md", ".ksor/governance.yaml", ".ksor/takedowns.yaml"] as const;
+// `.ksor/people.yaml` is here because the SITE reads it and publishes what it
+// says — it rewrites the approver, owner and verifier printed on every document
+// page. A file that changes published bytes has to reach `build_id`, or the
+// human surface and the machine surface of one build can disagree about who
+// approved a document with nothing going red (found by review, 2026-09-01).
+const CONTROL_FILES = [
+  "instance.md",
+  ".ksor/governance.yaml",
+  ".ksor/people.yaml",
+  ".ksor/takedowns.yaml",
+] as const;
 /** Files the operating system writes behind the author's back: ignored, never reported. */
 const OS_JUNK = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
 

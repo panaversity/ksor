@@ -73,6 +73,8 @@ export interface ControlTexts {
   readonly policy: string;
   /** Null when `.ksor/takedowns.yaml` is not there — an empty ledger. */
   readonly ledger: string | null;
+  /** Null when `.ksor/people.yaml` is not there — no natural names declared. */
+  readonly people: string | null;
 }
 
 function sha256Text(text: string): string {
@@ -139,12 +141,17 @@ export function readLock(
     ["instance.md", lock.data.instance_sha256, sha256Text(control.instance)],
     [".ksor/governance.yaml", lock.data.policy_sha256, sha256Text(control.policy)],
     [".ksor/takedowns.yaml", lock.data.ledger_sha256, sha256Text(control.ledger ?? "")],
+    // The phone book publishes NAMES in place of stored actors, so an edit here
+    // changes the approver printed on every page. Left out, the site could
+    // publish one approver while the `/md/` twin stamped with the same
+    // `build_id` published another (review, 2026-09-01).
+    [".ksor/people.yaml", lock.data.people_sha256, sha256Text(control.people ?? "")],
   ] as const) {
     if (want === have) continue;
     refuse(
       "ksor-lock-stale",
       `${file} changed since ${LOCK_FILE} was written`,
-      "the lock's build_id is a hash over the record AND the three files that govern it, so a projection under a control file the lock never saw publishes what nothing checked — a denial lifted by deleting a line would otherwise leave the lock valid",
+      "the lock's build_id is a hash over the record AND the four files that govern it, so a projection under a control file the lock never saw publishes what nothing checked — a denial lifted by deleting a line would otherwise leave the lock valid",
       "run `ksor build` again and commit the lock with the change; lift a denial with `ksor takedown --revoke <id>`, never by editing the ledger",
     );
   }

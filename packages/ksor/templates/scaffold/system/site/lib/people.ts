@@ -8,8 +8,9 @@
  * `human:mjs` — most of the actors in a real record — had no expressible name
  * at all. It also collided: "Bashir Aziz" and "Bashira Ziz" both derive
  * `bashiraziz`, which would print one person's name on the other's governance
- * act. A map has neither problem, and duplicate keys are refused by the parser
- * rather than resolved by whichever came last.
+ * act. A map has neither problem, and a duplicate key drops the whole book
+ * rather than resolving to whichever came last — `uniqueKeys` only REPORTS the
+ * duplicate, so the errors have to be read for that to be true.
  *
  * ONE-WAY. The identifier is what the record stores, cites and checks against
  * the policy; this is only what a page prints. Nothing reads a name back into
@@ -34,8 +35,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { parseAllDocuments } from "yaml";
-
+import { parsePeople } from "./people-rule";
 import { projectRoot } from "./shared";
 
 const PEOPLE_YAML = path.join(projectRoot, ".ksor", "people.yaml");
@@ -48,26 +48,7 @@ function loadPeople(): ReadonlyMap<string, string> {
     // Optional: its absence means "no natural names declared".
     return new Map();
   }
-  try {
-    const docs = parseAllDocuments(text.replace(/^﻿/, ""), {
-      schema: "core",
-      uniqueKeys: true,
-      logLevel: "silent",
-    });
-    const value: unknown = docs[0]?.toJS();
-    if (typeof value !== "object" || value === null) return new Map();
-    const table = (value as { people?: unknown }).people;
-    if (typeof table !== "object" || table === null || Array.isArray(table)) return new Map();
-    const out = new Map<string, string>();
-    for (const [actor, name] of Object.entries(table as Record<string, unknown>)) {
-      // A blank value is an entry someone started and left; printing "" would
-      // erase the identifier rather than replace it.
-      if (typeof name === "string" && name.trim() !== "") out.set(actor.trim(), name.trim());
-    }
-    return out;
-  } catch {
-    return new Map();
-  }
+  return parsePeople(text);
 }
 
 let cached: ReadonlyMap<string, string> | null = null;

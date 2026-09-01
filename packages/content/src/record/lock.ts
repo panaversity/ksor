@@ -46,6 +46,7 @@ const lockSchema = z
     drafts: z.enum(["hidden", "shown"]),
     instance_sha256: hex64,
     policy_sha256: hex64,
+    people_sha256: hex64,
     ledger_sha256: hex64,
     ledger_entries: z.array(z.object({ id: z.string().min(1), digest: hex64 }).strict()),
     audiences: z
@@ -89,6 +90,8 @@ export interface Lock {
   readonly drafts: Drafts;
   readonly instance_sha256: string;
   readonly policy_sha256: string;
+  /** The phone book the SITE publishes names from. Empty string when absent. */
+  readonly people_sha256: string;
   readonly ledger_sha256: string;
   /** `(id, digest)` per ledger entry, sorted by id — the baseline the next build compares TEXT against. */
   readonly ledger_entries: readonly { readonly id: string; readonly digest: string }[];
@@ -154,6 +157,7 @@ export interface BuildIdInputs {
   readonly indexes: readonly { readonly path: string; readonly sha256: string }[];
   readonly instance_sha256: string;
   readonly policy_sha256: string;
+  readonly people_sha256: string;
   readonly ledger_sha256: string;
   readonly ksor_version: string;
   readonly drafts: Drafts;
@@ -181,6 +185,9 @@ export function buildIdOf(inputs: BuildIdInputs): string {
       .sort((a, b) => compare(a[0] ?? "", b[0] ?? "")),
     instance_sha256: inputs.instance_sha256,
     policy_sha256: inputs.policy_sha256,
+    // The site prints what this file says in place of the stored actor, so it
+    // is published content and belongs in the id like any other.
+    people_sha256: inputs.people_sha256,
     ledger_sha256: inputs.ledger_sha256,
     ksor_version: inputs.ksor_version,
     drafts: inputs.drafts,
@@ -233,6 +240,8 @@ export interface LockInput {
   readonly drafts: Drafts;
   readonly instanceText: string;
   readonly policyText: string;
+  /** Null when `.ksor/people.yaml` does not exist, which is every record until an owner writes one. */
+  readonly peopleText: string | null;
   /** Null when the ledger file does not exist. */
   readonly ledgerText: string | null;
   readonly ledgerEntries: readonly { readonly id: string; readonly digest: string }[];
@@ -269,6 +278,7 @@ export function composeLock(input: LockInput): Lock {
     .map((i) => ({ path: i.path, sha256: sha256Hex(i.text) }));
   const instance_sha256 = sha256Hex(input.instanceText);
   const policy_sha256 = sha256Hex(input.policyText);
+  const people_sha256 = sha256Hex(input.peopleText ?? "");
   const ledger_sha256 = sha256Hex(input.ledgerText ?? "");
   return {
     format: LOCK_FORMAT,
@@ -279,6 +289,7 @@ export function composeLock(input: LockInput): Lock {
       indexes,
       instance_sha256,
       policy_sha256,
+      people_sha256,
       ledger_sha256,
       ksor_version: input.ksorVersion,
       drafts: input.drafts,
@@ -291,6 +302,7 @@ export function composeLock(input: LockInput): Lock {
     drafts: input.drafts,
     instance_sha256,
     policy_sha256,
+    people_sha256,
     ledger_sha256,
     ledger_entries: [...input.ledgerEntries].sort((a, b) => compare(a.id, b.id)),
     audiences: { registry: [...input.audiences].sort(), viewers },
