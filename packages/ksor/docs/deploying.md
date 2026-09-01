@@ -427,12 +427,21 @@ Plain `pnpm build` is `[public]`, so the safe thing is the default.
 
 Two supported answers, and a third that is yours.
 
-**Read through the door instead.** This is the one ksor is built for. The MCP
-surface already applies the audience scope **per request** and writes a
-`retrieval_log` row carrying the actor for every read — per-person governance
-with an audit trail, which a static site cannot have at any price. If the
-requirement is "who read what, and were they allowed to", that is the door, not
-the website.
+**Run a door per audience.** The door does NOT decide per request: it serves
+ONE viewer list, read from `KSOR_AUDIENCE` once at boot
+(`content-gateway/src/compose.ts`) and validated against the policy before it
+widens past `public`. Every caller holding a valid token for that door gets the
+same view of the record — `docs/authorization.md` says so plainly, and
+per-request visibility filtering is named out of scope in
+`specs/ksor/serve/spec.md`. So the answer is one process per viewer list, each
+with its own `KSOR_AUDIENCE`, behind whatever routing already decides who
+reaches which URL.
+
+What the door gives that a static site cannot is the **audit**, not the
+authorization: every read writes a `retrieval_log` row naming the verified
+caller, so "who read what" is answerable afterwards. That is worth having, and
+it is a different thing from "were they allowed to", which is still decided by
+which door they can reach.
 
 **Or split the record.** Content needing per-person confidentiality inside one
 tier is usually content that belongs in its own record, with its own gate. That
