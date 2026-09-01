@@ -171,7 +171,27 @@ That is the whole required config. `embedding:` defaults to Gemini at 1536
 dimensions, and `retrieval:` is written for you by step 3's `calibrate`. Change
 the variable name here only if you want a different one.
 
-### 2. Fill in the environment
+### 2. Get a database — your agent can do this one
+
+`.mcp.json` at the repo root declares the MCP servers this project may reach.
+The first is Neon's. With it connected, ask your coding agent:
+
+> Using the Neon MCP server, create a project called `<your-record>` and enable
+> the pgvector extension on it. Then create a branch called `dev`, and save that
+> branch's connection string to `.env` as `KSOR_DB_URL`. Never print my API key.
+> Show me the plan before you run anything.
+
+Prefer the OAuth flow. `.mcp.json` is committed and carries no secret; an API
+key pasted into it would be.
+
+Any Postgres with pgvector works — Neon is the path that has an MCP server, not
+a requirement. Locally:
+`docker run -e POSTGRES_PASSWORD=x -p 5432:5432 pgvector/pgvector:pg17`.
+
+**`GEMINI_API_KEY` is the one step no agent can do for you** — no vendor mints
+an API key over a protocol. Get it from `aistudio.google.com` and paste it.
+
+### 3. Fill in the environment
 
 ```sh
 cp .env.example .env
@@ -191,7 +211,7 @@ refusal tells you to _export_ a variable, putting it in `.env` is the same
 thing. `KSOR_AUTH=disabled-local` is required for a local run: serve refuses to
 boot unauthenticated on purpose, so a server is never open by accident.
 
-### 3. Bring it up
+### 4. Bring it up
 
 ```sh
 pnpm provision  # once: apply the schema, authorize ingest

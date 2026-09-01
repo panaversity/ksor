@@ -114,7 +114,30 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    Leave `retrieval:` out for now — the gate is off and the server says so.
    Turning it on is step 4, AFTER the record is serving.
 
-2. **Copy `.env.example` to `.env`** and fill it in — `ksor` reads it
+2. **Get the database — your agent can do this one.** `.mcp.json` at the repo
+   root declares the MCP servers this project may reach, and the first is Neon.
+   With it connected, ask:
+
+   > Using the Neon MCP server, create a project called `<your-record>` and
+   > enable the pgvector extension on it. Then create a branch called `dev`,
+   > and save that branch's connection string to `.env` as `KSOR_DB_URL`.
+   > Never print my API key. Show me the plan before you run anything.
+
+   That is `create_project`, `run_sql` (`CREATE EXTENSION vector`),
+   `create_branch` and `get_connection_string` — four real tools, no dashboard.
+   Prefer the OAuth flow: an API key pasted into `.mcp.json` would be committed,
+   because that file carries no secret and is not gitignored.
+
+   Any Postgres with pgvector works — Neon is the path with an MCP server, not a
+   requirement. Locally: `docker run -e POSTGRES_PASSWORD=x -p 5432:5432
+pgvector/pgvector:pg17`.
+
+   **`GEMINI_API_KEY` is the one step no agent can do.** No vendor mints an API
+   key over a protocol; it comes from a browser at `aistudio.google.com` and a
+   human pastes it. An agent working through this list should ask for it by name
+   and stop, rather than trying.
+
+3. **Copy `.env.example` to `.env`** and fill it in — `ksor` reads it
    automatically, so nothing needs exporting, and `.env` is already gitignored.
    A real environment variable still wins over the file, so CI and production
    overrides behave normally.
@@ -134,7 +157,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
      intended dev shape. A PUBLIC deployment configures the SSO door instead —
      see the comments in `.env.example` and "Serving safely" below.
 
-3. **Bring it up.** Once, then every time:
+4. **Bring it up.** Once, then every time:
 
    ```sh
    pnpm provision  # schema (or migrate) + grant — the privileged acts, run once
@@ -219,7 +242,7 @@ Stand it up in this order (each step's errors explain how to fix themselves):
    serves, or a DBA who holds the credentials that authorize ingest — not as a
    daily choice.
 
-4. **Turn the abstention gate on — deliberately, once it serves.** This is the
+5. **Turn the abstention gate on — deliberately, once it serves.** This is the
    step that makes "not in this corpus" a real answer, and it is measured, never
    guessed:
 
