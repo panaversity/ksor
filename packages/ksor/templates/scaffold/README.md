@@ -189,7 +189,11 @@ a requirement. Locally:
 `docker run -e POSTGRES_PASSWORD=x -p 5432:5432 pgvector/pgvector:pg17`.
 
 **`GEMINI_API_KEY` is the one step no agent can do for you** — no vendor mints
-an API key over a protocol. Get it from `aistudio.google.com` and paste it.
+an API key over a protocol. Get it from
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey) and paste it.
+**The free tier costs nothing and is enough**: embedding input on
+`gemini-embedding-001` is free of charge, and a first corpus is a few thousand
+tokens. This is a signup, not a bill.
 
 ### 3. Fill in the environment
 

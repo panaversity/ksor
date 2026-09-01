@@ -133,9 +133,12 @@ Stand it up in this order (each step's errors explain how to fix themselves):
 pgvector/pgvector:pg17`.
 
    **`GEMINI_API_KEY` is the one step no agent can do.** No vendor mints an API
-   key over a protocol; it comes from a browser at `aistudio.google.com` and a
-   human pastes it. An agent working through this list should ask for it by name
-   and stop, rather than trying.
+   key over a protocol; it comes from a browser at
+   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and a human
+   pastes it. An agent working through this list should ask for it by name and
+   stop, rather than trying — and should say that the FREE TIER is enough:
+   embedding input on `gemini-embedding-001` is free of charge, so this is a
+   signup, not a bill.
 
 3. **Copy `.env.example` to `.env`** and fill it in — `ksor` reads it
    automatically, so nothing needs exporting, and `.env` is already gitignored.
