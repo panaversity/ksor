@@ -115,14 +115,20 @@ ksor build: 6 document(s), 5 admitted to a machine surface at 2026-09-01T19:34:4
 source: unspecified — knowledge/ is in a git repository with no commits yet, so this build cannot be traced back to a reviewed commit.
   fix: commit the record (git add knowledge && git commit) and re-run
   wrote knowledge/index.md
-  wrote build.lock.json — build_id sha256:70dae2f92647c0cdc9d98fcc681185d985a8ffa5f2ed40be47f93c9880480f92
+  wrote build.lock.json — build_id sha256:6d96d4514dcb13df48d980c1218bed9c5cf40734201f4c8d3ab361f1fbe70b75
 ```
 
-Your timestamp will differ; the `build_id` will not. Same record, same
-toolchain, same `build_id` — that is a testable claim this project holds itself
-to, and you just reproduced it. The `source: unspecified` line is the record
-telling you it cannot trace this build back to a reviewed commit, because you
-have not made one yet. We fix that in a moment.
+Your timestamp will differ. So will the `build_id` if you are on a later ksor
+than the 0.0.55 these were captured on — the id hashes the TOOLCHAIN along with
+the record, because "what produced this" is part of what a publication is. What
+you can reproduce right now is the claim itself: run `ksor build` twice without
+changing anything and the id is identical both times. Same record, same
+toolchain, same `build_id` is a property this project tests itself on rather
+than asserts.
+
+The `source: unspecified` line is the record telling you it cannot trace this
+build back to a reviewed commit, because you have not made one yet. We fix that
+in a moment.
 
 **Six documents. Five admitted.** Yours is not one of them — it is absent from
 `llms.txt`, from the markdown twins, from everything an AI agent would read.
@@ -156,13 +162,16 @@ npx ksor build
 </details>
 
 ```
-ksor build: 6 document(s), 6 admitted to a machine surface at 2026-09-01T19:37:32.457Z
-source: b3a9e18b51c21fb266f8cc5b959fcf3d58c3ce3b
-  wrote build.lock.json — build_id sha256:6af6a2ee49346bc1546af9071e39646e677375f7feddf8802dc814e7f5ad01af
+ksor build: 6 document(s), 6 admitted to a machine surface at 2026-09-01T21:38:13.441Z
+source: 4ff382518b868c7534153c9bf7963fcaad80b6db
+  wrote build.lock.json — build_id sha256:ac107998b571a92f3c2d51f1fb9eecdb7189aea92b89d81133a512596be79bf2
 ```
 
-`source` is now your commit — the build traces to a reviewed change. Your sha
-will be your own; the `build_id` is still everyone's.
+`source` is now your commit — the build traces to a reviewed change, which is
+the whole of what provenance claims: not that the content is right, but that
+this publication came from that reviewed change. Your sha will be your own, and
+so will the `build_id`, which moved because the document did and which also
+carries the toolchain that built it.
 
 That is the product. A draft reaches no machine surface, an approval is an act
 with a name and a time attached to it, and the count moved because a human
