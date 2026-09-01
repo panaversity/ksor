@@ -1,5 +1,154 @@
 # @panaversity/ksor
 
+## 0.0.54
+
+### Patch Changes
+
+- 3f55e91: `ksor calibrate` names the free-tier path when a quota refuses it, and the
+  calibration text model moves to `gemini-3.7-flash`.
+
+  Walked on a real free-tier key: embedding is free of charge and a first corpus
+  embeds fine (23 chunks, 0 failed), but the DEFAULT calibration door writes one
+  probe question per sampled passage with an LLM — and the free tier allows five
+  generations a minute. So the documented way to turn on the product's headline
+  feature failed, surfacing the vendor's sentence and nothing else.
+
+  Two quotas reach that code and they need opposite answers: the generation cap is
+  a wall no wait clears (the remedy is `--queries-file`, the zero-LLM door), and
+  the embedding cap is a per-minute window (the remedy is to wait, and the usual
+  cause is an ingest immediately before). Both are now named, with why. A 429 this
+  does not recognise is re-thrown untouched — an invented remedy is worse than the
+  vendor's own message.
+
+  `docs/ingesting.md` documents the zero-LLM door where the reader meets the
+  command, including how to choose the questions: the floor is set by the weakest
+  one, so a vague question drags it down and a question the record cannot answer
+  invalidates the measurement.
+
+  The text model moves `gemini-2.5-flash` → `gemini-3.7-flash`. Cheap, unlike the
+  embedding model: it only writes probe questions, so nothing stored is
+  re-computed and no floor is invalidated — and the door is recorded beside every
+  number, which is what stops two measurements being compared as one experiment.
+
+  **And calibration now embeds on the patient retry.** It used the READ plane's
+  door, which never retries a 429 — correct for a live search, which should
+  degrade to keyword-only in under a second rather than stall a reader behind
+  backoff, and wrong for a measurement nobody is waiting on. So a free-tier key
+  that rate-limited mid-run refused the whole calibration. The intent stays
+  `query` (a floor must be measured through the label the door searches with);
+  only the retry policy moves, to the one `isRetryable`'s own comment describes
+  for batch work. Calibration's text generation already took that path, so this
+  was the two halves of one act disagreeing.
+
+- dd6371b: Two things: a false claim removed from a shipped page, and the scaffold gains
+  `.mcp.json`.
+
+  **The false claim.** `docs/deploying.md` told adopters "The MCP surface already
+  applies the audience scope **per request**", under the heading of the very
+  requirement it does not meet. It does not: `content-gateway/src/compose.ts`
+  reads `KSOR_AUDIENCE` from the environment once at boot into a per-process
+  viewer, and the request path never touches it — `docs/authorization.md` says so
+  plainly ("Any caller holding a valid token gets the whole record") and
+  `specs/ksor/serve/spec.md` names per-request visibility filtering as out of
+  scope. A reader who believed the page would point every caller at one door and
+  serve them the restricted half. The page now says what the door does — one
+  viewer per door, so one process per audience — and separates the audit it does
+  give (a `retrieval_log` row naming the verified caller) from the authorization
+  it does not. A docs-truth assertion now fails on the claim itself, not merely on
+  a command that no longer exists.
+
+  **`.mcp.json`.** The scaffold's closed root set gains one member: the MCP
+  servers a coding agent may reach from the project. It ships with Neon's, which
+  turns the step the tool could never do for an adopter — provision a Postgres,
+  enable pgvector, produce a connection string — into four real tool calls
+  (`create_project`, `run_sql`, `create_branch`, `get_connection_string`) and one
+  sentence to the agent. The scaffold's README and AGENTS.md carry that sentence,
+  and both now say plainly which step no agent can do at any price: the embedding
+  API key, which no vendor mints over a protocol. Committed rather than ignored,
+  because both entries authenticate interactively and the file carries no secret —
+  stated, because pasting an API key into it would change that.
+
+- eebd777: OpenAI joins Gemini behind the embedding seam, and the wiring stops naming one
+  vendor (issue #25).
+
+  The seam was already vendor-neutral in shape — `EmbeddingProvider`, the
+  framework's normalization and degeneracy checks, and an embedding space
+  identified by `modelId` + column width and never by the vendor. What was
+  Gemini-bound was the WIRING: `GEMINI_API_KEY` was spelled into three composition
+  roots, so a second provider could not obtain a key even though the registry
+  would happily build it. Each registry row now names its own key variable, and
+  the roots ask, exactly as `instance.md` names the DSN variable rather than
+  hardcoding it.
+
+  `provider: openai` with `model: text-embedding-3-small` and `dim: 1536` reads
+  `OPENAI_API_KEY`. Over `fetch`, no SDK — the same call decision 12's 2026-08-22
+  revision made for Gemini, and for the same reason.
+
+  Two things a live call surfaced that a stub would not. Response items carry
+  their own `index` and the vendor does not promise array order, so they are
+  sorted before the framework pairs them positionally — a shuffled response is the
+  same count, the same width and all finite, so every downstream check passes
+  while every passage carries another's vector. And an exhausted balance arrives
+  as **429**, the same status as a rate limit: it is now read from the vendor's
+  `error.type` and never retried, because five exponential backoffs do not add
+  credit.
+
+  Switching provider is a re-embed of the whole corpus and a re-measured
+  `vector_floor`. A different provider is a different embedding space, and the
+  invariant against copying a calibrated constant applies across vendors with more
+  force, not less.
+
+  Verified live against the real API on a funded key: 1536-dimension vectors, a
+  paraphrase at cosine 0.812 against an unrelated sentence at 0.058, and the two
+  intents agreeing to 0.9997 — which is the symmetry that makes the empty task
+  labels correct. Then through the whole plane: a real record ingested to Postgres
+  under `embedding_model = text-embedding-3-small`, 23 chunks, 0 failed, stored at
+  the declared width of 1536 and L2-normalized as the framework promises.
+
+  One more defect the live call found: `buildShippedProvider` handed EVERY
+  provider Gemini's task labels from global config, so an OpenAI run logged its
+  space as `text-embedding-3-small/d1536/RETRIEVAL_DOCUMENT` — a label that vendor
+  has no concept of and never received. The labels moved onto the registry row,
+  where a vendor's shape belongs.
+
+- eb54871: The npm page shows what the product does, on the first screen.
+
+  It asserted the headline behaviour — a cited answer, an honest refusal — and
+  demonstrated it nowhere. A reader had no way to tell a real mechanism from a
+  prompt instruction, which is exactly the skepticism this product exists to
+  answer. It now shows three things, all of them real output: the admitted count
+  moving when a human approves a draft, the `provenance` and `governance` a search
+  hit carries, and an abstention envelope. It also links the hello world.
+
+  Nothing was added to the tarball; this is the README npm renders.
+
+- 6e5ff3e: Repo documentation and a test only — nothing an adopter installs changes.
+
+  `docs/status.md` named 0.0.42 while the published package was 0.0.53. Authority
+  rule 3 makes that file the only authority on what is built, and it is the first
+  thing an evaluator's coding agent reads. It is current now, and a docs-truth
+  assertion holds it equal to `packages/ksor/package.json` so a Version PR cannot
+  bump one without the other. It also records that the full kernel walk was re-run
+  against 0.0.53 — it had last run against 0.0.18, thirty-five releases earlier.
+
+- ed947c1: The deploy runbook stops ruling out the one step Vercel calls required.
+
+  `docs/deploying.md` said the silent-404 failure "does not depend on the
+  Application Preset". Vercel's own guide says the opposite: a project builds as
+  services only when the preset is `Services` AND `vercel.json` carries a
+  `services` key, and "if either is missing, Vercel falls back to its default
+  framework detection and ignores your services configuration" — which is that
+  failure exactly, and no file in the repository can set a project setting.
+
+  One measurement of ours disagrees with that guide and is recorded rather than
+  reconciled: two projects read back from the API, one `Services` and one `Other`,
+  both built and served. Both facts are real; guessing between them is what
+  produced the sentence that steered adopters away from the fix.
+
+  The scaffold's runbook now sets the preset at step 2, and ends with the three
+  curls that tell a live deployment from a Ready-and-404 one — `/mcp` answering
+  405 is the door refusing a GET, which is how you know it is routed at all.
+
 ## 0.0.53
 
 ### Patch Changes
