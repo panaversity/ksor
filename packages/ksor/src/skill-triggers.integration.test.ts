@@ -72,7 +72,7 @@ const TUTORIAL_PROMPTS: ReadonlyArray<readonly [string, string | null]> = [
   ["Build this for publishing", null],
   ["Why isn't my refund policy in `llms.txt`", null],
   ["Using the Neon MCP server, create a project", null],
-  ["Run `pnpm provision`, then `pnpm refresh`", null],
+  ["Run `npm run provision`, then `npm run refresh`", null],
   ["Start the server in the background", null],
   ["Add my record to `.mcp.json`", null],
   // The payoff. No skill: this is the reader ASKING THE RECORD, through the MCP
