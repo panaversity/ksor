@@ -197,11 +197,16 @@ measure until the corpus is in there.
 pnpm exec ksor calibrate --instance instance.md
 ```
 
-**On a free-tier key, use the zero-LLM door instead.** The command above is the
-SYNTHESIZED door: it writes one probe question per sampled passage with an LLM,
-and a free key allows only a few generations a minute — a bigger corpus makes
-that worse, not better. Write your own in-corpus questions, one per line, and
-pass them:
+**The synthesized door needs `GEMINI_API_KEY`, whatever your embedding provider
+is.** The command above writes one probe question per sampled passage with an
+LLM, and question synthesis is Gemini-only today — so a record on
+`embedding.provider: openai` embeds with `OPENAI_API_KEY` and would still be
+refused here for a Google key. That is a real gap, stated rather than papered
+over; the zero-LLM door below avoids it entirely and is the better choice on a
+free-tier key anyway, because a free key allows only a few generations a minute
+and a bigger corpus makes that worse, not better.
+
+Write your own in-corpus questions, one per line, and pass them:
 
 ```sh
 pnpm exec ksor calibrate --instance instance.md --queries-file questions.txt

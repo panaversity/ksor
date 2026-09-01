@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { OpenAiEmbeddingProvider, isRetryable, isRetryableQuery } from "./openai.js";
+import { OpenAiEmbeddingProvider, isFatal, isRetryable, isRetryableQuery } from "./openai.js";
 import {
   OpenAiHttpError,
   openAiRestEmbedClient,
@@ -213,5 +213,39 @@ describe("reset", () => {
     p.reset();
     await p.embed(["a"], { intent: "document" });
     expect(built).toBe(2);
+  });
+});
+
+describe("the third answer: a failure of the ACCOUNT, not of the passage", () => {
+  // The ingest drain has two behaviours for a batch error: abort the run
+  // (retryable — chunks stay pending), or binary-split down to the single
+  // poison chunk and quarantine it. `insufficient_quota` is neither. It
+  // arrives on EVERY chunk, so the poison path split each batch to singletons
+  // and marked them `failed`; a run whose failed fraction stayed under
+  // MAX_FAILED_FRACTION then FLIPPED, publishing a generation in which exactly
+  // the passages the owner had just edited were unsearchable — exit 0, with
+  // the billing reason only in `chunks.embed_error`. Gemini aborts on the same
+  // event, so switching provider silently changed what a spent quota does.
+  it("marks a spent balance fatal, so the drain aborts instead of quarantining", () => {
+    const broke = new OpenAiHttpError(429, "You have no credits remaining.", PERMANENT_QUOTA);
+    expect(isFatal(broke)).toBe(true);
+    expect(isRetryable(broke), "and still not worth waiting on").toBe(false);
+  });
+
+  it("does NOT mark an ordinary rate limit fatal — that one is worth waiting on", () => {
+    expect(isFatal(new OpenAiHttpError(429, "Rate limit reached", "rate_limit_error"))).toBe(false);
+  });
+
+  it("does not mark a real poison chunk fatal, which must still be isolated", () => {
+    // A 400 on one passage is the case binary-split exists for. Calling it
+    // fatal would abort the whole run on one bad chunk — the opposite defect.
+    expect(isFatal(new OpenAiHttpError(400, "invalid input"))).toBe(false);
+    expect(isFatal(new Error("degenerate embedding"))).toBe(false);
+  });
+
+  it("is reachable through the provider the framework actually holds", () => {
+    const p = new OpenAiEmbeddingProvider(opts);
+    expect(p.isFatal(new OpenAiHttpError(429, "no credits", PERMANENT_QUOTA))).toBe(true);
+    expect(p.isFatal(new OpenAiHttpError(503, "unavailable"))).toBe(false);
   });
 });

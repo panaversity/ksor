@@ -110,3 +110,21 @@ describe.runIf(apiKey !== "")("openai provider — live", () => {
     expect(provider.recipe, "no other vendor's task label").not.toContain("RETRIEVAL");
   });
 });
+
+/**
+ * The other half of "gated", which this file shipped without.
+ *
+ * A `describe.runIf` that is false contributes NOTHING to a run — no test, no
+ * skip line, nothing. So this suite, which the header above calls "the proof"
+ * that the seam is vendor-neutral and "the tripwire for vendor drift", was
+ * absent from every CI run and reported as absent by nobody: `grep -rn OPENAI
+ * .github/` returns nothing, and the workflows pass `GEMINI_API_KEY` alone.
+ * A green board therefore said the tripwire was armed when it had never fired.
+ *
+ * Gemini's live suite already does this. Honest absence, never silent weakness.
+ */
+describe.runIf(apiKey === "")("openai provider — live (gated)", () => {
+  it("skipped — set OPENAI_API_KEY to run the live embedding-space proof", () => {
+    expect(apiKey).toBe("");
+  });
+});

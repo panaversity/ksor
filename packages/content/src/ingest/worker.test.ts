@@ -96,6 +96,55 @@ describe("drain", () => {
     ).rejects.toThrow("429");
   });
 
+  // The kind that made two kinds insufficient. A spent balance is not a poison
+  // chunk: it arrives on EVERY chunk, and quarantining is a claim about the
+  // passage. Without this the run walked the whole queue splitting batches to
+  // singletons, marked each `failed`, and — if the failed fraction stayed under
+  // MAX_FAILED_FRACTION — FLIPPED a generation missing exactly what had changed.
+  it("a FATAL error aborts the run: nothing quarantined, the queue left pending", async () => {
+    const failedIds: string[] = [];
+    let calls = 0;
+    const spent = Object.assign(new Error("You have no credits remaining."), { spent: true });
+    await expect(
+      drain(pendingOf(64), {
+        embedBatch: async () => {
+          calls += 1;
+          throw spent;
+        },
+        writeBatch: async () => {
+          throw new Error("must not write");
+        },
+        markFailed: async (_reason, chunkId) => {
+          failedIds.push(chunkId);
+        },
+        // Not retryable — waiting does not add credit — and not the chunk's fault.
+        isRetryable: () => false,
+        isFatal: (exc) => (exc as { spent?: boolean }).spent === true,
+      }),
+    ).rejects.toThrow("no credits remaining");
+    expect(failedIds, "a billing failure must quarantine nothing").toEqual([]);
+    expect(calls, "and must not binary-split its way through the queue first").toBe(1);
+  });
+
+  it("still quarantines when the provider offers no third answer", async () => {
+    // `isFatal` is optional: a provider that cannot tell keeps the two-kind
+    // behaviour, so this change cannot alter Gemini's.
+    const failedIds: string[] = [];
+    const result = await drain(pendingOf(2), {
+      embedBatch: async (texts) => {
+        if (texts.some((t) => t.includes("text 1"))) throw new Error("degenerate embedding");
+        return texts.map(() => "[0.1]");
+      },
+      writeBatch: async () => {},
+      markFailed: async (_reason, chunkId) => {
+        failedIds.push(chunkId);
+      },
+      isRetryable: () => false,
+    });
+    expect(failedIds).toEqual(["id-1"]);
+    expect(result.embedded).toBe(1);
+  });
+
   it("batches sequentially at BATCH=32 and commits per batch", async () => {
     expect(BATCH).toBe(32);
     const batchSizes: number[] = [];
