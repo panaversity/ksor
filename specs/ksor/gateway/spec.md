@@ -1,5 +1,5 @@
 ---
-status: draft
+status: ratified
 date: 2026-08-23
 claim: agents are the operator, not the audience for a manual — a record whose tool surface it cannot shape spends the caller's context badly and gets picked for the wrong questions
 evidence: measured against the live 81-document book record, 2026-08-23 (below)
@@ -187,6 +187,19 @@ a boot refusal and become a 500 on a process whose `/health` and `/ready` both
 read green — a shape this repo has already had to fix twice.
 
 ## Acceptance
+
+_Ratified 2026-09-02: every line below has a suite in the tree, walked against
+the built package at this date. 1 `content-gateway/src/floor-guarantees.test.ts`;
+2 `ksor/src/default-gateway-drift.integration.test.ts` (including "needs no
+dependency the scaffold does not have"); 3
+`ksor/src/served-surface.integration.test.ts` against
+`__fixtures__/served-surface.golden.json` — whose `tools` array measures
+17,394 chars and its three rows 8,152 / 3,552 / 5,686, the figures above; 4
+and 5 `ksor/src/gateway-file.integration.test.ts` (deletable, identical
+surface; the three slugs by name); 6 the 2026-08-23 live walk recorded in
+decision 23; 7 `content-gateway/src/gateway-notice.test.ts`. The example
+registration's imports all resolve from `@panaversity/ksor/gateway`
+(`content-gateway/src/gateway-api.ts:20-36`)._
 
 1. **Unit** — every sentence in `FLOOR_GUARANTEES` survives in each floor.
    (Written after one was silently deleted; proven to go red against that
