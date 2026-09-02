@@ -49,6 +49,7 @@ import { contentHash } from "./markdown.js";
 import { buildManifestFromRecord } from "./adapters/plain-tree.js";
 import { applyLedger, unledgeredRefusal, unmergedLines } from "./ledger-apply.js";
 import { checkLock, formatRefusals, LOCK_PATH, type IngestRefusal } from "./lock-gate.js";
+import { checkChangeControl } from "../record/change-control.js";
 import { checkRecord } from "../record/check.js";
 import { splitFrontmatter } from "../record/frontmatter.js";
 import {
@@ -733,7 +734,17 @@ export async function buildGeneration(
       ? []
       : [{ source: LOCK_PATH, entries: lockLedgerEntries(lockText), accepted: true }];
   const check = checkRecord(record, { mode: "build", ledgerBaselines: lockBaseline });
-  if (check.refusals.length > 0 || check.policy === null) throw new RecordRefused(check.refusals);
+  // KSP R23 beside the checker, as `ksor build` runs it: a stable body that
+  // changed under an unmoved `generated.at` never reaches the door. It reads
+  // git, and the containerised ingest above has none — so where history is
+  // unreadable it REPORTS that rather than refusing (the ledger's posture, for
+  // the ledger's reason: no flag here could answer it) and never passes in
+  // silence.
+  const change = checkChangeControl(root, check.concepts, record.files);
+  if (check.refusals.length > 0 || change.refusals.length > 0 || check.policy === null) {
+    throw new RecordRefused([...check.refusals, ...change.refusals]);
+  }
+  if (change.notice !== null) (options.onReport ?? log)(change.notice);
   const policy = check.policy;
   const lock = checkLock(lockText, record);
   if (!lock.ok) throw new RecordRefused([lock.refusal]);

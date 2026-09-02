@@ -679,6 +679,9 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     expect(refused.stderr.split("\n")[0]).toBe("error: ksor-ledger-unverifiable");
     const allowed = build(shallow, "--allow-unverifiable-ledger");
     expect(allowed.status, allowed.stderr).toBe(0);
+    // R23 ran against what a depth-1 clone holds, and says that is all it saw.
+    expect(allowed.stdout).toContain("change-control: checked against");
+    expect(allowed.stdout).toContain("shallow");
   });
 
   it("outside any repository the committed lock is the only baseline, source_commit is null and the tree is dirty", () => {
@@ -698,6 +701,8 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
       "source: unspecified — knowledge/ is not in a git repository",
     );
     expect(r.stdout).toContain("fix: git init, commit the record, and re-run");
+    expect(r.stdout).toContain("change-control: not checked");
+    expect(r.stdout).toContain("not in a git repository");
     // The entries deleted, not the FILE emptied: a ledger that exists and holds
     // nothing is `ksor-ledger-empty` — a torn write, refused before anything
     // parses — and this is about the baseline, so what is left has to be a
@@ -706,6 +711,143 @@ describe("ksor build — the ledger against its history (record spec §5)", () =
     const shrank = build(root, "--as-of", AS_OF);
     expect(shrank.stderr.split("\n")[0]).toBe("error: ksor-ledger-shrank");
     expect(shrank.stderr).toContain("build.lock.json");
+  });
+});
+
+/**
+ * KSP R23 through the real verb, against real history. `board-pay.md` is the
+ * stable concept nothing links to and no ledger entry names, so it can be
+ * edited, renamed and re-stamped without tripping any other rule.
+ */
+describe("ksor build — change control (KSP R23): a stable body may not change under its generated.at", () => {
+  const DOC = "knowledge/policies/board-pay.md";
+  const STAMP = "2026-08-20T09:00:00Z";
+  const STAMP_LINE = `generated: { by: "ksor-starter/0.0.1", at: ${STAMP} }`;
+  const APPROVAL_LINE = `  approval: { by: "human:cfo", at: 2026-08-21T09:00:00Z }`;
+  const edit = (root: string, from: string, to: string): void => {
+    const file = path.join(root, DOC);
+    const before = readFileSync(file, "utf8");
+    expect(before, `${DOC} does not contain ${JSON.stringify(from)}`).toContain(from);
+    writeFileSync(file, before.replace(from, to));
+  };
+  const editBody = (root: string): void =>
+    edit(root, "See [purchase approval]", "Directors are paid quarterly. See [purchase approval]");
+
+  it("an uncommitted body edit with no bump is refused by name, naming the commit and the stamp; nothing is written", () => {
+    const root = repo();
+    editBody(root);
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-generated-stale");
+    expect(r.stderr).toContain(DOC);
+    expect(r.stderr).toContain(git(root, "rev-parse", "--short=7", "HEAD"));
+    expect(r.stderr).toContain(STAMP);
+    expect(r.stderr).toContain("fix: ");
+    expect(r.stderr).toContain("`generated.at`");
+    expect(r.stderr).toContain("`ksor.approval.at`");
+    expect(existsSync(path.join(root, "build.lock.json"))).toBe(false);
+  });
+
+  it("the remedy is real, and it is two halves: a bump alone is ksor-generated-after-approval; bump plus re-approval builds", () => {
+    const root = repo();
+    editBody(root);
+    edit(root, STAMP_LINE, `generated: { by: "ksor-starter/0.0.1", at: 2026-08-27T09:00:00Z }`);
+    const half = build(root, "--as-of", AS_OF);
+    expect(half.status).toBe(1);
+    expect(half.stderr.split("\n")[0]).toBe("error: ksor-generated-after-approval");
+    edit(root, APPROVAL_LINE, `  approval: { by: "human:cfo", at: 2026-08-28T09:00:00Z }`);
+    const whole = build(root, "--as-of", AS_OF);
+    expect(whole.status, whole.stderr).toBe(0);
+    expect(whole.stdout).not.toContain("change-control:");
+  });
+
+  it("the edit COMMITTED without a bump is still refused on a clean tree — the shape CI sees", () => {
+    const root = repo();
+    const first = git(root, "rev-parse", "--short=7", "HEAD");
+    editBody(root);
+    git(root, "commit", "-qam", "edit without bump");
+    expect(git(root, "status", "--porcelain")).toBe("");
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-generated-stale");
+    // The version it names is the one the body DIFFERS from, not HEAD.
+    expect(r.stderr).toContain(first);
+    expect(r.stderr).not.toContain(git(root, "rev-parse", "--short=7", "HEAD"));
+  });
+
+  it("a frontmatter-only edit is not a body change", () => {
+    const root = repo();
+    edit(root, "description: Board pay, in one sentence.", "description: How directors are paid.");
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+  });
+
+  it("a concept stable for the first time, and a renamed one, have no history to compare — both pass", () => {
+    const root = repo();
+    writeFileSync(
+      path.join(root, "knowledge/policies/travel.md"),
+      `---
+type: Document
+title: Travel
+description: Travel, in one sentence.
+status: stable
+${STAMP_LINE}
+ksor:
+  audience: [public]
+${APPROVAL_LINE}
+---
+
+Economy below six hours.
+`,
+    );
+    const fresh = build(root, "--as-of", AS_OF);
+    expect(fresh.status, fresh.stderr).toBe(0);
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "travel");
+    // Path is identity: the moved file starts its history over.
+    git(root, "mv", DOC, "knowledge/policies/director-pay.md");
+    const moved = path.join(root, "knowledge/policies/director-pay.md");
+    writeFileSync(
+      moved,
+      readFileSync(moved, "utf8").replace("See [purchase approval]", "Quarterly. See [purchase approval]"),
+    );
+    const renamed = build(root, "--as-of", AS_OF);
+    expect(renamed.status, renamed.stderr).toBe(0);
+  });
+
+  it("a record BELOW its repository root is read at its own path, not at a doubled one", () => {
+    const outer = mkdtempSync(path.join(tmpdir(), "ksor-nested-"));
+    roots.push(outer);
+    const root = path.join(outer, "docs-sor");
+    mkdirSync(root);
+    for (const [rel, text] of Object.entries(VALID.files)) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), text);
+    }
+    git(outer, "init", "-q", "-b", "main");
+    git(outer, "config", "user.email", "t@example.com");
+    git(outer, "config", "user.name", "t");
+    git(outer, "config", "commit.gpgsign", "false");
+    git(outer, "add", "-A");
+    git(outer, "commit", "-qm", "first");
+    editBody(root);
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-generated-stale");
+  });
+
+  it("a repository with no commit yet SAYS the check did not run, and builds", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-unborn-"));
+    roots.push(root);
+    for (const [rel, text] of Object.entries(VALID.files)) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), text);
+    }
+    git(root, "init", "-q", "-b", "main");
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("change-control: not checked");
+    expect(r.stdout).toContain("no commits yet");
   });
 });
 

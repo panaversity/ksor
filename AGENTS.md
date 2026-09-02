@@ -744,7 +744,16 @@ gateway` package, serve-by-spawn) is superseded._
     for and did not get: a policy allowlist is AUTHORISATION, not
     verification. Every envelope says `checked: policy` for exactly that
     reason, and change-control verification against repository history is
-    what would let it say otherwise._
+    what would let it say otherwise._ _Revision 2026-09-02 (KSP R23): the
+    first verification tooth. `ksor-generated-stale` verifies the
+    `generated.at` instant against repository history — a `stable` body that
+    differs from any committed version stable under the same stamp refuses at
+    `ksor build`, `ksor ingest` and `pnpm check`, and where history is
+    unreadable each says `change-control: not checked` rather than passing.
+    It verifies WHAT changed and WHEN it was stamped, not WHO: R22 and R25
+    still await an identity source the tool can verify, and
+    `approval.checked` stays `"policy"` — the flip is a public-envelope change
+    and is not made as a side effect of this._
 
 22. **Navigation is a SHAPE, not a length** (2026-08-22, issue #55 — the first
     DELIBERATE divergence from the converted oracle). `classify()` labelled any

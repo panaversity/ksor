@@ -607,7 +607,12 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   audiences registered in `.ksor/governance.yaml`; never omitted, never
   inferred). A `stable` document carries `generated: { by, at }` and
   `ksor.approval: { by, at }` by an actor the policy authorises, with
-  `generated.at` no later than the approval; a `deprecated` one carries
+  `generated.at` no later than the approval — and `generated.at` dates the
+  TEXT: edit a stable document's body and `pnpm check`, `ksor build` and
+  `ksor ingest` compare it against every committed version that was stable
+  under the same stamp and refuse `ksor-generated-stale` until you move the
+  stamp past the edit and re-approve (a frontmatter-only edit, such as adding
+  a `verified` entry, is not a body change); a `deprecated` one carries
   `ksor.deprecated: { by, at }` and usually `ksor.superseded_by: <id>`
   (a stable document every reader of this one may read). Optional: `order`
   (reading position), `sources` (`{ id, resource, title }`, cited in the body

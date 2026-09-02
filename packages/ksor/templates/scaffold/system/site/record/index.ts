@@ -72,6 +72,14 @@ export {
   type Drafts,
 } from "./lock";
 export { git, historicLedger, type HistoricLedger } from "./git-ledger";
+export {
+  checkChangeControl,
+  checkGeneratedStale,
+  committedVersions,
+  type ChangeControl,
+  type CommittedHistory,
+  type CommittedVersion,
+} from "./change-control";
 export { generateIndexes, parseIndex, humanise, type IndexInput } from "./index-file";
 export { actorKind, isIndividualActor } from "./actor";
 export { checkFootnotes, linkTargets, resolveLink } from "./citations";
