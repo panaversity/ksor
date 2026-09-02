@@ -8,23 +8,21 @@ scaffold that ships.
 **Nothing phones home — now true of the artifact, not only of the pitch.**
 Next.js ships with anonymous usage telemetry ON, so every site `ksor init`
 emitted posted to `telemetry.nextjs.org` on its first `build` and `dev` while
-the README promised nothing phones home. The site's two scripts now carry
-`NEXT_TELEMETRY_DISABLED=1`, which is where every package manager's root script
-and the deploy's `pnpm build` end up, and `.env.example` says so. It is the
-process environment rather than `next.config.mjs` on purpose: read in 16.3.3's
-source, `next build` constructs its telemetry after loading the config, but the
-`next dev` parent process never loads the config and still records a session
-event on exit — a config-time assignment would have left that one in place with
-nothing red. An existing scaffold gets the switch by adding the prefix to
-`build` and `dev` in `system/site/package.json`.
-
-Disclosed, not hidden: the prefix is POSIX and bun-shell syntax. pnpm's own
-documentation says a script of this shape fails under cmd.exe unless
-`shell-emulator` is on, and npm has no equivalent — so a Windows adopter on pnpm
-or npm sees the site build refuse loudly rather than phone home quietly. A
-dependency-free cross-platform form does not exist in npm scripts; choosing one
-(`cross-env`, or emitting `shell-emulator` for pnpm) is an owner decision that
-this release leaves open.
+the README promised nothing phones home. The site's two scripts now run next
+through `system/site/next-no-telemetry.mjs`, a dependency-free wrapper that
+hands it an environment carrying `NEXT_TELEMETRY_DISABLED=1`; that is where
+every package manager's root script and the deploy's `pnpm build` end up, and
+`.env.example` says so. It is the process environment rather than
+`next.config.mjs` on purpose: read in 16.3.3's source, `next build` constructs
+its telemetry after loading the config, but the `next dev` parent process never
+loads the config and still records a session event on exit — a config-time
+assignment would have left that one in place with nothing red. And it is a file
+rather than a `NEXT_TELEMETRY_DISABLED=1 next …` prefix in `package.json`
+because that prefix is POSIX shell syntax: cmd.exe refuses it under pnpm and
+npm on Windows, a platform CI walks `ksor init` on, so the prefix would have
+traded a quiet leak for a loud break. An existing scaffold gets the switch from
+`ksor migrate --write-site`, which offers the wrapper and the two scripts as a
+diff.
 
 **The README no longer contradicts the tree.** Five sentences described a
 product that does not ship, each now corrected and held by a test against the
