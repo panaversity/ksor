@@ -92,6 +92,26 @@ const TUTORIAL_2_PROMPTS: ReadonlyArray<readonly [string, string | null]> = [
   ["Delete the five starter documents", null],
 ];
 
+/**
+ * Tutorial 3's prompts. Governance is edited, never mediated: an audience, a
+ * review, a date, a withdrawal are frontmatter and ledger acts the record
+ * itself refuses or admits, so no skill stands between the owner and them.
+ * The one exception is the successor policy, written from what the owner
+ * simply states — the #50 shape again, and add-sources owns it.
+ */
+const TUTORIAL_3_PROMPTS: ReadonlyArray<readonly [string, string | null]> = [
+  ["The late-claims procedure is for employees only", null],
+  ["Omar has reviewed the expense policy against the finance manual", null],
+  ["The expense policy takes effect on 1 October 2026", null],
+  ["The refund window is now 14 days for unwanted items", "add-sources"],
+  ["Withdraw the late-claims procedure from every surface", null],
+  ["Priya has rewritten the late-claims procedure", null],
+  // The record answers this one, not the agent: the ledger is append-only and
+  // `ksor build` refuses the deletion by name. The prompt is in the tutorial
+  // BECAUSE it sounds reasonable — that is what a fail-closed refusal is for.
+  ["Delete the takedown entry from the ledger", null],
+];
+
 describe("every shipped skill's trigger says what it fires on", () => {
   it("the shipped set is exactly what this file accounts for", () => {
     // A new skill lands with its trigger recorded, or this goes red. That is
@@ -124,6 +144,7 @@ const TUTORIALS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string,
   [
     ["docs/tutorials/01-hello-world.md", TUTORIAL_PROMPTS],
     ["docs/tutorials/02-make-it-yours.md", TUTORIAL_2_PROMPTS],
+    ["docs/tutorials/03-governance-in-practice.md", TUTORIAL_3_PROMPTS],
   ];
 
 describe.each(TUTORIALS)("%s's prompts are accounted for", (file, table) => {

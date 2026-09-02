@@ -764,6 +764,7 @@ describe("documents that print a build_id say what moves one", () => {
   const DOCS = [
     "docs/tutorials/01-hello-world.md",
     "docs/tutorials/02-make-it-yours.md",
+    "docs/tutorials/03-governance-in-practice.md",
     "packages/ksor/docs/building.md",
     "packages/ksor/README.md",
     "README.md",
