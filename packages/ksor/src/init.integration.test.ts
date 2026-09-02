@@ -281,6 +281,41 @@ describe("ksor init — acceptance (spec clauses 1-3)", () => {
     expect(workspace, "sharp build denied").toMatch(/sharp:\s*false/);
   });
 
+  it("switches Next.js telemetry off in the site's own scripts — nothing phones home", () => {
+    // README.md's quick start: "nothing is downloaded at build time, and
+    // nothing phones home". Next.js ships with anonymous usage telemetry ON,
+    // posted by `next build` and `next dev` unless NEXT_TELEMETRY_DISABLED is
+    // set — and the scaffold set it nowhere, so every emitted site phoned home
+    // on its first build. It is the ENVIRONMENT, not next.config.mjs: read in
+    // 16.3.3's source, the `next dev` parent (cli/next-dev.js) never loads the
+    // config and still constructs a Telemetry on exit to record the session,
+    // so an assignment in the config would have left that event in place with
+    // nothing red. The site's scripts are where every manager's root script
+    // and the deploy's `pnpm build` end up, so the switch lives at their front.
+    const dir = workDir();
+    expect(runInit(["quiet-sor"], dir).status).toBe(0);
+    const site = JSON.parse(
+      readFileSync(path.join(dir, "quiet-sor", "system", "site", "package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    const runsNext = Object.entries(site.scripts ?? {}).filter(([, body]) => /\bnext\b/.test(body));
+    expect(
+      runsNext.map(([name]) => name),
+      "the site's build and dev scripts both run next",
+    ).toEqual(expect.arrayContaining(["build", "dev"]));
+    for (const [name, body] of runsNext) {
+      expect(
+        body,
+        `system/site/package.json script "${name}" runs next with telemetry ON — ` +
+          `README.md says nothing phones home. Prefix it: NEXT_TELEMETRY_DISABLED=1 next …`,
+      ).toMatch(/^NEXT_TELEMETRY_DISABLED=1 next\b/);
+    }
+    // The example is where an adopter looks for a switch; it says where this one is.
+    const env = readFileSync(path.join(dir, "quiet-sor", ".env.example"), "utf8");
+    expect(env, ".env.example names the telemetry switch and where it lives").toContain(
+      "NEXT_TELEMETRY_DISABLED",
+    );
+  });
+
   it.runIf(process.platform !== "win32")(
     "gives both init forms the same project-root mode (0755)",
     () => {

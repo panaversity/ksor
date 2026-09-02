@@ -56,7 +56,7 @@ The three so far, in reading order — pick by what you want from it:
 | | read this if |
 | --- | --- |
 | [00 · Introduction](https://github.com/panaversity/ksor/blob/main/docs/tutorials/00-introduction-to-ksor.md) | you want to understand why this exists — no technical background needed |
-| [01 · Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Node only, nothing else |
+| [01 · Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Part 1 needs only Node; Part 2 adds a free Postgres and a free embedding key |
 | [02 · Make it yours](https://github.com/panaversity/ksor/blob/main/docs/tutorials/02-make-it-yours.md) | you finished hello world and want a record that is only yours — a file in, a person's knowledge in, the samples out |
 
 One command emits a complete governed project: the record (`knowledge/`,

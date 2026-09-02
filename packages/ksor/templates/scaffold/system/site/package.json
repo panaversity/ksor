@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "next build --webpack",
-    "dev": "next dev"
+    "build": "NEXT_TELEMETRY_DISABLED=1 next build --webpack",
+    "dev": "NEXT_TELEMETRY_DISABLED=1 next dev"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",

@@ -15,7 +15,9 @@
  * than in production.
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -829,5 +831,285 @@ describe("every link into docs/tutorials resolves", () => {
       `${file} links to tutorial file(s) that do not exist: ${missing.join(", ")}`,
     ).toEqual([]);
     expect(targets.size, `${file} links into docs/tutorials at all`).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * "Nothing is downloaded at build time, and nothing phones home" (README.md's
+ * quick start, repeated by the introduction) is a claim about the ARTIFACT,
+ * and Next.js ships with anonymous usage telemetry switched ON: `next build`
+ * and `next dev` each post to telemetry.nextjs.org unless
+ * `NEXT_TELEMETRY_DISABLED` is set. The scaffold set it nowhere, so every
+ * emitted site phoned home on its first build while the README said otherwise.
+ *
+ * The switch is the process ENVIRONMENT, not `next.config.mjs`. Read in
+ * 16.3.3's source: `next build` constructs its `Telemetry` after loading the
+ * config, but the `next dev` PARENT (`cli/next-dev.js`) never loads the config
+ * and still constructs one on exit to record the session — an assignment in
+ * the config would have left exactly that event in place, with nothing red.
+ * So it sits at the front of the site's own scripts, which is where every
+ * manager's root script (`pnpm -C system/site build`, `npm --prefix
+ * system/site run build`, `cd system/site && bun run build`) and the deploy's
+ * `pnpm build` all end up. The emitted-tree half is held in
+ * init.integration.test.ts; this half ties the sentence to the bytes.
+ */
+describe("the scaffold makes 'nothing phones home' true", () => {
+  it.each(["README.md", "docs/tutorials/00-introduction-to-ksor.md"])(
+    "%s makes the claim",
+    (file) => {
+      // Pinned so the assertion below cannot go vacuous: a document that stops
+      // making the claim fails here and asks whether the switch still matters.
+      expect(
+        flat(read(file)),
+        `${file} no longer says nothing phones home — if that was dropped on purpose, ` +
+          "retire this block with it rather than leaving a guard for a claim nobody makes",
+      ).toMatch(/nothing phones home/);
+    },
+  );
+
+  it("every site script that runs next switches telemetry off first", () => {
+    const { scripts } = JSON.parse(read(`${SCAFFOLD}/system/site/package.json`)) as {
+      scripts: Record<string, string>;
+    };
+    const runsNext = Object.entries(scripts).filter(([, body]) => /\bnext\b/.test(body));
+    expect(
+      runsNext.map(([name]) => name),
+      "the site's build and dev scripts run next",
+    ).toEqual(expect.arrayContaining(["build", "dev"]));
+    for (const [name, body] of runsNext) {
+      expect(
+        body,
+        `${SCAFFOLD}/system/site/package.json script "${name}" runs next with Next.js ` +
+          "telemetry ON, and README.md says nothing phones home. The switch is the " +
+          "environment, not the config: the `next dev` parent never loads next.config.mjs.",
+      ).toMatch(/^NEXT_TELEMETRY_DISABLED=1 next\b/);
+    }
+  });
+
+  it("the emitted .env.example says where the switch lives", () => {
+    expect(
+      read(`${SCAFFOLD}/env.example`),
+      `${SCAFFOLD}/env.example: an adopter looking for the telemetry switch looks here ` +
+        "first — say that it is already set, and where",
+    ).toContain("NEXT_TELEMETRY_DISABLED");
+  });
+});
+
+/**
+ * Sentences a 2026-09-02 review of the root README found describing a product
+ * that does not ship, each held against the thing that decides it: the
+ * scaffold's manifest, the CI workflow, the record checker, the tutorial.
+ * Every assertion here was red before its sentence was rewritten.
+ */
+describe("the README describes the scaffold that ships", () => {
+  /** The prose under one heading, up to the next `##`/`###`, flattened. */
+  const section = (file: string, heading: string): string => {
+    const text = read(file);
+    const start = text.indexOf(`\n${heading}\n`);
+    if (start === -1) throw new Error(`${file}: no heading ${JSON.stringify(heading)}`);
+    const rest = text.slice(start + heading.length + 2);
+    const end = rest.search(/\n#{2,3} /);
+    return flat(end === -1 ? rest : rest.slice(0, end));
+  };
+
+  it("`pnpm serve` serves; `pnpm refresh` publishes", () => {
+    // The premise, from the manifest: serve is ONE process that publishes
+    // nothing, and the build-ingest-collect chain is a separate script.
+    const { scripts } = JSON.parse(read(`${SCAFFOLD}/package.json`)) as {
+      scripts: Record<string, string>;
+    };
+    expect(scripts["serve"]).toBe("ksor serve");
+    expect(scripts["refresh"]).toMatch(/^ksor build && .*ingest.* && .*gc$/);
+    const served = section("README.md", "### Serve to AI Agents");
+    expect(
+      served,
+      "README.md `### Serve to AI Agents`: `pnpm serve` runs `ksor serve` and nothing " +
+        "else — it neither provisions nor ingests, so it is not 'the only command this " +
+        "rung needs'. The first-run and re-run story belongs to `pnpm provision` and " +
+        "`pnpm refresh`.",
+    ).not.toMatch(/`pnpm serve` is the only command this rung needs/);
+    // The skip needs BOTH halves — `sameCorpus`, the set of (id, content,
+    // governance, toolchain) tuples, AND `sameCommit`, the run's recorded
+    // source commit (ingest/build.ts: "a new commit over identical bytes is
+    // still a new build fact") — so the sentence has to name the commit.
+    const build = read("packages/content/src/ingest/build.ts");
+    expect(build).toMatch(/async function sameCorpus\(/);
+    expect(build).toMatch(/async function sameCommit\(/);
+    expect(served, "README.md: the re-run command is `pnpm refresh`").toMatch(
+      /`pnpm refresh`[^.]*unchanged/,
+    );
+    expect(
+      served,
+      "README.md: ingest reports `unchanged` only when the source commit matches too — " +
+        "a sentence that names documents, governance and toolchain and not the commit " +
+        "promises a skip the code refuses",
+    ).toMatch(/commit[^.]*unchanged|unchanged[^.]*commit/);
+  });
+
+  it("the gate paragraph names what CI runs — no more, no less", () => {
+    const jobs = [...read(".github/workflows/ci.yml").matchAll(/^    name: (.+)$/gm)].map(
+      (m) => m[1] as string,
+    );
+    expect(jobs.length, "ci.yml declares named jobs").toBeGreaterThan(5);
+    const text = read("README.md");
+    const start = text.indexOf("The development gate is defined in");
+    if (start === -1) throw new Error("README.md: no gate paragraph");
+    const paragraph = flat(text.slice(start, text.indexOf("\n\n", start)));
+    expect(
+      paragraph,
+      "README.md: browser and deployment acceptance have run in ci.yml for weeks — " +
+        "say what the gate runs instead of promising it",
+    ).not.toMatch(/will join it when a site surface exists/);
+    // TWO-WAY: a suite the paragraph names must exist, and a suite CI runs
+    // must be named — so removing a job or overclaiming one both go red.
+    const PAIRS: ReadonlyArray<readonly [RegExp, RegExp, string]> = [
+      [/browser/i, /^Scaffold walkthrough \(browser\)/, "the browser walkthrough (KSOR_E2E)"],
+      [/Postgres/, /^Kernel acceptance \(Postgres\)/, "the kernel's Postgres tier"],
+      [/Windows/, /^Init acceptance \(Windows\)/, "init on Windows"],
+      [/npm and bun/, /^Manager acceptance/, "the npm and bun scaffolds"],
+      [/Docker/, /^Container acceptance/, "the emitted Dockerfile on plain Docker"],
+    ];
+    for (const [keyword, job, what] of PAIRS) {
+      const claimed = keyword.test(paragraph);
+      const runs = jobs.some((name) => job.test(name));
+      expect(
+        claimed,
+        `README.md's gate paragraph ${claimed ? "names" : "omits"} ${what} while ci.yml ` +
+          `${runs ? "runs it" : "has no such job"} — the two must agree. Paragraph: ${paragraph}`,
+      ).toBe(runs);
+    }
+  });
+
+  it("`log.md` is refused and `index.md` is generated — nobody 'manages' either", () => {
+    // The premise, from the checker: an authored log.md is refused by name, and
+    // a committed index that differs from the generated one is refused too.
+    const check = read("packages/content/src/record/check.ts");
+    expect(check).toMatch(/slug: "ksor-reserved-name"/);
+    expect(check).toMatch(/slug: "ksor-index-stale"/);
+    const structure = section("README.md", "## Project Structure");
+    expect(
+      structure,
+      "README.md `## Project Structure`: publishers neither generate nor manage " +
+        "`log.md` — the checker refuses an authored one (ksor-reserved-name) and ksor " +
+        "never writes one; `index.md` is written by `ksor build` and drift-checked",
+    ).not.toMatch(/Publishers generate or manage those files/);
+    expect(structure, "README.md: say that an authored `log.md` is refused").toMatch(
+      /`log\.md`[^.]*refus/,
+    );
+    expect(structure, "README.md: say that `index.md` is generated").toMatch(
+      /`index\.md`[^.]*generat|generat[^.]*`index\.md`/,
+    );
+  });
+
+  it.each(["README.md", "packages/ksor/README.md"])(
+    "%s's hello-world row says what Part 2 needs",
+    (file) => {
+      // The premise, from the tutorial: Part 1 is Node only; Part 2 is not.
+      const tutorial = read("docs/tutorials/01-hello-world.md");
+      const part2 = tutorial.slice(tutorial.indexOf("## Part 2"));
+      expect(part2, "the tutorial's Part 2 asks for a Postgres").toMatch(/Postgres/);
+      expect(part2, "…and an embedding key").toMatch(/embedding API key/);
+      const row = /^\|[^\n]*01 · Hello world[^\n]*$/m.exec(read(file))?.[0];
+      if (row === undefined) throw new Error(`${file}: no hello-world row in the tutorials table`);
+      expect(
+        row,
+        `${file}: hello world is "Node only, nothing else" for Part 1 alone — Part 2 needs a ` +
+          "Postgres and an embedding key, both free. The row is what a reader picks by.",
+      ).not.toMatch(/Node only, nothing else/);
+      expect(row, `${file}: the row names the Postgres Part 2 needs`).toMatch(/Postgres/);
+      expect(row, `${file}: the row names the key Part 2 needs`).toMatch(/key/);
+    },
+  );
+});
+
+/**
+ * The README's project-structure tree is presented as what `ksor init` emits,
+ * and nothing held it to the emitted tree — a renamed sample or a moved policy
+ * file would have left it wrong with nothing red. So it is parsed and every
+ * path it names is looked for in a scaffold freshly emitted by the BUILT CLI,
+ * the way the acceptance suite emits one. The tree is a picture, not an
+ * inventory: it must say so when it leaves files out, and it does.
+ */
+describe("the README's project-structure tree names paths `ksor init` emits", () => {
+  const distCli = fileURLToPath(new URL("../dist/cli.mjs", import.meta.url));
+  const FENCE = "```text\nmy-ksor/\n";
+
+  const readTree = (): { intro: string; paths: string[]; abridged: boolean } => {
+    const text = read("README.md");
+    const at = text.indexOf(FENCE);
+    if (at === -1) throw new Error("README.md: no project-structure tree (```text / my-ksor/)");
+    const before = text.slice(0, at).trimEnd();
+    const intro = flat(before.slice(before.lastIndexOf("\n\n") + 2));
+    const body = text.slice(at + FENCE.length, text.indexOf("\n```", at));
+    const stack: string[] = [];
+    const paths: string[] = [];
+    let abridged = false;
+    for (const line of body.split("\n")) {
+      // Four columns per level, then a connector; spacer lines and the
+      // continuation of an annotation carry no connector and are skipped.
+      const m = /^((?:│   |    )*)(?:├── |└── )(.*)$/.exec(line);
+      if (m === null) continue;
+      const depth = (m[1] as string).length / 4;
+      const name = ((m[2] as string).split(/\s{2,}|\s*←/)[0] as string).trim();
+      if (name === "...") {
+        abridged = true;
+        continue;
+      }
+      stack.length = depth;
+      stack[depth] = name;
+      paths.push(stack.join(""));
+    }
+    return { intro, paths, abridged };
+  };
+
+  /** Every file under a scaffold, as relative paths, .git excluded. */
+  const filesUnder = (root: string): string[] => {
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        if (e.name === ".git") return [];
+        const full = path.join(dir, e.name);
+        return e.isDirectory() ? walk(full) : [path.relative(root, full)];
+      });
+    return walk(root);
+  };
+
+  it("every path exists in a freshly emitted scaffold, and the tree says it is abridged", () => {
+    const { intro, paths, abridged } = readTree();
+    expect(paths.length, `parsed the tree into: ${paths.join(", ")}`).toBeGreaterThan(5);
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-readme-tree-"));
+    try {
+      const r = spawnSync(process.execPath, [distCli, "init", "my-ksor"], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { ...process.env, npm_config_user_agent: "pnpm/11.22.0 npm/? node/v24" },
+      });
+      expect(r.status, r.stderr).toBe(0);
+      const root = path.join(dir, "my-ksor");
+      const missing = paths.filter((p) => {
+        const full = path.join(root, p);
+        if (!existsSync(full)) return true;
+        return p.endsWith("/") !== statSync(full).isDirectory();
+      });
+      expect(
+        missing,
+        `README.md's project-structure tree names paths \`ksor init\` does not emit ` +
+          `(a trailing slash means the tree shows a directory): ${missing.join(", ")}`,
+      ).toEqual([]);
+      // Abridgement is a FACT about the two trees, not a flag: whenever the
+      // scaffold holds a file the picture omits, the picture must say so.
+      const omitted = filesUnder(root).filter(
+        (f) => !paths.includes(f) && !paths.some((p) => p.endsWith("/") && f.startsWith(p)),
+      );
+      if (omitted.length > 0 || abridged) {
+        expect(
+          intro,
+          `README.md: the tree omits ${omitted.length} emitted file(s) (e.g. ` +
+            `${omitted.slice(0, 3).join(", ")}) — the sentence introducing it must say ` +
+            `it is abridged. Sentence: ${intro}`,
+        ).toMatch(/abridged/);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
