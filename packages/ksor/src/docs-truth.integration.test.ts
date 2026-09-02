@@ -744,3 +744,53 @@ describe("docs/status.md names the version that is actually published", () => {
     ).toBe(version);
   });
 });
+
+/**
+ * A printed `build_id` is version-scoped, and any document showing one has to
+ * say so.
+ *
+ * `buildIdOf` hashes `ksor_version` along with the record, deliberately — "what
+ * produced this" is part of what a publication is. So a captured id is correct
+ * for exactly one release, and a tutorial that prints one and tells the reader
+ * "your `build_id` will not differ" is false for everyone on a later version.
+ * That sentence shipped in 0.0.54's tutorial fix and was already false when
+ * 0.0.55 published it, which is how this assertion came to exist: found by
+ * walking the published package rather than by reading the diff.
+ *
+ * The rule is the general one, not the sentence: never show an id without
+ * saying what moves it.
+ */
+describe("documents that print a build_id say what moves one", () => {
+  const DOCS = [
+    "docs/tutorials/00-hello-world.md",
+    "packages/ksor/docs/building.md",
+    "packages/ksor/README.md",
+    "README.md",
+  ] as const;
+
+  for (const doc of DOCS) {
+    it(`${doc}`, () => {
+      let text: string;
+      try {
+        text = read(doc);
+      } catch {
+        return; // the document does not exist in this tree; nothing to hold
+      }
+      // PROXIMITY, not presence. The first version of this assertion asked
+      // whether the word "toolchain" appeared anywhere in the file, and the
+      // file already used it once for an unrelated reason — so removing the
+      // caveat next to the id left it green. Caught by mutation.
+      const WINDOW = 700;
+      for (const m of text.matchAll(/build_id\s+sha256:[0-9a-f]{8}/g)) {
+        const after = text.slice(m.index, m.index + WINDOW);
+        expect(
+          /toolchain/i.test(after),
+          `${doc} prints a concrete build_id at offset ${m.index} and the next ${WINDOW} ` +
+            "characters never say the id hashes the TOOLCHAIN as well as the record — so a " +
+            "reader on any other ksor version is shown a hash that will not match theirs, " +
+            "with nothing nearby explaining why",
+        ).toBe(true);
+      }
+    });
+  }
+});
