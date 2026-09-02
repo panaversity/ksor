@@ -5,14 +5,20 @@ your own, each approved by a person with a name. By the end of this, one is
 for employees only and the public site has never seen it; one has been checked
 by a second person and says so; one takes effect on a date; one has been
 replaced, and its replacement says what it replaced; and one was withdrawn from
-every surface through a ledger, then put back. Eleven times the record will
-refuse to publish something, and each time it is right.
+every surface through a ledger, then put back. Fourteen times the record will
+refuse to publish something, and each time it is right — eleven on the path
+this tutorial walks, and three more on branches it only names.
 
 Every command and every output below was run on 2026-09-02 and pasted as it
-appeared, with the convention from tutorial 2: a `build_id` is shown as
-`sha256:…`, because it hashes the toolchain version along with the record and
-yours will not match. The counts and the refusals will; timestamps and the
-ledger's entry ids carry the instant you ran them.
+appeared, with two conventions. Hashes are shortened — a `build_id` to
+`sha256:…`, a document's `sha256` in the lock to its first characters —
+because the first hashes the toolchain version along with the record and the
+second hashes bytes you will have typed for yourself, so neither will match
+yours. And a build prints a `source:` line and a `wrote …` line either side of
+what these pastes are about; they are shown where they are the point and left
+out where they are not. Nothing else is trimmed: the counts and the refusals
+will match yours, and timestamps and the ledger's entry ids carry the instant
+you ran them.
 
 **You need** the `handbook` from tutorial 2, and nothing else — no database,
 no key. Each step gives you a prompt for your coding agent, and the same work
@@ -80,13 +86,18 @@ ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T13:33:2
 Still three admitted — that count is documents admitted to _some_ viewer.
 Which viewer is in the lock:
 
-```json
-{
-  "path": "finance/late-claims.md",
-  "status": "stable",
-  "audience": ["internal"],
-  "admitted": ["internal"]
-}
+```
+  {
+    "path": "finance/late-claims.md",
+    "sha256": "2c2d239cca1f902a…",
+    "status": "stable",
+    "audience": [
+      "internal"
+    ],
+    "admitted": [
+      "internal"
+    ]
+  }
 ```
 
 The other two are admitted to `["internal", "public"]`. A viewer is a list that
@@ -219,6 +230,7 @@ ksor build: 3 document(s), 2 admitted to a machine surface at 2026-09-02T13:35:5
   this build decided that at 2026-09-02T13:35:52.049Z and static output cannot re-decide itself:
     at 2026-10-01T00:00:00.000Z finance/expense-policy.md reaches its effective_from, and until a build runs after that
     instant these files disagree with `ksor serve`, which evaluates at request time.
+    Rebuild and redeploy on a schedule if this record uses stale_after.
 ```
 
 The page still renders, with a badge: a person reading ahead is fine, an
@@ -229,7 +241,14 @@ with dates rebuilds on a schedule. Now the same tree, evaluated on 1 October:
 ```
 $ npx ksor build --as-of 2026-10-01T00:00:00Z
 ksor build: 3 document(s), 3 admitted to a machine surface at 2026-10-01T00:00:00.000Z
+  this build decided that at 2026-10-01T00:00:00.000Z and static output cannot re-decide itself:
+    at 2027-10-01T00:00:00.000Z finance/expense-policy.md reaches its stale_after, and until a build runs after that
+    instant these files disagree with `ksor serve`, which evaluates at request time.
+    Rebuild and redeploy on a schedule if this record uses stale_after.
 ```
+
+Admitted — and the notice has moved to the next boundary, the review date a
+year out. It names one instant at a time: the next one this tree crosses.
 
 This is the product invariant, worth running with your own hands: same tree,
 same toolchain, same `as_of` gives the same `build_id`. Build twice at that
@@ -384,6 +403,9 @@ takedown: knowledge/finance/late-claims denied (scope: node, expected: present)
 The act is a file, `.ksor/takedowns.yaml`, committed with the record:
 
 ```yaml
+# The takedown ledger (record spec §5): append-only, written only by
+# `ksor takedown`, and validated by the record checker, `ksor build` and
+# ingest. Lift a denial with a revocation entry; never delete a line.
 - id: "2026-09-02T13:36:37.644Z-8b7a1a"
   stable_id: "knowledge/finance/late-claims"
   scope: node
@@ -438,6 +460,7 @@ npx ksor takedown --actor human:priya --file-only \
 ```
 takedown: revoked `2026-09-02T13:36:37.644Z-8b7a1a`
   recorded as `2026-09-02T13:36:40.709Z-75de6e` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger
+  --file-only: the entry is written and the row is not — apply it with `ksor takedown --apply` where the database is reachable
 ```
 
 ```
@@ -508,15 +531,19 @@ Every fact about them — who may read, who approved, who checked, when it took
 effect, who withdrew it and why — is a line in a file a reviewer sees in a pull
 request and a fact the page prints. None of it is a setting on a server.
 
-Eleven refusals did work for you, and none was an error: an audience nobody
-registered, a viewer that dropped the public or named one, a `stable` document
-with no approval, one edited after its approval, a successor that was not
-there, a withdrawal by nobody, a takedown by nobody, one the door could not be
-told about, a denied document under a new name, and a ledger something was
-deleted from. And one thing it did without refusing: it held a policy off
-every machine surface until the day it took effect, and said so. That is what
-"whether an agent can be trusted is decided by the governance of what it
-reads" means in practice.
+Eleven refusals on the path you walked did work for you, and none was an
+error: an audience nobody registered, a viewer that dropped the public or named
+one, a `stable` document with no approval, one edited after its approval, a
+successor that was not there, a withdrawal by nobody, a takedown by nobody, one
+the door could not be told about, a denied document under a new name, and a
+ledger something was deleted from. Three more fire on the branches this
+tutorial only names, and are worth trying by hand: a document declaring the
+`trust_tier` the build derives (`ksor-derived-key`), a bare `2026-10-01` where
+an instant belongs (`ksor-instant-form`), and a revocation left naming a denial
+somebody deleted (`ksor-ledger-invalid`). And one thing the record did without
+refusing: it held a policy off every machine surface until the day it took
+effect, and said so. That is what "whether an agent can be trusted is decided
+by the governance of what it reads" means in practice.
 
 **What is not done yet.** Every step above ran with no database. Serving this
 record — one door per viewer, `--apply` for the ledger, and the abstention

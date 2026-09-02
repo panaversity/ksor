@@ -63,10 +63,11 @@ restrict one document to a second audience and watch the public build leave it
 out of `llms.txt` while the employee build carries it; record a second person's
 review and see the trust tier move; give a policy an effective date and build
 the same record at two instants; replace a document and withdraw another
-through the takedown ledger, then lift it. Eleven refusals fire along the way,
-each stopping something the record could not stand behind — a takedown with no
-name on it, a deleted ledger line, an approved document edited after its
-approval. Every output was run and pasted as it appeared.
+through the takedown ledger, then lift it. Eleven refusals fire on the path it
+walks and three more on branches it names, each stopping something the record
+could not stand behind — a takedown with no name on it, a deleted ledger line,
+an approved document edited after its approval. Every output was run and pasted
+as it appeared.
 
 ---
 

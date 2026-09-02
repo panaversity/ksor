@@ -125,13 +125,14 @@ answering from your own document and naming which document and which
 publication it came from. Every command and output in it was run and pasted as
 it appeared.
 
-The three so far, in reading order — pick by what you want from it:
+The four so far, in reading order — pick by what you want from it:
 
 | | read this if |
 | --- | --- |
 | [00 · Introduction](docs/tutorials/00-introduction-to-ksor.md) | you want to understand why this exists — no technical background needed |
 | [01 · Hello world](docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Node only, nothing else |
 | [02 · Make it yours](docs/tutorials/02-make-it-yours.md) | you finished hello world and want a record that is only yours — a file in, a person's knowledge in, the samples out |
+| [03 · Governance in practice](docs/tutorials/03-governance-in-practice.md) | you have a record of your own and want to govern it — a second audience, a review, an effective date, a takedown and the refusals that fire |
 
 **Next, open the project in the coding agent you already use** (Claude Code,
 Cursor, Copilot — any of them) **and tell it what this knowledge base is

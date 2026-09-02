@@ -51,13 +51,14 @@ run and pasted as it appeared. The envelopes above show the SHAPE of an answer
 and a refusal; the refusal needs a calibrated floor, which hello world defers
 to its own tutorial.
 
-The three so far, in reading order — pick by what you want from it:
+The four so far, in reading order — pick by what you want from it:
 
 | | read this if |
 | --- | --- |
 | [00 · Introduction](https://github.com/panaversity/ksor/blob/main/docs/tutorials/00-introduction-to-ksor.md) | you want to understand why this exists — no technical background needed |
 | [01 · Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Node only, nothing else |
 | [02 · Make it yours](https://github.com/panaversity/ksor/blob/main/docs/tutorials/02-make-it-yours.md) | you finished hello world and want a record that is only yours — a file in, a person's knowledge in, the samples out |
+| [03 · Governance in practice](https://github.com/panaversity/ksor/blob/main/docs/tutorials/03-governance-in-practice.md) | you have a record of your own and want to govern it — a second audience, a review, an effective date, a takedown and the refusals that fire |
 
 One command emits a complete governed project: the record (`knowledge/`,
 plain CommonMark), a working documentation site with hot reload, offline
