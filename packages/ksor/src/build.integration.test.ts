@@ -1091,12 +1091,16 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     // A plain path segment, and still refused: the lock copy sits beside the
     // bundle directories, so an audience by its name would collide with it —
     // found by asking what the one reserved sibling name does (hostile pass).
-    const reserved = repoRegistering("build.lock.json");
-    const collide = build(reserved, "--bundles", "--as-of", LATER);
-    expect(collide.status).toBe(1);
-    expect(collide.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
-    expect(collide.stderr).toContain("collide");
-    expect(existsSync(path.join(reserved, ".ksor/out"))).toBe(false);
+    // Casefolded, for the same reason the collision rule is casefolded: on a
+    // case-insensitive filesystem `Build.Lock.json` IS the lock's name.
+    for (const id of ["build.lock.json", "Build.Lock.json"]) {
+      const reserved = repoRegistering(id);
+      const collide = build(reserved, "--bundles", "--as-of", LATER);
+      expect(collide.status, `${id} was accepted: ${collide.stdout}`).toBe(1);
+      expect(collide.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+      expect(collide.stderr).toContain("collide");
+      expect(existsSync(path.join(reserved, ".ksor/out"))).toBe(false);
+    }
 
     // The prose the refusal prints is the regex, not a wider set: a leading
     // `.` or `-` is refused, so `.hidden` cannot become a dotfile directory
