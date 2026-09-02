@@ -129,7 +129,8 @@ export function planBundles(input: BundleInput): Bundle[] {
           seen.add(id);
           const asset = input.assets.get(`${KNOWLEDGE}${id}`);
           if (asset !== undefined) files.set(id, asset);
-          else if (conceptIds.has(id) && !held.has(id)) dangling.push({ from: rel, to: `${id}.md` });
+          else if (conceptIds.has(id) && !held.has(id))
+            dangling.push({ from: rel, to: `${id}.md` });
         }
       }
     }

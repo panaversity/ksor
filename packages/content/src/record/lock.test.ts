@@ -223,11 +223,11 @@ describe("composeLock + parseLock", () => {
     expect(composeLock({ ...input, bundles: [] }).build_id).toBe(base);
   });
 
-  it("a lock written before bundle digests existed still parses, with an empty list", () => {
+  it("a lock written before bundle digests existed is refused, not read around", () => {
     const { bundles: _omitted, ...older } = composeLock(input);
     const parsed = parseLock(JSON.stringify(older));
-    expect(parsed.ok, parsed.ok ? "" : parsed.why).toBe(true);
-    expect(parsed.ok && parsed.lock.bundles).toEqual([]);
+    expect(parsed.ok).toBe(false);
+    expect(!parsed.ok && parsed.why).toContain("bundles");
   });
 
   it("build_id excludes as_of, source_commit and dirty, and moves with the admitted set", () => {

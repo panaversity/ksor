@@ -7,8 +7,8 @@ claim: provenance is load-bearing — every build records the exact corpus that 
 # `ksor build` (Class B)
 
 The database-free verb that turns the record into projections, and the one
-place the governance decision runs for static output. Steps 1–3 and the lock
-run (`packages/ksor/src/build/`); `--bundles` exits `2`. Plan:
+place the governance decision runs for static output. Steps 1–4 and the lock
+run (`packages/ksor/src/build/`; `--bundles` since 0.0.59, issue #158). Plan:
 `research/okf-native.md`; record contract: `specs/ksor/record/spec.md`.
 
 ## 1 · Contract
@@ -65,7 +65,19 @@ the contract and performs nothing.
    list `[public, X]` exactly: the admitted concepts (§2), companions beside
    their parents, indexes generated for the filtered tree, `okf_version` at
    the root, frontmatter intact. No byte of an excluded concept — not a
-   title, path, description, link target or asset (R5).
+   title, path, description, link target or asset (R5). Only an asset a held
+   body references travels, or an image nothing published mentions would ship
+   into every bundle. The admission is the lock's own `admitted` set
+   (`admittedViewersOf`), never a second predicate. `.ksor/out/bundles/` is
+   REPLACED on every `--bundles` run — a bundle for an audience the policy no
+   longer registers must not sit beside the fresh ones — and a copy of the
+   lock is written beside them so the output travels with its provenance. An
+   audience identifier that cannot name a directory (`../x`) is refused before
+   anything is written (`ksor-audience-identifier-invalid`). A link from a held
+   body to a concept the bundle excludes for a lifecycle or ledger reason
+   dangles — the body is verbatim, not rewritten — and stdout names it; a link
+   that would widen audience never reaches here, because the checker refuses
+   it (`ksor-link-widens`).
 
 In every manager's scaffold the `build` script becomes `ksor build` followed
 by the site build and `export-denylist` is removed (decision 25's
@@ -147,6 +159,16 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   checker skips `index.md`; `companions[]` is the attachment kinds;
   `assets[]` is the non-markdown), so the record of what was published stopped
   short of the file that lists what was published.
+- `bundles[]` is one `{ viewer, sha256, files }` per canonical viewer, in the
+  lock's viewer order, recorded on EVERY build and not only under `--bundles`:
+  the digest is sha256 over the JSON of the bundle's sorted `[path, sha256]`
+  pairs, stated this plainly so a recipient holding only the directory can
+  recompute it and find the publication it came from. It is NOT in `build_id`,
+  and for the same reason it is on every build — the bundles are a pure
+  function of what the id already hashes (the documents, their `admitted`
+  sets, the companions, the assets, the instance), so hashing them again could
+  not move it, and the lock is the same lock whether or not the directories
+  exist. A lock without the key is `ksor-lock-invalid` (decision 28).
 - `build_id` = sha256 over everything a projection reads: the sorted
   `documents[]`, `companions[]`, `assets[]` and `indexes[]` `(path, sha256)` pairs, `instance_sha256`,
   `policy_sha256`, `people_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each

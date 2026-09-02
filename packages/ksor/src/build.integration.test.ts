@@ -869,8 +869,10 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(r.status, r.stderr).toBe(0);
     const pub = path.join(root, OUT, "public");
     expect([...tree(pub).keys()]).toEqual(["index.md"]);
+    // The trailing blank line is the generator's shape for a childless
+    // directory — the same bytes `ksor build` would commit for an empty record.
     expect(readFileSync(path.join(pub, "index.md"), "utf8")).toBe(
-      '---\nokf_version: "0.2"\n---\n\n# Acme\n',
+      '---\nokf_version: "0.2"\n---\n\n# Acme\n\n',
     );
     const internal = path.join(root, OUT, "internal");
     expect([...tree(internal).keys()].sort()).toEqual([
@@ -1009,7 +1011,10 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
   it("two runs are byte-identical, a previous run's strays are pruned, and the lock records every bundle's digest whether or not it was written", () => {
     const root = bundleRepo();
     expect(build(root, "--bundles", "--as-of", LATER).status).toBe(0);
-    const first = { public: tree(path.join(root, OUT, "public")), internal: tree(path.join(root, OUT, "internal")) };
+    const first = {
+      public: tree(path.join(root, OUT, "public")),
+      internal: tree(path.join(root, OUT, "internal")),
+    };
     const lockBytes = readFileSync(path.join(root, "build.lock.json"), "utf8");
     // Provenance travels beside the bundles the way it sits beside knowledge/.
     expect(readFileSync(path.join(root, OUT, "build.lock.json"), "utf8")).toBe(lockBytes);
@@ -1023,7 +1028,11 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(tree(path.join(root, OUT, "public"))).toEqual(first.public);
     expect(tree(path.join(root, OUT, "internal"))).toEqual(first.internal);
     expect(existsSync(path.join(root, OUT, "board"))).toBe(false);
-    expect(readdirSync(path.join(root, OUT)).sort()).toEqual(["build.lock.json", "internal", "public"]);
+    expect(readdirSync(path.join(root, OUT)).sort()).toEqual([
+      "build.lock.json",
+      "internal",
+      "public",
+    ]);
     expect(readFileSync(path.join(root, "build.lock.json"), "utf8")).toBe(lockBytes);
 
     const lock = lockOf(root);
@@ -1092,6 +1101,9 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
       "surfaces/index.md",
       "surfaces/overview.md",
       "what-is-a-ksor.md",
+      // The starter's one companion, beside its parent — a companion travels
+      // by position (decision 24), so it is in the bundle its parent is in.
+      "what-is-a-ksor.summary.md",
     ]);
     expect(git(root, "status", "--porcelain", "--", ".ksor")).toBe("");
     const ignored = spawnSync("git", ["check-ignore", "-q", ".ksor/out/bundles/public/index.md"], {

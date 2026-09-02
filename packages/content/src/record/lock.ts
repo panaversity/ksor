@@ -69,11 +69,7 @@ const lockSchema = z
     companions: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
     assets: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
     indexes: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
-    // Optional on READ only: a lock written before 0.0.59 carries no bundle
-    // digests, and refusing it would make every upgrade start by deleting the
-    // committed lock. `parseLock` reads the absence as an empty list; every lock
-    // this version writes carries one entry per canonical viewer.
-    bundles: z.array(bundleEntry).optional(),
+    bundles: z.array(bundleEntry),
   })
   .strict();
 
@@ -141,11 +137,13 @@ export interface Lock {
    * `--bundles` wrote the directories: the bundle set is a function of what
    * `build_id` already hashes, so the lock is the same lock either way, and a
    * `pnpm build` on a host that never passes the flag records the same digests
-   * the owner's `--bundles` run did. Outside `build_id`: the bundles are a
-   * pure function of what the id already hashes — the documents, their
-   * admitted sets, the companions, the assets and the instance title — so
-   * hashing them again could not move it. They are listed so a directory can be
-   * MATCHED to a publication, not to widen what the id covers.
+   * the owner's `--bundles` run did. Outside `build_id` for the same reason —
+   * the documents, their admitted sets, the companions, the assets and the
+   * instance title are already in it, so hashing the bundles again could not
+   * move it (build spec §2). Listed so a directory can be MATCHED to a
+   * publication, not to widen what the id covers. Required on read like every
+   * other field: a lock an older ksor wrote is `ksor-lock-invalid` and is
+   * regenerated, never read around (decision 28).
    */
   readonly bundles: readonly LockBundle[];
 }
@@ -169,7 +167,7 @@ export function parseLock(text: string): LockResult {
       why: `\`${issue?.path.map(String).join(".") || "(root)"}\`: ${issue?.message ?? "invalid"}`,
     };
   }
-  return { ok: true, lock: { ...parsed.data, bundles: parsed.data.bundles ?? [] } as Lock };
+  return { ok: true, lock: parsed.data as Lock };
 }
 
 export function sha256Hex(data: string | Uint8Array): string {

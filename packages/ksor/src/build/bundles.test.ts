@@ -44,7 +44,13 @@ const INPUT: BundleInput = {
       order: null,
       admitted: [],
     },
-    { id: "notes/memo", title: "Memo", description: "A memo.", order: null, admitted: ["internal"] },
+    {
+      id: "notes/memo",
+      title: "Memo",
+      description: "A memo.",
+      order: null,
+      admitted: ["internal"],
+    },
   ],
   files: new Map([
     ["instance.md", "---\nformat: 2\n---\n"],
@@ -130,9 +136,7 @@ describe("planBundles — one bundle per viewer, in the order given", () => {
 
   it("regenerates every index for the FILTERED tree: okf_version at the root, no bullet for what is excluded", () => {
     const root = text(by("public").files.get("index.md"));
-    expect(root).toBe(
-      '---\nokf_version: "0.2"\n---\n\n# Acme\n\n* [Policies](policies/)\n',
-    );
+    expect(root).toBe('---\nokf_version: "0.2"\n---\n\n# Acme\n\n* [Policies](policies/)\n');
     expect(root).not.toContain("stale committed map");
     expect(text(by("public").files.get("policies/index.md"))).toBe(
       "# Policies\n\n* [Purchase approval](purchase-approval.md) - Who approves.\n",
@@ -154,6 +158,9 @@ describe("planBundles — one bundle per viewer, in the order given", () => {
     ]);
   });
 
+  // The trailing blank line is the generator's own shape for a childless
+  // directory — what `ksor build` commits for an empty record — kept rather
+  // than special-cased here, so the bundle's index is byte-for-byte the record's.
   it("a viewer nothing is admitted to gets a root index with a heading and no bullets", () => {
     const [empty] = planBundles({
       ...INPUT,
@@ -161,7 +168,7 @@ describe("planBundles — one bundle per viewer, in the order given", () => {
       concepts: INPUT.concepts.map((c) => ({ ...c, admitted: [] })),
     });
     expect([...empty!.files.keys()]).toEqual(["index.md"]);
-    expect(text(empty!.files.get("index.md"))).toBe('---\nokf_version: "0.2"\n---\n\n# Acme\n');
+    expect(text(empty!.files.get("index.md"))).toBe('---\nokf_version: "0.2"\n---\n\n# Acme\n\n');
   });
 });
 
