@@ -79,6 +79,19 @@ const TUTORIAL_PROMPTS: ReadonlyArray<readonly [string, string | null]> = [
   ["How long does a customer have to return something?", null],
 ];
 
+/**
+ * Tutorial 2's prompts. Two fire add-sources — one for a FILE, one for a PERSON
+ * — which is the decision on #50 made visible: same skill, two kinds of source.
+ */
+const TUTORIAL_2_PROMPTS: ReadonlyArray<readonly [string, string | null]> = [
+  ["Get me started — run the intake interview", "intake-interview"],
+  ["Here is our expense policy, `src/expense-policy.pdf`", "add-sources"],
+  ["Nobody ever wrote down how we handle a late expense claim", "add-sources"],
+  ["Show me both on the site", null],
+  ["Approved — record both as me", null],
+  ["Delete the five starter documents", null],
+];
+
 describe("every shipped skill's trigger says what it fires on", () => {
   it("the shipped set is exactly what this file accounts for", () => {
     // A new skill lands with its trigger recorded, or this goes red. That is
@@ -106,11 +119,18 @@ describe("every shipped skill's trigger says what it fires on", () => {
   });
 });
 
-describe("the hello world's prompts are accounted for", () => {
-  const tutorial = readFileSync(path.join(repoRoot, "docs/tutorials/00-hello-world.md"), "utf8");
+/** Every tutorial that hands the reader prompts, with the table that accounts for them. */
+const TUTORIALS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, string | null]>]> =
+  [
+    ["docs/tutorials/00-hello-world.md", TUTORIAL_PROMPTS],
+    ["docs/tutorials/02-make-it-yours.md", TUTORIAL_2_PROMPTS],
+  ];
+
+describe.each(TUTORIALS)("%s's prompts are accounted for", (file, table) => {
+  const tutorial = readFileSync(path.join(repoRoot, file), "utf8");
 
   it("every prompt in this table is still in the tutorial", () => {
-    for (const [prompt] of TUTORIAL_PROMPTS) {
+    for (const [prompt] of table) {
       expect(
         tutorial.includes(prompt),
         `the tutorial no longer says ${JSON.stringify(prompt)}`,
@@ -125,9 +145,9 @@ describe("the hello world's prompts are accounted for", () => {
     const blocks = [...tutorial.matchAll(/^> \*\*Ask your agent:\*\*\n((?:^> .*\n)+)/gm)].map((m) =>
       (m[1] ?? "").replaceAll(/^> /gm, "").replaceAll("\n", " "),
     );
-    expect(blocks.length, "the tutorial's prompt blocks").toBe(TUTORIAL_PROMPTS.length);
+    expect(blocks.length, "the tutorial's prompt blocks").toBe(table.length);
     for (const block of blocks) {
-      const known = TUTORIAL_PROMPTS.some(([prompt]) => block.includes(prompt));
+      const known = table.some(([prompt]) => block.includes(prompt));
       expect(
         known,
         `the tutorial gives a prompt this table does not account for: ${JSON.stringify(block.slice(0, 70))}. ` +
@@ -137,7 +157,7 @@ describe("the hello world's prompts are accounted for", () => {
   });
 
   it("each prompt claiming a skill names one that ships", () => {
-    for (const [prompt, skill] of TUTORIAL_PROMPTS) {
+    for (const [prompt, skill] of table) {
       if (skill === null) continue;
       expect(shipped, `${JSON.stringify(prompt)} expects ${skill}`).toContain(skill);
     }

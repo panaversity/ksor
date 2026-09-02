@@ -32,6 +32,18 @@ pasted as it appeared.
 Start here if you want to see what this is. Read the introduction below if you
 want to understand why it exists.
 
+### [Make it yours — your knowledge, your record, in about half an hour](./02-make-it-yours.md)
+
+Picks up where hello world leaves off. You run the intake interview, bring in
+one policy that already exists as a PDF — and watch a shipped check catch the
+one number the conversion got wrong — then write down one procedure that only
+ever lived in someone's head, with the thing they were not sure of recorded as
+an open question rather than smoothed into prose. Then the samples go, and
+nothing left in the record was approved by anything but a person.
+
+Two refusals do work for you on the way, and the tutorial says exactly which
+state each one fires on. Every output was run and pasted as it appeared.
+
 ### [Tutorial 1 — KSoR: One Governed Knowledge Record for Humans and AI Agents](./01-introduction-to-ksor.md)
 
 The introduction. No technical background required.
@@ -46,7 +58,7 @@ You will follow one hospital story the whole way through, and come out understan
 
 ## Coming next in this series
 
-2. **Build a Real Governed KSoR** — grow the Tutorial 1 exercise into a real corpus: scope, governance metadata, resolving a conflict between two concepts, publishing the human site.
+2. ~~Build a Real Governed KSoR~~ — shipped as [Make it yours](./02-make-it-yours.md).
 3. **KSoR Governance in Practice** — ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
 4. **Serve a KSoR to AI Agents with MCP** — provision Postgres + pgvector, publish a generation, connect an MCP client, retrieve citations, and test abstention.
 5. **Combine KSoR with Traditional Systems of Record** — an agent that applies governed policy to current operational facts from an ERP, CRM, or accounting system.
