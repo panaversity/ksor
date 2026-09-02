@@ -73,6 +73,58 @@ function runGuard(at: string) {
   return spawnSync(process.execPath, [at], { encoding: "utf8" });
 }
 
+/** A db-tier suite in the harness that names its scratch database with `expression`. */
+function dbSuiteNaming(at: string, expression: string): void {
+  const dir = path.join(path.dirname(at), "..", "packages", "content", "src");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path.join(dir, "sample.db.test.ts"),
+    `import { randomBytes } from "node:crypto";\nconst dbName = ${expression};\n`,
+  );
+}
+
+describe("guard-invariants — rule 12 evaluates the suite's own literal", () => {
+  const STAMP = "${Date.now().toString(36)}";
+
+  it("accepts the shape the tier uses, in both forms", () => {
+    const at = harness();
+    dbSuiteNaming(
+      at,
+      "`ksor_sample_" +
+        STAMP +
+        '_${randomBytes(3).toString("hex")}`;\n' +
+        'const other = ["ksor", "sample", Date.now().toString(36), randomBytes(3).toString("hex")].join("_")',
+    );
+    const result = runGuard(at);
+    expect(result.stderr, result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("refuses randomBytes(2): both halves are present and the reaper would still never drop it", () => {
+    // The mutation the text check could not see: `randomBytes(` is there, the
+    // stamp is there, and the name mints four hex characters where the grammar
+    // wants six. Before the guard evaluated the suite's own expression this
+    // passed, and the round trip it ran instead was on a literal it invented.
+    const at = harness();
+    dbSuiteNaming(at, "`ksor_sample_" + STAMP + '_${randomBytes(2).toString("hex")}`');
+    const result = runGuard(at);
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("rule 12");
+    expect(result.stderr).toContain("packages/content/src/sample.db.test.ts");
+    // The refusal shows the NAME it evaluated to, so the reader sees what the
+    // reaper would have been handed rather than being told to guess.
+    expect(result.stderr).toMatch(/evaluates to ksor_sample_[0-9a-z]+_0123\b/);
+  });
+
+  it("refuses a join builder that carries the stamp but not the random field", () => {
+    const at = harness();
+    dbSuiteNaming(at, '["ksor", "sample", Date.now().toString(36)].join("_")');
+    const result = runGuard(at);
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("the random suffix");
+  });
+});
+
 describe("guard-invariants — rule 2 symlink comparison", () => {
   it("accepts a symlink whose stored target uses backslashes", () => {
     const at = harness();

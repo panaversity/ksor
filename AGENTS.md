@@ -163,6 +163,7 @@ pnpm guard                # guard-invariants.mjs (<1s)
 pnpm check:corpus         # the SHIPPED docs' frontmatter and links (<1s)
 pnpm test:unit            # *.test.ts, colocated, pure (<3s)
 pnpm build && pnpm test:integration   # built artifacts + repo-tree suites (~2 min)
+pnpm test:e2e             # the KSOR_E2E browser suites, after the playwright install
 pnpm publint               # package manifest/tarball correctness (needs build)
 ```
 
@@ -1656,7 +1657,14 @@ assertion.
   owns its own scratch DATABASE, named uniquely per run and stamped with the
   instant it was made (guard rule 12) — a fixed name let two runs on one
   cluster drop each other's database mid-test, and the stamp is what lets the
-  tier's reaper tell a leak from a live run's database (issue #166).
+  tier's reaper tell a leak from a live run's database (issue #166). The tier
+  also carries the suites whose SHAPE is a real socket and a real clock —
+  `probe-deadline.db.test.ts` opens a listening socket and waits eight real
+  seconds and reads no `KSOR_DB_URL` at all. They run unconditionally, so a
+  machine with no database pays their wall clock for nothing; that is the
+  cheaper half of the trade, because gating them on a variable they never read
+  would mean the readiness budget is only ever asserted in CI. The unit tier
+  cannot hold them: it admits neither sockets nor waiting.
 - `*.agent.test.ts` — a shipped skill run by a REAL coding agent (`claude -p`)
   in a fresh scaffold, with the skill and without it, graded on what it leaves
   behind (`pnpm test:agent`; `skill-evals.yml` runs it on push to main and by

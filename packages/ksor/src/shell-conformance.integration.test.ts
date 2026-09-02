@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 import { isAttachment } from "../templates/scaffold/system/site/lib/attachment-rule.js";
 import { buildScaffold } from "./e2e-build.js";
+import { e2eSkipNote } from "./e2e-gate.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -585,7 +586,7 @@ ZZPENDINGBODYZZ.
 );
 
 describe.runIf(!enabled)("shell conformance (gated)", () => {
-  it("skipped — set KSOR_E2E=1 to run the shell through the surface contract", () => {
-    expect(enabled).toBe(false);
+  it("the shell, through the surface contract, in a real browser", (ctx) => {
+    ctx.skip(e2eSkipNote("packages/ksor/src/shell-conformance.integration.test.ts"));
   });
 });
