@@ -19,7 +19,9 @@ hashes the toolchain version along with the record and yours will not match.
 And the door is on port **8180** throughout, because 8080 was held by another
 record on the machine this was captured on — `ksor serve` refused it by name and
 suggested `KSOR_MCP_PORT`, so that is what was used. On your machine leave the
-variable off and read `8080` wherever this says `8180`.
+variable off and read `8080` wherever this says `8180`. JSON envelopes are
+pretty-printed and trimmed to the fields under discussion, and the agent's
+replies are re-wrapped to this page's width; nothing is reworded.
 
 **You need:** the `handbook` from tutorial 2, with the `.env` you wrote in
 hello world — `KSOR_DB_URL`, `GEMINI_API_KEY`, `KSOR_AUTH=disabled-local` —
@@ -177,6 +179,9 @@ curl -s -X POST http://127.0.0.1:8180/mcp \
 "top_cosine": 0.5303894719366247,
 "hits": [ "knowledge/finance/late-claims", "knowledge/refund-policy" ]
 ```
+
+(The two hits are shown by their `provenance.stable_id`; each carries the
+passage, its governance block and its generation, as in hello world.)
 
 Two hits, both cited, both governed, both approved by Priya — and neither
 answers the question. With the gate off the door returns its closest passages
