@@ -763,6 +763,7 @@ describe("docs/status.md names the version that is actually published", () => {
 describe("documents that print a build_id say what moves one", () => {
   const DOCS = [
     "docs/tutorials/00-hello-world.md",
+    "docs/tutorials/02-make-it-yours.md",
     "packages/ksor/docs/building.md",
     "packages/ksor/README.md",
     "README.md",

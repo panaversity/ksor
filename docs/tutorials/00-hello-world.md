@@ -55,7 +55,7 @@ npm run dev
 
 Open **http://localhost:3000**. You have a documentation site rendering five
 starter documents about KSoR itself. They are scratch paper — you will delete
-them in tutorial 2.
+them in [tutorial 2](./02-make-it-yours.md).
 
 ### 3. Write your first document
 
@@ -90,8 +90,8 @@ outside this window entirely.
 types — `Policy`, `Procedure`, `Control` and the rest — carry governance meaning,
 so the record demands `sources` and an owner before it will accept one. If your
 agent reaches for `type: Policy` here, it will meet that refusal and can either
-add `sources` or fall back to `Document`; tutorial 2 is where reserved types
-earn their keep.
+add `sources` or fall back to `Document`; [tutorial 2](./02-make-it-yours.md) is where
+reserved types earn their keep.
 
 </details>
 
@@ -351,9 +351,10 @@ procedure under "Turning the abstention gate on".
 
 **The record is still mostly about KSoR.** Five of your seven documents are
 starter scratch paper. Replacing them with your organisation's actual knowledge
-— and retiring the tool that approved them — is the next tutorial, not yet
-written. The scaffold ships an `intake-interview` skill that starts it: ask your
-agent to run it.
+— and retiring the tool that approved them — is
+[tutorial 2, Make it yours](./02-make-it-yours.md). It starts with the
+`intake-interview` skill the scaffold ships, brings in one file of yours and
+one thing nobody ever wrote down, and ends with a record that is only yours.
 
 ---
 
