@@ -844,14 +844,18 @@ describe("every link into docs/tutorials resolves", () => {
  *
  * The switch is the process ENVIRONMENT, not `next.config.mjs`. Read in
  * 16.3.3's source: `next build` constructs its `Telemetry` after loading the
- * config, but the `next dev` PARENT (`cli/next-dev.js`) never loads the config
- * and still constructs one on exit to record the session — an assignment in
- * the config would have left exactly that event in place, with nothing red.
- * So it sits at the front of the site's own scripts, which is where every
- * manager's root script (`pnpm -C system/site build`, `npm --prefix
- * system/site run build`, `cd system/site && bun run build`) and the deploy's
- * `pnpm build` all end up. The emitted-tree half is held in
- * init.integration.test.ts; this half ties the sentence to the bytes.
+ * config (build/index.js:552), but the `next dev` PARENT (cli/next-dev.js:126)
+ * never loads the config and still constructs one on exit to record the
+ * session — an assignment in the config would have left exactly that event in
+ * place, with nothing red. And it is a WRAPPER (`next-no-telemetry.mjs`), not
+ * a `VAR=1 next` prefix in the script: the prefix is POSIX syntax that cmd.exe
+ * refuses under pnpm and npm on Windows, a platform CI walks `ksor init` on,
+ * so it would have traded a quiet leak for a loud break. The wrapper sits
+ * behind the site's own scripts, which is where every manager's root script
+ * (`pnpm -C system/site build`, `npm --prefix system/site run build`,
+ * `cd system/site && bun run build`) and the deploy's `pnpm build` all end
+ * up. The emitted-tree half is held in init.integration.test.ts; this half
+ * ties the sentence to the bytes.
  */
 describe("the scaffold makes 'nothing phones home' true", () => {
   it.each(["README.md", "docs/tutorials/00-introduction-to-ksor.md"])(
@@ -867,7 +871,15 @@ describe("the scaffold makes 'nothing phones home' true", () => {
     },
   );
 
-  it("every site script that runs next switches telemetry off first", () => {
+  it("the wrapper hands next an environment with telemetry off", () => {
+    expect(
+      read(`${SCAFFOLD}/system/site/next-no-telemetry.mjs`),
+      `${SCAFFOLD}/system/site/next-no-telemetry.mjs: the child's environment must carry ` +
+        "NEXT_TELEMETRY_DISABLED — it is the only switch the `next dev` parent honours",
+    ).toMatch(/NEXT_TELEMETRY_DISABLED: "1"/);
+  });
+
+  it("every site script that runs next runs it through the wrapper", () => {
     const { scripts } = JSON.parse(read(`${SCAFFOLD}/system/site/package.json`)) as {
       scripts: Record<string, string>;
     };
@@ -880,9 +892,9 @@ describe("the scaffold makes 'nothing phones home' true", () => {
       expect(
         body,
         `${SCAFFOLD}/system/site/package.json script "${name}" runs next with Next.js ` +
-          "telemetry ON, and README.md says nothing phones home. The switch is the " +
-          "environment, not the config: the `next dev` parent never loads next.config.mjs.",
-      ).toMatch(/^NEXT_TELEMETRY_DISABLED=1 next\b/);
+          "telemetry ON, and README.md says nothing phones home. Run it as " +
+          "`node next-no-telemetry.mjs …` — a `VAR=1 next` prefix breaks under cmd.exe.",
+      ).toMatch(/^node next-no-telemetry\.mjs (build|dev)\b/);
     }
   });
 
