@@ -95,10 +95,26 @@ const armed = apiKey !== "" || (claudeOnPath && process.env["CI"] === undefined)
 const MODEL = process.env["KSOR_EVAL_MODEL"] ?? "claude-sonnet-5";
 const BUDGET_USD = process.env["KSOR_EVAL_BUDGET_USD"] ?? "4";
 
-/** The prompt tutorial 2 gives the reader, verbatim. */
+/**
+ * The prompt tutorial 2 gives the reader, plus the owner's standing answers.
+ *
+ * The second armed run (2026-09-02) taught why the second sentence exists.
+ * Given the tutorial's prompt alone, the WITH-skill agent extracted the PDF,
+ * compared it against the page, found two things it must not invent — the
+ * source names no currency, and the emitted AGENTS.md says audience is "never
+ * omitted, never inferred" — and STOPPED to ask the owner, writing nothing.
+ * The baseline guessed an owner ("a guess"), chose `[public]` unasked, and
+ * proceeded: 9/9 gates against 4/9. That is the skill behaving correctly and
+ * the harness misreading it, because a one-shot `claude -p` has no owner to
+ * answer. In tutorial 2 the owner is there and answers in a sentence. So the
+ * harness says what that owner would, once — and the report below still
+ * names a run that paused for the owner rather than scoring it as silence.
+ */
 const PROMPT =
   "Here is our expense policy, `src/expense-policy.pdf`. Add it to the record under " +
-  "`finance/`, and tell me what it leaves open.";
+  "`finance/`, and tell me what it leaves open. The record has one audience, public. " +
+  "Where the source leaves something unstated, write it into the document as an open " +
+  "question rather than asking me — I will review the page on the site.";
 
 // ── the scaffold ────────────────────────────────────────────────────────────
 
@@ -155,6 +171,8 @@ function touched(before: ReadonlyMap<string, string>, after: ReadonlyMap<string,
 
 interface AgentResult {
   readonly ok: boolean;
+  /** Wrote nothing and ended on a question: it is waiting for an owner. */
+  readonly pausedForOwner: boolean;
   readonly subtype: string;
   readonly costUsd: number;
   readonly turns: number;
@@ -202,13 +220,15 @@ function agent(root: string): AgentResult {
     | Record<string, unknown>
     | undefined;
   if (result === undefined) throw new Error(`no result message in: ${r.stdout.slice(0, 800)}`);
+  const text = String(result["result"] ?? "");
   return {
     ok: result["is_error"] !== true,
+    pausedForOwner: false, // decided once the tree diff is known; see runArm
     subtype: String(result["subtype"] ?? ""),
     costUsd: Number(result["total_cost_usd"] ?? 0),
     turns: Number(result["num_turns"] ?? 0),
     durationMs: Number(result["duration_ms"] ?? 0),
-    text: String(result["result"] ?? ""),
+    text,
   };
 }
 
@@ -302,7 +322,13 @@ function runArm(arm: Arm["arm"]): Arm {
     const result = agent(root);
     const after = snapshot(root);
     const changed = touched(before, after);
-    return { arm, agent: result, touched: changed, grades: grade(root, changed) };
+    const paused = changed.length === 0 && result.text.trimEnd().endsWith("?");
+    return {
+      arm,
+      agent: { ...result, pausedForOwner: paused },
+      touched: changed,
+      grades: grade(root, changed),
+    };
   } finally {
     rmSync(path.dirname(root), { recursive: true, force: true });
   }
@@ -314,7 +340,10 @@ function report(arms: readonly Arm[]): string {
     const passed = a.grades.filter((g) => g.pass).length;
     lines.push(
       `${a.arm.padEnd(8)} ${passed}/${a.grades.length} gates  $${a.agent.costUsd.toFixed(2)}  ` +
-        `${a.agent.turns} turns  ${(a.agent.durationMs / 1000).toFixed(0)}s  ${a.agent.subtype}`,
+        `${a.agent.turns} turns  ${(a.agent.durationMs / 1000).toFixed(0)}s  ${a.agent.subtype}` +
+        (a.agent.pausedForOwner
+          ? "  — PAUSED FOR THE OWNER (wrote nothing, asked a question)"
+          : ""),
     );
     for (const g of a.grades) lines.push(`  ${g.pass ? "✓" : "✗"} ${g.name} — ${g.saw}`);
     lines.push(`  touched: ${a.touched.join(", ") || "(nothing)"}`);
