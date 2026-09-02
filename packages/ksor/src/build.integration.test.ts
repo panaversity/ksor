@@ -1048,7 +1048,21 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(existsSync(path.join(root, ".ksor/out"))).toBe(false);
   });
 
-  it("a refusal writes no bundle, and an audience identifier that is not a path segment is refused before anything is written", () => {
+  /** `bundleRepo()` with one more audience registered in `.ksor/governance.yaml`. */
+  function repoRegistering(...ids: readonly string[]): string {
+    const root = bundleRepo();
+    const policy = path.join(root, ".ksor/governance.yaml");
+    writeFileSync(
+      policy,
+      readFileSync(policy, "utf8").replace(
+        "audiences:\n",
+        `audiences:\n${ids.map((id) => `  ${JSON.stringify(id)}:\n    description: Added by the test\n`).join("")}`,
+      ),
+    );
+    return root;
+  }
+
+  it("a refusal writes no bundle, and an audience identifier that is not a path segment is refused before anything is written — on EVERY build, flag or not", () => {
     const refused = bundleRepo();
     writeFileSync(path.join(refused, "knowledge/bad.md"), "---\ntitle: only\n---\n");
     const r = build(refused, "--bundles", "--as-of", LATER);
@@ -1056,17 +1070,7 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(r.stderr.split("\n")[0]).toBe("error: ksor-audience-missing");
     expect(existsSync(path.join(refused, ".ksor/out"))).toBe(false);
 
-    const hostile = bundleRepo();
-    const policy = path.join(hostile, ".ksor/governance.yaml");
-    writeFileSync(
-      policy,
-      readFileSync(policy, "utf8").replace(
-        "audiences:\n",
-        'audiences:\n  "../escape":\n    description: Escapes the output directory\n',
-      ),
-    );
-    const plain = build(hostile, "--as-of", LATER);
-    expect(plain.status, plain.stderr).toBe(0);
+    const hostile = repoRegistering("../escape");
     const bundles = build(hostile, "--bundles", "--as-of", LATER);
     expect(bundles.status).toBe(1);
     expect(bundles.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
@@ -1075,23 +1079,63 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(existsSync(path.join(hostile, ".ksor/out"))).toBe(false);
     expect(existsSync(path.join(hostile, ".ksor/escape"))).toBe(false);
 
+    // A PLAIN build refuses the same identifier. The lock records `bundles[]`
+    // on every build, so letting this through would commit a digest for a
+    // directory `--bundles` refuses to write — provenance for a thing that
+    // cannot exist. The owner learns about it at the build they already run.
+    const plain = build(hostile, "--as-of", LATER);
+    expect(plain.status).toBe(1);
+    expect(plain.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+    expect(plain.stderr).toContain("../escape");
+
     // A plain path segment, and still refused: the lock copy sits beside the
     // bundle directories, so an audience by its name would collide with it —
     // found by asking what the one reserved sibling name does (hostile pass).
-    const reserved = bundleRepo();
-    const reservedPolicy = path.join(reserved, ".ksor/governance.yaml");
-    writeFileSync(
-      reservedPolicy,
-      readFileSync(reservedPolicy, "utf8").replace(
-        "audiences:\n",
-        'audiences:\n  "build.lock.json":\n    description: Named after the lock\n',
-      ),
-    );
+    const reserved = repoRegistering("build.lock.json");
     const collide = build(reserved, "--bundles", "--as-of", LATER);
     expect(collide.status).toBe(1);
     expect(collide.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
     expect(collide.stderr).toContain("collide");
     expect(existsSync(path.join(reserved, ".ksor/out"))).toBe(false);
+
+    // The prose the refusal prints is the regex, not a wider set: a leading
+    // `.` or `-` is refused, so `.hidden` cannot become a dotfile directory
+    // and `-x` cannot become something a shell reads as a flag.
+    for (const id of [".hidden", "-x"]) {
+      const dotted = build(repoRegistering(id), "--bundles", "--as-of", LATER);
+      expect(dotted.status, `${id} was accepted: ${dotted.stdout}`).toBe(1);
+      expect(dotted.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+      expect(dotted.stderr).toContain(id);
+    }
+  });
+
+  it("two registered audiences that differ only in case are refused: they are two viewers and one directory", () => {
+    // `internal` is already registered; `Internal` passes the policy and the
+    // path-segment check, then merges into the SAME directory on macOS and
+    // Windows — the surviving bundle holding the internal-only concept while
+    // the lock's digest for that viewer describes a directory that is not
+    // there. Refused where the bundle set is computed, on every platform.
+    const root = repoRegistering("Internal");
+    const bundles = build(root, "--bundles", "--as-of", LATER);
+    expect(bundles.status, bundles.stdout).toBe(1);
+    expect(bundles.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+    expect(bundles.stderr).toContain('"Internal"');
+    expect(bundles.stderr).toContain('"internal"');
+    expect(bundles.stderr).toContain("fix:");
+    expect(existsSync(path.join(root, ".ksor/out"))).toBe(false);
+
+    // The same refusal without the flag, for the reason the lock records
+    // `bundles[]` without it.
+    const plain = build(root, "--as-of", LATER);
+    expect(plain.status, plain.stdout).toBe(1);
+    expect(plain.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+
+    // `public` is reserved by name; casefolded it is reserved too, or the
+    // registered audience would swallow the public bundle.
+    const shadow = build(repoRegistering("Public"), "--bundles", "--as-of", LATER);
+    expect(shadow.status, shadow.stdout).toBe(1);
+    expect(shadow.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+    expect(shadow.stderr).toContain('"Public"');
   });
 
   it("the emitted starter bundles its five documents for public, and git ignores the output", () => {

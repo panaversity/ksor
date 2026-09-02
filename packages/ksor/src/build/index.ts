@@ -86,9 +86,13 @@ const LOCK_NAME = "build.lock.json";
  * An audience identifier that can be a directory name. The policy admits any
  * non-empty string as a registry key, and every other surface uses one only as
  * a token — `--bundles` is the first to use it as a PATH, so `../x` written as
- * given would land outside the output directory.
+ * given would land outside the output directory. The first character must be a
+ * letter or a digit, which is what stops `.`, `..`, a dotfile and a name a
+ * shell reads as a flag; `-`, `_` and `.` are fine after it.
  */
 const PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/** {@link PATH_SEGMENT} in words, in ONE place, so the refusal and the docs cannot drift from the regex. */
+const PATH_SEGMENT_PROSE = "a letter or a digit first, then letters, digits, `-`, `_` and `.`";
 
 interface Parsed {
   readonly instance: string | null;
@@ -152,6 +156,61 @@ function provenanceLine(facts: GitFacts, root: string): string {
 function refuse(io: BuildIo, slug: string, why: string, fix: string): number {
   io.err(`error: ${slug}\n${why}\n  fix: ${fix}\n`);
   return exitCodes.refused;
+}
+
+/** A refusal a viewer set earns before any of it is planned, or `null`. */
+interface ViewerRefusal {
+  readonly slug: string;
+  readonly why: string;
+  readonly fix: string;
+}
+
+/**
+ * What every canonical viewer name has to be for `.ksor/out/bundles/<name>/`
+ * to hold what the lock says it holds.
+ *
+ * Run on EVERY build, not only under `--bundles`, because `bundles[]` is in
+ * the lock on every build: a plain build that let `../escape` through would
+ * commit a digest for a directory the tool refuses to write — provenance for
+ * something that cannot exist (invariant: provenance is load-bearing). The
+ * alternative considered was omitting unbuildable viewers from `bundles[]`;
+ * it keeps the lock honest too, but leaves the record broken and the owner
+ * unwarned until their first exchange, which is the weaker guarantee. Here
+ * the owner learns at the build they already run.
+ */
+function viewerRefusal(viewers: readonly string[]): ViewerRefusal | null {
+  const list = (ids: readonly string[]): string => ids.map((v) => JSON.stringify(v)).join(", ");
+  const unsafe = viewers.filter((v) => !PATH_SEGMENT.test(v) || v.toLowerCase() === LOCK_NAME);
+  if (unsafe.length > 0) {
+    return {
+      slug: "ksor-audience-identifier-invalid",
+      why: `the audience identifier${unsafe.length === 1 ? "" : "s"} ${list(unsafe)} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, and one named ${LOCK_NAME} would collide with the lock`,
+      fix: `name audiences in plain words (${PATH_SEGMENT_PROSE}) in .ksor/governance.yaml and in every \`ksor.audience\` list, then rebuild`,
+    };
+  }
+  // Two identifiers that differ only in case are two viewers in the policy and
+  // ONE directory on macOS and on Windows, whose filesystems are
+  // case-insensitive by default: the second bundle written merges into the
+  // first, so the surviving directory holds concepts the viewer named on it may
+  // not read, and the lock's digest for that viewer stops describing what is on
+  // disk. That is R5 — no byte of an excluded concept — failing on the one
+  // projection that leaves the building, from a state the checker accepts. So
+  // it is refused where the bundle set is computed, on every platform alike: a
+  // record must not build here and leak there.
+  const byFold = new Map<string, string[]>();
+  for (const v of viewers) {
+    const fold = v.toLowerCase();
+    byFold.set(fold, [...(byFold.get(fold) ?? []), v]);
+  }
+  const collided = [...byFold.values()].filter((group) => group.length > 1);
+  if (collided.length > 0) {
+    return {
+      slug: "ksor-audience-identifier-collides",
+      why: `${collided.map((g) => list(g)).join("; ")} differ only in case, so they are ${collided.length === 1 ? "two viewers" : "several viewers"} and one directory: --bundles writes ${BUNDLES_DIR}/<identifier>/ per viewer, and on a case-insensitive filesystem (macOS and Windows, by default) the later bundle merges into the earlier one — leaving a directory that holds concepts the viewer named on it may not read, and a digest in build.lock.json that no longer describes it`,
+      fix: `give each audience in .ksor/governance.yaml a name that differs by more than case — \`public\` is reserved, casefolded too — and update every \`ksor.audience\` list that named the one you dropped, then rebuild`,
+    };
+  }
+  return null;
 }
 
 export function runBuild(
@@ -288,6 +347,8 @@ export function runBuild(
   // lock's own — `admittedViewersOf` over the same concepts, viewers, instant
   // and denials `composeLock` uses below — never a second predicate.
   const viewers = canonicalViewers(audiences);
+  const bad = viewerRefusal(Object.keys(viewers));
+  if (bad !== null) return refuse(io, bad.slug, bad.why, bad.fix);
   const instance = parseInstanceDocument(record.files.get("instance.md") ?? "");
   const bundles = planBundles({
     // The checker refused an unreadable instance above, so the fallback is
@@ -305,22 +366,6 @@ export function runBuild(
     assets: record.assets,
     dirs: record.dirs,
   });
-  if (parsed.bundles) {
-    // The lock copy sits beside the bundle directories, so its name is the one
-    // path segment an audience cannot take without the two colliding.
-    const unsafe = bundles
-      .map((b) => b.viewer)
-      .filter((v) => !PATH_SEGMENT.test(v) || v === LOCK_NAME);
-    if (unsafe.length > 0) {
-      return refuse(
-        io,
-        "ksor-audience-identifier-invalid",
-        `the audience identifier${unsafe.length === 1 ? "" : "s"} ${unsafe.map((v) => JSON.stringify(v)).join(", ")} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, and one named ${LOCK_NAME} would collide with the lock`,
-        "name audiences in plain words (letters, digits, `-`, `_`, `.`) in .ksor/governance.yaml and in every `ksor.audience` list, then rebuild",
-      );
-    }
-  }
-
   const lock = composeLock({
     ksorVersion: options.version,
     sourceCommit: facts.sourceCommit,
