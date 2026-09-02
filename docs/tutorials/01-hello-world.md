@@ -367,9 +367,10 @@ Two honest gaps, each with a tutorial behind it.
 and it will return its closest guess rather than declining. Teaching a record to
 say _"I don't know"_ is a **measurement**, not a setting: you give it real
 questions your record answers, it measures where those score against questions
-it does not, and it prints a floor. That measurement is its own tutorial, not
-yet written — until then, `packages/ksor/docs/ingesting.md` carries the whole
-procedure under "Turning the abstention gate on".
+it does not, and it prints a floor. That measurement is
+[tutorial 4, Serve it — with a floor](./04-serve-it.md); the reference
+procedure is in `packages/ksor/docs/ingesting.md` under "Turning the
+abstention gate on".
 
 **The record is still mostly about KSoR.** Five of your seven documents are
 starter scratch paper. Replacing them with your organisation's actual knowledge
