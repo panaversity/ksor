@@ -6,7 +6,7 @@ updated: 2026-09-02.
 
 ## Published package
 
-`@panaversity/ksor` **0.0.57** on npm (trusted publishing, provenance
+`@panaversity/ksor` **0.0.58** on npm (trusted publishing, provenance
 attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor build`, `ksor migrate`, `ksor serve`, `ksor ingest`, `ksor schema`,
