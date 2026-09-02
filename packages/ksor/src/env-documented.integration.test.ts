@@ -52,8 +52,15 @@ const DOCUMENTED_ELSEWHERE = new Map([
  * "every file" in two ways that both matter here.
  *
  * Test files are excluded because a variable only a test reads is not something
- * an adopter can set; that is also why no exemption list for repo-only test
- * variables is needed — the scan never sees them.
+ * an adopter can set. That exclusion is by FILENAME, not by role, so it does not
+ * reach test SUPPORT — a module the tier imports which does not itself end in
+ * `.test.ts`. `e2e-gate.ts` is exactly that, and the scan sees it, which is why
+ * `KSOR_E2E` needs a `DOCUMENTED_ELSEWHERE` entry and why this docstring used to
+ * say the opposite. Narrowing the walk to make the old sentence true again was
+ * the alternative and is the weaker one: every narrowing is a place a real
+ * adopter-facing variable can hide, and an exemption is a line someone has to
+ * write a reason on. So the scan stays as wide as it can be and the exemption
+ * carries the argument.
  *
  * Transient trees are excluded because they are not the checkout: another suite
  * roots a fake npm install inside `packages/ksor` (it needs Node's upward module
