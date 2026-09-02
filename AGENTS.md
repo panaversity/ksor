@@ -1227,7 +1227,9 @@ gateway` package, serve-by-spawn) is superseded._
     an edit bumped `generated.at` is UNVERIFIED until change-control
     verification lands — the checker compares two authored instants and no
     more, and every envelope says `checked: policy` rather than implying
-    otherwise. Actor ids are published with the content, exactly as a commit
+    otherwise. _(Verified since 2026-09-02 for the STAMP, not the approver:
+    `ksor-generated-stale`, decision 21's revision of that date; the envelope
+    still says `checked: policy`.)_ Actor ids are published with the content, exactly as a commit
     author is in a public repository. Stale documents leave the open web at
     the next build, so a record with `stale_after` dates needs a scheduled
     rebuild.
