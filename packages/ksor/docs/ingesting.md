@@ -88,6 +88,26 @@ website's lock was fixed for exactly this once already, after deleting a
 denial's four lines republished the document with the committed lock still
 validating; ingest had the same hole, found by review before anyone hit it.
 
+## When ingest says generated.at is stale
+
+`ksor ingest` runs the same change-control check `ksor build` runs (KSP R23;
+the scaffold's `pnpm check` does not — it is the format gate, and reads no
+document history): a `stable` document whose body differs from a committed version
+that was `stable`, without `generated.at` having advanced past that version's,
+is refused `ksor-generated-stale`, before anything is written. The stamp dates
+the text, so leaving it alone and moving it backward are refused alike.
+The fix is the one it prints — set `generated.at` to an instant after the edit,
+then re-approve, because `ksor.approval.at` may not precede it — and the check
+reads every committed version of the file, so an edit committed without a bump
+is refused on a clean tree too.
+
+Ingest reads git for this, and a container that received the record without
+its `.git` cannot. It then prints `change-control: not checked` on stderr and
+continues: a check that could not run is reported, never counted as passed.
+Who approved is still checked against the policy alone — every envelope says
+`approval.checked: "policy"` — because R22 and R25 wait on an identity the
+platform can vouch for.
+
 ## What a generation is
 
 Each ingest builds a **fresh generation** — invisible until activated — and

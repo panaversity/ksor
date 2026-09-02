@@ -8,6 +8,7 @@ import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "n
 import path from "node:path";
 
 import {
+  checkChangeControl,
   checkRecord,
   composeLock,
   formatRefusal,
@@ -17,8 +18,8 @@ import {
   parseLedger,
   parseLock,
   resolveInstanceDir,
+  sortRefusals,
   type LedgerBaseline,
-  type Refusal,
 } from "@panaversity/ksor-content/record";
 
 import {
@@ -223,10 +224,16 @@ export function runBuild(
 
   const record = loadRecord(root);
   const result = checkRecord(record, { mode: "build", ledgerBaselines: baselines });
-  if (result.refusals.length > 0) {
-    io.err(`error: ${result.refusals[0]?.slug ?? "ksor-refused"}\n`);
-    io.err(`ksor build: ${result.refusals.length} problem(s) — nothing written:\n\n`);
-    for (const r of result.refusals as readonly Refusal[]) io.err(`  ${formatRefusal(r)}\n\n`);
+  // KSP R23 runs BESIDE the checker, not inside it: it is the one rule that
+  // reads git, and `checkRecord` also judges staged trees and fixtures that
+  // have no checkout. Where history cannot be read the check SAYS so on the
+  // success path below — the `source: unspecified` posture, never a pass.
+  const change = checkChangeControl(root, result.concepts, record.files);
+  const refusals = sortRefusals([...result.refusals, ...change.refusals]);
+  if (refusals.length > 0) {
+    io.err(`error: ${refusals[0]?.slug ?? "ksor-refused"}\n`);
+    io.err(`ksor build: ${refusals.length} problem(s) — nothing written:\n\n`);
+    for (const r of refusals) io.err(`  ${formatRefusal(r)}\n\n`);
     return exitCodes.refused;
   }
 
@@ -326,6 +333,7 @@ export function runBuild(
       // run's regenerated indexes are uncommitted output too, and the line has
       // to describe what was PUBLISHED.
       `${provenanceLine({ ...facts, dirty: lock.dirty }, root)}\n` +
+      (change.notice === null ? "" : `  ${change.notice}\n`) +
       notice +
       `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,

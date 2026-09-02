@@ -101,6 +101,14 @@ checks, refuses with the slug first and nothing written, else writes the
 changed indexes and the lock — `source_commit` from the last commit touching
 an input, `dirty` from git status, the ledger checked for shrinkage against
 every historic version and the committed lock, a shallow clone refused.
+**KSP R23 runs beside the checker** in `ksor build` and `ksor ingest` — not
+in the emitted `check.mjs`, which stays the format gate: a `stable` body that differs from any committed version
+stable under a `generated.at` the tree has not ADVANCED past — the same
+instant, or one moved backward — is `ksor-generated-stale`, read from every
+committed version of the path through a few `rev-parse` probes, one
+`git log`, and one `git cat-file --batch` per 256 objects; where history is
+unreadable each program prints
+`change-control: not checked` beside its verdict rather than passing.
 `--bundles` exits `2`. **The emitted `check.mjs` is generated** from the
 record module at package-build time into both skill trees (gitignored in the
 templates), read-only, refusing a stale index; a conformance fixture is judged
@@ -238,11 +246,12 @@ display title is `instance.md`'s `title:` key; there is no body H1 to read.
 
 - **`ksor build --bundles`** parses and exits `2` with the honest notice. One
   OKF bundle per registered audience, for exchange, is designed and unwritten.
-- **Change-control verification of approvals and ledger actors** (KSP R22–R25
-  against repository history). Until it exists an approval is POLICY-checked,
-  and every envelope says so in its own idiom: `approval.checked: "policy"`.
-  Whether an edit to a stable concept bumped `generated.at` is likewise
-  unverified — the checker compares two authored instants and no more.
+- **Change-control verification of WHO approved** (KSP R22, R24, R25 against
+  repository identity). R23 IS built — `ksor-generated-stale`, above — so
+  whether an edit to a stable concept bumped `generated.at` is now verified
+  against history wherever there is one. What remains needs an identity the
+  platform can vouch for; until it exists an approval is POLICY-checked, and
+  every envelope says so in its own idiom: `approval.checked: "policy"`.
 - **`llms.txt` v2 URL forms and path-scoped files.** The site emits the form
   it emitted before.
 - **OKF import** (R26) — reading a foreign bundle INTO a record. Demand-gated:
@@ -947,10 +956,11 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
   its contract: one OKF bundle per registered audience under
   `.ksor/out/bundles/<audience>/`, for exchange.
-- Change-control verification (KSP R22–R25) against repository history, which
-  is what would let an approval say `checked: "change-control"` instead of
-  `checked: "policy"`, and what would verify that an edit to a stable concept
-  bumped its `generated.at`. Phase B.
+- Change-control verification of WHO approved (KSP R22, R24, R25) against
+  repository identity, which is what would let an approval say
+  `checked: "change-control"` instead of `checked: "policy"`. R23 — an edit to
+  a stable concept must ADVANCE its `generated.at` — is built
+  (`ksor-generated-stale`). Phase B for the rest.
 - `llms.txt` v2 URL forms and path-scoped files. Phase B.
 - OKF import (R26) — reading a foreign bundle into a record. Demand-gated: a
   second ingest adapter plus a verb, when someone asks for it.

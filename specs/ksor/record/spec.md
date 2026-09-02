@@ -100,9 +100,33 @@ badly — it makes the bullet unreadable and drops the concept from the index,
 the sidebar and the reading order while its page stays published and the door
 keeps serving it. **On reserved types:** `sources`, `ksor.owner`. **When
 `stable`:** `generated` (with `at`) and `ksor.approval`, with `generated.at
-<= ksor.approval.at` (R23 — a comparison of two authored instants; whether an
-edit updated `generated.at` is the author's obligation until change-control
-verification lands, plan §4.2). **When `deprecated`:** `ksor.deprecated:
+<= ksor.approval.at` (R23 — a comparison of two authored instants), and —
+wherever a checkout with history is at hand — a body that has not changed
+since any committed version of the same path that was `stable`, unless
+`generated.at` is strictly LATER than that version's (`ksor-generated-stale`,
+R23's other half: the stamp dates the text, so an edit must ADVANCE it, and
+the advanced stamp then needs a fresh approval by the first rule). An
+unchanged stamp and a backdated one refuse alike — moving a stamp backward
+changes it without advancing it, and leaves the old approval post-dating the
+new text. Only the body is compared — the bytes after the closing
+fence, line endings and trailing whitespace normalised — so a frontmatter-only
+edit (a `verified` entry, a re-approval) is not a change to the text the stamp
+dates. Every committed version is read, not HEAD's alone: an edit committed
+without a bump matches HEAD and it is the version behind it that tells — and
+a body committed under a stamp and then reverted still refuses, because that
+stamp now names two texts; the printed remedy (move the stamp, re-approve)
+clears it, and rewriting history is never asked for. A path
+with no committed stable version passes — stable for the first time, or
+renamed, since path is identity. The check is run beside the checker by the
+two publishing verbs — `ksor build` and `ksor ingest` — and never by the
+emitted `check.mjs` (the format gate reads no document history) nor by a
+staged tree;
+where history cannot be read (no
+repository, no commit yet, a shallow boundary) each prints `change-control:
+not checked` (or how many versions a shallow clone let it read) beside its
+verdict, and never passes a check that did not run. WHO reviewed a commit
+(R22, R25) is still unverified, and `approval.checked` stays `policy`.
+**When `deprecated`:** `ksor.deprecated:
 { by, at }` by the resolved owner or a takedown authority (R23's last
 sentence), and usually `ksor.superseded_by`. `verified` is never required: a
 stable, approved, unverified concept is the honest state and sits at tier
@@ -526,6 +550,9 @@ duplicate key, non-plain tag, second document, non-mapping),
 `description`, §2.2), `ksor-audience-missing`, `ksor-audience-unregistered`,
 `ksor-stable-ungenerated`, `ksor-stable-unapproved`,
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,
+`ksor-generated-stale` (§2.2 — the one rule that reads git history, run
+beside `checkRecord` by `ksor build` and `ksor ingest`, each of which says
+when it could not run; the emitted `check.mjs` does not run it),
 `ksor-deprecated-unattributed`, `ksor-deprecator-unauthorised`,
 `ksor-reserved-type-unsourced`, `ksor-reserved-type-unowned`,
 `ksor-source-unresourced`, `ksor-actor-form` (§2.3 — the four

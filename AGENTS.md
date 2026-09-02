@@ -748,7 +748,18 @@ gateway` package, serve-by-spawn) is superseded._
     for and did not get: a policy allowlist is AUTHORISATION, not
     verification. Every envelope says `checked: policy` for exactly that
     reason, and change-control verification against repository history is
-    what would let it say otherwise._
+    what would let it say otherwise._ _Revision 2026-09-02 (KSP R23): the
+    first verification tooth. `ksor-generated-stale` verifies the
+    `generated.at` instant against repository history — a `stable` body that
+    differs from a committed version stable under a stamp this tree has not
+    ADVANCED past (the same instant, or one moved backward) refuses at
+    `ksor build` and `ksor ingest` (not at the emitted `check.mjs`, which stays
+    the format gate), and where history is unreadable each says
+    `change-control: not checked` rather than passing.
+    It verifies WHAT changed and WHEN it was stamped, not WHO: R22 and R25
+    still await an identity source the tool can verify, and
+    `approval.checked` stays `"policy"` — the flip is a public-envelope change
+    and is not made as a side effect of this._
 
 22. **Navigation is a SHAPE, not a length** (2026-08-22, issue #55 — the first
     DELIBERATE divergence from the converted oracle). `classify()` labelled any
@@ -1221,7 +1232,9 @@ gateway` package, serve-by-spawn) is superseded._
     an edit bumped `generated.at` is UNVERIFIED until change-control
     verification lands — the checker compares two authored instants and no
     more, and every envelope says `checked: policy` rather than implying
-    otherwise. Actor ids are published with the content, exactly as a commit
+    otherwise. _(Verified since 2026-09-02 for the STAMP, not the approver:
+    `ksor-generated-stale`, decision 21's revision of that date; the envelope
+    still says `checked: policy`.)_ Actor ids are published with the content, exactly as a commit
     author is in a public repository. Stale documents leave the open web at
     the next build, so a record with `stale_after` dates needs a scheduled
     rebuild.
