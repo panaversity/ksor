@@ -1,9 +1,9 @@
 /**
  * Mutation tests for the body gates: a conversion that follows the skill
  * passes every gate for its fixture, and each careless act — smoothing the
- * two statements into one, misreading the figure, dropping a row, keeping
- * the footer, inventing a currency — turns exactly the gate built for it red
- * and no other. The fixture is under test here as much as the skill: a gate
+ * two statements into one, misreading the figure, dropping a row, dropping a
+ * thousands separator, keeping the footer, inventing a currency — turns
+ * exactly the gate built for it red and no other. The fixture is under test here as much as the skill: a gate
  * that fails a good conversion is a wrong gate.
  */
 
@@ -154,13 +154,14 @@ describe("expense-policy-hard.pdf: the body gates", () => {
     expect(failed(bodyGates(hard, HARD_GOOD))).toEqual([]);
   });
 
-  it("carries three gates the clean fixture does not", () => {
+  it("carries four gates the clean fixture does not", () => {
     const clean = names(bodyGates(kase("expense-policy.pdf"), CLEAN_GOOD));
     const extra = names(bodyGates(hard, HARD_GOOD)).filter((n) => !clean.includes(n));
     expect(extra).toEqual([
       "both statements of the payment window survive (10 working days; ten (10) business days)",
       "the misreadable pair survives distinct (Zurich: 1,250 beside 1.250)",
       "every row of the rates table survives (five cities)",
+      "the thousands separators survive (2,500; 1,100; 1,000)",
     ]);
   });
 
@@ -189,6 +190,21 @@ describe("expense-policy-hard.pdf: the body gates", () => {
       "trimming 1.250 to 1.25",
       (s) => s.replace("1.250", "1.25 "),
       "the misreadable pair survives distinct (Zurich: 1,250 beside 1.250)",
+    ],
+    [
+      "dropping the separator from the director threshold (2,500 → 2500)",
+      (s) => s.replace("above 2,500", "above 2500"),
+      "the thousands separators survive (2,500; 1,100; 1,000)",
+    ],
+    [
+      "misreading the separator as a decimal point (2,500 → 2.500)",
+      (s) => s.replace("above 2,500", "above 2.500"),
+      "the thousands separators survive (2,500; 1,100; 1,000)",
+    ],
+    [
+      "dropping the separator from a monthly cap (1,100 → 1100)",
+      (s) => s.replace("| 1,100       |", "| 1100        |"),
+      "the thousands separators survive (2,500; 1,100; 1,000)",
     ],
     [
       "dropping a row of the table",

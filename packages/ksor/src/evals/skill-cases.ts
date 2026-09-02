@@ -96,6 +96,24 @@ const CURRENCY = /[$£€]|\b(USD|GBP|EUR|CHF|PLN|CZK|PKR|INR|AUD|CAD)\b/;
 const STATEMENT_A = "10 working days";
 const STATEMENT_B = "ten (10) business days";
 const CITIES = ["berlin", "vienna", "zurich", "prague", "warsaw"] as const;
+/**
+ * The figures the source writes with a thousands separator, other than
+ * Zurich's cap (the pair gate owns that one). `verify.mjs` catches a bare
+ * `2500` at the act level — "10,000 and 10000 are different claims" — but the
+ * unit tier cannot run it, and a decimal-point misread (`2.500`) is a figure
+ * a European eye writes without noticing; both forms are named here so the
+ * mutation that produces them has one gate to turn red. `1,000` has no dotted
+ * form to forbid: `1.000` is the source's own hardship factor.
+ */
+const SEPARATED = [
+  { n: "2,500", wrong: ["2500", "2.500"] },
+  { n: "1,100", wrong: ["1100", "1.100"] },
+  { n: "1,000", wrong: ["1000"] },
+] as const;
+
+/** Does `form` occur in `folded` as a whole figure — not inside 12,500 or 1,000.5? */
+const figure = (folded: string, form: string): boolean =>
+  new RegExp(`(?<![\\d.,])${form.replace(".", "\\.")}(?![\\d.,])`).test(folded);
 
 export const CASES: readonly SkillCase[] = [
   {
@@ -114,7 +132,7 @@ export const CASES: readonly SkillCase[] = [
     // the payment window stated twice and differently, §2 and §5, which the
     // skill says stays two statements, flagged; `1,250` beside `1.250` on one
     // row, where a misread makes them equal and verify.mjs — a substring
-    // check, and both strings ARE in the source — cannot tell; a threshold
+    // check, and both strings ARE in the source — cannot tell; three figures
     // with a thousands separator; and a running footer on both pages.
     fixture: "expense-policy-hard.pdf",
     extraction: "expense-policy-hard.txt",
@@ -128,6 +146,11 @@ export const CASES: readonly SkillCase[] = [
       const flagged = /open question/i.test(body);
       const zurich = f.indexOf("zurich");
       const missingCities = CITIES.filter((c) => !f.includes(c));
+      const separators = SEPARATED.map(({ n, wrong }) => ({
+        n,
+        present: f.includes(n),
+        wrong: wrong.find((form) => figure(f, form)),
+      }));
       return [
         {
           name: `both statements of the payment window survive (${STATEMENT_A}; ${STATEMENT_B})`,
@@ -145,6 +168,17 @@ export const CASES: readonly SkillCase[] = [
           name: "every row of the rates table survives (five cities)",
           pass: missingCities.length === 0,
           saw: missingCities.length === 0 ? "all five" : `missing ${missingCities.join(", ")}`,
+        },
+        {
+          name: `the thousands separators survive (${SEPARATED.map((s) => s.n).join("; ")})`,
+          pass: separators.every((s) => s.present && s.wrong === undefined),
+          saw: separators
+            .map(
+              (s) =>
+                `${s.n}: ${s.present ? "present" : "MISSING"}` +
+                (s.wrong === undefined ? "" : ` (saw ${s.wrong})`),
+            )
+            .join("; "),
         },
       ];
     },

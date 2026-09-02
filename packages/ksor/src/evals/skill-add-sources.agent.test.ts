@@ -9,7 +9,8 @@
  * `claude -p` the prompt tutorial 2 hands the reader. For the baseline arm
  * the skill is removed from both trees first. Nothing else differs. The agent
  * works inside the scaffold with file tools and a shell, bounded by a dollar
- * budget, and what it leaves behind is graded.
+ * budget, and what it leaves behind is graded. One row at a time when that
+ * is all the budget allows: `pnpm test:agent -t scanned` runs one fixture.
  *
  * WHAT GATES, and what only reports — the three-class split the Testing
  * contract already uses, applied here rather than invented:
@@ -43,7 +44,6 @@
  * (CI: `--bare`, no OAuth) or, on a developer's machine, on a logged-in
  * `claude`; without either it prints that it was skipped, the way the
  * database and live-provider tiers do. Honest absence, never silent weakness.
- * One fixture at a time: `pnpm test:agent -t scanned` runs one row.
  *
  * WHAT THREE ARMED RUNS SHOWED (2026-09-02, `SKILL_BASELINE`): on a clean
  * two-page PDF, both arms pass every deterministic gate. The skill's value was
