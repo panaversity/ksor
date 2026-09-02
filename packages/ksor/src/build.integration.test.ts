@@ -1005,9 +1005,19 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
   function bundleRepo(): string {
     const root = repo();
     const boardPay = path.join(root, "knowledge/policies/board-pay.md");
+    // The body of a STABLE concept is being edited after it was committed
+    // stable, so R23 (`ksor-generated-stale`, #256) requires the edit to
+    // advance `generated.at` — and `ksor.approval.at` may not precede it. This
+    // fixture is the rule's own subject, not an exception to it: the two
+    // instants move exactly as an author's would.
     writeFileSync(
       boardPay,
-      `${readFileSync(boardPay, "utf8")}\n![The board diagram](board-diagram.png)\n`,
+      `${readFileSync(boardPay, "utf8")
+        .replace("at: 2026-08-20T09:00:00Z", "at: 2026-08-23T09:00:00Z")
+        .replace(
+          "at: 2026-08-21T09:00:00Z",
+          "at: 2026-08-23T10:00:00Z",
+        )}\n![The board diagram](board-diagram.png)\n`,
     );
     writeFileSync(
       path.join(root, "knowledge/policies/board-pay.summary.md"),
