@@ -1,7 +1,11 @@
 ---
-status: ratified
-date: 2026-08-28
-claim: "`ksor dev` runs a local knowledge site with hot reload and live governance checks, proxying the MCP surface when `ksor serve` is running."
+status: draft
+claim: >-
+  `ksor dev` runs a local knowledge site with hot reload and live governance
+  checks, proxying the MCP surface when `ksor serve` is running.  Every refusal
+  it prints carries the same slug and remedy text `ksor build` would print, so
+  an adopter learns the governance vocabulary in the loop where mistakes are
+  cheap — not in CI, after the commit is pushed.
 evidence:
   - "`packages/ksor/src/dev/index.ts`: the dev command entry point."
   - "`packages/ksor/src/dev/server.ts`: spawns `next dev` for `system/site` and watches `knowledge/`."
@@ -55,7 +59,7 @@ Exit codes:
 - `1` — a startup precondition failed (`ksor-instance-missing`,
   `ksor-dev-no-site`). The slug is the first line on stderr.
 - `2` — not implemented in this ksor version (reserved; the command is
-  implemented as of the ratified date above).
+  implemented as of the proposed date above).
 - `3` — environment failure: `next` not found, the site port already taken by
   another process, or the watcher could not be created.
 
@@ -75,6 +79,30 @@ can ship a broken link to a reviewer without a word of warning. `ksor dev`
 collapses the loop: one command, live site, live rules, one URL for humans and
 agents alike.
 
+## Overlap with `pnpm dev`
+
+The scaffold already ships `"dev": "pnpm -C system/site dev"`, which runs the
+Next.js dev server without governance checks. `ksor dev` does the same three
+things `pnpm dev` does — start the site, watch for changes, reload — plus two
+that `pnpm dev` cannot do: run the record checker on every save and proxy the
+MCP surface from a running `ksor serve`.
+
+Two commands that both mean "run the site locally" is the one-obvious-way
+problem (working rule 8), so the intent is settled here:
+
+- **`pnpm dev` stays as-is.** It is the scaffold's escape hatch — no Node
+  prerequisite beyond what the site already needs, no record checker, no
+  `@panaversity/ksor` dependency required to run it. An adopter who has not
+  climbed to the served rung and does not need live governance still uses it.
+- **`ksor dev` is the recommended way to author a governed record.** It
+  replaces `pnpm dev` in the authoring loop once the adopter has the CLI
+  installed. The spec does not prescribe removing the scaffold script; the
+  decision belongs to the adopter, who owns the scaffold (decision 4).
+
+An adopter who runs `ksor dev` does not also need `pnpm dev` — the site is the
+same `next dev` process. An adopter who runs only `pnpm dev` gets a working
+site without governance; the gap is visible and intentional, not a bug.
+
 ## Design notes
 
 - The dev server reuses `loadRecord` + `checkRecord` from
@@ -83,6 +111,14 @@ agents alike.
   dev mode is `checkRecord(record, { mode: "check", ledgerBaselines })` with the
   ledger baseline taken from `build.lock.json` when present (so the
   departed-authority escape hatch works in dev too).
+- Refusals are rendered by `formatRefusal` — the same formatter `ksor build`
+  uses — so every refusal prints the path, the slug, the why, and the fix in
+  the identical shape the build and CI produce. An adopter who learns the
+  vocabulary in the dev loop does not re-learn it in CI, and a skill or a
+  scripted agent that greps for `problem:` slugs in dev output will find the
+  same text the build would print. This is a product argument: the dev loop is
+  the cheapest place to learn the governance vocabulary, and it should be no
+  more expensive to learn there than in CI.
 - `next dev` is spawned, not imported: the site is a separate Next.js app in
   `system/site`, and dev mode must survive a site that fails to compile (the
   author is mid-edit). The parent relays `next` stdout/stderr to its own.
