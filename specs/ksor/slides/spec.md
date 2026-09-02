@@ -150,9 +150,12 @@ RISES rather than sinking — a darker stage measured L 4.4 against the page's
    (`ksor-slides-no-embed`), and with one it frames that url. _Corrected
    2026-09-02: this read "an unknown host renders as a link rather than an
    empty frame". The deriver returns null for one (`slides-embed.test.ts`,
-   "an unknown host is not an error"), but the collection schema
-   (`source.config.ts:130`) turns that null into a refusal, so a build never
-   ships the link-only deck this clause described._
+   "an unknown host is not an error"), but `SlidesSchema`'s own `superRefine`
+   turns that null into a refusal (`lib/slides.ts:106-119`, the same
+   `superRefine` that raises `ksor-slides-empty`, `-two-sources` and
+   `-insecure`), and that schema is what the collection validates every deck
+   against (`source.config.ts:125-130`) — so a build never ships the link-only
+   deck this clause described._
 
 ## 7 · Status against acceptance (2026-09-02)
 

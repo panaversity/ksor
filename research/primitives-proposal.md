@@ -11,8 +11,9 @@ last_updated: 2026-09-02
 > section its own way. It is kept as the evidence trail; AGENTS.md → Decisions
 > is the authority wherever the two disagree.
 >
-> - **Landed.** §1's verbs: `init`, `dev`, `build` and `serve` all ship
->   (`docs/status.md`), and `serve` arrived as the graduated rung of decision 11
+> - **Landed, except one verb.** Of §1's four, `init`, `build` and `serve`
+>   ship; `ksor dev` is designed and not implemented — it reports so and exits
+>   `2` (`docs/status.md`). `serve` arrived as the graduated rung of decision 11
 >   — the predecessor's content kernel converted whole, behind
 >   `ksor serve`, speaking MCP over stateless Streamable HTTP (decision 13).
 >   §6's envelope requirement is met in the form the door serves: an answer is

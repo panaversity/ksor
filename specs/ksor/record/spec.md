@@ -39,7 +39,8 @@ hold; every timestamp in that revision is an instant.
 The scaffold `.gitignore` reads `.ksor/*`, `!.ksor/governance.yaml`,
 `!.ksor/people.yaml`, `!.ksor/takedowns.yaml` (the directory form `.ksor/`
 cannot be negated — verified against git). _2026-09-02: the phone book's
-negation was missing from this sentence; it has been emitted since 0.0.53._ The bundle root is `knowledge/`, so a bare OKF
+negation was missing from this sentence; it has been emitted since 0.0.52
+(`1e60b9d`, the commit that added the file, added the negation with it)._ The bundle root is `knowledge/`, so a bare OKF
 consumer handed that directory sees a conformant bundle and nothing of the
 site or the system. Identity: a concept's id is its bundle-relative path
 without `.md` (OKF §2); ksor's `stable_id` is `knowledge/<id>`. `sor_id` is

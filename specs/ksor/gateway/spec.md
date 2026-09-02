@@ -189,15 +189,20 @@ read green — a shape this repo has already had to fix twice.
 ## Acceptance
 
 _Ratified 2026-09-02: every line below has a suite in the tree, walked against
-the built package at this date. 1 `content-gateway/src/floor-guarantees.test.ts`;
+the built package at this date, EXCEPT 6 — which is a live walk recorded on
+2026-08-23 and was not re-walked here; its mechanical half (rename, a dropped
+tool, a floor-less boot refused) is held by
+`ksor/src/gateway-file.integration.test.ts:111,137`, and what rests on the
+recorded walk alone is the part no suite can reach: identical provenance from a
+real served record. 1 `content-gateway/src/floor-guarantees.test.ts`;
 2 `ksor/src/default-gateway-drift.integration.test.ts` (including "needs no
 dependency the scaffold does not have"); 3
 `ksor/src/served-surface.integration.test.ts` against
 `__fixtures__/served-surface.golden.json` — whose `tools` array measures
 17,394 chars and its three rows 8,152 / 3,552 / 5,686, the figures above; 4
 and 5 `ksor/src/gateway-file.integration.test.ts` (deletable, identical
-surface; the three slugs by name); 6 the 2026-08-23 live walk recorded in
-decision 23; 7 `content-gateway/src/gateway-notice.test.ts`. The example
+surface; the three slugs by name); 7
+`content-gateway/src/gateway-notice.test.ts`. The example
 registration's imports all resolve from `@panaversity/ksor/gateway`
 (`content-gateway/src/gateway-api.ts:20-36`)._
 
