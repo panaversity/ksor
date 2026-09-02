@@ -1162,3 +1162,57 @@ describe("the agent tier uses claude's own login, not an API key", () => {
     expect(wf.includes("ANTHROPIC_API_KEY")).toBe(false);
   });
 });
+
+/**
+ * …and every tutorial is REACHED by one of those links.
+ *
+ * The rule above holds the links that exist; it says nothing about the tutorial
+ * that has none. So a fourth tutorial landed while all three READMEs still read
+ * "The three so far, in reading order" over a two-row table, and nothing went
+ * red — on the surface an evaluator meets first, and in the package README that
+ * ships in the npm tarball (critical rule 3). The direction that was missing is
+ * this one: start from the FILES, and require each to be linked.
+ *
+ * A pointer stub is not a tutorial: it carries no `#` heading, only a line
+ * redirecting to the file that replaced it, and it exists precisely so an old
+ * link keeps resolving. The heading is what separates the two.
+ */
+describe("every tutorial is listed where readers look for the list", () => {
+  const READMES = ["README.md", "packages/ksor/README.md", "docs/tutorials/README.md"] as const;
+
+  const tutorials = readdirSync(path.join(repoRoot, "docs/tutorials"))
+    .filter((f) => /^\d\d-.*\.md$/.test(f) && f !== "README.md")
+    .filter((f) => read(`docs/tutorials/${f}`).trimStart().startsWith("# "))
+    .sort();
+
+  it("there are tutorials to find", () => {
+    expect(tutorials.length, "docs/tutorials holds numbered tutorials").toBeGreaterThan(0);
+  });
+
+  it.each(READMES)("%s links every one of them", (file) => {
+    const text = read(file);
+    // The index links its siblings relatively; the two outer READMEs link the
+    // path (relative from the root, absolute as a GitHub blob URL from npm).
+    const missing = tutorials.filter(
+      (f) => !text.includes(`docs/tutorials/${f}`) && !text.includes(`(./${f})`),
+    );
+    expect(
+      missing,
+      `${file} does not link: ${missing.join(", ")} — add a row, and count the list again`,
+    ).toEqual([]);
+  });
+
+  /**
+   * The count in the prose is part of the list. "The three so far" over four
+   * rows is the same defect one sentence earlier, and it is what a reader
+   * skims instead of counting.
+   */
+  it.each(READMES)("%s counts them correctly, if it counts them at all", (file) => {
+    const words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight"] as const;
+    const claim = /The (\w+) so far/.exec(read(file));
+    if (claim === null) return;
+    expect(claim[1], `${file}: "${claim[0]}" against ${tutorials.length} tutorials`).toBe(
+      words[tutorials.length] ?? String(tutorials.length),
+    );
+  });
+});
