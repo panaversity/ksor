@@ -6,7 +6,9 @@ question and had it answer **from that document**, naming which document and
 which publication the answer came from.
 
 Every command and every output below was run on 2026-09-01 and pasted as it
-appeared. Nothing here is a sketch.
+appeared. Nothing here is a sketch. One block is the exception and says so
+where it appears: `ksor serve`'s boot report gained a `generation` line the day
+after this walk, so step 8 shows the shape the current release prints.
 
 **Part 1 needs nothing but [Node 24+](https://nodejs.org/en/download).** Part 2
 needs two more things, both free, and says so before it asks.
@@ -302,8 +304,16 @@ ksor serve · handbook
   serving     http://127.0.0.1:8080/mcp
 ```
 
-Read that `abstain` line — it is telling you the truth about what this record
-cannot do yet. We come back to it at the end.
+_This is the one block on the page that was not captured on 2026-09-01: the
+`generation` line landed the day after, and every label moved two columns to
+make room for it. The values are the walk's own — generation 1, the seven nodes
+step 7 published, and the commit its `source:` line names._
+
+The `generation` line says what the door is serving. It would read
+`NONE — nothing published; run npm run refresh` if you had started the server
+before step 7, because serving does not publish. And read that `abstain` line —
+it is telling you the truth about what this record cannot do yet. We come back
+to it at the end.
 
 ### 9. Point your agent at your own record
 
