@@ -1,5 +1,172 @@
 # @panaversity/ksor
 
+## 0.0.59
+
+### Patch Changes
+
+- 4d7dad7: The agent tier authenticates through `claude`'s own login, never an API key.
+
+  Where the repository needs model inference — today, the skill evals — it uses
+  `claude -p`: a developer's logged-in CLI locally, and in CI a long-lived token
+  from `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`. The tier no longer reads
+  `ANTHROPIC_API_KEY` and no longer passes `--bare`, because bare mode does not
+  read the OAuth token (per the official headless docs) and would have quietly
+  fallen back to needing the key it is not supposed to have. A guard holds both.
+
+  The pending owner action changes with it: a `CLAUDE_CODE_OAUTH_TOKEN` repository
+  secret, not an API key. Test infrastructure only; nothing an adopter installs
+  behaves differently.
+
+- 5bf3733: `ksor build --bundles` is implemented (issue #158). It used to parse the flag
+  and exit `2`; it now runs an ordinary build and additionally writes one OKF
+  bundle per viewer under `.ksor/out/bundles/<viewer>/` — `public`, and
+  `[public, X]` for each audience X your `.ksor/governance.yaml` registers. A
+  bundle holds exactly what that viewer's machine surfaces publish: the admitted
+  concepts (stable, effective, unexpired, not taken down, audience overlapping),
+  their companions, the assets their bodies reference, and every `index.md`
+  regenerated for that filtered tree with `okf_version` at the root. No byte of a
+  concept excluded for AUDIENCE reaches it — not a title, a path, a description
+  or an asset — because the record checker refuses a link that widens audience
+  before a bundle is planned. A document excluded for a lifecycle or ledger
+  reason is different, and deliberately: bodies are copied verbatim, never
+  rewritten, so a link to a draft or a taken-down document keeps that path and
+  the build reports the dangling link instead of editing your prose. Any OKF
+  consumer reads a bundle with no ksor in the loop. The directory is replaced on
+  every run, a copy of `build.lock.json` is written beside the bundles, and the
+  scaffold's `.ksor/*` rule already gitignores it.
+
+  `build.lock.json` gains `bundles[]` — one `{ viewer, sha256, files }` per
+  viewer, recorded on EVERY build whether or not the flag was passed, so a
+  bundle directory can be matched to the publication that produced it. The
+  digest is sha256 over the JSON of the bundle's sorted `[path, sha256]` pairs.
+  `build_id` is unchanged: the bundles are a function of what it already
+  hashes.
+
+  **Upgrading:** a lock written by an earlier ksor lacks the key, so `ksor build`
+  refuses it as `ksor-lock-invalid` and says to delete it. It does NOT regenerate
+  one it cannot read — the lock is also a takedown baseline, and a baseline
+  nothing can parse is one that quietly holds nothing. So the first `pnpm build`
+  after upgrading (`ksor build && <site build>`, which is the deploy command too)
+  is red until the stale `build.lock.json` is gone. `ksor migrate` now offers that
+  deletion like any other change it carries, so the four steps in
+  `docs/upgrading.md` cover it; deleting the file by hand and rebuilding does the
+  same thing.
+
+  Two new refusals, both raised on EVERY build — not only under `--bundles` —
+  because the lock lists `bundles[]` either way and a digest for a directory the
+  tool refuses to write would be a provenance claim about something that cannot
+  exist. `ksor-audience-identifier-invalid`: a registered audience that cannot
+  name a bundle directory (`../x`, `.hidden`, `-x`, `internal.`, or
+  `build.lock.json`, whose name the lock copy beside the bundles already holds) —
+  an identifier must start with a letter or a digit, may then use letters, digits,
+  `-`, `_` and `.`, and may not END in `.`, which Windows strips from a path
+  segment, so `internal.` and `internal` would be one directory there.
+  `ksor-audience-identifier-collides`: two registered audiences differing only in
+  case, such as `internal` and `Internal`, which are two viewers in your policy
+  and ONE directory on macOS and Windows — the second bundle would merge into the
+  first, leaving a directory that holds concepts its viewer may not read.
+
+- d896f67: The skill harness gains two fixtures a baseline plausibly gets wrong, and is
+  parametrised over a CASES table. Nothing an adopter installs changes: the
+  fixtures, the graders and the baseline live under `src/evals/`, outside the
+  tarball.
+
+  Three armed runs on the clean two-page PDF had shown both arms — the agent with
+  `add-sources` and the agent without it — passing every deterministic gate; a
+  harness that cannot tell the arms apart is measuring the fixture, not the
+  skill. So `expense-policy-hard.pdf` is built out of the acts a careless
+  conversion fails a deterministic gate on: a five-row per-diem table (a dropped
+  row is a value `verify.mjs` cannot see missing), the payment window stated
+  twice and differently — "10 working days" in §2, "ten (10) business days" in §5
+  — which the skill says stays two statements, flagged; `1,250` beside `1.250` on
+  one row, where a misread makes them equal and a substring check cannot tell; a
+  threshold with a thousands separator; and a running footer on both pages.
+  `scanned-policy.pdf` is the same policy rasterised — two pages of picture, no
+  text layer — for which the skill's instruction is to stop and tell the owner.
+
+  `skill-cases.ts` is the table: fixture, prompt, the outcome class a correct run
+  belongs to (`converted` or `refused`), and the gates that apply. Its body
+  gates are pure functions, so a unit suite mutation-tests each one — smoothing
+  the two statements, misreading the figure, dropping a row, dropping or
+  misreading a thousands separator, keeping the footer, inventing a currency —
+  and watches exactly the gate built for it go red. The agent suite also asserts
+  the fixtures are what they claim: each committed `.txt` is its PDF's
+  `pdftotext -layout` extraction, and the scanned PDF yields only whitespace. For
+  the scanned case the WITH arm's correct outcome — wrote nothing, named the
+  missing text layer — is the pass; what the baseline did is reported.
+
+  Not run here: the armed arms. `SKILL_BASELINE` carries no row for either new
+  fixture; the hard fixture's first armed run is pending and its row lands with
+  the run that produces it.
+
+  RESULTS
+
+- 3ba4acc: `ksor-generated-stale`: the first change-control verification (KSP R23). A `stable` document whose body differs from a committed version that was `stable` is now refused by `ksor build` and `ksor ingest` unless its `generated.at` is strictly LATER than that version's (the scaffold's `pnpm check` stays the format gate and does not run it), naming the commit whose body differs, its instant and the stamp. Leaving the stamp alone and moving it BACKWARD are refused alike: neither advances it, and a backdated stamp leaves the old approval post-dating the new text — the exact reading R23 exists to prevent. The fix it prints is the whole of it: set `generated.at` to an instant after the edit, then re-approve, because `ksor.approval.at` may not precede it (`ksor-generated-after-approval`, unchanged). Only the body is compared, so adding a `verified` entry or re-approving is not an edit; a document stable for the first time, or renamed, has no history to compare and passes; every committed version is read, so an edit committed without a bump is refused on a clean tree too.
+
+  Where history cannot be read — no repository, no commit yet, a container without `.git`, a shallow clone — each verb prints `change-control: not checked` (or how many versions a shallow clone let it read) beside its verdict instead of passing. Who approved is still checked against the policy alone: every envelope keeps `approval.checked: "policy"` until R22/R25 have an identity source to verify against.
+
+- db39c11: Switch Next.js telemetry off in the scaffold, and make the README describe the
+  scaffold that ships.
+
+  **Nothing phones home — now true of the artifact, not only of the pitch.**
+  Next.js ships with anonymous usage telemetry ON, so every site `ksor init`
+  emitted posted to `telemetry.nextjs.org` on its first `build` and `dev` while
+  the README promised nothing phones home. The site's two scripts now run next
+  through `system/site/next-no-telemetry.mjs`, a dependency-free wrapper that
+  hands it an environment carrying `NEXT_TELEMETRY_DISABLED=1`; that is where
+  every package manager's root script and the deploy's `pnpm build` end up, and
+  `.env.example` says so. It is the process environment rather than
+  `next.config.mjs` on purpose: read in 16.3.3's source, `next build` constructs
+  its telemetry after loading the config, but the `next dev` parent process never
+  loads the config and still records a session event on exit — a config-time
+  assignment would have left that one in place with nothing red. And it is a file
+  rather than a `NEXT_TELEMETRY_DISABLED=1 next …` prefix in `package.json`
+  because that prefix is POSIX shell syntax: cmd.exe refuses it under pnpm and
+  npm on Windows, a platform CI walks `ksor init` on, so the prefix would have
+  traded a quiet leak for a loud break. An existing scaffold gets the switch from
+  `ksor migrate --write-site`, which offers the wrapper and the two scripts as a
+  diff.
+
+  **The README no longer contradicts the tree.** Five sentences described a
+  product that does not ship, each now corrected and held by a test against the
+  thing that decides it: `pnpm serve` is `ksor serve` alone (provisioning is
+  `pnpm provision`, publishing is `pnpm refresh`, and ingest reports `unchanged`
+  only when documents, governance, toolchain AND source commit all match the
+  serving generation); the gate paragraph names the browser, Postgres, Windows,
+  npm/bun and container acceptance CI has run for weeks instead of promising
+  them, two-way against the workflow's job names; an authored `log.md` is refused
+  (`ksor-reserved-name`) and never generated, while `index.md` is generated by
+  `ksor build` and drift-checked; the hello-world tutorial row says Part 2 needs a
+  free Postgres and a free embedding key (the package README's copy too); and the
+  project-structure tree is labelled abridged, with every path it names asserted
+  to exist in a scaffold freshly emitted by the built CLI.
+
+- 1c336d2: Honest absence on the served rung: the door, the write plane and `ksor takedown` now say what is missing instead of coming up green about nothing.
+
+  - **`ksor serve` names what it is serving.** The boot block gains a `generation` line — `generation  NONE — nothing published; run pnpm refresh` on a record that was provisioned and never ingested (the state `ksor init`'s own next steps leave an adopter who skipped the publish step), or `generation  1 · 7 nodes · source <sha>` once something is. The remedy is spelled for the manager that ran `serve` (`npm run refresh`, `bun run refresh`, or `ksor ingest --flip` with no manager in the loop). `/health` carries the same `generation` field, re-read on every readiness probe, so a `refresh` after boot shows without a restart. The block's value column moved two characters right to fit the longer label.
+  - **A missing provider key opens with its slug.** `ksor serve`, `ksor ingest` and `ksor calibrate` exit 3 as before, but the first stderr line is now `error: ksor-provider-key-missing` — the stable name every other refusal opens with — followed by the same sentence naming the variable.
+  - **`search` on an empty record answers `reason: "unpublished"` before it embeds.** The question "is anything published?" is now asked first, so a never-ingested record reports its own emptiness rather than the provider's outage, and the provider is not paid for a question no row could match.
+  - **`ksor takedown --ledger` never resolves a DSN**: it reads the committed `.ksor/takedowns.yaml` on every rung, including the record `ksor init` emits (which names `KSOR_DB_URL` from birth). `--list` reads the door's denylist rows when the DSN is set and otherwise the ledger's denials, each labelled `not applied (no database)`. A denial itself still needs a named actor and, on a record whose DSN is unset, either the DSN or `--file-only`.
+  - **`ksor calibrate --help` prints the whole verb** — both invocation forms, the `--check` paragraph, and the description — instead of the first form's flags alone, and a heading now matches the verb WHOLE — so `ksor g --help`, a verb that does not exist, prints the whole usage rather than `grant`'s block under exit 0. Docs corrected: the scaffold README names `--ooc-file` for scope-adjacent out-of-corpus questions, and `ingesting.md` says the zero-LLM calibration door is not zero-key.
+
+- babf416: Five tests now hold what they claimed. Nothing served changes; what changes is what a green run proves.
+
+  - **The audit-degraded signal is held on every serving arm, and on the wire.** `search`'s hit arm, its abstained arm, `read` and `outline` each answer `audit: "degraded"` when their §7 audit row is shed, and drop the field once it lands — asserted through real Postgres, with the landed state proven by the rows themselves. The three tool output schemas are driven with the real handlers' replies in both states, so a field the service emits and the schema refuses can no longer pass unseen.
+  - **Guard rule 12 evaluates each suite's own scratch-database expression** into the name it will mint and hands THAT to the reaper's parser, instead of a literal the guard wrote for itself. `randomBytes(2)` — both halves present, four hex characters where the grammar wants six — now refuses naming the evaluated name; `["ksor", …].join("_")` builders are read too.
+  - **`sync-status-version` refuses a prerelease by name** (`ksor-status-version-prerelease`): a snapshot such as `0.0.1-dev-…` never reaches `docs/status.md`, which names only what a plain `npm install` resolves. Its core is a pure function with a colocated unit test.
+  - **`probe-deadline` runs on a fake clock in the unit tier** — the file went from 8.2s to 0.3s — and asserts the deadline fires AT the budget rather than within two seconds of it. One real-clock case, a pool against a socket that accepts and never speaks, lives in the db tier.
+  - **Every `KSOR_E2E`-gated browser suite says how to run it** — the playwright install from `packages/ksor`, then the `KSOR_E2E=1` command — and a root `pnpm test:e2e` runs all three. The set is now read from the tree rather than kept by hand in three places: a suite that gates on `KSOR_E2E` and is missing from `pnpm test:e2e` or from CI fails by name, as does a skip note that prints a command for a different file.
+
+- 37b57c3: Tutorial 3, _Governance in practice_ (`docs/tutorials/03-governance-in-practice.md`), walked end to end on a scaffold with no database and no key and pasted as it ran: a second audience (`internal`) and what the public and employee site builds each put in `llms.txt`; a `verified` entry and the trust tier it moves; `ksor.effective_from` and `stale_after` under `ksor build --as-of`, with the lock diffed at one instant twice and at two instants; a deprecated document and its successor as the page shows them; a takedown written to the ledger with `--file-only`, the `ksor-takedown-dangling` refusal on a renamed file, and a revocation. Fourteen refusals fire — eleven on the path it walks, three on branches it names — each identified by its slug and most pasted with the why and fix the CLI prints. Both README tutorial tables gain a row for it, so the npm package page lists all four.
+
+  Two tests grow with it: `skill-triggers.integration.test.ts` accounts for every prompt the tutorial gives (one fires `add-sources`; the rest are governance acts no skill mediates), and `docs-truth.integration.test.ts` holds the new file to the rule that a printed `build_id` says what moves it.
+
+- 0c51d0b: Tutorial 4, _Serve it — with a floor_, joins the series (`docs/tutorials/04-serve-it.md`): the served rung walked end to end on the three-document record tutorial 2 leaves behind — the `generation NONE` boot block on a provisioned-but-unpublished door, `refresh`, two `ksor calibrate` measurements (the far-domain one that prints a floor and the scope-adjacent one that refuses to and finds an unwritten rule), the pasted floor, three questions from a real coding agent with the near-miss refused, `calibrate --check`, and a takedown between two questions. Every output pasted as it appeared.
+
+  The package's own tests grow with it: the skill-trigger accounting now covers tutorial 4's prompts (a new prompt fails until someone says which skill answers it), and the `build_id` proximity rule holds the new document too.
+
+  **Fixed while writing it: `ksor calibrate` prints the built-in-probe caveat again.** A run with no `--ooc-file` scores against the twenty shipped far-domain probes, and the caveat that says so — the one line standing between an operator and a floor blessed by questions nobody would ever bring to their record — was suppressed, because the run was classified as having been given probes. Anyone who calibrated without `--ooc-file` was told the margin was measured against supplied probes when it was not; the recommended floor is unchanged, the warning above it is not. Both READMEs list tutorial 4, and hello world's `ksor serve` block is re-pasted in the shape the door prints today.
+
 ## 0.0.58
 
 ### Patch Changes
