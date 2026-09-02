@@ -125,13 +125,14 @@ answering from your own document and naming which document and which
 publication it came from. Every command and output in it was run and pasted as
 it appeared.
 
-The four so far, in reading order — pick by what you want from it:
+The five so far, in reading order — pick by what you want from it:
 
 | | read this if |
 | --- | --- |
 | [00 · Introduction](docs/tutorials/00-introduction-to-ksor.md) | you want to understand why this exists — no technical background needed |
 | [01 · Hello world](docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Part 1 needs only Node; Part 2 adds a free Postgres and a free embedding key |
 | [02 · Make it yours](docs/tutorials/02-make-it-yours.md) | you finished hello world and want a record that is only yours — a file in, a person's knowledge in, the samples out |
+| [03 · Governance in practice](docs/tutorials/03-governance-in-practice.md) | you have a record of your own and want to govern it — a second audience, a review, an effective date, a takedown and the refusals that fire |
 | [04 · Serve it — with a floor](docs/tutorials/04-serve-it.md) | you want the headline claim by hand — measure the line under which your record declines, then watch an agent be refused |
 
 **Next, open the project in the coding agent you already use** (Claude Code,
