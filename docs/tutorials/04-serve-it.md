@@ -21,7 +21,12 @@ record on the machine this was captured on — `ksor serve` refused it by name a
 suggested `KSOR_MCP_PORT`, so that is what was used. On your machine leave the
 variable off and read `8080` wherever this says `8180`. JSON envelopes are
 pretty-printed and trimmed to the fields under discussion, and the agent's
-replies are re-wrapped to this page's width; nothing is reworded.
+replies are re-wrapped to this page's width; nothing is reworded. A console
+block that begins or ends with `...` is one you are joining mid-stream —
+`npm run refresh` runs three commands and prints all of them, and the blocks
+below show the half under discussion. One line, marked where it appears, was
+added after the walk; it is the only line on this page that was not captured
+from the run.
 
 **You need:** the `handbook` from tutorial 2, with the `.env` you wrote in
 hello world — `KSOR_DB_URL`, `GEMINI_API_KEY`, `KSOR_AUTH=disabled-local` —
@@ -127,6 +132,7 @@ curl -s http://127.0.0.1:8180/health
 </details>
 
 ```
+...
 run 1: building generation 1 (embed gemini:gemini-embedding-001/d1536/RETRIEVAL_DOCUMENT)
 structure: 4 nodes, 3 sources, 6 chunks; carried 0, pending 6
 embedding 6 pending chunks (batch 32) ...
@@ -233,6 +239,7 @@ free key — but not zero-key, because the questions are still embedded.
 ```
 measured on generation 1 (served), model gemini-embedding-001, door: queries-file
 CAVEAT: --queries-file floors are measured on human/gold-derived queries — section-weighted eval targets, NOT per-node passage samples — so this floor's low tail is a different distribution than the synthesized door's; record 'door: queries-file' beside the number and never compare the two doors' floors as interchangeable.
+CAVEAT: the out-of-corpus probes are the BUILT-IN set, which is entirely far-domain — a shipped set cannot be scope-adjacent, because adjacency depends on a corpus it has never seen. Far-domain probes score low against anything, so this margin is an OVER-estimate and a floor it blesses may still answer near-misses just outside your scope. Re-run with --ooc-file naming questions a reader might plausibly ask that this record does NOT cover, and trust that verdict over this one.
 AURC = 0.356  (lower = better separation)
 separation margin: 0.079 (over 8 in-corpus / 20 out-of-corpus probes)
 zero-FA floor (never refuse a real question): 0.656 -> coverage 0.286, ooc leak 0.000
@@ -257,11 +264,19 @@ The weakest question is listed by name because **the floor is set by the
 weakest of them** — a vague question drags it down, and a question the record
 does not actually answer invalidates the measurement.
 
-**Do not paste it yet.** The twenty out-of-corpus probes it measured against
-are built in, and they are all far from any handbook — the kind of question
-nobody would bring to this record. The parental-leave question above is the
-dangerous kind: close enough to score. So write six of those, in `ooc.txt`,
-and measure again:
+The **second** `CAVEAT` is the line that was added after the walk, and it is
+worth knowing why. When this was captured, `ksor calibrate` did not print it:
+a run given no `--ooc-file` scored against the built-in probes and then
+reported that probes had been supplied, so the one warning written for exactly
+this moment stayed silent. The review of this tutorial found that, using this
+block as the evidence; it is fixed, and the caveat above is what the current
+release prints here.
+
+**Do not paste it yet** — and the tool has now told you why. The twenty
+out-of-corpus probes it measured against are built in, and they are all far
+from any handbook: the kind of question nobody would bring to this record. The
+parental-leave question above is the dangerous kind, close enough to score. So
+write six of those, in `ooc.txt`, and measure again:
 
 ```
 How many weeks of parental leave do employees get?
@@ -347,6 +362,7 @@ npx ksor calibrate --instance instance.md --queries-file questions.txt --ooc-fil
 </details>
 
 ```
+...
 run 2: building generation 2 (embed gemini:gemini-embedding-001/d1536/RETRIEVAL_DOCUMENT)
 structure: 4 nodes, 3 sources, 7 chunks; carried 5, pending 2
 embedding 2 pending chunks (batch 32) ...
@@ -355,6 +371,7 @@ source: 29ffdd7d13a2d5e22feb2e7009f5bf3b3a6777fc
 ingest: generation 2 — 4 nodes, 7 chunks; embedded 2, carried 5, failed 0
 pre-flip delta vs gen 1: 4 -> 4 nodes (+0 / -0)
 FLIPPED active generation -> 2
+...
 ```
 
 Two chunks embedded, five carried forward unchanged: an edit costs what the
