@@ -104,6 +104,31 @@ export function parseQueriesFile(text: string): string[] {
   return normalizeQueries(queries);
 }
 
+/**
+ * Where the out-of-corpus probes came from, and WHAT they are — decided once.
+ *
+ * These were two expressions and they disagreed. The label tested
+ * `=== undefined` while the probes fell back through `?? BUILT_IN_OOC`, and the
+ * CLI passes `null` when `--ooc-file` is absent (`commands.ts`) — so every
+ * `ksor calibrate` without `--ooc-file` scored against the twenty BUILT-IN
+ * far-domain probes and reported `ooc_source: "provided"`. `BUILT_IN_OOC_CAVEAT`
+ * is gated on that field, and it is the one line that exists to stop an operator
+ * pasting a floor blessed by far-domain probes — so it never printed on the path
+ * that needs it most. Found reviewing PR #259, whose tutorial's own pasted
+ * output is the evidence: a run with no `--ooc-file`, and no caveat above it.
+ *
+ * Returning both together is the fix rather than correcting one test: a source
+ * label and the probes it labels cannot drift when one expression yields both.
+ */
+export function resolveOoc(probes: readonly string[] | null | undefined): {
+  readonly source: "built-in" | "provided";
+  readonly probes: readonly string[];
+} {
+  return probes === undefined || probes === null
+    ? { source: "built-in", probes: BUILT_IN_OOC }
+    : { source: "provided", probes };
+}
+
 export interface CalibrationOptions {
   readonly tenantId: string;
   readonly corpusId: string;
@@ -271,8 +296,9 @@ export async function runCalibration(
     inQueries = normalizeQueries(synthesized);
   }
 
-  const oocSource = options.oocProbes === undefined ? "built-in" : "provided";
-  const ooc = normalizeQueries(options.oocProbes ?? BUILT_IN_OOC);
+  const resolved = resolveOoc(options.oocProbes);
+  const oocSource = resolved.source;
+  const ooc = normalizeQueries(resolved.probes);
   const detail = [
     ...(await scoreQueries(pool, scope, gucs, options.provider, inQueries, true)),
     ...(await scoreQueries(pool, scope, gucs, options.provider, ooc, false)),
