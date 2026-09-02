@@ -55,6 +55,7 @@ export function lockWith(
       companions: [],
       assets: [],
       indexes: [],
+      bundles: [],
     },
     null,
     2,

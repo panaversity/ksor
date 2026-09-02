@@ -1074,6 +1074,24 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(bundles.stderr).toContain("fix:");
     expect(existsSync(path.join(hostile, ".ksor/out"))).toBe(false);
     expect(existsSync(path.join(hostile, ".ksor/escape"))).toBe(false);
+
+    // A plain path segment, and still refused: the lock copy sits beside the
+    // bundle directories, so an audience by its name would collide with it —
+    // found by asking what the one reserved sibling name does (hostile pass).
+    const reserved = bundleRepo();
+    const reservedPolicy = path.join(reserved, ".ksor/governance.yaml");
+    writeFileSync(
+      reservedPolicy,
+      readFileSync(reservedPolicy, "utf8").replace(
+        "audiences:\n",
+        'audiences:\n  "build.lock.json":\n    description: Named after the lock\n',
+      ),
+    );
+    const collide = build(reserved, "--bundles", "--as-of", LATER);
+    expect(collide.status).toBe(1);
+    expect(collide.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+    expect(collide.stderr).toContain("collide");
+    expect(existsSync(path.join(reserved, ".ksor/out"))).toBe(false);
   });
 
   it("the emitted starter bundles its five documents for public, and git ignores the output", () => {
