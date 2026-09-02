@@ -4,15 +4,20 @@
  * with it. The shedding under saturation is correct (availability over
  * audit); only the silence is the defect.
  *
- * This asserts search's `audit` field is:
- *   - "degraded" when the retrieval_log write is refused (INSERT revoked
- *     from the serving role, simulating audit-under-saturation without
- *     needing to actually saturate the pool)
- *   - absent when the write lands normally
+ * FOUR call sites write that row — search's hit arm, search's abstained arm,
+ * `readDocument` and `outlineDocuments` — and the first version of this file
+ * asserted one of them. A signal that three of four arms could drop while the
+ * suite stayed green is the shape this codebase keeps finding (decision 18),
+ * so every arm is driven here, on one fixture, in both states:
+ *   - `audit: "degraded"` while the retrieval_log INSERT is revoked from the
+ *     serving role (audit-under-saturation, without saturating the pool)
+ *   - no `audit` field once the grant is restored and the row lands
  *
  * Seeding follows kernel.db.test.ts's proven shape: schema at a test
  * dimension, one document ingested through the real ingest role (grant
- * table + RLS enforced), read back through the real service function.
+ * table + RLS enforced), read back through the real service functions.
+ * The gateway's half — that all three output schemas PARSE the field the
+ * handlers emit — is `content-gateway/src/audit-degraded.db.test.ts`.
  */
 
 import { randomBytes } from "node:crypto";
@@ -21,14 +26,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { contentPool, RUNTIME_ROLE, runIngest } from "./db.js";
 import { applySchema } from "./schema.js";
+import { GATE_PREDICATE_DIGEST } from "./lib/search.js";
 import { keyRingFromEnv } from "./lib/snapshot.js";
-import { search, type ServiceContext } from "./service.js";
+import { outlineDocuments, readDocument, search, type ServiceContext } from "./service.js";
 import type { ContentInstance } from "./instance.js";
 
 const adminDsn = process.env["KSOR_DB_URL"] ?? "";
 const DIM = 8;
 const TENANT = "audit-corp";
 const CORPUS = "audit-corp-handbook";
+const QUERY = "zebra compensation bands";
 
 const PAD = " filler content well beyond the twenty-four character servable floor.";
 
@@ -39,11 +46,14 @@ function unit(hot: number): number[] {
   return v.map((x) => x / norm);
 }
 
-describe.runIf(adminDsn !== "")("search's audit-degraded signal (db)", () => {
+describe.runIf(adminDsn !== "")("the audit-degraded signal on every serving arm (db)", () => {
   let admin: pg.Pool;
   let pool: pg.Pool;
   let dbName: string;
+  /** No floor: every search answers, through the hit arm. */
   let ctx: ServiceContext;
+  /** A calibrated floor the query cannot reach: every search abstains. */
+  let abstaining: ServiceContext;
 
   beforeAll(async () => {
     dbName = `ksor_audit_degraded_${Date.now().toString(36)}_${randomBytes(3).toString("hex")}`;
@@ -112,6 +122,16 @@ describe.runIf(adminDsn !== "")("search's audit-degraded signal (db)", () => {
       instanceDigest: "digest-1",
       embedQuery: async () => unit(0),
     };
+    abstaining = {
+      ...ctx,
+      instance: {
+        ...instance,
+        // Measured under THIS door's predicate, so the gate is trusted — and
+        // set where a near-orthogonal query (cosine ≈ 0.02) cannot reach it.
+        abstain: { vectorFloor: 0.9, keywordFloor: null, floorDigest: GATE_PREDICATE_DIGEST },
+      },
+      embedQuery: async () => unit(DIM - 1),
+    };
   }, 180_000);
 
   afterAll(async () => {
@@ -121,21 +141,69 @@ describe.runIf(adminDsn !== "")("search's audit-degraded signal (db)", () => {
     await admin?.end().catch(() => undefined);
   });
 
-  it('carries audit: "degraded" when the §7 row could not be written', async () => {
-    await pool.query(`REVOKE INSERT ON retrieval_log FROM ${RUNTIME_ROLE}`);
-    try {
-      const result = await search(ctx, "zebra compensation bands", 5);
-      // The shedding stays: the answer still arrives.
+  /** The four arms, each answering with the envelope that carries `audit`. */
+  const arms = {
+    "search (hit arm)": async () => {
+      const result = await search(ctx, QUERY, 5);
       expect(result.ok, JSON.stringify(result)).toBe(true);
-      expect(result.audit).toBe("degraded");
-    } finally {
+      expect(result.abstained, "the hit arm must answer, not abstain").toBe(false);
+      return result;
+    },
+    "search (abstained arm)": async () => {
+      const result = await search(abstaining, QUERY, 5);
+      // An abstention is `ok: false, abstained: true` — a correct answer, not
+      // an error, and the one arm whose §7 row records what it declined.
+      expect(result.ok, JSON.stringify(result)).toBe(false);
+      expect(result.abstained, "the floor must abstain this query").toBe(true);
+      return result;
+    },
+    readDocument: async () => {
+      const result = await readDocument(ctx, "zebra");
+      expect(result.slug, JSON.stringify(result)).toBe("zebra");
+      return result;
+    },
+    outlineDocuments: async () => {
+      const result = await outlineDocuments(ctx, { limit: 10 });
+      expect(result.nodes.length, JSON.stringify(result)).toBeGreaterThan(0);
+      return result;
+    },
+  } as const;
+  const armNames = Object.keys(arms) as (keyof typeof arms)[];
+
+  describe("while the §7 row cannot be written", () => {
+    beforeAll(async () => {
+      await pool.query(`REVOKE INSERT ON retrieval_log FROM ${RUNTIME_ROLE}`);
+    });
+    afterAll(async () => {
       await pool.query(`GRANT INSERT ON retrieval_log TO ${RUNTIME_ROLE}`);
-    }
+    });
+
+    it.each(armNames)('%s carries audit: "degraded" and still answers', async (arm) => {
+      const result = await arms[arm]();
+      expect(result.audit, `${arm} answered ${JSON.stringify(result)}`).toBe("degraded");
+    });
   });
 
-  it("carries no audit field when the row lands normally", async () => {
-    const result = await search(ctx, "zebra compensation bands", 5);
-    expect(result.ok, JSON.stringify(result)).toBe(true);
-    expect(result.audit).toBeUndefined();
+  describe("once the row lands normally", () => {
+    it.each(armNames)("%s carries no audit field", async (arm) => {
+      const result = await arms[arm]();
+      expect(result.audit, `${arm} answered ${JSON.stringify(result)}`).toBeUndefined();
+    });
+
+    it("wrote one §7 row per arm, which is what 'landed' means", async () => {
+      // Not a shape assertion: the field's absence is only honest if a row
+      // exists. Read as the DSN's owner, outside any serving role.
+      const { rows } = await pool.query<{ action: string; n: number }>(
+        `SELECT action, count(*)::int AS n FROM retrieval_log GROUP BY action ORDER BY action`,
+      );
+      // The four arms above ran once each in this block; the degraded block
+      // wrote nothing, which is the whole point of the revoke.
+      expect(Object.fromEntries(rows.map((r) => [r.action, r.n]))).toEqual({
+        content_served: 1,
+        outline_served: 1,
+        search_abstained: 1,
+        similarity_searched: 1,
+      });
+    });
   });
 });

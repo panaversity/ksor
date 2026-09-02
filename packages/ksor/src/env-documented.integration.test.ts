@@ -32,6 +32,10 @@ const DOCUMENTED_ELSEWHERE = new Map([
   ["KSOR_BASE_PATH", "scaffold README + AGENTS.md — a site build flag, not a server variable"],
   ["KSOR_AUDIENCE", "scaffold README + AGENTS.md — a site build flag"],
   ["KSOR_INSTANCE", "a CLI convenience for --instance; the flag is the documented form"],
+  // A repo-only test gate. No shipped code reads it; `e2e-gate.ts` only NAMES
+  // it, in the note a skipped browser suite prints, and that file is test
+  // support that happens not to end in `.test.ts`.
+  ["KSOR_E2E", "this repository's browser-suite gate — read by tests, named by e2e-gate.ts"],
   // RETIRED, replaced by KSOR_AUTH. The code still READS them, solely to tell an
   // operator following an old runbook what replaced them — documenting them in
   // env.example would present them as current, which is the opposite of the
@@ -48,8 +52,15 @@ const DOCUMENTED_ELSEWHERE = new Map([
  * "every file" in two ways that both matter here.
  *
  * Test files are excluded because a variable only a test reads is not something
- * an adopter can set; that is also why no exemption list for repo-only test
- * variables is needed — the scan never sees them.
+ * an adopter can set. That exclusion is by FILENAME, not by role, so it does not
+ * reach test SUPPORT — a module the tier imports which does not itself end in
+ * `.test.ts`. `e2e-gate.ts` is exactly that, and the scan sees it, which is why
+ * `KSOR_E2E` needs a `DOCUMENTED_ELSEWHERE` entry and why this docstring used to
+ * say the opposite. Narrowing the walk to make the old sentence true again was
+ * the alternative and is the weaker one: every narrowing is a place a real
+ * adopter-facing variable can hide, and an exemption is a line someone has to
+ * write a reason on. So the scan stays as wide as it can be and the exemption
+ * carries the argument.
  *
  * Transient trees are excluded because they are not the checkout: another suite
  * roots a fake npm install inside `packages/ksor` (it needs Node's upward module

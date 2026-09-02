@@ -130,7 +130,7 @@ The three so far, in reading order — pick by what you want from it:
 | | read this if |
 | --- | --- |
 | [00 · Introduction](docs/tutorials/00-introduction-to-ksor.md) | you want to understand why this exists — no technical background needed |
-| [01 · Hello world](docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Node only, nothing else |
+| [01 · Hello world](docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Part 1 needs only Node; Part 2 adds a free Postgres and a free embedding key |
 | [02 · Make it yours](docs/tutorials/02-make-it-yours.md) | you finished hello world and want a record that is only yours — a file in, a person's knowledge in, the samples out |
 
 **Next, open the project in the coding agent you already use** (Claude Code,
@@ -933,13 +933,17 @@ unauthenticated** — a local run declares `KSOR_AUTH=disabled-local` (which
 intended development shape. A public bind needs a configured SSO door instead,
 or an explicit `KSOR_AUTH=disabled-public`.
 
-`pnpm serve` is the only command this rung needs: run it the first time, after
-editing `knowledge/`, or to bring the server back. Every step reports the state
-it found instead of failing, and a rerun on an unchanged record costs nothing —
-ingest compares what it read against the generation already serving and, when
-they match at the same commit, writes no rows at all. The abstention gate stays
-off until you measure a floor with `ksor calibrate` and paste it into
-`instance.md` — never copied from another corpus.
+`pnpm serve` runs the server and nothing else: it is `ksor serve`, one
+supervised process over whatever was last published. Provisioning is
+`pnpm provision`, run once by a human — it applies the schema and authorizes
+ingest — and publishing is `pnpm refresh`, which is `ksor build`, then
+`ksor ingest --flip`, then `ksor gc`. Re-run `pnpm refresh` whenever you have
+edited `knowledge/`; every step in it is re-runnable, and on an unchanged record
+ingest compares what it read — the documents, their governance, the toolchain,
+and the commit they came from — against the generation already serving,
+reports `unchanged`, consumes no generation and embeds nothing. The abstention
+gate stays off until you measure a floor with `ksor calibrate` and paste it
+into `instance.md` — never copied from another corpus.
 
 ---
 
@@ -947,7 +951,7 @@ off until you measure a floor with `ksor calibrate` and paste it into
 
 A KSoR project is intentionally understandable without proprietary tooling.
 
-KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, and `.ksor/governance.yaml` beside them. The takedown ledger `.ksor/takedowns.yaml` is not emitted: the first `ksor takedown` writes it, because an empty ledger would assert an act nobody performed. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
+KSP-001 defines the structure below, and `ksor init` emits it — every document in the profile, the generated indexes, and `.ksor/governance.yaml` beside them. The tree is abridged: it shows the shape rather than every file, and a test holds each path it names to a freshly emitted scaffold. The takedown ledger `.ksor/takedowns.yaml` is not emitted: the first `ksor takedown` writes it, because an empty ledger would assert an act nobody performed. [`docs/status.md`](docs/status.md) remains authoritative for which release carries it.
 
 ```text
 my-ksor/
@@ -975,7 +979,7 @@ my-ksor/
 └── ...
 ```
 
-Under the KSoR Profile of OKF, `index.md` and `log.md` are reserved OKF files rather than ordinary concept documents. Publishers generate or manage those files according to the pinned OKF contract instead of using `index.md` as a normal content page.
+Under the KSoR Profile of OKF, `index.md` and `log.md` are reserved OKF files rather than ordinary concept documents. `ksor build` generates every `index.md` from the tree — committed, and refused as `ksor-index-stale` when the tree moved without a rebuild — and an authored `log.md` is refused by name (`ksor-reserved-name`); ksor never writes one.
 
 ### `knowledge/`
 
@@ -1884,8 +1888,12 @@ The project is intentionally agent-friendly, so coding agents should also read `
 
 The development gate is defined in [`CONTRIBUTING.md`](CONTRIBUTING.md):
 lint, format check, typecheck, guard invariants, corpus checks, unit and
-integration tests, build, and publint. Browser and deployment acceptance will
-join it when a site surface exists.
+integration tests, build, and publint. CI runs that gate and, beside it, the
+acceptance the local gate skips: the emitted scaffold walked in a real browser
+(`KSOR_E2E=1`), the kernel's database tier against Postgres with pgvector,
+`ksor init` on Windows, the npm and bun scaffolds installed and built end to
+end, and the emitted Dockerfile built and booted on plain Docker and asked a
+question over MCP ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 Do not weaken provenance, abstention, governance, or reproducibility guarantees merely to simplify an implementation.
 
