@@ -1,8 +1,8 @@
 ---
 name: intake-interview
-description: The first conversation with the owner of this Knowledge System of Record — seven questions that define what it is authoritative for, who may read it and who may approve it, then write instance.md together. Use when the owner asks to set up, configure, or "get started with" this project, when instance.md still contains its scaffold placeholder text, or when the scope of the corpus is unclear.
+description: The first conversation with the owner of this Knowledge System of Record — three questions that define what it is authoritative for, who may read it and who may approve it, then write instance.md together. Use when the owner asks to set up, configure, or "get started with" this project, when instance.md still contains its scaffold placeholder text, or when the scope of the corpus is unclear.
 metadata:
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 # Intake interview
@@ -123,9 +123,10 @@ never an email address.
   Leave `name:` and `toolchain:` alone. One block is added here only when
   the owner stands up the served MCP rung — `database:`/`embedding:`/
   `retrieval:` (see `AGENTS.md` → "Serving to agents"; that is a later
-  climb, not part of this interview). The strictness answer from question 5
-  is the intent behind the `retrieval.vector_floor` on that climb, measured
-  by `ksor calibrate` — capture it in the prose now so it is ready.
+  climb, not part of this interview). The `declines` default above (or the owner's
+  correction to it) is the intent behind the `retrieval.vector_floor` on that
+  climb, measured by `ksor calibrate` — capture it in the prose now so it is
+  ready.
 - Write `.ksor/governance.yaml` from question 3: `version: "0.1"`,
   the `audiences:` registry if there is one, and the two authority sets with
   real actors. That file is the root of authority — every approval, every
@@ -134,12 +135,19 @@ never an email address.
   document is still in `knowledge/`.** Those five are approved by it, so a
   policy rewritten without it refuses the next build by name
   (`ksor-approver-unauthorised`). It leaves when the last sample does.
+- **Re-attribute what `human:you` already did.** If any document carries
+  `human:you` as its approver, generator or deprecator — the hello-world
+  tutorial's own document does — rewrite those acts to the owner's handle in
+  the SAME change that retires the placeholder from the policy. It is the same
+  person. A policy that stops naming `human:you` beside a document that still
+  cites it turns a green record red (`ksor-approver-unauthorised`), and the
+  owner's first act after being interviewed should not be a refusal.
 - Write `.ksor/people.yaml` from question 3: `version: "0.1"` and a `people:`
   MAP from each actor to its natural name — `"human:bashiraziz": Bashir Aziz`.
   Keyed by the actor exactly as the record stores it, quoted because it
   contains a colon. Nothing else — the site looks the actor up at render time,
   so pages read "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz". Every skill that records a governance
-  act (this one, add-sources for `verified:` entries, `ksor takedown` for
+  act (this one, add-sources when it names a `ksor.owner`, `ksor takedown` for
   withdrawals) asks the owner for a natural name whenever it is about to write
   an actor that isn't in `people.yaml` yet — the owner is the only source of a
   display name, never a convention-based guess.
@@ -162,7 +170,7 @@ never an email address.
   the new title and refuses anything the profile does not accept.
 - Restart `pnpm dev` afterwards so the site picks the new title up, and
   show the owner their name on the page.
-- Offer to capture the source list from question 4 as the first real
-  documents (the add-sources skill takes it from there).
+- Offer to start on the owner's own documents: the add-sources skill takes
+  whatever material they have from there.
 - Read the result back to the owner and get an explicit yes before
   finishing. Their words, tightened — never your invention.
