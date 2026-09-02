@@ -8,8 +8,10 @@
  * change a sentence, leave the stamp, and the approval that ratified the old
  * sentence reads as ratifying the new one, with nothing red. This module
  * compares the body in the working tree against every committed version of
- * the same path that was `stable` under the SAME `generated.at`, and refuses
- * `ksor-generated-stale` when they differ. Only the body: a frontmatter-only
+ * the same path that was `stable`, and refuses `ksor-generated-stale` when a
+ * body differs under a `generated.at` the tree has not ADVANCED past — equal,
+ * or moved backward, which changes the stamp without advancing it. Only the
+ * body: a frontmatter-only
  * edit — a `verified` entry, a re-approval — is not a change to the text the
  * stamp dates.
  *
@@ -68,7 +70,9 @@ const MAX_BUFFER = 64 * 1024 * 1024;
  * `-m`, because without a diff-merges option a merge commit lists NO paths at
  * all — verified against git 2.50 — and a conflict resolved by hand is a body
  * that is in neither parent; the same commit then prints once per parent, so
- * versions are keyed by (commit, path).
+ * versions are keyed by (commit, path). That flag is held by the merge case in
+ * `build.integration.test.ts`'s KSP R23 describe: drop `-m` here and the build
+ * it expects to refuse exits 0 instead.
  */
 export function committedVersions(root: string, paths: readonly string[]): CommittedHistory {
   const inside = git(root, ["rev-parse", "--is-inside-work-tree"]);
@@ -169,6 +173,8 @@ interface StableVersion {
   readonly sha: string;
   readonly committedAt: string;
   readonly generatedAt: number;
+  /** The stamp as that version spelled it, so the refusal quotes the file rather than a re-rendering. */
+  readonly stamp: string;
   readonly body: string;
 }
 
@@ -190,24 +196,32 @@ function stableVersionOf(version: CommittedVersion, path: string): StableVersion
   const generated = split.frontmatter["generated"];
   if (typeof generated !== "object" || generated === null) return null;
   const at = (generated as Readonly<Record<string, unknown>>)["at"];
-  const generatedAt = typeof at === "string" ? parseInstant(at) : null;
+  if (typeof at !== "string") return null;
+  const generatedAt = parseInstant(at);
   if (generatedAt === null) return null;
   return {
     sha: version.sha,
     committedAt: version.committedAt,
     generatedAt,
+    stamp: at,
     body: comparable(split.body),
   };
 }
 
 /**
- * The rule, pure: for every `stable` concept, every committed version that was
- * `stable` under the same `generated.at` must carry the same body. All of
- * history, not only HEAD's version — an edit committed without a bump matches
- * HEAD exactly, and it is the version BEHIND it that tells (the shape CI
- * sees). A path with no committed stable version passes: stable for the first
- * time, or renamed, since path is identity. Instants are compared as instants,
- * so two spellings of one moment are one stamp.
+ * The rule, pure: for every `stable` concept whose body differs from a
+ * committed version that was `stable`, the tree's `generated.at` must be
+ * strictly LATER than that version's. Equal is the defect this rule exists to
+ * catch — edit the sentence, leave the stamp — and EARLIER is the same defect
+ * with one more keystroke: backdating the stamp changes it without advancing
+ * it, so the approval that ratified the old text still post-dates the new one.
+ * Only strictly-later clears a version, which is exactly what the refusal's
+ * own `fix` prints. All of history, not only HEAD's version — an edit
+ * committed without a bump matches HEAD exactly, and it is the version BEHIND
+ * it that tells (the shape CI sees). A path with no committed stable version
+ * passes: stable for the first time, or renamed, since path is identity.
+ * Instants are compared as instants, so two spellings of one moment are one
+ * stamp.
  */
 export function checkGeneratedStale(
   concepts: readonly Concept[],
@@ -224,19 +238,24 @@ export function checkGeneratedStale(
     const body = comparable(split.body);
     for (const version of versions.get(concept.path) ?? []) {
       const stable = stableVersionOf(version, concept.path);
-      if (stable === null || stable.generatedAt !== concept.generatedAt || stable.body === body) {
+      if (stable === null || stable.generatedAt < concept.generatedAt || stable.body === body) {
         continue;
       }
       const authored = (concept.frontmatter["generated"] as { readonly at?: unknown } | undefined)
         ?.at;
       const stamp =
         typeof authored === "string" ? authored : new Date(concept.generatedAt).toISOString();
+      const under =
+        stable.generatedAt === concept.generatedAt
+          ? `under the same \`generated.at\` (${stamp})`
+          : `under \`generated.at\` ${stable.stamp}, LATER than the ${stamp} this file now carries ` +
+            "(the stamp was moved backward, which changes it without advancing it)";
       refusals.push({
         slug: "ksor-generated-stale",
         path: concept.path,
         why:
           `the body differs from the one committed at ${stable.sha.slice(0, 7)} (${stable.committedAt}), ` +
-          `where this concept was \`stable\` under the same \`generated.at\` (${stamp}) — that instant dates ` +
+          `where this concept was \`stable\` ${under} — that instant dates ` +
           "the text, so an edit to a stable concept must advance it, or the approval that ratified the old " +
           "text reads as ratifying the new one (KSP R23)",
         fix:

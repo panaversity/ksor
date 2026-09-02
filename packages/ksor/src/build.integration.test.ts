@@ -732,6 +732,27 @@ describe("ksor build — change control (KSP R23): a stable body may not change 
   };
   const editBody = (root: string): void =>
     edit(root, "See [purchase approval]", "Directors are paid quarterly. See [purchase approval]");
+  /** Replace the whole body — the bytes after the closing fence — with one sentence. */
+  const setBody = (root: string, sentence: string): void => {
+    const file = path.join(root, DOC);
+    const text = readFileSync(file, "utf8");
+    const close = text.indexOf("\n---\n", 4);
+    expect(close, `${DOC} has no closing fence`).toBeGreaterThan(4);
+    writeFileSync(file, `${text.slice(0, close + 5)}\n${sentence}\n`);
+  };
+  /** Move `generated.at` and the approval that may not precede it to one instant. */
+  const restamp = (root: string, at: string): void => {
+    const file = path.join(root, DOC);
+    const before = readFileSync(file, "utf8");
+    const after = before
+      .replace(
+        /generated: \{ by: "[^"]+", at: \S+ \}/,
+        `generated: { by: "ksor-starter/0.0.1", at: ${at} }`,
+      )
+      .replace(/approval: \{ by: "[^"]+", at: \S+ \}/, `approval: { by: "human:cfo", at: ${at} }`);
+    expect(after, `restamp matched nothing in ${DOC}`).not.toBe(before);
+    writeFileSync(file, after);
+  };
 
   it("an uncommitted body edit with no bump is refused by name, naming the commit and the stamp; nothing is written", () => {
     const root = repo();
@@ -837,6 +858,66 @@ Economy below six hours.
     const r = build(root, "--as-of", AS_OF);
     expect(r.status).toBe(1);
     expect(r.stderr.split("\n")[0]).toBe("error: ksor-generated-stale");
+  });
+
+  /**
+   * Changing the stamp is not advancing it. A backdated `generated.at` clears
+   * an identity test and leaves the approval that ratified the OLD text still
+   * post-dating the new one — the exact reading R23 exists to prevent, so it
+   * is held through the verb and not only in the pure unit.
+   */
+  it("a stamp moved BACKWARD is refused, naming both instants", () => {
+    const root = repo();
+    editBody(root);
+    edit(root, STAMP_LINE, `generated: { by: "ksor-starter/0.0.1", at: 2026-08-01T09:00:00Z }`);
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, `${r.stdout}${r.stderr}`).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-generated-stale");
+    // The committed version's stamp, the tree's, and what went wrong.
+    expect(r.stderr).toContain(STAMP);
+    expect(r.stderr).toContain("2026-08-01T09:00:00Z");
+    expect(r.stderr, r.stderr).toContain("backward");
+    expect(existsSync(path.join(root, "build.lock.json"))).toBe(false);
+  });
+
+  /**
+   * The `-m` on the history walk, held by the topology it exists for. A merge
+   * resolved by hand carries a body that is in NEITHER parent, and without a
+   * diff-merges option a merge commit lists no paths at all — so the walk
+   * would never read that version, and the commonest way a body enters history
+   * in neither parent would stop being checked with nothing red. Drop `-m`
+   * from the `git log` argv and this is the assertion that goes.
+   */
+  it("a body that exists in NEITHER parent — a hand-resolved merge — is compared, and the MERGE is named", () => {
+    const root = repo();
+    git(root, "checkout", "-q", "-b", "side");
+    setBody(root, "Directors are paid quarterly.");
+    restamp(root, "2026-08-26T09:00:00Z");
+    git(root, "commit", "-qam", "side edit");
+    git(root, "checkout", "-q", "main");
+    setBody(root, "Directors are paid monthly.");
+    restamp(root, "2026-08-27T09:00:00Z");
+    git(root, "commit", "-qam", "main edit");
+    // Conflict or not, the resolution is written by hand and committed as the
+    // merge — a third body under a stamp later than either parent's.
+    spawnSync("git", ["merge", "--no-commit", "--no-ff", "side"], { cwd: root, encoding: "utf8" });
+    // Resolve from one side first, so the hand-written body replaces a whole
+    // file rather than one carrying conflict markers through its frontmatter.
+    git(root, "checkout", "HEAD", "--", DOC);
+    setBody(root, "Directors are paid twice a year.");
+    restamp(root, "2026-08-28T09:00:00Z");
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "resolve the merge by hand");
+    expect(git(root, "rev-list", "--parents", "-n", "1", "HEAD").split(" ")).toHaveLength(3);
+    const merge = git(root, "rev-parse", "--short=7", "HEAD");
+    expect(git(root, "status", "--porcelain")).toBe("");
+    // Only the merge holds the body this differs from: both parents are stamped
+    // EARLIER, so the advance rule clears them and the merge alone can refuse.
+    setBody(root, "Directors are paid twice a year, in arrears.");
+    const r = build(root, "--as-of", AS_OF);
+    expect(r.status, `${r.stdout}${r.stderr}`).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-generated-stale");
+    expect(r.stderr, r.stderr).toContain(merge);
   });
 
   it("a repository with no commit yet SAYS the check did not run, and builds", () => {

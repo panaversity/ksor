@@ -101,9 +101,11 @@ an input, `dirty` from git status, the ledger checked for shrinkage against
 every historic version and the committed lock, a shallow clone refused.
 **KSP R23 runs beside the checker** in `ksor build` and `ksor ingest` — not
 in the emitted `check.mjs`, which stays the format gate: a `stable` body that differs from any committed version
-stable under the same `generated.at` is `ksor-generated-stale`, read from
-every committed version of the path through one `git log` and one
-`git cat-file --batch`; where history is unreadable each program prints
+stable under a `generated.at` the tree has not ADVANCED past — the same
+instant, or one moved backward — is `ksor-generated-stale`, read from every
+committed version of the path through a few `rev-parse` probes, one
+`git log`, and one `git cat-file --batch` per 256 objects; where history is
+unreadable each program prints
 `change-control: not checked` beside its verdict rather than passing.
 `--bundles` exits `2`. **The emitted `check.mjs` is generated** from the
 record module at package-build time into both skill trees (gitignored in the
@@ -952,7 +954,7 @@ date`. The same badge marks the row in the sidebar, in every listing and in
 - Change-control verification of WHO approved (KSP R22, R24, R25) against
   repository identity, which is what would let an approval say
   `checked: "change-control"` instead of `checked: "policy"`. R23 — an edit to
-  a stable concept must bump its `generated.at` — is built
+  a stable concept must ADVANCE its `generated.at` — is built
   (`ksor-generated-stale`). Phase B for the rest.
 - `llms.txt` v2 URL forms and path-scoped files. Phase B.
 - OKF import (R26) — reading a foreign bundle into a record. Demand-gated: a

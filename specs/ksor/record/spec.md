@@ -99,10 +99,13 @@ keeps serving it. **On reserved types:** `sources`, `ksor.owner`. **When
 `stable`:** `generated` (with `at`) and `ksor.approval`, with `generated.at
 <= ksor.approval.at` (R23 — a comparison of two authored instants), and —
 wherever a checkout with history is at hand — a body that has not changed
-since any committed version of the same path that was `stable` under the same
-`generated.at` (`ksor-generated-stale`, R23's other half: the stamp dates the
-text, so an edit must move it, and the moved stamp then needs a fresh approval
-by the first rule). Only the body is compared — the bytes after the closing
+since any committed version of the same path that was `stable`, unless
+`generated.at` is strictly LATER than that version's (`ksor-generated-stale`,
+R23's other half: the stamp dates the text, so an edit must ADVANCE it, and
+the advanced stamp then needs a fresh approval by the first rule). An
+unchanged stamp and a backdated one refuse alike — moving a stamp backward
+changes it without advancing it, and leaves the old approval post-dating the
+new text. Only the body is compared — the bytes after the closing
 fence, line endings and trailing whitespace normalised — so a frontmatter-only
 edit (a `verified` entry, a re-approval) is not a change to the text the stamp
 dates. Every committed version is read, not HEAD's alone: an edit committed
@@ -113,7 +116,8 @@ clears it, and rewriting history is never asked for. A path
 with no committed stable version passes — stable for the first time, or
 renamed, since path is identity. The check is run beside the checker by the
 two publishing verbs — `ksor build` and `ksor ingest` — and never by the
-emitted `check.mjs` (the format gate reads no history) nor by a staged tree;
+emitted `check.mjs` (the format gate reads no document history) nor by a
+staged tree;
 where history cannot be read (no
 repository, no commit yet, a shallow boundary) each prints `change-control:
 not checked` (or how many versions a shallow clone let it read) beside its

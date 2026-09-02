@@ -55,7 +55,8 @@ the contract and performs nothing.
 2. **Check.** Runs the record checker (record spec §6) against the tree with
    the fresh indexes, and beside it the change-control check against git
    history (record spec §2.2, `ksor-generated-stale`): a `stable` body that
-   differs from any committed version stable under the same `generated.at`
+   differs from a committed version stable under a `generated.at` this tree
+   has not advanced past — the same instant, or one moved backward —
    refuses here as it does at ingest (the emitted `check.mjs` does not run
    it — it is the format gate, and reads no document history). Any refusal exits
    `1` with the slug on the first stderr line; nothing is written, so a red
@@ -272,12 +273,13 @@ diffs (decision 4).
    here; a dirty input is refused only under `--strict`, and a stale
    COMMITTED index is one — `--strict` refuses it and a loose build that
    rewrites it stamps `dirty: true`. A stable body edited under an unmoved
-   `generated.at` is `ksor-generated-stale` — uncommitted, or committed
-   without a bump and built on a clean tree — naming the commit whose body
-   differs and the stamp, with a bump alone then refused
+   or BACKDATED `generated.at` is `ksor-generated-stale` — uncommitted, or
+   committed without a bump and built on a clean tree — naming the commit
+   whose body differs and the stamp, with a bump alone then refused
    `ksor-generated-after-approval` and bump plus re-approval building; a
    frontmatter-only edit, a concept stable for the first time and a renamed
-   one are not refused; a record below its repository root is read at its
+   one are not refused; a body committed only in a hand-resolved MERGE — in
+   neither parent — is compared too, and the merge is the commit named; a record below its repository root is read at its
    own path; a repository with no commit builds and prints `change-control:
 not checked`, a shallow clone under `--allow-unverifiable-ledger` prints
    how many versions it read.

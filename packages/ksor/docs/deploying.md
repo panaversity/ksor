@@ -379,9 +379,10 @@ database: it regenerates every `index.md`, runs the record checker, and writes
 `build.lock.json` — commit it — which every machine artefact stamps. A refusal
 stops the build before a byte is written; `--strict` also refuses an
 uncommitted input. One refusal reads git: a `stable` document whose body
-changed while its `generated.at` did not is `ksor-generated-stale`, compared
-against every committed version of the file — so when you edit a published
-document, move the stamp and re-approve. A checkout without history cannot
+changed while its `generated.at` did not ADVANCE — left alone, or moved
+backward — is `ksor-generated-stale`, compared against every committed version
+of the file, so when you edit a published document, move the stamp forward and
+re-approve. A checkout without history cannot
 read those versions; the build then prints `change-control: not checked` (or,
 on a shallow clone, how many versions it did read) beside the `source:` line
 instead of passing quietly. Takedowns reach the site through the committed ledger

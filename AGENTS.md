@@ -747,7 +747,8 @@ gateway` package, serve-by-spawn) is superseded._
     what would let it say otherwise._ _Revision 2026-09-02 (KSP R23): the
     first verification tooth. `ksor-generated-stale` verifies the
     `generated.at` instant against repository history — a `stable` body that
-    differs from any committed version stable under the same stamp refuses at
+    differs from a committed version stable under a stamp this tree has not
+    ADVANCED past (the same instant, or one moved backward) refuses at
     `ksor build` and `ksor ingest` (not at the emitted `check.mjs`, which stays
     the format gate), and where history is unreadable each says
     `change-control: not checked` rather than passing.

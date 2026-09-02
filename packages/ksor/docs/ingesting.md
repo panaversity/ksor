@@ -93,8 +93,9 @@ validating; ingest had the same hole, found by review before anyone hit it.
 `ksor ingest` runs the same change-control check `ksor build` runs (KSP R23;
 the scaffold's `pnpm check` does not — it is the format gate, and reads no
 document history): a `stable` document whose body differs from a committed version
-that was `stable` under the same `generated.at` is refused
-`ksor-generated-stale`, before anything is written. The stamp dates the text.
+that was `stable`, without `generated.at` having advanced past that version's,
+is refused `ksor-generated-stale`, before anything is written. The stamp dates
+the text, so leaving it alone and moving it backward are refused alike.
 The fix is the one it prints — set `generated.at` to an instant after the edit,
 then re-approve, because `ksor.approval.at` may not precede it — and the check
 reads every committed version of the file, so an edit committed without a bump

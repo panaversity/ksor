@@ -138,6 +138,24 @@ describe("ksor-generated-stale (KSP R23)", () => {
     ).toEqual([]);
   });
 
+  it("refuses a stamp moved BACKWARD: a committed stable version under a LATER stamp is not advanced past", () => {
+    const refusals = judge(text({ body: EDITED, generatedAt: T1, approvalAt: A1 }), [
+      version(SHA_A, COMMITTED_A, text({ generatedAt: T2, approvalAt: A2 })),
+    ]);
+    expect(refusals.map((r) => r.slug)).toEqual(["ksor-generated-stale"]);
+    expect(refusals[0]!.why).toContain(T2);
+    expect(refusals[0]!.why).toContain(T1);
+  });
+
+  it("refuses a body edit that only RE-USES a stamp an older committed version already carried", () => {
+    const refusals = judge(text({ body: "A third body.\n", generatedAt: T1 }), [
+      version(SHA_A, COMMITTED_A, text({ body: EDITED, generatedAt: T2, approvalAt: A2 })),
+      version(SHA_B, COMMITTED_B, text({ generatedAt: T1 })),
+    ]);
+    expect(refusals.map((r) => r.slug)).toEqual(["ksor-generated-stale"]);
+    expect(refusals[0]!.why).toContain("aaaaaaa");
+  });
+
   it("reads line endings and trailing whitespace as the checkout's, not the text's", () => {
     const crlf = text().replace(/\n/g, "\r\n");
     expect(judge(text(), [version(SHA_A, COMMITTED_A, crlf)])).toEqual([]);
