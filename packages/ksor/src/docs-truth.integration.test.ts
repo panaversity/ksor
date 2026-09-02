@@ -15,7 +15,7 @@
  * than in production.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -762,7 +762,7 @@ describe("docs/status.md names the version that is actually published", () => {
  */
 describe("documents that print a build_id say what moves one", () => {
   const DOCS = [
-    "docs/tutorials/00-hello-world.md",
+    "docs/tutorials/01-hello-world.md",
     "docs/tutorials/02-make-it-yours.md",
     "packages/ksor/docs/building.md",
     "packages/ksor/README.md",
@@ -794,4 +794,40 @@ describe("documents that print a build_id say what moves one", () => {
       }
     });
   }
+});
+
+/**
+ * Every link into `docs/tutorials/` resolves to a file that exists.
+ *
+ * The tutorials were renumbered into reading order on 2026-09-02, and three
+ * documents pointed at the old name — the root README, the package README
+ * that ships on npm, and the tutorials index. A stale link there is the first
+ * thing an evaluator (or their agent) follows and the last thing anyone
+ * re-checks. Relative links and GitHub blob URLs alike are held; the pointer
+ * stub left for one release counts as existing, which is the point of it.
+ */
+describe("every link into docs/tutorials resolves", () => {
+  const READMES = ["README.md", "packages/ksor/README.md", "docs/tutorials/README.md"] as const;
+  const GH = "https://github.com/panaversity/ksor/blob/main/docs/tutorials/";
+
+  it.each(READMES)("%s", (file) => {
+    const text = read(file);
+    const targets = new Set<string>();
+    for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) {
+      const href = m[1] as string;
+      if (href.startsWith(GH)) targets.add(`docs/tutorials/${href.slice(GH.length)}`);
+      else if (href.includes("docs/tutorials/"))
+        targets.add(href.replace(/^.*?(docs\/tutorials\/)/, "$1"));
+      else if (file === "docs/tutorials/README.md" && href.startsWith("./"))
+        targets.add(`docs/tutorials/${href.slice(2)}`);
+    }
+    const missing = [...targets].filter(
+      (t) => !existsSync(path.join(repoRoot, t.split("#")[0] as string)),
+    );
+    expect(
+      missing,
+      `${file} links to tutorial file(s) that do not exist: ${missing.join(", ")}`,
+    ).toEqual([]);
+    expect(targets.size, `${file} links into docs/tutorials at all`).toBeGreaterThan(0);
+  });
 });

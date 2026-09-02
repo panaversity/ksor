@@ -42,9 +42,17 @@ where it came from:
 { "ok": false, "abstained": true, "gate": { "floor": 0.622 } }
 ```
 
-**[Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/00-hello-world.md)**
+**[Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/01-hello-world.md)**
 walks all of that in about fifteen minutes. Every command and output in it was
 run and pasted as it appeared — including the ones above.
+
+The three so far, in reading order — pick by what you want from it:
+
+| | read this if |
+| --- | --- |
+| [00 · Introduction](https://github.com/panaversity/ksor/blob/main/docs/tutorials/00-introduction-to-ksor.md) | you want to understand why this exists — no technical background needed |
+| [01 · Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/01-hello-world.md) | you want to see it work in fifteen minutes — Node only, nothing else |
+| [02 · Make it yours](https://github.com/panaversity/ksor/blob/main/docs/tutorials/02-make-it-yours.md) | you finished hello world and want a record that is only yours — a file in, a person's knowledge in, the samples out |
 
 One command emits a complete governed project: the record (`knowledge/`,
 plain CommonMark), a working documentation site with hot reload, offline

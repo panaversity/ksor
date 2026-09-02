@@ -1,4 +1,4 @@
-# Tutorial 1: KSoR — One Governed Knowledge Record for Humans and AI Agents
+# Introduction: KSoR — One Governed Knowledge Record for Humans and AI Agents
 
 A **Knowledge System of Record (KSoR)** is an authoritative and governed knowledge layer that humans, AI agents, and software can all use.
 
@@ -59,7 +59,7 @@ The second gives a different amount.
 
 The third gives yet another amount.
 
-![Three helpers give three different answers to the same dosage question](01-assets/01-three-helpers.png)
+![Three helpers give three different answers to the same dosage question](00-assets/01-three-helpers.png)
 
 All three answers sound confident.
 
@@ -76,7 +76,7 @@ One might be relying on:
 - an outdated policy,
 - or information remembered by the language model itself.
 
-![Each helper learned from a different place — none of them official](01-assets/02-why-did-this-happen.png)
+![Each helper learned from a different place — none of them official](00-assets/02-why-did-this-happen.png)
 
 The problem is not that the AI systems are unable to find information.
 
@@ -269,7 +269,7 @@ Those agents need both **current state** and **operating knowledge**.
 | Traditional System of Record | Current operational data             | **What is true right now?** |
 | Knowledge System of Record   | Rules, methods, policies, procedures | **How should we operate?**  |
 
-![Every AI worker needs two Systems of Record: a KSoR for governed knowledge and a traditional SoR for current state](01-assets/two-systems-of-record.png)
+![Every AI worker needs two Systems of Record: a KSoR for governed knowledge and a traditional SoR for current state](00-assets/two-systems-of-record.png)
 
 For example:
 
@@ -385,13 +385,13 @@ We will continue using the hospital example.
 
 Each concept answers one question.
 
-![The eight ideas, each answering one question](01-assets/03-the-eight-ideas.png)
+![The eight ideas, each answering one question](00-assets/03-the-eight-ideas.png)
 
 ---
 
 ## Concept 1 — One official book
 
-![Concept 1 slide](01-assets/concept-1-one-official-book.png)
+![Concept 1 slide](00-assets/concept-1-one-official-book.png)
 
 ### Question
 
@@ -453,7 +453,7 @@ The authoritative knowledge does not require a proprietary database format.
 
 ## Concept 2 — What goes in the book?
 
-![Concept 2 slide](01-assets/concept-2-what-goes-in.png)
+![Concept 2 slide](00-assets/concept-2-what-goes-in.png)
 
 ### Question
 
@@ -521,7 +521,7 @@ This prevents the KSoR from becoming another ERP or transactional database.
 
 ## Concept 3 — Stamps
 
-![Concept 3 slide](01-assets/concept-3-stamps.png)
+![Concept 3 slide](00-assets/concept-3-stamps.png)
 
 ### Question
 
@@ -584,7 +584,7 @@ In other words:
 
 ## Concept 4 — The door
 
-![Concept 4 slide](01-assets/concept-4-the-door.png)
+![Concept 4 slide](00-assets/concept-4-the-door.png)
 
 ### Question
 
@@ -655,7 +655,7 @@ A very fast search engine operating over ungoverned knowledge simply retrieves u
 
 ## Concept 5 — "I don't know"
 
-![Concept 5 slide](01-assets/concept-5-i-dont-know.png)
+![Concept 5 slide](00-assets/concept-5-i-dont-know.png)
 
 ### Question
 
@@ -707,7 +707,7 @@ That boundary is valuable information.
 
 ## Concept 6 — Show the page
 
-![Concept 6 slide](01-assets/concept-6-show-the-page.png)
+![Concept 6 slide](00-assets/concept-6-show-the-page.png)
 
 ### Question
 
@@ -759,7 +759,7 @@ This makes the answer inspectable.
 
 ## Concept 7 — Getting a page into the book
 
-![Concept 7 slide](01-assets/concept-7-getting-a-page-in.png)
+![Concept 7 slide](00-assets/concept-7-getting-a-page-in.png)
 
 ### Question
 
@@ -822,13 +822,13 @@ The receiving organization must govern it for itself.
 
 ---
 
-![The write side of authority: source material → draft → review → approval → stable](01-assets/governance-lifecycle.png)
+![The write side of authority: source material → draft → review → approval → stable](00-assets/governance-lifecycle.png)
 
 ---
 
 ## Concept 8 — Many doors, one book
 
-![Concept 8 slide](01-assets/concept-8-many-doors.png)
+![Concept 8 slide](00-assets/concept-8-many-doors.png)
 
 ### Question
 
@@ -894,13 +894,13 @@ These different access methods are **projections** of the governed record.
 
 ---
 
-![One governed record behind the governance boundary, projected through four doors](01-assets/one-record-many-doors.png)
+![One governed record behind the governance boundary, projected through four doors](00-assets/one-record-many-doors.png)
 
 ---
 
 # 6. The trust ladder: every door does not provide the same guarantee
 
-![Some doors give a stronger promise than others](01-assets/trust-ladder.png)
+![Some doors give a stronger promise than others](00-assets/trust-ladder.png)
 
 Concept 8 introduced multiple ways of accessing the same governed knowledge.
 
@@ -1056,7 +1056,7 @@ The organization's approved policy should not change from one invocation to the 
 
 ---
 
-![What the helper may change, and what it may not](01-assets/helper-not-a-robot.png)
+![What the helper may change, and what it may not](00-assets/helper-not-a-robot.png)
 
 ---
 
@@ -1720,7 +1720,7 @@ Now all three helpers can point to the same authoritative rule:
 
 > _Medicine Rules, page 7, version 4._
 
-![The same question, asked again — same cited answer from all three helpers](01-assets/same-question-again.png)
+![The same question, asked again — same cited answer from all three helpers](00-assets/same-question-again.png)
 
 The important change was not that the AI suddenly became smarter.
 
