@@ -289,7 +289,10 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    degrades to readable text in a plain renderer, which is what
    "framework-free" was protecting._ _Revision 2026-09-01: the closed root set is
    recorded as gaining TWO members it had already gained in silence —
-   `.ksor/people.yaml` (0.0.53) and `.mcp.json` (0.0.54). Both were emitted and
+   `.ksor/people.yaml` (0.0.52 — this revision first said 0.0.53, corrected
+   2026-09-02 against the tags: `1e60b9d` added the file and its `.gitignore`
+   negation, and both are present at `@panaversity/ksor@0.0.52` and absent at
+   `0.0.51`) and `.mcp.json` (0.0.54). Both were emitted and
    asserted in `init.integration.test.ts` with no row in the init spec's
    emitted-tree contract and no revision here, which is exactly the review step
    this decision names as where additions are locked. The omission was not

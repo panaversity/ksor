@@ -1,5 +1,5 @@
 ---
-issue: okf-native-spec branch (set to the PR URL when it opens)
+issue: https://github.com/panaversity/ksor/pull/161
 status: accepted (phase A built; phase B not started — §7)
 last_updated: 2026-08-25
 ---

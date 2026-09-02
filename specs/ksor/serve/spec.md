@@ -70,14 +70,20 @@ generation is neither, so its outstanding tokens refresh to active
 for the token's TTL. "The generation is the authorization" holds at read
 time, not only at issue time.
 
-**Serving fails safe** (decision 7). Local serve binds loopback with auth
-off. A public bind refuses to boot unless auth is configured or
-unauthenticated serving is explicitly flagged — a dropped auth variable must
-never silently ship an open door. ONE transport: stateless Streamable
+**Serving fails safe** (decision 7). Serve refuses to boot unauthenticated
+at all: a local run says so explicitly with `KSOR_AUTH=disabled-local` and
+binds loopback; a public bind additionally refuses unless the SSO door is
+configured or `KSOR_AUTH=disabled-public` is deliberate
+(`packages/gateway-kit/src/auth.ts:243-284`,
+`packages/content-gateway/src/http.ts:231-238`) — a dropped auth variable must
+never silently ship an open door. _Corrected 2026-09-02: this read "Local serve
+binds loopback with auth off", the default decision 7's 2026-08-20 revision
+records the code has never had._ ONE transport: stateless Streamable
 HTTP — the shape the production gateway ships, spoken by hosted clients
 and local coding agents alike against a URL (no stdio door; one obvious
 way). The bind is the posture: unset PORT → loopback (the dev door,
-rebind-protected, safe with auth off); a public bind is deliberate.
+rebind-protected, where `disabled-local` is the intended shape); a public
+bind is deliberate.
 
 **The protocol revision is 2026-07-28** (SDK v2's `createMcpHandler`;
 decision 13 revision 2026-08-20): handshake-free, with `server/discover` in
@@ -148,8 +154,12 @@ the refresh path; byte-exact read; the HTTP door's fail-closed boot and
 probes; oracle-fixture parity for chunking, calibration math, windowing,
 manifest; and the calibrate CLI's synthesized door (`calibrateCommand` builds
 the text generator and passes it into `runCalibration` — corrected 2026-08-20:
-this spec listed it as unwired after the code landed; the code wins). Not yet
-wired: behavioural evals as a CI gate, and the `.mcp.json` scaffold rung.
+this spec listed it as unwired after the code landed; the code wins). _Corrected
+2026-09-02: this list also carried "not yet wired: behavioural evals as a CI
+gate, and the `.mcp.json` scaffold rung". Both are wired — `pnpm test:db` runs
+`evals/behavioural.db.test.ts` in CI with the provider key
+(`.github/workflows/ci.yml:197-200`), and `.mcp.json` has been emitted since
+0.0.54 (`init.integration.test.ts:604`; decision 8 revision 2026-09-01)._
 _Corrected 2026-08-25: this list also carried "the visibility-staged tier as
 serve's source". That is retired rather than pending — the audience decision IS
 wired and enforced in the serving predicate, and it will never be wired as a
@@ -215,6 +225,22 @@ returned (`result_count` — one name for that fact across every action), and th
 generation. Never content and never the query — telemetry
 that accumulated passages would be a second copy of the record with no
 audience predicate over it and no takedown seam bound to it.
+
+## Status against acceptance (2026-09-02)
+
+Walked against the tree at this date. 1: the oracle fixtures are in
+`packages/content/src/ingest/fixtures/` and `calibrate/fixtures/`, asserted by
+`chunking.test.ts`, `manifest.test.ts`, `windowing.test.ts`, `calibrate/math`.
+2: `evals/behavioural.db.test.ts` gates under `pnpm test:db` in CI. 3:
+`kernel.db.test.ts:335-340` narrows on `ok === false` and reads `reason`. 5:
+`snapshot-viewer.db.test.ts` proves the viewer-bound token from the door. **4
+does not hold as written.** The refusal is real and exits 1
+(`content-gateway/src/http.ts:231-238`, `main.ts:101`), but its first stderr
+line is prose (`error: refusing an UNAUTHENTICATED PUBLIC bind …`), not a
+slug — `AuthConfigError` carries none — so "refuses to boot, slugged" is the
+line that keeps this spec a draft. Product principle 4 says a refusal that
+gains detail leads with a slug; giving this one a slug is a product change,
+not a spec correction.
 
 ## Out of scope
 

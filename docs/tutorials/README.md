@@ -62,7 +62,7 @@ state each one fires on. Every output was run and pasted as it appeared.
 
 2. ~~Build a Real Governed KSoR~~ — shipped as [Make it yours](./02-make-it-yours.md).
 3. **KSoR Governance in Practice** — ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
-4. **Serve a KSoR to AI Agents with MCP** — provision Postgres + pgvector, publish a generation, connect an MCP client, retrieve citations, and test abstention.
+4. **Serve a KSoR to AI Agents with MCP** — extends [hello world Part 2](./01-hello-world.md#part-2--the-agent-surface), which already provisions Postgres + pgvector, publishes a generation and connects one MCP client: calibrate the abstention floor, connect more than one client, and test that the record declines what it does not cover.
 5. **Combine KSoR with Traditional Systems of Record** — an agent that applies governed policy to current operational facts from an ERP, CRM, or accounting system.
 6. **Exchange Governed Knowledge with OKF** — package and move governed knowledge between systems without creating a second source of truth.
 

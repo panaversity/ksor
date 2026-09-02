@@ -376,7 +376,7 @@ it:
 **One of the nine is a binding with nothing behind it yet, and one is half
 built — both say so here.** `ksor build`
 writes `build.lock.json` but signs nothing — SLSA/Sigstore attestation of that
-lock is out of scope in `specs/ksor/build/spec.md` §5 and will land separately.
+lock is out of scope in `specs/ksor/build/spec.md` §6 and will land separately.
 **No telemetry is emitted today either**: there is no OpenTelemetry code in the
 tree, and the row above records which standard owns that boundary rather than a
 surface that runs. When it does land, one constraint is already decided by the
@@ -1207,7 +1207,7 @@ provenance attached. `ksor build` writes `build.lock.json` — the committed
 record of which corpus, which commit and which toolchain produced a
 publication, stamped into `llms.txt`, every markdown twin and
 `server.json` — but it signs nothing: SLSA/Sigstore attestation of that lock
-is named as out of scope in `specs/ksor/build/spec.md` §5 and will land
+is named as out of scope in `specs/ksor/build/spec.md` §6 and will land
 separately.
 
 ---

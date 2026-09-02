@@ -280,7 +280,18 @@ diffs (decision 4).
    contains no byte of it, read back by a bare OKF parser; the `internal`
    bundle contains both.
 
-## 5 · Out of scope
+## 5 · Status against acceptance (2026-09-02)
+
+Walked against the built CLI at this date. `ksor build --help` prints the §1
+contract; on `workbench/example-corpus` the lock carries exactly the §2 keys
+(`format` 1, `okf.commit` `ad30107c…`, `spec_sha256` `26aa5da0…`). Acceptance
+1–5 are asserted by `packages/ksor/src/build.integration.test.ts`,
+`site-staging.integration.test.ts` and the per-manager scaffold walks. **6
+does not hold**: `ksor build --bundles` prints `designed but not implemented
+in 0.0.58` and exits `2`, as §1 says — the bundles clause is the line that
+keeps this spec a draft, and it flips when `--bundles` lands with its test.
+
+## 6 · Out of scope
 
 SLSA/Sigstore attestation of the lock (P-Verified). Running the site build
 itself. Import. A REST surface. `log.md`.
