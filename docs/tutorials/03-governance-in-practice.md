@@ -14,11 +14,11 @@ appeared, with two conventions. Hashes are shortened — a `build_id` to
 `sha256:…`, a document's `sha256` in the lock to its first characters —
 because the first hashes the toolchain version along with the record and the
 second hashes bytes you will have typed for yourself, so neither will match
-yours. And a build prints a `source:` line and a `wrote …` line either side of
-what these pastes are about; they are shown where they are the point and left
-out where they are not. Nothing else is trimmed: the counts and the refusals
-will match yours, and timestamps and the ledger's entry ids carry the instant
-you ran them.
+yours. And every build prints a `source:` line naming the commit it read and a
+`wrote …` line naming what it wrote; both are shown where they are the point
+and left out where they are not. Nothing else is trimmed: the counts and the
+refusals will match yours, and timestamps and the ledger's entry ids carry the
+instant you ran them.
 
 **You need** the `handbook` from tutorial 2, and nothing else — no database,
 no key. Each step gives you a prompt for your coding agent, and the same work
