@@ -32,6 +32,10 @@ const DOCUMENTED_ELSEWHERE = new Map([
   ["KSOR_BASE_PATH", "scaffold README + AGENTS.md — a site build flag, not a server variable"],
   ["KSOR_AUDIENCE", "scaffold README + AGENTS.md — a site build flag"],
   ["KSOR_INSTANCE", "a CLI convenience for --instance; the flag is the documented form"],
+  // A repo-only test gate. No shipped code reads it; `e2e-gate.ts` only NAMES
+  // it, in the note a skipped browser suite prints, and that file is test
+  // support that happens not to end in `.test.ts`.
+  ["KSOR_E2E", "this repository's browser-suite gate — read by tests, named by e2e-gate.ts"],
   // RETIRED, replaced by KSOR_AUTH. The code still READS them, solely to tell an
   // operator following an old runbook what replaced them — documenting them in
   // env.example would present them as current, which is the opposite of the
