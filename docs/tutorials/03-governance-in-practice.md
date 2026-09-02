@@ -11,8 +11,8 @@ refuse to publish something, and each time it is right.
 Every command and every output below was run on 2026-09-02 and pasted as it
 appeared, with the convention from tutorial 2: a `build_id` is shown as
 `sha256:…`, because it hashes the toolchain version along with the record and
-yours will not match. Everything else will, except the ledger's entry ids,
-which carry the instant you ran the verb.
+yours will not match. The counts and the refusals will; timestamps and the
+ledger's entry ids carry the instant you ran them.
 
 **You need** the `handbook` from tutorial 2, and nothing else — no database,
 no key. Each step gives you a prompt for your coding agent, and the same work
@@ -221,9 +221,9 @@ ksor build: 3 document(s), 2 admitted to a machine surface at 2026-09-02T13:35:5
     instant these files disagree with `ksor serve`, which evaluates at request time.
 ```
 
-The page still renders, with an **Effective from** fact in its strip: a person
-reading ahead is fine, an agent citing a policy not yet in force is not. And
-the notice means what it says — static output decided this once, so a record
+The page still renders, with a badge: a person reading ahead is fine, an
+agent citing a policy not yet in force is not. And the notice means what it
+says — static output decided this once, so a record
 with dates rebuilds on a schedule. Now the same tree, evaluated on 1 October:
 
 ```
@@ -518,10 +518,9 @@ every machine surface until the day it took effect, and said so. That is what
 "whether an agent can be trusted is decided by the governance of what it
 reads" means in practice.
 
-**What is not done yet.** Every step above ran with no database, and the door
-reads exactly what the site does: the lock's admitted set, the trust tier, the
-ledger. Serving it — one door per viewer, `--apply` for the ledger, and the
-abstention floor that is still unmeasured — is tutorial 4.
+**What is not done yet.** Every step above ran with no database. Serving this
+record — one door per viewer, `--apply` for the ledger, and the abstention
+floor that is still unmeasured — is tutorial 4.
 
 ---
 
