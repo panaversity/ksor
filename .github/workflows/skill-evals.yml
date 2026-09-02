@@ -3,8 +3,11 @@ name: Skill evals
 # The agent tier (AGENTS.md → Testing): a shipped skill run by a real coding
 # agent, with the skill and without it. It spends model tokens, so it runs on
 # push to main and by hand — never per pull request — and only when the paths
-# it measures changed. Without ANTHROPIC_API_KEY it still runs and prints that
-# every suite was skipped, so an unarmed tier is visible rather than absent.
+# it measures changed. It authenticates through claude's own login — a
+# long-lived token from `claude setup-token` in CLAUDE_CODE_OAUTH_TOKEN — never
+# an API key (owner decision, 2026-09-02). Without the token it still runs and
+# prints that every suite was skipped, so an unarmed tier is visible rather
+# than absent.
 on:
   push:
     branches: [main]
@@ -42,4 +45,4 @@ jobs:
       - run: pnpm test:agent
         env:
           CI: "true"
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
