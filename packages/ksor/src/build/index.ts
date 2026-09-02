@@ -184,7 +184,7 @@ function viewerRefusal(viewers: readonly string[]): ViewerRefusal | null {
   if (unsafe.length > 0) {
     return {
       slug: "ksor-audience-identifier-invalid",
-      why: `the audience identifier${unsafe.length === 1 ? "" : "s"} ${list(unsafe)} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, and one named ${LOCK_NAME} would collide with the lock`,
+      why: `the audience identifier${unsafe.length === 1 ? "" : "s"} ${list(unsafe)} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, and one named ${LOCK_NAME} would collide with the lock. build.lock.json records that bundle's digest on EVERY build, flag or not, so this is refused here rather than only under --bundles`,
       fix: `name audiences in plain words (${PATH_SEGMENT_PROSE}) in .ksor/governance.yaml and in every \`ksor.audience\` list, then rebuild`,
     };
   }
@@ -206,7 +206,7 @@ function viewerRefusal(viewers: readonly string[]): ViewerRefusal | null {
   if (collided.length > 0) {
     return {
       slug: "ksor-audience-identifier-collides",
-      why: `${collided.map((g) => list(g)).join("; ")} differ only in case, so they are ${collided.length === 1 ? "two viewers" : "several viewers"} and one directory: --bundles writes ${BUNDLES_DIR}/<identifier>/ per viewer, and on a case-insensitive filesystem (macOS and Windows, by default) the later bundle merges into the earlier one — leaving a directory that holds concepts the viewer named on it may not read, and a digest in build.lock.json that no longer describes it`,
+      why: `${collided.map((g) => list(g)).join("; ")} differ only in case, so they are ${collided.length === 1 ? "two viewers" : "several viewers"} and one directory: --bundles writes ${BUNDLES_DIR}/<identifier>/ per viewer, and on a case-insensitive filesystem (macOS and Windows, by default) the later bundle merges into the earlier one — leaving a directory that holds concepts the viewer named on it may not read, and a digest in build.lock.json that no longer describes it. build.lock.json records both digests on EVERY build, flag or not, so this is refused here rather than only under --bundles`,
       fix: `give each audience in .ksor/governance.yaml a name that differs by more than case — \`public\` is reserved, casefolded too — and update every \`ksor.audience\` list that named the one you dropped, then rebuild`,
     };
   }
