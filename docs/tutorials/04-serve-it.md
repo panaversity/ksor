@@ -14,15 +14,15 @@ questions and been refused exactly once, correctly; and you have seen a
 document withdrawn from the door between two questions.
 
 Every command and every output below was run on 2026-09-02 and pasted as it
-appeared, with two conventions. A `build_id` is shown as `sha256:…`, because it
-hashes the toolchain version along with the record and yours will not match.
-And the door is on port **8180** throughout, because 8080 was held by another
-record on the machine this was captured on — `ksor serve` refused it by name and
-suggested `KSOR_MCP_PORT`, so that is what was used. On your machine leave the
-variable off and read `8080` wherever this says `8180`. JSON envelopes are
-pretty-printed and trimmed to the fields under discussion, and the agent's
-replies are re-wrapped to this page's width; nothing is reworded. A console
-block that begins or ends with `...` is one you are joining mid-stream —
+appeared, with the conventions that follow. A `build_id` is shown as `sha256:…`,
+because it hashes the toolchain version along with the record and yours will not
+match. And the door is on port **8180** throughout, because 8080 was held by
+another record on the machine this was captured on — `ksor serve` refused it by
+name and suggested `KSOR_MCP_PORT`, so that is what was used. On your machine
+leave the variable off and read `8080` wherever this says `8180`. JSON
+envelopes are pretty-printed and trimmed to the fields under discussion, and
+the agent's replies are re-wrapped to this page's width; nothing is reworded. A
+console block that begins or ends with `...` is one you are joining mid-stream —
 `npm run refresh` runs three commands and prints all of them, and the blocks
 below show the half under discussion. One line, marked where it appears, was
 added after the walk; it is the only line on this page that was not captured
