@@ -72,7 +72,7 @@ describe.runIf(adminDsn !== "")("the floor-drift query (db)", () => {
     await log(TENANT, "search_abstained", { top_cosine: 0.1 }, 400);
     await log(OTHER, "similarity_searched", { top_cosine: 0.99 });
     // Same tenant, a SECOND corpus: one record's floor must never be measured
-    // against the other's traffic (the scope readLedger records the reason for).
+    // against the other's traffic (the scope every governance write records).
     await log(TENANT, "similarity_searched", { top_cosine: 0.98 }, 0, "second-corpus");
   }, 180_000);
 

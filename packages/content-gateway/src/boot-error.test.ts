@@ -11,11 +11,33 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { RequiredEnvError } from "@panaversity/ksor-gateway-kit";
+
 import { bootErrorLines } from "./main.js";
 import { GatewayConfigError } from "./gateway-load.js";
 import { BindError } from "./bind.js";
 
 describe("bootErrorLines", () => {
+  it("an ENVIRONMENT refusal that names its rule opens with the slug too — exit 3 is not exempt", () => {
+    // A missing provider key exited 3 printing the sentence alone, so the one
+    // exit code the contract reserves for "the environment cannot run ksor"
+    // was also the one with no stable first line (found live, 2026-09-02).
+    const error = new RequiredEnvError(
+      'embedding provider "openai" needs an API key and none was supplied — set OPENAI_API_KEY',
+      "ksor-provider-key-missing",
+    );
+    expect(bootErrorLines(error)).toBe(
+      "error: ksor-provider-key-missing\n" +
+        'embedding provider "openai" needs an API key and none was supplied — set OPENAI_API_KEY',
+    );
+  });
+
+  it("an environment refusal with no rule to name stays a plain sentence", () => {
+    expect(bootErrorLines(new RequiredEnvError("KSOR_DB_URL is not set"))).toBe(
+      "error: KSOR_DB_URL is not set",
+    );
+  });
+
   it("prints the slug alone on the first line when the error carries one beside its message", () => {
     const error = Object.assign(new Error("the record refused\n  fix: fix it"), {
       slug: "ksor-instance-format",

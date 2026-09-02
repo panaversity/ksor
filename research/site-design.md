@@ -1,5 +1,5 @@
 ---
-issue: recorded via the site-design branch (set to the PR URL when it opens)
+issue: https://github.com/panaversity/ksor/pull/96
 status: proposed
 last_updated: 2026-08-21
 ---
@@ -372,8 +372,8 @@ simplify an implementation.
   model between the reader and the record — the opposite of "the calling model
   composes; the record returns evidence".
 - **`Accept: text/markdown` content negotiation**: needs a Node host at serve
-  time, which `output: export` does not have. Already recorded in
-  `research/site-shell.md`; the `.md` endpoint gets the same benefit statically.
+  time, which `output: export` does not have. Already recorded when the shell
+  was chosen (decision 9); the `.md` endpoint gets the same benefit statically.
 - **A cross-link graph (`graph.json`, `.graph.md`)**: Vercel's answer to a
   documentation _estate_ of many sites. One corpus per project is ksor's shape;
   revisit if multi-corpus composition ever lands.

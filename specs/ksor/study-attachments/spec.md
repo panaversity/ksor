@@ -216,8 +216,11 @@ naming neither the file's purpose nor the rule.
 
 ## 4 · Acceptance
 
-1. `ksor init` emits a record whose seed document carries a summary and a
-   deck; `pnpm dev` renders both with no database and no key.
+1. `ksor init` emits a record whose seed document carries a summary;
+   `pnpm dev` renders it with no database and no key. _Corrected 2026-09-02:
+   this read "a summary and a deck". The starter was trimmed to ONE companion,
+   `what-is-a-ksor.summary.md`, on 2026-08-26 (`2ece135`), and ships no
+   `.flashcards.yaml`; the deck surface is asserted on a fixture instead._
 2. A `.summary.md` beside a document produces a tab strip and a
    `.flashcards.yaml` produces a deck at the end of the page; removing either
    removes it and leaves no trace, and removing both leaves no region at all.
@@ -229,12 +232,27 @@ naming neither the file's purpose nor the rule.
 6. A denied parent's attachments are absent.
 7. An orphan attachment fails `pnpm check` with a remedy, and fails the build.
 8. `ksor ingest` creates no node for either attachment.
-9. Both shells refuse to publish an attachment as a routed document.
+9. The shell refuses to publish an attachment as a routed document.
+   _Corrected 2026-09-02: this read "both shells". The second shell was
+   retired on 2026-08-24 (decision 9 revision); the conformance suite keeps
+   its `.each(SHELLS)` shape over one entry
+   (`shell-conformance.integration.test.ts:56`)._
 10. The scheduler's transition table is asserted for every state × rating pair
     against a frozen clock.
 11. A real browser: both themes, both tabs, the deck at the end of the page, a
     full grade cycle, reload persistence, zero console errors, zero external
     requests.
+
+## 4a · Status against acceptance (2026-09-02)
+
+Walked against the scaffold at this date: `.yml` is refused by name
+(`lib/attachment-rule.ts:39-44`), `ksor-attachment-orphan` lives in the record
+checker (`record/check.ts`), `SCHEDULER_POLICY` is `ksor-sm2-v1`
+(`lib/srs.ts:15`), and `check.mjs` is built into both skill copies. 2–9 are
+held by `scaffold-e2e.integration.test.ts`, `site-staging.integration.test.ts`
+and `attachment-rule-drift.integration.test.ts`; 10 by the scheduler's unit
+suite. **11 — the real-browser walk — runs only under `KSOR_E2E`** and was not
+run for this walk, which is the line that keeps this spec a draft.
 
 ## 5 · Out of scope
 

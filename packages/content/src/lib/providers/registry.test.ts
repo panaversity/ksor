@@ -78,6 +78,12 @@ describe("buildShippedProvider — the one door", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(MissingProviderKeyError);
       expect((error as MissingProviderKeyError).providerName).toBe("gemini");
+      // …and a SLUG, so the refusal's first stderr line is the stable name every
+      // other refusal opens with (product principle 4) — `ksor serve` and
+      // `ksor ingest` both printed the sentence alone and exit 3, with no line
+      // an agent could branch on (found on a live walk, 2026-09-02).
+      expect((error as MissingProviderKeyError).slug).toBe("ksor-provider-key-missing");
+      expect((error as MissingProviderKeyError).keyEnv).toBe("GEMINI_API_KEY");
     }
   });
 

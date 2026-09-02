@@ -173,7 +173,20 @@ every build rather than on request.
    a larger one draws a round and offers another.
 10. Score state survives a reload and is per-reader; it is never sent anywhere.
 
-## 8 · Out of scope
+## 8 · Status against acceptance (2026-09-02)
+
+Walked against the scaffold at this date. The five §5 slugs are exactly the
+set `system/site/lib/quiz-audit.ts` raises, `questionsPerRound` defaults to
+10 (`lib/quiz-round.ts:21`), and the location label is "In the document"
+(`components/quiz.tsx:284`). 1–7 are asserted by
+`scaffold-e2e.integration.test.ts` ("publishes a quiz on its document's page
+only, and refuses a guessable one") with `quiz-audit.test.ts` and
+`quiz-round.test.ts` under them. **8–10 are not asserted anywhere in the
+tree**: immediate feedback, the round offer and reload persistence are
+browser behaviour, and no suite drives the built page for them — those are
+the lines that keep this spec a draft.
+
+## 9 · Out of scope
 
 Highlights (issue #35 — reader state needing an owner decision first), the
 directive grammar, any server-side scoring or cross-device progress, and

@@ -68,6 +68,16 @@ walks and three more on branches it names, each stopping something the record
 could not stand behind — a takedown with no name on it, a deleted ledger line,
 an approved document edited after its approval. Every output was run and pasted
 as it appeared.
+### [Serve it — with a floor, in about half an hour](./04-serve-it.md)
+
+The headline claim, done by hand: a measured floor under which the record
+declines. You publish the three documents from tutorial 2 to the agent door —
+after seeing it say, in capitals, that it is serving nothing — then measure
+where questions the record answers score against questions it does not. The
+first measurement prints a floor; the second, against near-misses, refuses to,
+and finds a rule nobody had written down. Then a real coding agent asks three
+questions and is refused exactly once, correctly, and a document is withdrawn
+between two questions. Every output was run and pasted as it appeared.
 
 ---
 
@@ -76,6 +86,8 @@ as it appeared.
 2. ~~Build a Real Governed KSoR~~ — shipped as [Make it yours](./02-make-it-yours.md).
 3. ~~KSoR Governance in Practice~~ — shipped as [Governance in practice](./03-governance-in-practice.md).
 4. **Serve a KSoR to AI Agents with MCP** — provision Postgres + pgvector, publish a generation, connect an MCP client, retrieve citations, and test abstention.
+3. **KSoR Governance in Practice** — ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
+4. ~~Serve a KSoR to AI Agents with MCP~~ — shipped as [Serve it — with a floor](./04-serve-it.md).
 5. **Combine KSoR with Traditional Systems of Record** — an agent that applies governed policy to current operational facts from an ERP, CRM, or accounting system.
 6. **Exchange Governed Knowledge with OKF** — package and move governed knowledge between systems without creating a second source of truth.
 

@@ -139,12 +139,40 @@ describe("every shipped skill's trigger says what it fires on", () => {
   });
 });
 
+/**
+ * Tutorial 4's prompts. None fires a skill, and that is the finding worth
+ * keeping: the served rung is run by VERBS the scaffold's scripts already name
+ * (`provision`, `refresh`, `serve`, `calibrate`), and the three questions at
+ * the end are the reader asking the RECORD through the door — answered, or
+ * refused, by the product rather than by the agent's competence. The one
+ * prompt that edits the record ("say what happens to an exchange") is the
+ * add-sources shape from tutorial 2, and names it.
+ */
+const TUTORIAL_4_PROMPTS: ReadonlyArray<readonly [string, string | null]> = [
+  ["Provision the database — `npm run provision`", null],
+  ["Publish the record — `npm run refresh`", null],
+  ["Here are eight questions our record answers", null],
+  ["Now measure it against questions just outside our scope", null],
+  ["Nobody ever wrote down what happens to an exchange", "add-sources"],
+  ["Paste the retrieval block into `instance.md`", null],
+  // The three-question test, and the one after the takedown: the reader
+  // asking the RECORD. The middle one is the only passing answer that is an
+  // abstention, and the product — not the agent — is what produces it.
+  ["What's the meal allowance when I'm away on business?", null],
+  ["How many weeks of parental leave do we get?", null],
+  ["What is the boiling point of water at sea level?", null],
+  ["Run `ksor calibrate --check`", null],
+  ["Take `finance/late-claims` down", null],
+  ["What happens to a late claim from a director?", null],
+];
+
 /** Every tutorial that hands the reader prompts, with the table that accounts for them. */
 const TUTORIALS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, string | null]>]> =
   [
     ["docs/tutorials/01-hello-world.md", TUTORIAL_PROMPTS],
     ["docs/tutorials/02-make-it-yours.md", TUTORIAL_2_PROMPTS],
     ["docs/tutorials/03-governance-in-practice.md", TUTORIAL_3_PROMPTS],
+    ["docs/tutorials/04-serve-it.md", TUTORIAL_4_PROMPTS],
   ];
 
 describe.each(TUTORIALS)("%s's prompts are accounted for", (file, table) => {

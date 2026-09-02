@@ -12,10 +12,22 @@ export type Bind = { host: string; port: number };
 /**
  * A required env var is missing — thrown with the operator message. Like
  * AuthConfigError, the gateway maps this distinct type to a clean stderr line
- * + exit 2; it must never half-boot past it.
+ * + exit 3 (environment); it must never half-boot past it.
+ *
+ * `slug` is the stable first stderr line the gateway prints when the refusal
+ * names a rule (`bootErrorLines`). Optional, because most of these are one
+ * sentence about one variable and the sentence IS the name; a missing provider
+ * key is the one with a rule behind it, and it exited 3 with no line an agent
+ * could branch on while every exit-1 refusal had one (product principle 4;
+ * found live, 2026-09-02).
  */
 export class RequiredEnvError extends Error {
   override readonly name: string = "RequiredEnvError";
+  readonly slug: string | null;
+  constructor(message: string, slug: string | null = null) {
+    super(message);
+    this.slug = slug;
+  }
 }
 
 export function requireEnv(env: Env, name: string): string {

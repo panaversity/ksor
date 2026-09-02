@@ -1,1 +1,0 @@
-Moved to [01-hello-world.md](./01-hello-world.md) — the tutorials are numbered in reading order, and the introduction comes first. This pointer stays for one release because the package README that shipped in 0.0.56 links here.

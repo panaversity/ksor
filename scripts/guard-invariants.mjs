@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 // strips types natively, so the grammar can be shared with the TypeScript
 // tests without a build step and without a second copy. This is Node, not
 // the TypeScript compiler API — coding principle 2 is untouched.
-import { parseScratchName } from "./lib/db-scratch.ts";
+import { parseScratchName, sampleScratchName } from "./lib/db-scratch.ts";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -512,28 +512,46 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
       violate(12, `${rel} names a scratch database with the fixed string "${match[1]}"`, WHY, FIX);
     }
 
-    // …and a template literal starting `ksor_` must carry both halves.
-    for (const match of text.matchAll(/`ksor_[^`]*`/g)) {
-      const literal = match[0];
+    // …and a name BUILDER — a template literal starting `ksor_`, or a
+    // `["ksor", …].join("_")` assembling one from its fields — must carry both
+    // halves, and must evaluate to a name the reaper recognises. A join that
+    // attempts NEITHER half is not read as a builder: the reaper's own suite
+    // assembles a fixture that way on purpose, a name from before this grammar
+    // that the reaper must leave alone, and there is no way to write "not
+    // ours" in a grammar whose whole point is to be recognisable.
+    const builders = [
+      ...text.matchAll(/`ksor_[^`]*`/g),
+      ...[...text.matchAll(/\[\s*"ksor"[^\]]*\]\s*\.join\(\s*"_"\s*\)/g)].filter(
+        (match) => match[0].includes("Date.now()") || match[0].includes("randomBytes("),
+      ),
+    ].map((match) => match[0]);
+    for (const literal of builders) {
       const missing = [];
-      if (!literal.includes("Date.now().toString(36)")) missing.push("the run stamp");
+      if (!literal.includes("Date.now()") || !literal.includes(".toString(36)")) {
+        missing.push("the run stamp");
+      }
       if (!literal.includes("randomBytes(")) missing.push("the random suffix");
       if (missing.length > 0) {
         violate(12, `${rel} builds ${literal} without ${missing.join(" or ")}`, WHY, FIX);
+        continue;
+      }
+      // Both halves are present as TEXT. That is not the same as minting a
+      // name the reaper will drop — `randomBytes(2)` passes the line above and
+      // yields four hex characters where the grammar wants six — so the
+      // suite's own expression is evaluated into the name it will make, and
+      // THAT is handed to the parser the reaper uses. This used to run on a
+      // literal the guard wrote for itself, which proved only that the guard
+      // agreed with the guard.
+      const sample = sampleScratchName(literal);
+      if (sample === null || parseScratchName(sample) === null) {
+        violate(
+          12,
+          `${rel} builds ${literal}, which evaluates to ${sample ?? "nothing this rule can read"} — a name scripts/db-reaper.ts would not recognise as a scratch database`,
+          "the reaper only drops names it can parse, so a name it disagrees with leaks forever, and a grammar the two sides read differently is how that happens",
+          FIX,
+        );
       }
     }
-  }
-
-  // The reaper reads names the guard admits, so a change to either that stops
-  // them agreeing is caught here rather than by a database nobody drops.
-  const sample = `ksor_idle_${Date.now().toString(36)}_3f2c8e`;
-  if (parseScratchName(sample) === null) {
-    violate(
-      12,
-      `scripts/db-reaper.ts would not recognise ${sample} as a scratch database`,
-      "the reaper only drops names it can parse, so a grammar it disagrees with means every scratch database leaks forever",
-      "reconcile parseScratchName in scripts/lib/db-scratch.ts with the literal this rule requires",
-    );
   }
 }
 

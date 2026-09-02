@@ -44,6 +44,7 @@ export {
   type ViewerRefusal,
 } from "./lib/audience.js";
 export { servingPolicy, type ServingPolicy } from "./lib/policy-row.js";
+export { publishedGeneration, readPublished, type PublishedGeneration } from "./lib/published.js";
 export {
   parseTrustFloor,
   tierOrdinal,

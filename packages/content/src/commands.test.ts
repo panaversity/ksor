@@ -34,4 +34,52 @@ describe("usageFor", () => {
     expect(usageFor("takedown")).not.toContain("ksor gc");
     expect(usageFor("ingest")).not.toContain("ksor calibrate");
   });
+
+  /**
+   * `calibrate` has TWO headings — the measuring form and `--check` — and the
+   * description paragraph sits under the second. The slice stopped at the next
+   * heading whatever verb it named, so `ksor calibrate --help` printed the
+   * first form's flags and nothing else: no `--check`, no `--days`, and not one
+   * sentence about what the verb does. The paragraph was reachable only by
+   * getting the arguments wrong (found on a live walk, 2026-09-02).
+   */
+  it("carries a verb's every heading AND its description, when the verb has more than one form", () => {
+    const block = usageFor("calibrate");
+    for (const text of [
+      "--queries-file PATH",
+      "--ooc-file PATH",
+      "--check [--days N]",
+      "Measure the abstention floor",
+      "no provider key, no",
+    ]) {
+      expect(block, `\`${text}\` is missing from \`ksor calibrate --help\`:\n${block}`).toContain(
+        text,
+      );
+    }
+    expect(block).not.toContain("ksor grant");
+  });
+
+  /**
+   * A heading matches only when it names the verb WHOLE, and the reachable case
+   * is a verb that does NOT exist: `ksor g --help` reaches `usageFor("g")` —
+   * the dispatcher answers `--help` before it knows the verb — and matching a
+   * heading by PREFIX printed `grant`'s block for it, exit 0: the binary
+   * documenting a verb it refuses to run. The whole usage is the honest answer.
+   *
+   * What this replaced asserted that `usageFor("gc")` never carries `grant`'s
+   * help, which no prefix rule could produce — "ksor grant" does not start with
+   * "ksor gc" — so it was green against the very code it claimed to guard
+   * (review finding 3).
+   */
+  it("a verb that only PREFIXES a real one gets the whole usage, not that verb's block", () => {
+    const block = usageFor("g");
+    expect(block, "`ksor g --help` must not be answered with `grant`'s block").not.toBe(
+      usageFor("grant"),
+    );
+    for (const verb of ["ksor schema", "ksor ingest", "ksor grant", "ksor gc"]) {
+      expect(block, `the whole usage lists every verb; ${verb} is missing:\n${block}`).toContain(
+        verb,
+      );
+    }
+  });
 });

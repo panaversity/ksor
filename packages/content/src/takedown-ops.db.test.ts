@@ -5,19 +5,20 @@
  * verb in `takedown-verb.db.test.ts`. What stays here is the pair that has to
  * hold whoever wrote the row: the acts are READABLE (before schema 2.3
  * `retrieval_log` had FORCE row-level security, an INSERT policy and no reader
- * at all — written forever, readable by nobody), and both readers are scoped to
- * ONE RECORD, not merely to the tenant.
+ * at all — written forever, readable by nobody), and the state is scoped to ONE
+ * RECORD rather than merely to the tenant — `listTakedowns` scopes its read,
+ * and every §7 act carries the `corpus_id` any reader scopes by.
  */
 
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { contentPool, runIngest } from "./db.js";
+import { contentPool, runAuditRead, runIngest } from "./db.js";
 import { grantIngest } from "./grant.js";
 import { instanceOf } from "./ingest/fixtures/record-fixture.js";
 import { applyLedger } from "./ingest/ledger-apply.js";
 import { parseLedger } from "./record/ledger.js";
-import { listTakedowns, readLedger } from "./takedown-ops.js";
+import { listTakedowns } from "./takedown-ops.js";
 import { applySchema } from "./schema.js";
 import type { ContentInstance } from "./instance.js";
 import type pg from "pg";
@@ -52,9 +53,42 @@ const REVOKED_LEDGER =
   `- id: "2026-08-25T11:00:00Z-bbb222"\n  revokes: "2026-08-25T10:00:00Z-aaa111"\n` +
   `  by: "${REVOKER}"\n  at: "2026-08-25T11:00:00Z"\n`;
 
+interface Act {
+  readonly action: string;
+  readonly actor: string;
+  readonly corpusId: string | null;
+  readonly detail: Record<string, unknown>;
+}
+
 describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
   let pool: pg.Pool;
   let admin: pg.Pool;
+
+  /**
+   * The §7 acts one corpus recorded, newest first, through the auditor role.
+   *
+   * A statement of its own rather than a kernel function: the one that existed
+   * (`readLedger`) lost its last caller when `--ledger` became the committed
+   * file's history on every rung, and was deleted with it (review finding 5).
+   * What these tests hold is unchanged, because it was never a property of the
+   * reader — it is what the WRITE leaves behind, the row proving a named person
+   * performed the act (working rule 10), and the auditor role's SELECT on a
+   * table no serving role may read at all.
+   */
+  const acts = async (corpusId: string = instance.corpusId): Promise<Act[]> =>
+    runAuditRead(pool, TENANT, async (client) => {
+      const r = await client.query(
+        "SELECT action, actor, detail, corpus_id FROM retrieval_log" +
+          " WHERE tenant_id = $1 AND corpus_id = $2 ORDER BY created_at DESC, id DESC LIMIT 50",
+        [TENANT, corpusId],
+      );
+      return r.rows.map((row: Record<string, unknown>) => ({
+        action: String(row.action),
+        actor: String(row.actor),
+        corpusId: row.corpus_id === null ? null : String(row.corpus_id),
+        detail: (row.detail ?? {}) as Record<string, unknown>,
+      }));
+    });
 
   beforeAll(async () => {
     const { Pool } = (await import("pg")).default;
@@ -109,7 +143,7 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
   });
 
   it("the §7 act is readable, and names the LEDGER's actor rather than whoever ran the apply", async () => {
-    const rows = await readLedger(pool, instance, 10);
+    const rows = await acts();
     const act = rows.find((r) => r.action === "takedown_applied");
     expect(act, "the act left a row").toBeDefined();
     expect(act?.actor).toBe("human:ciso");
@@ -149,7 +183,7 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
     const restored = restore.ledger;
     await runIngest(pool, TENANT, (c) => applyLedger(c, instance, revoked.ledger));
     try {
-      const rows = await readLedger(pool, instance, 50);
+      const rows = await acts();
       const act = rows.find((r) => r.action === "takedown_revoked");
       expect(act, "the revocation left a row of its own").toBeDefined();
       expect(act).toMatchObject({
@@ -169,11 +203,15 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
     }
   });
 
-  it("the ledger is scoped to THIS record, not just the tenant", async () => {
-    // Every governance write records corpus_id, and listTakedowns already
-    // scoped by it; readLedger did not. One tenant serving two corpora — the
-    // shape the second-record open question prepares for — got one record's
-    // audit trail polluted with the other's (round-9 review of #43).
+  /**
+   * The scoping used to be asserted on the READER, and the reader is gone. What
+   * makes ANY reader able to scope is that the WRITE stamps `corpus_id` — which
+   * is what `ksor calibrate --check` reads this table under, and what one
+   * tenant serving two corpora (the shape the second-record open question
+   * prepares for) depends on to keep one record's acts out of the other's
+   * (round-9 review of #43). So the assertion moves to the durable half.
+   */
+  it("every act records THIS record's corpus, not just the tenant", async () => {
     const other: ContentInstance = { ...instance, corpusId: "other-corpus" };
     await runIngest(pool, TENANT, async (client) => {
       await client.query(
@@ -188,13 +226,18 @@ describe.runIf(adminDsn !== "")("takedown read plane (db)", () => {
       );
     });
 
-    const mine = await readLedger(pool, instance, 50);
+    const mine = await acts();
+    expect(mine.length, "the apply in beforeAll left acts to read").toBeGreaterThan(0);
+    expect(
+      mine.map((r) => r.corpusId),
+      "every act this record wrote carries its corpus, which is what a reader scopes by",
+    ).toEqual(mine.map(() => instance.corpusId));
     expect(
       mine.some((r) => r.actor === "someone-else"),
-      `another corpus's act appeared in this record's ledger: ${JSON.stringify(mine.map((r) => r.actor))}`,
+      `another corpus's act appeared in this record's acts: ${JSON.stringify(mine.map((r) => r.actor))}`,
     ).toBe(false);
 
-    const theirs = await readLedger(pool, other, 50);
+    const theirs = await acts(other.corpusId);
     expect(
       theirs.map((r) => r.actor),
       "…and it IS in its own",

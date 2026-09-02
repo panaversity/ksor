@@ -1,5 +1,5 @@
 ---
-status: draft
+status: superseded
 date: 2026-08-20
 claim: whether an agent — or a reader — can be trusted is decided by the governance of what it reads, so the governance a document carries must be visible on the surface that serves it
 evidence: panaversity/ksor#29
@@ -7,6 +7,14 @@ evidence: panaversity/ksor#29
 
 # Site governance rendering
 
+> **Status set to `superseded`, 2026-09-02.** The note below already named
+> the record and build specs as the contract; this walk confirmed that the
+> acceptance below cannot pass against the tree — its fixtures
+> (`status: approved`, `status: superseded`, a bare `effective` date) are
+> shapes the checker refuses (`ksor-status-unknown`, `ksor-instant-form`) —
+> so the honest lifecycle word is the third one guard rule 8 admits. The
+> reasoning stays, as the note says.
+>
 > **Superseded in part, 2026-08-25.** This page was written against the ranked
 > `visibility:` model and the `draft | review | approved | superseded` status
 > vocabulary. The record is now the KSoR Profile of OKF: the lifecycle states
