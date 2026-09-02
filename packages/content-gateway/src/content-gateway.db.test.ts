@@ -866,7 +866,8 @@ Answer ONLY from this record.
    * 2026-09-02). Booted with npm's user agent, so the remedy is spelled for
    * the manager that ran it.
    */
-  it("a door on a record nothing was published to says NONE, on the boot line and on /health", async () => {
+  it("a door on a record nothing was published to says NONE, and follows a refresh without a restart", async () => {
+    const emptyTenant = `${TENANT}-empty`;
     const emptyInstance = path.join(work, "instance-empty.md");
     writeFileSync(
       emptyInstance,
@@ -924,6 +925,42 @@ Answer ONLY from this record.
       };
       expect(health.boot_checks).toBe("passed");
       expect(health.generation).toBe("NONE — nothing published; run npm run refresh");
+
+      // …and a publish AFTER boot reaches /health with no restart, which is the
+      // half the readiness probe was rewritten for: it reads what is published
+      // instead of the `SELECT 1` it replaced, at the same one round trip. That
+      // claim was made in the changeset and in docs/deploying.md and held by
+      // nothing — reverting the probe left every suite green (review finding 4).
+      await pool.query(
+        "INSERT INTO ingest_tenant_grants (role_name, tenant_id) VALUES ('sor_content_ingest', $1)",
+        [emptyTenant],
+      );
+      await runIngest(pool, emptyTenant, async (c) => {
+        await c.query(
+          "INSERT INTO corpora (tenant_id, corpus_id, active_generation) VALUES ($1, $1, 7)",
+          [emptyTenant],
+        );
+        // The run row a real `ksor ingest` writes; without it the generation
+        // reads as pre-profile, which is a different state from the one under
+        // test here.
+        await c.query(
+          `INSERT INTO ingestion_runs (tenant_id, corpus_id, generation, state, source_commit,
+                                       instance_bundle_sha256, schema_version, build_id, ledger_ids)
+           VALUES ($1, $1, 7, 'active', 'fixture', 'fixture', '2.5', 'sha256:fixture', ARRAY[]::text[])`,
+          [emptyTenant],
+        );
+      });
+      // The verdict is cached for READY_TTL_MS after it settles (http.ts), so
+      // the next answer is asked for past that window: freshness is the claim,
+      // and a shorter wait would only prove the cache works.
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      const refreshed = (await (await fetch(`http://127.0.0.1:${emptyPort}/health`)).json()) as {
+        generation: string;
+      };
+      expect(
+        refreshed.generation,
+        "a generation flipped while the door was up must reach /health on the next probe",
+      ).toBe("7 · 0 nodes · source fixture");
     } finally {
       await new Promise<void>((resolve) => {
         const hard = setTimeout(() => child.kill("SIGKILL"), 5_000);
