@@ -858,18 +858,24 @@ describe("every link into docs/tutorials resolves", () => {
  * ties the sentence to the bytes.
  */
 describe("the scaffold makes 'nothing phones home' true", () => {
-  it.each(["README.md", "docs/tutorials/00-introduction-to-ksor.md"])(
-    "%s makes the claim",
-    (file) => {
-      // Pinned so the assertion below cannot go vacuous: a document that stops
-      // making the claim fails here and asks whether the switch still matters.
-      expect(
-        flat(read(file)),
-        `${file} no longer says nothing phones home — if that was dropped on purpose, ` +
-          "retire this block with it rather than leaving a guard for a claim nobody makes",
-      ).toMatch(/nothing phones home/);
-    },
-  );
+  // README.md is the product pitch and its only home, so it is where the claim
+  // lives and what this block exists to keep true. It is pinned so the
+  // assertions below cannot go vacuous: a README that stops making the claim
+  // fails here and asks whether the switch still matters.
+  //
+  // The introduction tutorial was pinned here too until 2026-09-03, when its
+  // §10 mini-walkthrough — which carried the sentence — was replaced by a
+  // pointer to hello world. That is the guard working as its own message says:
+  // the document stopped making the claim, so the question was asked, and the
+  // answer is that the claim belongs to the README, not to a tutorial that no
+  // longer walks a build.
+  it("README.md makes the claim", () => {
+    expect(
+      flat(read("README.md")),
+      "README.md no longer says nothing phones home — if that was dropped on purpose, " +
+        "retire this block with it rather than leaving a guard for a claim nobody makes",
+    ).toMatch(/nothing phones home/);
+  });
 
   it("the wrapper hands next an environment with telemetry off", () => {
     expect(
