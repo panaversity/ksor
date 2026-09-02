@@ -103,13 +103,18 @@ every historic version and the committed lock, a shallow clone refused.
 each registered audience, each built for the viewer `[public, <audience>]`
 exactly — the admitted concepts, their companions, the assets their bodies
 reference, and every `index.md` regenerated for that filtered tree with
-`okf_version` at the root; no byte of an excluded concept, grepped in the test
-rather than inspected by name; a copy of the lock beside them; the directory
-replaced on every run and gitignored by the scaffold's `.ksor/*` rule. The
-admission is the lock's own `admitted` set, never a second predicate. The lock
-records every bundle's digest on EVERY build, flag or not — the bundles are a
-function of what `build_id` already hashes, so `build_id` is unchanged and the
-lock is the same lock either way. **The emitted `check.mjs` is generated** from the
+`okf_version` at the root; no byte of a concept excluded for AUDIENCE, grepped
+in the test rather than inspected by name (an exclusion for a lifecycle or
+ledger reason leaves the excluded path in a held body's link, verbatim and
+reported); a copy of the lock beside them; the directory replaced on every run
+and gitignored by the scaffold's `.ksor/*` rule. The admission is the lock's own
+`admitted` set, never a second predicate. The lock records every bundle's digest
+on EVERY build, flag or not — the bundles are a function of what `build_id`
+already hashes, so `build_id` is unchanged and the lock is the same lock either
+way — and an audience identifier that cannot name a bundle directory is
+therefore refused on every build too, whether it is not a path segment
+(`ksor-audience-identifier-invalid`) or differs from another only in case
+(`ksor-audience-identifier-collides`). **The emitted `check.mjs` is generated** from the
 record module at package-build time into both skill trees (gitignored in the
 templates), read-only, refusing a stale index; a conformance fixture is judged
 identically by it and by `checkRecord`. **The starter is in the profile**:

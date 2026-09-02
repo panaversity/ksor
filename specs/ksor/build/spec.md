@@ -64,20 +64,31 @@ the contract and performs nothing.
    audience X, an OKF bundle at `.ksor/out/bundles/<X>/` built for the viewer
    list `[public, X]` exactly: the admitted concepts (§2), companions beside
    their parents, indexes generated for the filtered tree, `okf_version` at
-   the root, frontmatter intact. No byte of an excluded concept — not a
-   title, path, description, link target or asset (R5). Only an asset a held
+   the root, frontmatter intact. No byte of a concept excluded for AUDIENCE —
+   not a title, path, description, link target or asset (R5); the checker is
+   what makes that byte-complete, because it refuses upstream any link,
+   supersession pointer or companion body reaching a narrower audience
+   (`ksor-link-widens`), so a verbatim body cannot name one. An exclusion for
+   a LIFECYCLE or LEDGER reason is not byte-complete and is not meant to be:
+   the body stays verbatim, so the excluded concept's path ships as a
+   dangling link target, reported per bundle (below). Only an asset a held
    body references travels, or an image nothing published mentions would ship
    into every bundle. The admission is the lock's own `admitted` set
    (`admittedViewersOf`), never a second predicate. `.ksor/out/bundles/` is
    REPLACED on every `--bundles` run — a bundle for an audience the policy no
    longer registers must not sit beside the fresh ones — and a copy of the
    lock is written beside them so the output travels with its provenance. An
-   audience identifier that cannot name a directory (`../x`) is refused before
-   anything is written (`ksor-audience-identifier-invalid`). A link from a held
-   body to a concept the bundle excludes for a lifecycle or ledger reason
-   dangles — the body is verbatim, not rewritten — and stdout names it; a link
-   that would widen audience never reaches here, because the checker refuses
-   it (`ksor-link-widens`).
+   audience identifier that cannot name a directory (`../x`, a leading `.` or
+   `-`) is refused before anything is written
+   (`ksor-audience-identifier-invalid`), as are two identifiers differing only
+   in case (`ksor-audience-identifier-collides`) — two viewers and one
+   directory on a case-insensitive filesystem. Both run on EVERY build, flag or
+   not, because §2's `bundles[]` is written either way and a digest for a
+   directory the tool refuses to write is provenance for something that cannot
+   exist. A link from a held body to a concept the bundle excludes for a
+   lifecycle or ledger reason dangles — the body is verbatim, not rewritten —
+   and stdout names it; a link that would widen audience never reaches here,
+   because the checker refuses it (`ksor-link-widens`).
 
 In every manager's scaffold the `build` script becomes `ksor build` followed
 by the site build and `export-denylist` is removed (decision 25's

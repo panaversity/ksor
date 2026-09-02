@@ -9,11 +9,16 @@ bundle per viewer under `.ksor/out/bundles/<viewer>/` — `public`, and
 bundle holds exactly what that viewer's machine surfaces publish: the admitted
 concepts (stable, effective, unexpired, not taken down, audience overlapping),
 their companions, the assets their bodies reference, and every `index.md`
-regenerated for that filtered tree with `okf_version` at the root. No byte of
-an excluded concept reaches it — not a title, a path, a description or an
-asset — and any OKF consumer reads it with no ksor in the loop. The directory
-is replaced on every run, a copy of `build.lock.json` is written beside the
-bundles, and the scaffold's `.ksor/*` rule already gitignores it.
+regenerated for that filtered tree with `okf_version` at the root. No byte of a
+concept excluded for AUDIENCE reaches it — not a title, a path, a description
+or an asset — because the record checker refuses a link that widens audience
+before a bundle is planned. A document excluded for a lifecycle or ledger
+reason is different, and deliberately: bodies are copied verbatim, never
+rewritten, so a link to a draft or a taken-down document keeps that path and
+the build reports the dangling link instead of editing your prose. Any OKF
+consumer reads a bundle with no ksor in the loop. The directory is replaced on
+every run, a copy of `build.lock.json` is written beside the bundles, and the
+scaffold's `.ksor/*` rule already gitignores it.
 
 `build.lock.json` gains `bundles[]` — one `{ viewer, sha256, files }` per
 viewer, recorded on EVERY build whether or not the flag was passed, so a
@@ -24,6 +29,14 @@ hashes. A lock written by an earlier ksor lacks the key and is refused as
 `ksor-lock-invalid` — run `ksor build` once after upgrading, which `pnpm build`
 already does.
 
-One new refusal: `ksor-audience-identifier-invalid`, when a registered
-audience cannot name a directory (for example `../x`), raised only under
-`--bundles` and before anything is written.
+Two new refusals, both raised on EVERY build — not only under `--bundles` —
+because the lock lists `bundles[]` either way and a digest for a directory the
+tool refuses to write would be a provenance claim about something that cannot
+exist. `ksor-audience-identifier-invalid`: a registered audience that cannot
+name a bundle directory (`../x`, `.hidden`, `-x`, or `build.lock.json`, whose
+name the lock copy beside the bundles already holds) — an identifier must start
+with a letter or a digit and may then use letters, digits, `-`, `_` and `.`.
+`ksor-audience-identifier-collides`: two registered audiences differing only in
+case, such as `internal` and `Internal`, which are two viewers in your policy
+and ONE directory on macOS and Windows — the second bundle would merge into the
+first, leaving a directory that holds concepts its viewer may not read.

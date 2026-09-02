@@ -72,7 +72,8 @@ scaffold is deterministic and offline, and every refusal explains itself.
 > `gc` — the climbed rung, needing Postgres and a provider key). Only `dev` is
 > designed, not implemented — it prints an honest notice and exits `2` (inside
 > a scaffolded project, `pnpm dev` covers local work). `build --bundles`
-> writes one OKF bundle per audience for exchange.
+> writes one OKF bundle per canonical viewer — `public`, and `[public, X]` for
+> each registered audience X — for exchange.
 > [`docs/status.md`](https://github.com/panaversity/ksor/blob/main/docs/status.md)
 > and the released version number are authoritative for the exact released
 > functionality.

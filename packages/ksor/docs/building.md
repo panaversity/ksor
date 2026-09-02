@@ -45,11 +45,22 @@ from the lock's own `admitted` set:
   its parent;
 - frontmatter verbatim, unknown keys preserved, bytes unchanged.
 
-No byte of an excluded concept reaches a bundle: not its title, its path, its
-description, a companion of it, or an asset only it references. The test that
-holds this greps the emitted tree for the excluded document rather than
-inspecting it by name, because a bundle is the one projection that leaves the
-building.
+No byte of a concept excluded for AUDIENCE reaches a bundle: not its title, its
+path, its description, a companion of it, or an asset only it references. The
+test that holds this greps the emitted tree for the excluded document rather
+than inspecting it by name, because a bundle is the one projection that leaves
+the building. What makes it byte-complete is the record checker, not this
+command: a link, a supersession pointer or a companion body reaching a narrower
+audience is refused as `ksor-link-widens` before a bundle is ever planned, so a
+body copied verbatim cannot name what its own readers may not open.
+
+An exclusion for a LIFECYCLE or LEDGER reason — a draft, a document not yet
+effective, one past `stale_after`, one taken down — is narrower on purpose. The
+body is copied verbatim, never rewritten, so if a held document links to one of
+those, the excluded path ships inside that link. It is [reported per
+bundle](#what-it-will-tell-you) rather than edited away: rewriting a body would
+make the bundle a derivative instead of a copy you can hash against the record,
+and the reader who sees the path is already entitled to that audience.
 
 ```
 .ksor/out/bundles/
@@ -106,16 +117,37 @@ refuses it (`ksor-link-widens`) before any bundle is planned, because a public
 document naming an internal one leaks the name whether or not the target
 travels.
 
-One refusal is this flag's own. An audience identifier is a directory name
-here, so one that cannot be a path segment (`../x`) is refused before anything
-is written:
+Two refusals come from the bundles, and both run on EVERY build, with or
+without the flag — the lock records `bundles[]` either way, and a digest for a
+directory the tool refuses to write would be provenance for something that
+cannot exist.
+
+An audience identifier is a directory name here, so one that cannot be a path
+segment is refused before anything is written:
 
 ```
 error: ksor-audience-identifier-invalid
 ```
 
-Name audiences in plain words — letters, digits, `-`, `_`, `.` — in
-`.ksor/governance.yaml` and in every `ksor.audience` list.
+Name audiences in plain words — a letter or a digit first, then letters,
+digits, `-`, `_` and `.` — in `.ksor/governance.yaml` and in every
+`ksor.audience` list. That first-character rule is why `../escape`, `.hidden`
+and `-x` are all refused, and `build.lock.json` is refused too: the lock copy
+sits beside the bundle directories.
+
+Two registered audiences that differ only in case — `internal` and `Internal` —
+are two viewers and one directory on macOS and on Windows, whose filesystems
+are case-insensitive by default. The second bundle written would merge into the
+first, leaving a directory holding concepts the viewer named on it may not read
+and a lock digest that no longer describes it, so they are refused on every
+platform alike:
+
+```
+error: ksor-audience-identifier-collides
+```
+
+Give each audience a name that differs by more than case. `public` is reserved,
+casefolded too.
 
 ### What it is not
 
