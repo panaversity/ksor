@@ -1,5 +1,195 @@
 # @panaversity/ksor
 
+## 0.0.56
+
+### Patch Changes
+
+- bf35e2f: `add-sources` 2.0.0: a file or a person, one skill — with a check the agent
+  runs instead of a rule it is asked to follow.
+
+  Two issues asked for two paths into the record. #31: an owner with a folder of
+  PDFs had no path — the skill stated the rules and converted nothing. #50: an
+  owner whose knowledge is only in their head had no path — the interview scoped
+  the record and stopped, leaving `knowledge/` full of samples about KSoR.
+
+  **They are one skill, not two.** The record draws no line between the kinds:
+  an interview attestation in `sources[].resource` passes `ksor build` today,
+  the fidelity rules read the same for both, and a real owner has BOTH — the
+  policy PDF and the exception everyone knows that the PDF never mentions. So
+  the person step runs after every file: "what does this not cover?" is the
+  question that finds the pages nobody wrote. A sibling skill would have made
+  the agent choose before it knew, and #50's own three-way trigger collision
+  vanishes.
+
+  **The source is a file.** Extract first, into a scratch file outside
+  `knowledge/` — the skill names the extractor per format (`pdftotext`,
+  `pandoc`, macOS `textutil`, `markitdown`) and what to do with none on `PATH`:
+  read the file directly and SAY the verification that follows is weaker. An
+  empty extraction is a scanned image, and the skill stops and tells the owner
+  rather than OCR and hope. Then decide the shape of the record, convert to
+  CommonMark a person would have written, name the source precisely, and run
+  the shipped check:
+
+  ```
+  node .agents/skills/add-sources/verify.mjs /tmp/in.txt knowledge/<path>.md
+  ```
+
+  `verify.mjs` — plain Node, no dependencies, the owner's to keep — lists every
+  number, date, threshold, code and capitalised name in the document's body that
+  does not appear in the extraction, case-folded and whitespace-collapsed.
+  Frontmatter and footnote ids are exempt, because they are the agent's words by
+  design. It is a floor, and says so: a value that passes was in the source; it
+  cannot see a value that was dropped, and it cannot tell a paraphrase from an
+  invention. Model-driven conversion is highest-fidelity for layout and
+  lowest for exact values, and this is the mechanical half of "copy load-bearing
+  values exactly".
+
+  **The source is a person.** Ask one question at a time in their words — who
+  triggers it, the steps, who approves and at what threshold, what goes wrong,
+  the exception — until someone who was not in the room could act on it. Draft
+  as the record, not a transcript; anything unconfirmed is an `Open question:`
+  line, never prose. The attestation goes in `sources` (who, role, instant,
+  conducted by) — there is no `provenance:` key, and no transcript is kept.
+  Two people describing one process differently stay two cited statements.
+
+  **Both end the same way, and the ending is new.** Read it back on `pnpm dev`,
+  then ask the owner to approve and write down what they said. A draft reaches
+  no machine surface, so a skill that stopped at the draft left every `llms.txt`
+  and every door empty — found on the journey walk: `1 document(s), 0 admitted`.
+
+  The rules that were restated here (placement, frontmatter, audience,
+  deprecation) now point at the emitted AGENTS.md instead. The trigger test that
+  asserted "no skill claims dictated knowledge" flips: add-sources claims it by
+  name, and no other skill may. Eleven cases hold `verify.mjs` to what it does
+  and, in three of them, to what it does not claim.
+
+- 73530e6: Prune the scaffold's skills to the three that make a record, and fix the two
+  seams every adopter hits on the way to one.
+
+  **Removed: `make-slides` and `make-summary`.** They were 45% of all shipped
+  skill text and 21.6% identical to each other — their own commit says
+  "make-summary is make-slides' discipline applied to prose". A companion is
+  downstream of a record existing and invisible to the agent surface (no route,
+  no `llms.txt` line, no MCP node); no fixture and no tutorial ever fired either;
+  and neither was ever shown to beat its absence, which is the bar AGENTS.md sets
+  for keeping a skill at all. Their one real rule — a card may only say what its
+  document says — already lives in the emitted AGENTS.md, and the site renders
+  companions exactly as before. Verified: the emitted checker passes with both
+  gone. `format-checker/SKILL.md` is cut to what AGENTS.md does not say; the
+  program it names is unchanged.
+
+  **Fixed: `intake-interview` was contradicting itself in its trigger.** The
+  always-resident description promised "seven questions"; the body has asked
+  three since 2026-08-26. The body handed off to "question 4" and "question 5",
+  neither of which exists, and claimed `add-sources` writes `verified:` entries —
+  nothing does. 1.6.0 says three, hands off to add-sources with whatever material
+  the owner has, and drops the false claim.
+
+  **Fixed: the recommended path turned a green record red.** Walked on the
+  published package:
+
+  - The README said run the interview, then "delete each starter as your own
+    knowledge arrives". Delete the five first and the build refuses
+    `ksor-record-empty` and writes nothing — a slug named by no document an
+    adopter reads. The README now says to write and approve one document of
+    your own before the last starter goes, and names the refusal.
+  - The hello-world tutorial approves as `human:you`. The interview then retires
+    `human:you` from the policy, and the tutorial's own document — still approved
+    by an actor the policy no longer names — refuses `ksor-approver-unauthorised`.
+    The interview now re-attributes every act recorded under the placeholder to
+    the owner's handle in the same change: it is the same person.
+
+  **Consolidated:** "the record says only what its source says — a gap is an
+  open question, never filled from general knowledge" lived only inside
+  `add-sources`; it is now stated once in the emitted AGENTS.md where every
+  other writing rule is.
+
+  Two deterministic gates hold all of this: a skill-consistency lint (a trigger's
+  question count matches its body; every "question N" resolves; every refusal
+  slug a document names is one the product raises; every skill a document names
+  ships) and a journey walk against the built CLI (interview → one draft →
+  approve → delete starters → retire the starter actor, plus the exact state
+  each refusal fires on). Every lint assertion was mutation-tested.
+
+  Found by four independent reviews of the plan to build a system of record,
+  before building any of it.
+
+- ab6a3ed: The agent tier: a shipped skill, run by a real coding agent, with the skill
+  and without it — the comparison AGENTS.md has always demanded and nothing had
+  ever run (issue #30).
+
+  `pnpm test:agent` scaffolds a fresh record, installs it, drops a real two-page
+  PDF in `src/`, and hands `claude -p` the prompt tutorial 2 hands the reader.
+  Once with `add-sources` present, once with it removed. What the agent leaves
+  behind is graded, and the split is the Testing contract's own: deterministic
+  behavioural graders GATE the with-skill arm — exactly one new document, under
+  `finance/`; `.ksor/*` and `instance.md` untouched; the record builds; `status:
+draft`, `sources` present, no `id:`/`name:`; page furniture gone; every
+  number, date and name in the body found in the extraction by the shipped
+  `verify.mjs`. Cost, turns, duration and the baseline arm are REPORTED, so the
+  delta is visible and a skill that stops winning is seen.
+
+  "Checker passes" is deliberately not a grader: while this was being designed a
+  baseline run passed the checker by hand-authoring `index.md` and editing
+  `.ksor/people.yaml` — the worse behaviour scoring better. Files touched is the
+  discriminating assertion.
+
+  It spends model tokens, so it is gated like the database tier: on
+  `ANTHROPIC_API_KEY` in CI (a repository secret the owner has not yet added; the
+  tier runs and reports itself skipped until then) or a logged-in `claude`
+  locally, pins a mid-tier model by default (a one-word reply on the default
+  model measured $0.25), and runs from `skill-evals.yml` on push to main and by
+  hand — never per pull request.
+
+  What it cannot measure is written in the suite rather than implied: a
+  conversational skill needs a scripted owner, "reads as a finished page" needs
+  a browser, and the adopter's own model is whatever they run.
+
+  Decision 31 records the three choices this week made about the skill surface —
+  pruned to three, one skill for a file and a person, and this harness shape
+  over the Python trigger script that was proposed and measured wanting.
+
+- c34cc3a: Tutorial 2, _Make it yours_: the walk from hello world's record to one that is
+  only the owner's — every output run and pasted as it appeared.
+
+  The intake interview and what it does to the placeholder approver; one policy
+  brought in from a real PDF, with the shipped check catching the one number the
+  conversion got wrong; one procedure that only ever lived in someone's head,
+  written with the thing they were not sure of as an open question rather than
+  prose; the read-back on the site and the approval act; then the samples go and
+  the tool that approved them leaves the policy. Two refusals do work on the way,
+  and the tutorial says exactly which state each fires on.
+
+  The prompt-accounting test now covers both tutorials from one table, so a new
+  prompt in either fails until someone names the skill that answers it. Only that
+  test changes under `packages/`; nothing an adopter installs behaves differently.
+
+- 87a3542: Correct a claim the tutorial made about `build_id`, and guard the general rule.
+
+  `buildIdOf` hashes `ksor_version` along with the record — deliberately, because
+  "what produced this" is part of what a publication is. So a captured `build_id`
+  is correct for exactly one release, and the sentence 0.0.54's tutorial fix added
+  — "Your timestamp will differ; the `build_id` will not" — was already false when
+  0.0.55 published it. A reader on any later ksor sees a hash that does not match
+  theirs and nothing saying why.
+
+  Found by walking the published package rather than by reading the diff: the same
+  practice that caught the tutorial being uncompletable caught the correction being
+  wrong.
+
+  The tutorial now says the id carries the toolchain, names the version its
+  outputs were captured on, and points at the reproducibility a reader can
+  actually check — run `ksor build` twice on one tree and the id is identical.
+  Both captured blocks are re-taken from a 0.0.55 walk.
+
+  A guard in `docs-truth.integration.test.ts` holds the general rule rather than
+  the sentence: a document printing a concrete `build_id` must say what moves one,
+  within 700 characters of the id. It is PROXIMITY rather than presence — the
+  first version asked whether "toolchain" appeared anywhere in the file, the file
+  already used the word once for an unrelated reason, and removing the caveat left
+  it green. Caught by mutation, and the tightened version immediately found a
+  second uncaveated id in the same document.
+
 ## 0.0.55
 
 ### Patch Changes
