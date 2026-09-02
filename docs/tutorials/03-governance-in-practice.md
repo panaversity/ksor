@@ -117,21 +117,14 @@ KSOR_AUDIENCE=public,internal npm run build
 - [Refund policy](/docs/refund-policy): Customers may return an item within 30 days with a receipt.
 ```
 
-Two viewers the site build refuses as it starts, with nothing written.
-`KSOR_AUDIENCE=internal` alone:
+Two viewers the site build refuses as it starts, with nothing written:
+`KSOR_AUDIENCE=public,staff`, naming an audience nobody registered
+(`ksor-viewer-unregistered`), and `KSOR_AUDIENCE=internal` alone:
 
 ```
 Error: ksor-viewer-omits-public: KSOR_AUDIENCE="internal" does not include public
   why: a viewer list always includes public — every reader of a restricted build is also a reader of the open one, and a build for a restricted audience alone would silently drop every public concept
   fix: build with KSOR_AUDIENCE=public,internal
-```
-
-And `KSOR_AUDIENCE=public,staff`, naming an audience nobody registered:
-
-```
-Error: ksor-viewer-unregistered: KSOR_AUDIENCE names "staff", which the record's registry does not declare (registered: internal)
-  why: an unknown identifier is a typo, and a typo in a viewer would silently build the public site under a name that promised more
-  fix: build with public and registered audiences only, or register "staff" in .ksor/governance.yaml and run ksor build
 ```
 
 Commit. The procedure is read by employees and by nobody else, and the public
@@ -226,12 +219,12 @@ ksor build: 3 document(s), 2 admitted to a machine surface at 2026-09-02T13:35:5
   this build decided that at 2026-09-02T13:35:52.049Z and static output cannot re-decide itself:
     at 2026-10-01T00:00:00.000Z finance/expense-policy.md reaches its effective_from, and until a build runs after that
     instant these files disagree with `ksor serve`, which evaluates at request time.
-    Rebuild and redeploy on a schedule if this record uses stale_after.
 ```
 
 The page still renders, with an **Effective from** fact in its strip: a person
-reading ahead is fine, an agent citing a policy not yet in force is not. Now
-the same tree, evaluated on 1 October:
+reading ahead is fine, an agent citing a policy not yet in force is not. And
+the notice means what it says — static output decided this once, so a record
+with dates rebuilds on a schedule. Now the same tree, evaluated on 1 October:
 
 ```
 $ npx ksor build --as-of 2026-10-01T00:00:00Z
@@ -347,18 +340,9 @@ Approved   Human: Priya Patel · 2026-09-02
 Replaces   Refund policy
 ```
 
-Withdrawal is an act with a name on it. Leave `ksor.deprecated` off and the
-build refuses:
-
-```
-error: ksor-deprecated-unattributed
-ksor build: 1 problem(s) — nothing written:
-
-  knowledge/refund-policy.md
-    problem: ksor-deprecated-unattributed
-    why: a `deprecated` concept must carry `ksor.deprecated: { by, at }` — who withdrew it
-    fix: record the deprecation by the owner or a takedown authority, usually with `ksor.superseded_by`
-```
+Withdrawal is an act with a name on it: leave `ksor.deprecated` off and the
+build refuses `ksor-deprecated-unattributed` — "a `deprecated` concept must
+carry `ksor.deprecated: { by, at }` — who withdrew it".
 
 ## 5. Takedown, end to end
 
@@ -386,17 +370,10 @@ a takedown is a governance act and its ledger entry must name who performed it. 
   fix: pass --actor, e.g. --actor human:ciso
 ```
 
-Leave `--file-only` off and it refuses too: your `instance.md` declares a
-database, this shell has no `KSOR_DB_URL`, and it will not record a withdrawal
-the door would go on ignoring:
-
-```
-error: ksor-takedown-dsn-missing
-instance.md declares a database (named by database.dsn_env) and KSOR_DB_URL is unset — the door would keep serving this document until someone remembered to apply the entry
-  fix: export KSOR_DB_URL='postgresql://...' and rerun, or pass --file-only to record the entry now and `ksor takedown --apply` where the database is reachable
-```
-
-With both:
+Leave `--file-only` off and it refuses too, `ksor-takedown-dsn-missing`: your
+`instance.md` declares a database, this shell has no `KSOR_DB_URL`, and "the
+door would keep serving this document until someone remembered to apply the
+entry". With both:
 
 ```
 takedown: knowledge/finance/late-claims denied (scope: node, expected: present)
@@ -531,16 +508,15 @@ Every fact about them — who may read, who approved, who checked, when it took
 effect, who withdrew it and why — is a line in a file a reviewer sees in a pull
 request and a fact the page prints. None of it is a setting on a server.
 
-Eleven refusals did work for you, and none was an error. Read them as one
-sentence: the record will not publish a document to an audience nobody
-registered, for a viewer that drops the public or names an audience nobody
-registered, without an approval, edited after its approval, pointing at a
-successor that is not there, withdrawn by nobody, taken down by nobody, taken
-down where the door could not be told, under a name it no longer has, or on a
-ledger something was deleted from. And one thing it did without refusing: it
-held a policy off every machine surface until the day it took effect, and said
-so. That is what "whether an agent can be trusted is decided by the governance
-of what it reads" means in practice.
+Eleven refusals did work for you, and none was an error: an audience nobody
+registered, a viewer that dropped the public or named one, a `stable` document
+with no approval, one edited after its approval, a successor that was not
+there, a withdrawal by nobody, a takedown by nobody, one the door could not be
+told about, a denied document under a new name, and a ledger something was
+deleted from. And one thing it did without refusing: it held a policy off
+every machine surface until the day it took effect, and said so. That is what
+"whether an agent can be trusted is decided by the governance of what it
+reads" means in practice.
 
 **What is not done yet.** Every step above ran with no database, and the door
 reads exactly what the site does: the lock's admitted set, the trust tier, the
