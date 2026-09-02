@@ -585,13 +585,18 @@ Check which one you got. `/health` says so plainly:
 ```json
 {
   "corpus_id": "book",
-  "abstain_gate": "OFF (no floor declared — will not refuse out-of-corpus questions)",
+  "generation": "1 · 81 nodes · source 3807493d3f2f1b4c2e6b0a9d8c7f6e5d4c3b2a10",
+  "abstain_gate": "OFF — no floor calibrated; out-of-corpus questions will be answered, not refused",
   "embedding_space": "gemini-embedding-001/d1536 ok",
   "auth": "disabled"
 }
 ```
 
 `"auth":"disabled"` on a public host means the second option is in effect.
+`"generation"` is what the door is serving — `NONE — nothing published; run
+pnpm refresh` on a record that was provisioned and never ingested, which is
+where skipping the publish step leaves it — and it is re-read on every
+readiness probe, so a `refresh` after boot shows here without a restart.
 
 ## What a cold start costs
 

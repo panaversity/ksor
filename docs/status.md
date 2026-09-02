@@ -164,9 +164,12 @@ applies the ledger in file order, and records the `build_id` it published;
 `GOVERNANCE_SINCE` is 2.5, so a carried-forward generation refuses to serve
 until it is re-ingested. `ksor takedown` is ledger-first (record spec §5):
 the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
-`--apply`, and `--export` and `.ksor-denylist.json` are gone. `--list` and
-`--ledger` read without a database too, from the committed ledger — the rung
-`ksor init` emits, and the only place `--revoke`'s entry id can be found there.
+`--apply`, and `--export` and `.ksor-denylist.json` are gone. `--ledger` reads
+the committed ledger and never resolves a DSN — the rung `ksor init` emits
+names `KSOR_DB_URL` from birth, and a read of a file must not demand it — and
+it is the only place `--revoke`'s entry id can be found there; `--list` reads
+the door's denylist rows when the DSN is set and otherwise the ledger's
+denials, labelled `not applied (no database)`.
 The write is serialised and APPEND-ONLY: the read, the decision and the write
 happen under `.ksor/takedowns.yaml.lock` (a holder still there after 30s is
 `ksor-ledger-locked`, exit `3`, nothing written), and the entry is appended

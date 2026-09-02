@@ -921,7 +921,9 @@ lines to paste into `instance.md`; the banner then reads
 
 Skip `pnpm refresh` and the server comes up with nothing published: every search
 answers `ok: false, reason: "unpublished"` — the record is empty, which is a
-different answer from "not in the record".
+different answer from "not in the record" — and the boot block says so in as
+many words (`generation  NONE — nothing published; run pnpm refresh`), as does
+`/health`.
 
 The agent projection exposes the governed KSoR through MCP: `search`, `outline`,
 and `read` over stateless Streamable HTTP, with cited passages, snapshot
@@ -1849,7 +1851,12 @@ floor, and collect withdrawn generations. All but `takedown` need the same
 Postgres store: a takedown is written to the committed ledger
 `.ksor/takedowns.yaml` first and to the denylist row second, so a record with
 no database can withdraw a document, and the site reads the withdrawal from the
-repository rather than from an exported manifest.
+repository rather than from an exported manifest. On a record that names a DSN
+variable nobody has set — the record `ksor init` emits — a denial is refused by
+name unless `--file-only` records the entry alone, and `--apply` writes the
+rows later where the database is reachable; `--ledger` always reads the
+committed file, and `--list` reads the door's rows when the DSN is present and
+otherwise the ledger's denials, labelled `not applied (no database)`.
 
 `grant` is the one to read twice: who may WRITE a tenant's corpus is decided by
 a row in the database that row-level security checks, never by a flag on a

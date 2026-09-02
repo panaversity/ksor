@@ -64,7 +64,7 @@ instead of their training memory. The corpus grows with each implemented verb.
   slug such as `error: bad-name`, followed by a remedy), `2` designed but
   not implemented, `3` the environment cannot run ksor
   (`error: unsupported-platform`, `error: broken-install`,
-  `error: environment`).
+  `error: ksor-provider-key-missing`, `error: environment`).
 - The package root exports the CLI contract: `exitCodes`, `verbs`, and
   `resolveCommand`.
 

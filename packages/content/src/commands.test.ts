@@ -34,4 +34,33 @@ describe("usageFor", () => {
     expect(usageFor("takedown")).not.toContain("ksor gc");
     expect(usageFor("ingest")).not.toContain("ksor calibrate");
   });
+
+  /**
+   * `calibrate` has TWO headings — the measuring form and `--check` — and the
+   * description paragraph sits under the second. The slice stopped at the next
+   * heading whatever verb it named, so `ksor calibrate --help` printed the
+   * first form's flags and nothing else: no `--check`, no `--days`, and not one
+   * sentence about what the verb does. The paragraph was reachable only by
+   * getting the arguments wrong (found on a live walk, 2026-09-02).
+   */
+  it("carries a verb's every heading AND its description, when the verb has more than one form", () => {
+    const block = usageFor("calibrate");
+    for (const text of [
+      "--queries-file PATH",
+      "--ooc-file PATH",
+      "--check [--days N]",
+      "Measure the abstention floor",
+      "no provider key, no",
+    ]) {
+      expect(block, `\`${text}\` is missing from \`ksor calibrate --help\`:\n${block}`).toContain(
+        text,
+      );
+    }
+    expect(block).not.toContain("ksor grant");
+  });
+
+  it("matches the verb whole — `gc` never receives `grant`'s block", () => {
+    expect(usageFor("gc")).toContain("Reap generations");
+    expect(usageFor("gc")).not.toContain("Authorize ingest");
+  });
 });

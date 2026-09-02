@@ -749,10 +749,14 @@ Answer ONLY from this record. Abstention is a correct answer.
       abstain_gate: string;
       auth: string;
       corpus_id: string;
+      generation: string;
     };
     expect(health.abstain_gate).toContain(`floor ${floor}`);
     expect(health.auth).toBe("disabled");
     expect(health.corpus_id).toBe(TENANT);
+    // What is being SERVED: the generation, its rows, and the commit the run
+    // row recorded — the fixture's two documents in generation 1.
+    expect(health.generation).toBe("1 · 2 nodes · source fixture");
     expect((await fetch(`http://127.0.0.1:${port}/ready`)).status).toBe(200);
 
     // A CHUNKED POST must work through harden's buffered replay seam — the
@@ -849,6 +853,87 @@ Answer ONLY from this record.
     });
     expect(result.code, result.stderr).toBe(3);
     expect(result.stderr.toLowerCase()).toContain("api key");
+    // …with the stable name FIRST, like every other refusal: exit 3 is an
+    // exit code, not a slug (found live, 2026-09-02).
+    expect(result.stderr.split("\n")[0]).toBe("error: ksor-provider-key-missing");
+  }, 60_000);
+
+  /**
+   * The door booted GREEN on a provisioned record nobody had ever ingested —
+   * db, audience, trust, auth, abstain, serving — and said nothing about
+   * serving nothing; `ksor init`'s own next steps leave an adopter who skipped
+   * `refresh` exactly here, and /health read entirely normal (found live,
+   * 2026-09-02). Booted with npm's user agent, so the remedy is spelled for
+   * the manager that ran it.
+   */
+  it("a door on a record nothing was published to says NONE, on the boot line and on /health", async () => {
+    const emptyInstance = path.join(work, "instance-empty.md");
+    writeFileSync(
+      emptyInstance,
+      `---
+format: 2
+name: ${TENANT}-empty
+title: Empty Handbook
+description: A record that was provisioned and never ingested.
+database:
+  dsn_env: KSOR_TEST_DSN
+embedding:
+  provider: fake
+  model: fake-embed-001
+  dim: ${DIM}
+---
+
+Answer ONLY from this record.
+`,
+    );
+    const emptyPort = 30000 + Math.floor(Math.random() * 20000);
+    const child = spawn(process.execPath, [CLI], {
+      env: {
+        ...process.env,
+        KSOR_INSTANCE: emptyInstance,
+        KSOR_TEST_DSN: dbUrl,
+        KSOR_MCP_PORT: String(emptyPort),
+        KSOR_AUTH: "disabled-local",
+        npm_config_user_agent: "npm/11.4.2 node/v24.5.0 darwin arm64 workspaces/false",
+      },
+    });
+    let booted = "";
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const deadline = setTimeout(
+          () => reject(new Error(`no boot line; stderr: ${booted}`)),
+          30_000,
+        );
+        child.stderr?.on("data", (d: Buffer) => {
+          booted += d.toString();
+          if (booted.includes("serving")) {
+            clearTimeout(deadline);
+            resolve();
+          }
+        });
+        child.on("exit", (code) =>
+          reject(new Error(`gateway exited ${code} before serving: ${booted}`)),
+        );
+      });
+      expect(booted, "the boot block names the absence and the publish step").toContain(
+        "generation  NONE — nothing published; run npm run refresh",
+      );
+      const health = (await (await fetch(`http://127.0.0.1:${emptyPort}/health`)).json()) as {
+        generation: string;
+        boot_checks: string;
+      };
+      expect(health.boot_checks).toBe("passed");
+      expect(health.generation).toBe("NONE — nothing published; run npm run refresh");
+    } finally {
+      await new Promise<void>((resolve) => {
+        const hard = setTimeout(() => child.kill("SIGKILL"), 5_000);
+        child.once("exit", () => {
+          clearTimeout(hard);
+          resolve();
+        });
+        child.kill("SIGTERM");
+      });
+    }
   }, 60_000);
 });
 

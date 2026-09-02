@@ -120,10 +120,10 @@ export function ledgerDenials(ledger: Ledger): TakedownRow[] {
  * What `--ledger` prints: every entry the file records, newest first, in the
  * shape the database trail uses — the act, who, and the detail.
  *
- * NOT the same trail as the database's: with a `database:` the flag reads §7
- * `retrieval_log` acts, which include the APPLY. Here it is the file's own
- * history, which is the only history this rung has and the one `--revoke` needs
- * ids from.
+ * NOT the database's §7 trail (`readLedger`), which also records the APPLY of
+ * each entry to the door. The file's own history is what the flag prints on
+ * every rung — it is the record of the act (record spec §5), it is where
+ * `--revoke`'s entry ids live, and it never needs a DSN.
  */
 export function ledgerActs(ledger: Ledger): LedgerRow[] {
   return [...ledger.entries]

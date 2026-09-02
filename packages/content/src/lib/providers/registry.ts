@@ -65,6 +65,16 @@ export interface ProviderEntry {
 }
 
 /**
+ * The stable first stderr line for a missing provider key, on BOTH planes:
+ * `ksor serve` (through the gateway's `bootErrorLines`) and `ksor ingest` /
+ * `ksor calibrate` (the write plane's `fail`). Exit 3 either way — the key is
+ * the operator's environment — but an exit code is not a name, and this was
+ * the one refusal in the first-hour path that printed its sentence with no
+ * slug above it (found live, 2026-09-02).
+ */
+export const PROVIDER_KEY_MISSING = "ksor-provider-key-missing" as const;
+
+/**
  * A key-needing provider was built without an API key. A TYPED error (mirrors
  * EmbeddingSpaceMismatch) so a composition root classifies the missing-key case
  * by TYPE, not by string-matching this message — the exact prose-coupling scar
@@ -72,6 +82,7 @@ export interface ProviderEntry {
  * exit-code mapping no longer breaks when it is reworded.
  */
 export class MissingProviderKeyError extends Error {
+  readonly slug: typeof PROVIDER_KEY_MISSING = PROVIDER_KEY_MISSING;
   readonly providerName: string;
   readonly keyEnv: string | null;
   /**
