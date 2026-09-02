@@ -911,13 +911,14 @@ That serves MCP at `http://127.0.0.1:8080/mcp`, announcing its posture as it
 boots — an uncalibrated record says so in as many words:
 
 ```text
-  auth      DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
-  abstain   OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
+  generation  1 · 5 nodes · source 3807493d3f2f1b4c2e6b0a9d8c7f6e5d4c3b2a10
+  auth        DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
+  abstain     OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
 ```
 
 `ksor calibrate` measures a floor against your own corpus and prints the two
 lines to paste into `instance.md`; the banner then reads
-`abstain   floor 0.609 — below it, this record abstains`.
+`abstain     floor 0.609 — below it, this record abstains`.
 
 Skip `pnpm refresh` and the server comes up with nothing published: every search
 answers `ok: false, reason: "unpublished"` — the record is empty, which is a
