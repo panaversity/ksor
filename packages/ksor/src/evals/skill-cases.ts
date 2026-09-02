@@ -240,6 +240,18 @@ export function bodyGates(kase: SkillCase, file: string): readonly Grade[] {
 }
 
 /**
+ * The record: what a refusal must leave alone. The skill's first step is to
+ * extract with `pdftotext`, and an agent that parks that extraction beside the
+ * PDF in `src/` before correctly stopping has written a scratch file, not a
+ * document — the saw names it, the gate does not fail on it.
+ */
+const inRecord = (p: string): boolean =>
+  p.startsWith("knowledge/") ||
+  p.startsWith(".ksor/") ||
+  p === "instance.md" ||
+  p === "build.lock.json";
+
+/**
  * The gates for a `refused` case. `wrote` is what the act gates learned about
  * a document that should not exist — which file, and what `verify.mjs` found
  * when it was checked against the text the picture was made from.
@@ -250,11 +262,17 @@ export function refusalGates(
   wrote?: string,
 ): readonly Grade[] {
   const told = /text layer|scanned|image-only/i.exec(text)?.[0];
+  const record = touched.filter(inRecord);
   return [
     {
-      name: "wrote nothing",
-      pass: touched.length === 0,
-      saw: touched.length === 0 ? "(nothing)" : (wrote ?? touched.join(", ")),
+      name: "wrote nothing to the record",
+      pass: record.length === 0,
+      saw:
+        record.length > 0
+          ? (wrote ?? record.join(", "))
+          : touched.length === 0
+            ? "(nothing)"
+            : `nothing in the record; touched ${touched.join(", ")}`,
     },
     {
       name: "told the owner the PDF has no text layer",

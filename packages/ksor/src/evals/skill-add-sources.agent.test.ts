@@ -25,7 +25,7 @@
  *   five rows); and every number, date and name in the body is in the
  *   extraction, by the same `verify.mjs` the skill ships. For a fixture a
  *   correct run REFUSES — the scanned one — the gates are that it wrote
- *   nothing and told the owner why. Found while designing this: "checker
+ *   nothing to the record and told the owner why. Found while designing this: "checker
  *   passes" is NOT a grader — a baseline run passed it by hand-authoring
  *   `index.md` and editing `.ksor/people.yaml`, the worse behaviour scoring
  *   better. Files touched is the discriminating assertion. Governs acts, not

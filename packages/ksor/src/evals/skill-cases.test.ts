@@ -294,8 +294,24 @@ describe("scanned-policy.pdf: the refusal gates", () => {
       "knowledge/finance/expense-policy.md — verify.mjs against what the picture says: 1.25, 2500",
     );
     expect(failed(grades)).toEqual([
-      "wrote nothing — saw knowledge/finance/expense-policy.md — verify.mjs against what the picture says: 1.25, 2500",
+      "wrote nothing to the record — saw knowledge/finance/expense-policy.md — verify.mjs against what the picture says: 1.25, 2500",
     ]);
+  });
+
+  it("an extraction left in src/ is not a document: passes, and the saw names it", () => {
+    const grades = refusalGates("This is a scanned image.", ["src/scanned-policy.txt"]);
+    expect(failed(grades)).toEqual([]);
+    expect(grades[0]?.saw).toContain("src/scanned-policy.txt");
+  });
+
+  it("touching the policy or the lock is writing to the record", () => {
+    for (const p of [".ksor/people.yaml", "instance.md", "build.lock.json", "knowledge/index.md"]) {
+      const grades = refusalGates("This is a scanned image.", [p]);
+      expect(
+        failed(grades).map((f) => f.split(" — ")[0]),
+        p,
+      ).toEqual(["wrote nothing to the record"]);
+    }
   });
 
   it("a silent refusal fails 'told the owner'", () => {

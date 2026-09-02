@@ -23,12 +23,16 @@ text layer — for which the skill's instruction is to stop and tell the owner.
 `skill-cases.ts` is the table: fixture, prompt, the outcome class a correct run
 belongs to (`converted` or `refused`), and the gates that apply. Its body
 gates are pure functions, so a unit suite mutation-tests each one — smoothing
-the two statements, misreading the figure, dropping a row, keeping the footer,
-inventing a currency — and watches exactly the gate built for it go red. The
-agent suite also asserts the fixtures are what they claim: each committed
-`.txt` is its PDF's `pdftotext -layout` extraction, and the scanned PDF yields
-only whitespace. For the scanned case the WITH arm's correct outcome — wrote
-nothing, named the missing text layer — is the pass; what the baseline did is
-reported.
+the two statements, misreading the figure, dropping a row, dropping or
+misreading a thousands separator, keeping the footer, inventing a currency —
+and watches exactly the gate built for it go red. The agent suite also asserts
+the fixtures are what they claim: each committed `.txt` is its PDF's
+`pdftotext -layout` extraction, and the scanned PDF yields only whitespace. For
+the scanned case the WITH arm's correct outcome — wrote nothing, named the
+missing text layer — is the pass; what the baseline did is reported.
+
+Not run here: the armed arms. `SKILL_BASELINE` carries no row for either new
+fixture; the hard fixture's first armed run is pending and its row lands with
+the run that produces it.
 
 RESULTS
