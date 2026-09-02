@@ -117,8 +117,7 @@ describe.runIf(adminDsn !== "")("ksor ingest verifies generated.at against histo
     writeIndexesAndLock(root);
     const before = await pool.query("SELECT count(*)::int AS n FROM ingestion_runs");
     await expect(ingest(root, [])).rejects.toSatisfy(
-      (e: unknown) =>
-        e instanceof RecordRefused && e.refusals[0]?.slug === "ksor-generated-stale",
+      (e: unknown) => e instanceof RecordRefused && e.refusals[0]?.slug === "ksor-generated-stale",
       "expected RecordRefused with ksor-generated-stale first",
     );
     const after = await pool.query("SELECT count(*)::int AS n FROM ingestion_runs");

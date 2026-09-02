@@ -14,7 +14,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  checkChangeControl,
   checkRecord,
   checkScaffoldStructure,
   formatRefusal,
@@ -83,19 +82,17 @@ function historyBaseline(): LedgerBaseline[] {
   return [{ source: "git history", entries: facts.historicLedger }];
 }
 
-const loaded = loadRecord(root);
-const record = checkRecord(loaded, {
+// KSP R23 (`ksor-generated-stale`) is NOT run here. It reads every committed
+// version of a stable concept, and this checker is the format gate an agent
+// runs after each edit; the publishing verbs — `ksor build` and `ksor ingest`
+// — are where a stamp is verified against history, so an edit this gate
+// passes can still be refused there.
+const record = checkRecord(loadRecord(root), {
   mode: "check",
   ledgerBaselines: [...historyBaseline(), ...lockBaseline()],
 });
-// KSP R23 — a stable body edited under an unmoved `generated.at` — refuses
-// here as it does in `ksor build`, or this gate is green while the deploy is
-// red. It reads git; where it cannot, the note is beside the verdict, the
-// posture `historyBaseline` takes for the ledger.
-const change = checkChangeControl(root, record.concepts, loaded.files);
-if (change.notice !== null) console.error(change.notice);
 const structure = checkScaffoldStructure(loadScaffoldStructure(root));
-const problems = sortRefusals([...record.refusals, ...change.refusals, ...structure]);
+const problems = sortRefusals([...record.refusals, ...structure]);
 
 if (problems.length > 0) {
   console.error(`format-checker: ${problems.length} problem(s):\n`);

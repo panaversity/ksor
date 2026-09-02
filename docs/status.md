@@ -99,8 +99,8 @@ checks, refuses with the slug first and nothing written, else writes the
 changed indexes and the lock — `source_commit` from the last commit touching
 an input, `dirty` from git status, the ledger checked for shrinkage against
 every historic version and the committed lock, a shallow clone refused.
-**KSP R23 runs beside the checker** in `ksor build`, `ksor ingest` and the
-emitted `check.mjs`: a `stable` body that differs from any committed version
+**KSP R23 runs beside the checker** in `ksor build` and `ksor ingest` — not
+in the emitted `check.mjs`, which stays the format gate: a `stable` body that differs from any committed version
 stable under the same `generated.at` is `ksor-generated-stale`, read from
 every committed version of the path through one `git log` and one
 `git cat-file --batch`; where history is unreadable each program prints

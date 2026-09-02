@@ -56,13 +56,14 @@ the contract and performs nothing.
    the fresh indexes, and beside it the change-control check against git
    history (record spec §2.2, `ksor-generated-stale`): a `stable` body that
    differs from any committed version stable under the same `generated.at`
-   refuses here as it does at `pnpm check` and at ingest. Any refusal exits
+   refuses here as it does at ingest (the emitted `check.mjs` does not run
+   it — it is the format gate, and reads no document history). Any refusal exits
    `1` with the slug on the first stderr line; nothing is written, so a red
    build leaves the tree as it found it. Where history cannot be read —
    outside a repository, before the first commit, or on a shallow clone
    admitted by `--allow-unverifiable-ledger` — stdout carries
    `change-control: not checked — …` (or `checked against the N committed
-   version(s) this shallow clone holds`) beside the provenance line, and the
+version(s) this shallow clone holds`) beside the provenance line, and the
    build never counts a check that did not run as passed.
 3. **Write.** Index files whose bytes changed — and delete a committed index
    whose directory earns none, since it would be stale forever — then
@@ -278,7 +279,7 @@ diffs (decision 4).
    frontmatter-only edit, a concept stable for the first time and a renamed
    one are not refused; a record below its repository root is read at its
    own path; a repository with no commit builds and prints `change-control:
-   not checked`, a shallow clone under `--allow-unverifiable-ledger` prints
+not checked`, a shallow clone under `--allow-unverifiable-ledger` prints
    how many versions it read.
 4. After a `[public]` site build: `llms.txt`, `llms-full.txt`, `/md/index.md`
    and `server.json` carry the lock's stamps; no draft appears in any page,

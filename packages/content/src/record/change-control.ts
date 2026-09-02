@@ -16,10 +16,11 @@
  * What it does NOT verify, and says so: who reviewed anything. R22 and R25
  * need an identity the platform can vouch for, and `approval.checked` stays
  * `"policy"` (decision 21). This is the one rule in the record module that
- * reads git, so it sits beside `git-ledger.ts` and is run by the three
- * programs that have a checkout — `ksor build`, `ksor ingest` and the emitted
- * `check.mjs` — each of which SAYS when history could not be read rather than
- * passing a check that did not run.
+ * reads git, so it sits beside `git-ledger.ts` and is run by the two
+ * publishing verbs — `ksor build` and `ksor ingest` — each of which SAYS when
+ * history could not be read rather than passing a check that did not run. The
+ * emitted `check.mjs` does not run it: that is the format gate an agent runs
+ * after every edit, and a stamp is verified where the record is published.
  */
 import { spawnSync } from "node:child_process";
 
@@ -228,7 +229,8 @@ export function checkGeneratedStale(
       }
       const authored = (concept.frontmatter["generated"] as { readonly at?: unknown } | undefined)
         ?.at;
-      const stamp = typeof authored === "string" ? authored : new Date(concept.generatedAt).toISOString();
+      const stamp =
+        typeof authored === "string" ? authored : new Date(concept.generatedAt).toISOString();
       refusals.push({
         slug: "ksor-generated-stale",
         path: concept.path,
@@ -256,7 +258,7 @@ export interface ChangeControl {
   readonly notice: string | null;
 }
 
-/** The three callers' one entry: read history for the stable concepts, judge, and say what could not be read. */
+/** The two callers' one entry: read history for the stable concepts, judge, and say what could not be read. */
 export function checkChangeControl(
   root: string,
   concepts: readonly Concept[],

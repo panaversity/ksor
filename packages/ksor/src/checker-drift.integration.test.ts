@@ -152,10 +152,11 @@ describe("the emitted check.mjs judges the conformance fixture exactly as the ke
       // migrate/rules.test.ts, which cover a missing title, a missing
       // description, an underivable `generated.at` and an unattributed denial.
       "ksor-migrate-underivable": "migrate.integration.test.ts",
-      // Reads git history, which a text map cannot carry. Reached against the
-      // emitted checker in a real repository in the R23 describe below, and
-      // against `ksor build` in build.integration.test.ts.
-      "ksor-generated-stale": "checker-drift.integration.test.ts (KSP R23 describe)",
+      // Reads git history, which a text map cannot carry, and runs in the
+      // publishing verbs rather than the emitted checker: reached against
+      // `ksor build` in build.integration.test.ts and against `ksor ingest`
+      // in content's change-control.db.test.ts.
+      "ksor-generated-stale": "build.integration.test.ts (KSP R23 describe)",
     };
     const uncovered = REFUSAL_SLUGS.filter((s) => !covered.has(s) && elsewhere[s] === undefined);
     expect(uncovered, `slugs with no fixture record: ${uncovered.join(", ")}`).toEqual([]);
@@ -199,48 +200,4 @@ describe("the emitted check.mjs judges the conformance fixture exactly as the ke
       expect(emitted.status).toBe(1);
     },
   );
-});
-
-/**
- * KSP R23 is the one rule that reads git, and `pnpm check` is the adopter's
- * own gate (`validate.yml` checks out with `fetch-depth: 0`), so a body edit
- * `ksor build` refuses must be refused HERE too — or the gate is green while
- * the deploy is red. The fixture above has no repository, which is the state
- * the checker must SAY rather than pass in silence.
- */
-describe("the emitted check.mjs verifies generated.at against history (KSP R23)", () => {
-  const git = (root: string, ...args: string[]): void => {
-    const r = spawnSync("git", args, { cwd: root, encoding: "utf8" });
-    expect(r.status, `git ${args.join(" ")}: ${r.stderr}`).toBe(0);
-  };
-
-  it("outside a repository it says the check did not run, and still reports ok", () => {
-    const root = materialize(VALID);
-    const r = spawnSync(process.execPath, [".agents/skills/format-checker/check.mjs"], {
-      cwd: root,
-      encoding: "utf8",
-    });
-    expect(r.status, r.stderr).toBe(0);
-    expect(r.stderr).toContain("change-control: not checked");
-    expect(r.stderr).toContain("not in a git repository");
-    expect(r.stdout).toContain("format-checker: ok");
-  });
-
-  it("a committed stable body edited without a bump is ksor-generated-stale, exit 1", () => {
-    const root = materialize(VALID);
-    git(root, "init", "-q", "-b", "main");
-    git(root, "config", "user.email", "t@example.com");
-    git(root, "config", "user.name", "t");
-    git(root, "config", "commit.gpgsign", "false");
-    git(root, "add", "-A");
-    git(root, "commit", "-qm", "first");
-    const doc = path.join(root, "knowledge/policies/board-pay.md");
-    writeFileSync(
-      doc,
-      readFileSync(doc, "utf8").replace("See [purchase approval]", "Quarterly. See [purchase approval]"),
-    );
-    const emitted = emittedSlugs(root);
-    expect(emitted.slugs).toEqual(["ksor-generated-stale knowledge/policies/board-pay.md"]);
-    expect(emitted.status).toBe(1);
-  });
 });

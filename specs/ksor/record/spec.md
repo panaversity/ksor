@@ -112,8 +112,9 @@ stamp now names two texts; the printed remedy (move the stamp, re-approve)
 clears it, and rewriting history is never asked for. A path
 with no committed stable version passes — stable for the first time, or
 renamed, since path is identity. The check is run beside the checker by the
-three programs that have a checkout — `ksor build`, `ksor ingest`, the emitted
-`check.mjs` — and never by a staged tree; where history cannot be read (no
+two publishing verbs — `ksor build` and `ksor ingest` — and never by the
+emitted `check.mjs` (the format gate reads no history) nor by a staged tree;
+where history cannot be read (no
 repository, no commit yet, a shallow boundary) each prints `change-control:
 not checked` (or how many versions a shallow clone let it read) beside its
 verdict, and never passes a check that did not run. WHO reviewed a commit
@@ -538,8 +539,8 @@ duplicate key, non-plain tag, second document, non-mapping),
 `ksor-stable-ungenerated`, `ksor-stable-unapproved`,
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,
 `ksor-generated-stale` (§2.2 — the one rule that reads git history, run
-beside `checkRecord` by `ksor build`, `ksor ingest` and `check.mjs`, each of
-which says when it could not run),
+beside `checkRecord` by `ksor build` and `ksor ingest`, each of which says
+when it could not run; the emitted `check.mjs` does not run it),
 `ksor-deprecated-unattributed`, `ksor-deprecator-unauthorised`,
 `ksor-reserved-type-unsourced`, `ksor-reserved-type-unowned`,
 `ksor-source-unresourced`, `ksor-actor-form` (§2.3 — the four

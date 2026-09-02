@@ -90,8 +90,9 @@ validating; ingest had the same hole, found by review before anyone hit it.
 
 ## When ingest says generated.at is stale
 
-`ksor ingest` runs the same change-control check `ksor build` and `pnpm check`
-run (KSP R23): a `stable` document whose body differs from a committed version
+`ksor ingest` runs the same change-control check `ksor build` runs (KSP R23;
+the scaffold's `pnpm check` does not — it is the format gate, and reads no
+document history): a `stable` document whose body differs from a committed version
 that was `stable` under the same `generated.at` is refused
 `ksor-generated-stale`, before anything is written. The stamp dates the text.
 The fix is the one it prints — set `generated.at` to an instant after the edit,

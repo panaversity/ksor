@@ -809,7 +809,10 @@ Economy below six hours.
     const moved = path.join(root, "knowledge/policies/director-pay.md");
     writeFileSync(
       moved,
-      readFileSync(moved, "utf8").replace("See [purchase approval]", "Quarterly. See [purchase approval]"),
+      readFileSync(moved, "utf8").replace(
+        "See [purchase approval]",
+        "Quarterly. See [purchase approval]",
+      ),
     );
     const renamed = build(root, "--as-of", AS_OF);
     expect(renamed.status, renamed.stderr).toBe(0);
