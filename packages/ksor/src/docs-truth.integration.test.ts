@@ -1125,3 +1125,33 @@ describe("the README's project-structure tree names paths `ksor init` emits", ()
     }
   });
 });
+
+/**
+ * The agent tier authenticates through `claude`'s own login, never an API key
+ * (owner decision, 2026-09-02). Two things would silently undo that: reading
+ * ANTHROPIC_API_KEY, or passing `--bare` — which the official docs say does
+ * not read CLAUDE_CODE_OAUTH_TOKEN, so a CI run would fall back to needing the
+ * key it is not supposed to have. Held on the source, since the predicate is
+ * module-level and the unarmed run only proves the skip.
+ */
+describe("the agent tier uses claude's own login, not an API key", () => {
+  const src = read("packages/ksor/src/evals/skill-add-sources.agent.test.ts")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+  it("never reads ANTHROPIC_API_KEY", () => {
+    expect(src.includes("ANTHROPIC_API_KEY")).toBe(false);
+  });
+  it("never passes --bare (bare mode does not read the OAuth token)", () => {
+    expect(/"--bare"/.test(src)).toBe(false);
+  });
+  it("arms on CLAUDE_CODE_OAUTH_TOKEN in CI", () => {
+    expect(src.includes('process.env["CLAUDE_CODE_OAUTH_TOKEN"]')).toBe(true);
+  });
+  it("the CI workflow passes the token and not a key", () => {
+    const wf = read(".github/workflows/skill-evals.yml");
+    expect(wf.includes("CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}")).toBe(
+      true,
+    );
+    expect(wf.includes("ANTHROPIC_API_KEY")).toBe(false);
+  });
+});

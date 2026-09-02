@@ -1461,7 +1461,10 @@ gateway` package, serve-by-spawn) is superseded._
 
     **What it costs.** A one-word reply on the default model measured $0.25,
     so the tier pins a mid-tier model and runs on push to main, not per PR.
-    An `ANTHROPIC_API_KEY` repository secret is an owner action; until it
+    It authenticates through `claude`'s own login, never an API key (owner,
+    2026-09-02): a logged-in CLI locally, and in CI a `claude setup-token`
+    token in `CLAUDE_CODE_OAUTH_TOKEN` — which bare mode does not read, so the
+    tier never passes `--bare`. That secret is an owner action; until it
     exists the tier runs and prints that it skipped. Companion generation no
     longer has a skill to fire; an owner asks their agent in plain words and
     AGENTS.md carries the rule.
@@ -1657,7 +1660,7 @@ assertion.
 - `*.agent.test.ts` — a shipped skill run by a REAL coding agent (`claude -p`)
   in a fresh scaffold, with the skill and without it, graded on what it leaves
   behind (`pnpm test:agent`; `skill-evals.yml` runs it on push to main and by
-  hand, never per PR — it spends model tokens). Gated on `ANTHROPIC_API_KEY`
+  hand, never per PR — it spends model tokens). Gated on `CLAUDE_CODE_OAUTH_TOKEN`
   in CI or a logged-in `claude` locally, and it announces its own skip. The
   three-class split below applies: the deterministic graders GATE (files
   touched, the record builds, values verified), cost and the baseline arm are

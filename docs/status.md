@@ -17,7 +17,9 @@ after 0.0.55 (they remain in the history below as what 0.0.38 added).
 `add-sources` 2.0.0 takes a file or a person as its source and ships
 `verify.mjs`. A fourth test tier, `pnpm test:agent`, runs a skill by a real
 coding agent with and without it (decision 31); **it needs an
-`ANTHROPIC_API_KEY` repository secret, which is a pending owner action** —
+`CLAUDE_CODE_OAUTH_TOKEN` repository secret (from `claude setup-token`; the
+tier uses `claude -p`'s own login, never an API key), which is a pending owner
+action** —
 until then `skill-evals.yml` runs and reports itself skipped. **`ksor dev` is the only verb still unimplemented**: it
 reports "designed but not implemented" and exits `2`. An unknown verb is
 refused with exit `1` and a stable `error: unknown-verb` stderr slug. The
