@@ -113,7 +113,8 @@ Usage:
       --check reads the record's OWN logged searches instead and reports how
       the declared floor is holding against them — no provider key, no
       embedding call, no LLM. A monitor, never a gate: it says what to
-      re-measure and always exits 0.
+      re-measure, and a verdict always exits 0 — the environment exits 3, as
+      for every verb.
   ksor grant --instance PATH [--revoke]
       Authorize ingest for the instance's tenant (the row row-level security
       requires), or withdraw it. Idempotent; reports the state it established.

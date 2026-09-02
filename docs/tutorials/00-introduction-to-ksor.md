@@ -1740,17 +1740,21 @@ And the operating principle is:
 
 # 13. Where to go next
 
-After completing this tutorial, useful next tutorials would be:
+Two of these exist now, and they are the ones to do next, in this order:
 
-1. **Build a Real Governed KSoR** — take the small exercise from section 11 further: grow it into a real corpus, apply governance metadata properly, resolve a conflict between two concepts, and publish the human site for others to use.
+1. **[Hello world](./01-hello-world.md)** — a governed record in about fifteen minutes: one document, refused until a human approves it, then your own coding agent answering from it with a citation.
 
-2. **KSoR Governance in Practice** — ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
+2. **[Make it yours](./02-make-it-yours.md)** — your knowledge, your record: bring in a file without losing a number, write down what only lived in someone's head, retire the samples.
 
-3. **Serve a KSoR to AI Agents with MCP** — provision Postgres + pgvector, publish a generation, connect an MCP client, retrieve citations, and test abstention.
+Still to be written, numbered as the [tutorials index](./README.md) numbers them:
 
-4. **Combine KSoR with Traditional Systems of Record** — build an agent that combines governed policy with current operational facts from an ERP, CRM, or accounting system.
+3. **KSoR Governance in Practice** — ownership, audiences, approvals, lifecycle states, effective dates, takedown, and fail-closed behavior.
 
-5. **Exchange Governed Knowledge with OKF** — package and move governed knowledge between knowledge systems without creating a second source of truth.
+4. **Serve a KSoR to AI Agents with MCP** — beyond hello world's first door: calibrate the abstention floor, connect more than one client, and test that the record declines what it does not cover.
+
+5. **Combine KSoR with Traditional Systems of Record** — build an agent that combines governed policy with current operational facts from an ERP, CRM, or accounting system.
+
+6. **Exchange Governed Knowledge with OKF** — package and move governed knowledge between knowledge systems without creating a second source of truth.
 
 ---
 

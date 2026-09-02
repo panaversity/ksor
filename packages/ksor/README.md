@@ -12,16 +12,19 @@ when the corpus does not cover the question.
 ```bash
 npx @panaversity/ksor@latest init my-sor
 cd my-sor
-pnpm install
-pnpm dev        # the site, live at http://localhost:3000
+npm install
+npm run dev     # the site, live at http://localhost:3000
 ```
 
 Then write a document and publish it:
 
 ```console
-$ pnpm exec ksor build
+$ npx ksor build
 ksor build: 6 document(s), 5 admitted to a machine surface
 ```
+
+(`npx` emits an npm project; `pnpm dlx` or `bunx` emit that manager's, and
+the README it writes speaks that manager throughout.)
 
 **Six documents, five admitted.** The one you just wrote is a `draft`, so it
 reaches nothing an AI agent reads — not `llms.txt`, not the markdown twins —
@@ -44,7 +47,9 @@ where it came from:
 
 **[Hello world](https://github.com/panaversity/ksor/blob/main/docs/tutorials/01-hello-world.md)**
 walks all of that in about fifteen minutes. Every command and output in it was
-run and pasted as it appeared — including the ones above.
+run and pasted as it appeared. The envelopes above show the SHAPE of an answer
+and a refusal; the refusal needs a calibrated floor, which hello world defers
+to its own tutorial.
 
 The three so far, in reading order — pick by what you want from it:
 
@@ -100,13 +105,9 @@ that document's page and nowhere else:
 | `<doc>.flashcards.yaml` | a recall deck, at the end                               |
 | `<doc>.quiz.yaml`       | a multiple-choice check, at the end                     |
 
-Ask your coding agent — `make slides for knowledge/expenses/approvals.md`, or
-`summarise knowledge/expenses/approvals.md` — and the `make-slides` and
-`make-summary` skills write the attachment from the document, check every claim
-and number back against it, and report what they left out because the document
-did not support it. A summary is checked section by section, because one that
-covers the opening and trails off leaves a reader believing they have the whole
-document.
+Companions are ordinary files beside the document. Write them yourself or ask
+your coding agent for one, and hold it to the rule the emitted AGENTS.md
+states: a companion may only say what its document says.
 
 An attachment is **part of its document**: no URL, no sidebar row, no
 `llms.txt` line, and no id an agent can cite. It takes its audience and any

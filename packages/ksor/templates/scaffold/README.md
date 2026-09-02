@@ -698,7 +698,7 @@ different coding agent's way of finding the same working contract.
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                        |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                  |
 | `.gitattributes`                 | markdown is checked out byte-stable on every platform, so the same commit hashes the same everywhere.                                                                                                   |
-| `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history — and negates two paths inside `.ksor/`, because the policy and the ledger ARE the record.                                   |
+| `.gitignore`                     | keeps build output, `node_modules/`, and `.env` out of the record's history — and negates three paths inside `.ksor/`, because the policy, the ledger and the phone book ARE the record.                  |
 
 `format-checker` deliberately contains a program, `check.mjs`, and not only
 prose: rules that are only written down cannot refuse anything.

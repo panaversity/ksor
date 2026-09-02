@@ -146,11 +146,12 @@ never an email address.
   MAP from each actor to its natural name — `"human:bashiraziz": Bashir Aziz`.
   Keyed by the actor exactly as the record stores it, quoted because it
   contains a colon. Nothing else — the site looks the actor up at render time,
-  so pages read "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz". Every skill that records a governance
-  act (this one, add-sources when it names a `ksor.owner`, `ksor takedown` for
-  withdrawals) asks the owner for a natural name whenever it is about to write
-  an actor that isn't in `people.yaml` yet — the owner is the only source of a
-  display name, never a convention-based guess.
+  so pages read "Owner · Bashir Aziz" instead of "Owner · human:bashiraziz". This
+  is the skill that writes actors into the policy, so it is the one that asks
+  the owner for a natural name for each — the owner is the only source of a
+  display name, never a convention-based guess. An actor that arrives later
+  (an owner named in a document, an approver added by hand) gets its entry
+  when the owner adds one; the site prints the identifier until then.
 - **Offer to start replacing the starter documents — they are already
   published.** All five ship `status: stable`, approved by
   `ksor-starter/KSOR-STAMP-VERSION`, so the site and `llms.txt` carry them from

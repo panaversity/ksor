@@ -26,7 +26,7 @@
 # name has to keep rendering on those acts.
 #
 # Optional. An actor with no entry renders exactly as stored, as it did before
-# this file existed. The intake and add-sources skills offer to add one; the
-# owner can also edit this file by hand — it is theirs.
+# this file existed. The intake interview offers to add one; the owner can
+# also edit this file by hand — it is theirs.
 version: "0.1"
 people: {}

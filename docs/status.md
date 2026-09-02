@@ -2,7 +2,7 @@
 
 **This document is the only authority on what is implemented.** The README is
 the concept; the released package version and this page are the facts. Last
-updated: 2026-09-01.
+updated: 2026-09-02.
 
 ## Published package
 
@@ -749,8 +749,9 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   choosing an author's answers. Verified live on a built scaffold — quiz text
   in **0** files outside its document's own page, parent's `/md/` and both
   llms files **byte-identical** with and without it, zero console errors, both
-  themes. The seed quiz `ksor init` ships was itself refused on first draft
-  for putting four of five answers at option B.
+  themes. The seed quiz `ksor init` shipped until 0.0.44 (when the starter was
+  trimmed to one companion, the summary) was itself refused on first draft for
+  putting four of five answers at option B.
 
 - **Study attachments — summaries and flashcard decks** (decision 24,
   `specs/ksor/study-attachments/spec.md`, released in 0.0.28). A
@@ -758,8 +759,9 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   The summary joins the record's own words as a second TAB — the two readings
   of a document. The deck renders at the END of the page, in the region the quiz
   now shares, because a study aid is used after reading and a tab would hide
-  the document while you used it. `ksor init` ships one of each on the seed
-  document. Presence-driven: a document with neither gets no tab strip and no
+  the document while you used it. `ksor init` ships the summary on the seed
+  document; the seed deck, quiz and slides were trimmed from the starter in
+  0.0.44, so a flashcard deck is now something the owner adds. Presence-driven: a document with neither gets no tab strip and no
   region at all (verified live: a page without attachments renders zero
   `role="tab"` elements).
 
@@ -797,8 +799,8 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   clock, and the ladder it produces is measured in the suite: 10 min, 2 d, 5 d,
   13 d, 33 d.
 
-- **The content kernel and the MCP gateway** (decision 11, in progress on
-  the kernel-conversion branch): four workspace packages — postgres (Postgres access
+- **The content kernel and the MCP gateway** (decision 11; converted on the
+  kernel-conversion branch and released in 0.0.8–0.0.18): four workspace packages — postgres (Postgres access
   discipline: pooling, scoped transactions, retry classification), content (schema + ingest + hybrid retrieval
   - calibrated abstention + read plane), gateway-kit (fail-closed serving
     postures), content-gateway (the content MCP door: search/outline/read over stateless

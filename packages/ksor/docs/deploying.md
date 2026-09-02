@@ -314,8 +314,8 @@ correct for a genuinely public record or one behind your own gateway; it is not 
 way to make a deploy go green.
 
 The alternative is a real authorization server — `KSOR_SSO_URL`,
-`KSOR_MCP_RESOURCE_URL`, `KSOR_JWT_ALLOWED_AUDIENCES`, with worked recipes for two
-of them in [authorization.md](./authorization.md).
+`KSOR_MCP_RESOURCE_URL`, `KSOR_JWT_ALLOWED_AUDIENCES`, with worked recipes for
+four of them in [authorization.md](./authorization.md).
 
 ### Set this on any container host
 
@@ -573,7 +573,7 @@ auth-off default, and that refusal is the last real step of a deployment. Two
 ways past it:
 
 - **Configure the SSO door** — `KSOR_SSO_URL`, `KSOR_MCP_RESOURCE_URL`,
-  `KSOR_JWT_ALLOWED_AUDIENCES`. Worked recipes for two different authorization
+  `KSOR_JWT_ALLOWED_AUDIENCES`. Worked recipes for four different authorization
   servers: [authorization.md](./authorization.md).
 - **Set `KSOR_AUTH=disabled-public`** — a deliberate decision that
   serves your whole record to anyone who can reach the port. Correct for a
