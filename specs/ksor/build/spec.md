@@ -8,7 +8,7 @@ claim: provenance is load-bearing — every build records the exact corpus that 
 
 The database-free verb that turns the record into projections, and the one
 place the governance decision runs for static output. Steps 1–4 and the lock
-run (`packages/ksor/src/build/`; `--bundles` since 0.0.59, issue #158). Plan:
+run (`packages/ksor/src/build/`; `--bundles` is issue #158). Plan:
 `research/okf-native.md`; record contract: `specs/ksor/record/spec.md`.
 
 ## 1 · Contract

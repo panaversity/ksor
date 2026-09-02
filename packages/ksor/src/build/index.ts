@@ -81,6 +81,7 @@ toolchain. A refusal (exit 1, slug first on stderr) writes nothing.
 
 /** What `--bundles` writes, record-relative. Gitignored by the scaffold's `.ksor/*` rule. */
 const BUNDLES_DIR = ".ksor/out/bundles";
+const LOCK_NAME = "build.lock.json";
 /**
  * An audience identifier that can be a directory name. The policy admits any
  * non-empty string as a registry key, and every other surface uses one only as
@@ -305,12 +306,16 @@ export function runBuild(
     dirs: record.dirs,
   });
   if (parsed.bundles) {
-    const unsafe = bundles.map((b) => b.viewer).filter((v) => !PATH_SEGMENT.test(v));
+    // The lock copy sits beside the bundle directories, so its name is the one
+    // path segment an audience cannot take without the two colliding.
+    const unsafe = bundles
+      .map((b) => b.viewer)
+      .filter((v) => !PATH_SEGMENT.test(v) || v === LOCK_NAME);
     if (unsafe.length > 0) {
       return refuse(
         io,
         "ksor-audience-identifier-invalid",
-        `the audience identifier${unsafe.length === 1 ? "" : "s"} ${unsafe.map((v) => JSON.stringify(v)).join(", ")} cannot name a directory, and --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ — written as given it would land somewhere else`,
+        `the audience identifier${unsafe.length === 1 ? "" : "s"} ${unsafe.map((v) => JSON.stringify(v)).join(", ")} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, and one named ${LOCK_NAME} would collide with the lock`,
         "name audiences in plain words (letters, digits, `-`, `_`, `.`) in .ksor/governance.yaml and in every `ksor.audience` list, then rebuild",
       );
     }
@@ -421,7 +426,7 @@ function writeBundles(root: string, bundles: readonly Bundle[], lockText: string
       writeFileSync(to, bytes);
     }
   }
-  writeFileSync(path.join(out, "build.lock.json"), lockText);
+  writeFileSync(path.join(out, LOCK_NAME), lockText);
 }
 
 /** One line per bundle written, and a line per link it carries to a concept it excludes. */

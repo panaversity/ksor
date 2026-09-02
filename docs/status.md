@@ -99,8 +99,7 @@ checks, refuses with the slug first and nothing written, else writes the
 changed indexes and the lock — `source_commit` from the last commit touching
 an input, `dirty` from git status, the ledger checked for shrinkage against
 every historic version and the committed lock, a shallow clone refused.
-**`--bundles` writes one OKF bundle per canonical viewer** (0.0.59, issue
-#158): `.ksor/out/bundles/public/` and `.ksor/out/bundles/<audience>/` for
+**`--bundles` writes one OKF bundle per canonical viewer** (issue #158): `.ksor/out/bundles/public/` and `.ksor/out/bundles/<audience>/` for
 each registered audience, each built for the viewer `[public, <audience>]`
 exactly — the admitted concepts, their companions, the assets their bodies
 reference, and every `index.md` regenerated for that filtered tree with
@@ -241,7 +240,7 @@ display title is `instance.md`'s `title:` key; there is no body H1 to read.
 
 **What is NOT built, on this branch or anywhere** — phase B of
 `research/okf-native.md` §4.2. `ksor build --bundles` (the export half of
-Class E) shipped in 0.0.59; the rest is not started:
+Class E) is built, above; the rest is not started:
 
 - **Change-control verification of approvals and ledger actors** (KSP R22–R25
   against repository history). Until it exists an approval is POLICY-checked,
