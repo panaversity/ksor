@@ -112,8 +112,8 @@ Before changing anything, get a feel for how the record behaves. With
   rules; read it before you change how documents are written here. The kit in
   `.agents/skills/` already knows this project: `intake-interview` (define the
   record with you), `add-sources` (turn source material into governed
-  documents), `make-slides`, `make-summary`, and `format-checker` (the rules,
-  as a program — also what `pnpm check` runs).
+  documents), and `format-checker` (the rules, as a program — also what
+  `pnpm check` runs).
 
 **Treat the starters as scratch paper.** They ship approved by
 `ksor-starter/KSOR-STAMP-VERSION` — a tool, not a person. Edit the body and that
@@ -400,10 +400,21 @@ wrong thing describes it on every surface. So replace them, in this order:
    approve or withdraw a document — then it writes `instance.md` with you and
    replaces the `human:you` placeholder in `.ksor/governance.yaml` with your
    real handle.
-2. **Delete each starter document** as your own knowledge arrives.
-3. **When the last one is gone, delete `ksor-starter/KSOR-STAMP-VERSION` from
+2. **Write and approve at least one document of your own** — ask your agent
+   to add it (the `add-sources` skill), read it on `pnpm dev`, then approve it.
+   A record is never empty: delete all five starters before this and the next
+   build refuses `ksor-record-empty` and writes nothing.
+3. **Delete each starter document** as your own knowledge arrives.
+4. **When the last one is gone, delete `ksor-starter/KSOR-STAMP-VERSION` from
    `approval_authorities` in `.ksor/governance.yaml`.** Nothing of yours should
    be approved by a tool.
+
+If you did the hello-world tutorial first, your document is approved by
+`human:you`. The interview replaces that placeholder with your real handle —
+and re-attributes every act already recorded under it to you in the same
+change, because it is the same person. A policy that no longer names
+`human:you` beside a document that still cites it refuses
+`ksor-approver-unauthorised`.
 
 ---
 
@@ -470,7 +481,7 @@ record:
 make slides for knowledge/expenses/approvals.md
 ```
 
-The `make-slides` skill reads the document whole, writes the deck into
+Your agent reads the document whole, writes the deck into
 `knowledge/expenses/approvals.slides.yaml`, checks every claim and every number
 back against the document, and tells you what it left out because the document
 did not support it — which is usually how you find out a document has a gap. The
@@ -494,7 +505,7 @@ way:
 summarise knowledge/expenses/approvals.md
 ```
 
-The `make-summary` skill reads the document whole, writes
+Your agent reads the document whole, writes
 `knowledge/expenses/approvals.summary.md`, and checks every line back against
 the document — every number, every rule, and every `##` section, because a
 summary that covers the opening and trails off is worse than none: a reader who
@@ -505,7 +516,7 @@ The summary is part of its document, not a document of its own: no route, no
 sidebar row, no line in `llms.txt`, and it takes its governance from its parent.
 Ask for one only where there is something to compress — under about two screens,
 a summary that restates the page teaches readers the tab is not worth opening,
-and the skill will say so rather than write one.
+and a good agent will say so rather than write one.
 
 ---
 
@@ -682,7 +693,7 @@ different coding agent's way of finding the same working contract.
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AGENTS.md`                      | the working contract every coding agent reads first — the rules for writing knowledge here.                                                                                                             |
 | `CLAUDE.md`                      | one line, pointing at `AGENTS.md`. Claude Code looks for this filename, not that one.                                                                                                                   |
-| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `make-slides`, `make-summary`, `format-checker` (the rules, as a program). |
+| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `format-checker` (the rules, as a program).                               |
 | `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                                                     |
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                        |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                  |
@@ -711,6 +722,8 @@ map rather than a substitute.
 | the agent answers questions 2 and 3 instead of declining             | no floor is measured, so the gate is off (`abstain OFF`, `gate: "off"`) — step 3's `calibrate` was skipped  | `pnpm exec ksor calibrate --instance instance.md`, paste the block, restart             |
 | a deployed door serves an empty record                               | deploying does not publish — and a laptop DSN is unreachable from the host                                 | point both at one hosted Postgres, then `pnpm refresh`                                 |
 | the home page and `/llms.txt` are empty                              | every document is still a draft — correct, not broken                                                      | approve one and rebuild                                                                |
+| `ksor-record-empty`                                                  | every document was deleted — a record is never empty, so nothing was written                               | add one document of your own (or restore one from git) before deleting the last starter |
+| `ksor-approver-unauthorised`                                         | a document is approved by an actor `.ksor/governance.yaml` no longer names — usually `human:you` after the interview | re-attribute the approval to your handle, or restore the actor to `approval_authorities` |
 | a new document never appears on the built site                       | drafts reach no built surface at all                                                                       | publish it — `status: stable` plus both governance keys                                |
 | an expired document still shows on the site but not through the door | the static build evaluated `stale_after` at build time                                                     | rebuild and redeploy; schedule a rebuild if you use it                                 |
 | Vercel: `no services are declared`                                   | Root Directory was auto-filled with `system/site`                                                          | set it to `./`                                                                         |

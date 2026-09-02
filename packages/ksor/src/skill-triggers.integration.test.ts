@@ -51,8 +51,6 @@ const shipped = readdirSync(SKILLS, { withFileTypes: true })
  */
 const TRIGGERS: Readonly<Record<string, readonly string[]>> = {
   "add-sources": ["add this to the knowledge base"],
-  "make-summary": ["summarise X", "give me the short version"],
-  "make-slides": ["make slides for X", "turn this into a deck"],
   "intake-interview": ["get started with"],
   "format-checker": ["pnpm check"],
 };

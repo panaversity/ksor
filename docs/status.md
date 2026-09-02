@@ -11,7 +11,9 @@ attached). It ships the working `ksor init` described below — including the
 visibility model and the deploy story — AND the bundled content kernel, so
 `ksor build`, `ksor migrate`, `ksor serve`, `ksor ingest`, `ksor schema`,
 `ksor grant`, `ksor takedown`, `ksor calibrate` and `ksor gc` all run from the
-one `ksor` binary. **`ksor dev` is the only verb still unimplemented**: it
+one `ksor` binary. The scaffold ships THREE skills — `intake-interview`,
+`add-sources`, `format-checker`; `make-slides` and `make-summary` were removed
+after 0.0.55 (they remain in the history below as what 0.0.38 added). **`ksor dev` is the only verb still unimplemented**: it
 reports "designed but not implemented" and exits `2`. An unknown verb is
 refused with exit `1` and a stable `error: unknown-verb` stderr slug. The
 package root exports `exitCodes`, `verbs`, and `resolveCommand`, and docs ship

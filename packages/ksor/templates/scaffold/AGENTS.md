@@ -801,9 +801,9 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   quiz had every correct answer in the same position across 451 questions.
 
   A **presentation** is slides the record owns. Ask your coding agent for one
-  rather than writing it by hand — `make slides for knowledge/<path>.md` runs
-  the `make-slides` skill, which reads the document, writes the deck, checks
-  every claim back against it, and tells you what it left out:
+  rather than writing it by hand: it reads the document whole, writes the
+  deck, checks every claim and every number back against the document, and
+  tells you what it left out because the document did not support it:
 
   ```yaml
   slides:
@@ -918,6 +918,11 @@ SAMEORIGIN`, which forbids any other site from framing them, and a browser
 - Copy load-bearing values (numbers, thresholds, dates) exactly from their
   source, name the source in `sources`, and cite it from the claim with a GFM
   footnote whose label is that source's `id`.
+- **The record says only what its source says.** A gap is an open question
+  written into the document — never filled from general knowledge — and two
+  sources that disagree stay two cited statements: flag the disagreement to
+  the owner rather than choosing. That boundary is the product; a record that
+  quietly knows more than its sources is a chatbot with a sidebar.
 
 ### Structuring the record
 
@@ -942,10 +947,6 @@ SAMEORIGIN`, which forbids any other site from framing them, and a browser
   write `instance.md` together.
 - `.agents/skills/add-sources/` — turn source material (documents, pages,
   notes) into governed knowledge.
-- `.agents/skills/make-slides/` — generate a presentation from one document
-  and attach it, so it renders on that document's page.
-- `.agents/skills/make-summary/` — write a document's summary and attach it,
-  so it renders as a second tab on that document's page.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.
 
