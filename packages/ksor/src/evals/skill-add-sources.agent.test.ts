@@ -39,6 +39,15 @@
  * `claude`; without either it prints that it was skipped, the way the
  * database and live-provider tiers do. Honest absence, never silent weakness.
  *
+ * WHAT THREE ARMED RUNS SHOWED (2026-09-02, `SKILL_BASELINE`): on a clean
+ * two-page PDF, both arms pass every deterministic gate. The skill's value was
+ * in acts the gates did not score — extracting to a greppable file, verifying
+ * against it, rendering the page as the read-back, and in one run refusing to
+ * invent a currency the source never names — at about three times the cost.
+ * So the tenth gate scores an absence, and the next fixture must be one a
+ * baseline plausibly gets wrong. A harness that cannot tell the arms apart is
+ * measuring the fixture, not the skill.
+ *
  * WHAT IT CANNOT MEASURE, stated rather than implied: a conversational skill
  * (intake-interview; add-sources' person path) needs a scripted owner to talk
  * to, which is a second harness shape; "reads as a finished page" needs a
@@ -293,6 +302,16 @@ function grade(root: string, changed: readonly string[]): Grade[] {
       name: "page furniture stripped",
       pass: !/Page \d+ of \d+/.test(body),
       saw: /Page \d+ of \d+/.exec(body)?.[0] ?? "none",
+    },
+    {
+      // The source names no currency. Run 2's WITH arm stopped rather than
+      // invent one; a document that says $ or USD filled a gap from general
+      // knowledge, which is the one thing add-sources must never do. This is
+      // the first gate that measures NOT doing something, and it was added
+      // after run 3 because the first nine could not tell the arms apart.
+      name: "no currency invented (the source names none)",
+      pass: !/[$£€]|\b(USD|GBP|EUR|PKR|INR|AUD|CAD)\b/.test(body),
+      saw: /[$£€]|\b(USD|GBP|EUR|PKR|INR|AUD|CAD)\b/.exec(body)?.[0] ?? "none",
     },
     {
       name: "every number, date and name is in the source (verify.mjs)",
