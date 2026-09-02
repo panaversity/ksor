@@ -145,9 +145,6 @@ made it answer from.
   hand-written one returning fabricated hits with plausible `stable_id`s would
   pass every shape check there is.
 - **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
-  `provenance`, each hit's `governance`, the `snapshot` token and `gate`. A
-  record that reshaped them would still look like a KSoR and no longer be one.
-- **The output schemas.** `SEARCH_OUTPUT`, `OUTLINE_OUTPUT`, `READ_OUTPUT` carry
   `provenance`, each hit's `governance`, the `snapshot` token, `gate`, and
   `audit`. A record that reshaped them would still look like a KSoR and no
   longer be one.

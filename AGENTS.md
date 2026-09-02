@@ -1636,7 +1636,7 @@ cite the research they distill; guard rule 8 enforces the frontmatter
 
 ## Testing
 
-Three tiers by filename convention; pick the tightest tier that can express the
+Four tiers by filename convention; pick the tightest tier that can express the
 assertion.
 
 - `*.test.ts` — unit, colocated (packages `src/` and `scripts/`): pure, no

@@ -57,8 +57,8 @@ instead of their training memory. The corpus grows with each implemented verb.
     which a dependency bump reaches a project already scaffolded. Includes the
     list of files migrate does NOT carry, so you know what to diff by hand.
   - **[authorization.md](./authorization.md)** — putting the record behind an
-    authorization server, with worked recipes for two of them, executed rather
-    than written. `ksor serve` refuses to boot unauthenticated on a public bind,
+    authorization server, with worked recipes for four of them — two self-hosted,
+    one hosted, one an organisation's own — executed rather than written. `ksor serve` refuses to boot unauthenticated on a public bind,
     so this is the last step of a deployment, not an optional hardening pass.
 - Exit codes are a contract: `1` refused (first stderr line is a stable
   slug such as `error: bad-name`, followed by a remedy), `2` designed but

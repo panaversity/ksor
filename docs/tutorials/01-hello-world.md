@@ -35,7 +35,7 @@ yours, not whatever your agent's shell reached for.
 The commands below are npm's, to match the `npx` above. On a `pnpm dlx` or
 `bunx` project, substitute your own manager throughout.
 
-It is also the moment your agent gets its instructions: `AGENTS.md`, five
+It is also the moment your agent gets its instructions: `AGENTS.md`, three
 skills, and `.mcp.json` all arrive here. Before this command there is nothing
 for an agent to read.
 
@@ -257,10 +257,21 @@ npm run refresh     # build, embed, publish a generation
 
 ```
 run 1: building generation 1 (embed gemini:gemini-embedding-001/d1536/RETRIEVAL_DOCUMENT)
+structure: 7 nodes, 6 sources, 23 chunks; carried 0, pending 23
+embedding 23 pending chunks (batch 32) ...
 embedded 23, failed 0
+source: 5bfbaafd809e199e44453ad94837300cf6e4e0ad-dirty
 ingest: generation 1 — 7 nodes, 23 chunks; embedded 23, carried 0, failed 0
+pre-flip delta vs gen 0: 0 -> 7 nodes (+7 / -0)
+  added:   ["knowledge/governance-ladder","knowledge/refund-policy","knowledge/surfaces#section","knowledge/surfaces/for-agents","knowledge/surfaces/for-people","knowledge/surfaces/overview","knowledge/what-is-a-ksor"]
 FLIPPED active generation -> 1
+gc: nothing collectable (active/rollback/grace all hold)
 ```
+
+Seven nodes: your six documents and the `surfaces` folder, which is a node of
+its own. The `source:` sha is your commit, and `-dirty` because `refresh` ran
+`ksor build` first and the lock it rewrote is not committed yet — provenance
+being precise about that, as in Part 1.
 
 Seven seconds, and your record is published as **generation 1** — the number
 every answer will cite.

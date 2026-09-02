@@ -50,7 +50,7 @@ root**, where `instance.md` and `package.json` live.
 
 ```sh
 pnpm provision   # ksor schema --apply, then ksor grant
-pnpm refresh     # ksor ingest --flip, then ksor gc
+pnpm refresh     # ksor build, then ksor ingest --flip, then ksor gc
 ```
 
 `provision` is separate because applying DDL and granting ingest are acts an
@@ -289,9 +289,12 @@ decision in this project's own gold rather than a threshold somebody picked.
 Run it on a schedule, or in your own CI beside `ksor build`. Three things to
 know about what it is:
 
-- **It never fails a run.** It always exits 0. A stale floor wants
-  re-measuring, and failing a build for one would make the shortest way out
-  deleting `vector_floor` — turning the gate off entirely to clear the error.
+- **A verdict never fails a run.** STEADY, WATCH and no-data all exit 0: a
+  stale floor wants re-measuring, and failing a build for one would make the
+  shortest way out deleting `vector_floor` — turning the gate off entirely to
+  clear the error. What does exit non-zero is the environment, the same way it
+  does for every verb: 3 when `KSOR_DB_URL` is unset or the database is
+  unreachable, 1 on a bad flag. Put it in CI knowing that.
 - **It reads traffic, so it needs traffic**, and it says so rather than
   reporting a healthy-looking nothing. It also cannot see questions nobody
   asked: it can tell you the floor has gone permissive, never that it is too

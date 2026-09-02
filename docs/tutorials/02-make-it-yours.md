@@ -243,7 +243,7 @@ name on it, not an edit.
 > **Ask your agent:**
 > Show me both on the site.
 
-`pnpm dev`, and open the two pages. They are marked as drafts. This is the
+`npm run dev`, and open the two pages. They are marked as drafts. This is the
 review surface — the actual page, not a message in a terminal — and it is
 where you decide whether the record says what you meant.
 

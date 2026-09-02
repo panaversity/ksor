@@ -423,7 +423,7 @@ governance block every hit now carries:
 Three edits pay for themselves:
 
 - **Delete a tool nothing calls.** Removing `outline` and `read` gives back
-  ~2,152 tokens for the whole session.
+  ~2,310 tokens for the whole session.
 - **Say what this record covers**, above `FLOOR.search`. It is how an agent with
   several records attached picks yours; name the subject AND the boundary.
 - **Set `k`** in the input schema — it is the lever on reply size.
@@ -899,8 +899,7 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   click is informed.
 
   **You do not state a height.** A page carried in the record is measured, so
-  the frame is exactly as tall as what it holds — on this record's own seven,
-  to the pixel. A number written into a document would be a number some other
+  the frame is exactly as tall as what it holds, to the pixel. A number written into a document would be a number some other
   measure makes wrong.
 
   **Carry the page in where you can.** A file named `<name>.sim.html`, sitting

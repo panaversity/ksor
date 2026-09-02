@@ -41,9 +41,8 @@ record wins.
 
 Everything above describes KSoR itself. It ships filled in so that a fresh
 project has a real governed corpus on the first `pnpm dev` — five approved
-documents, three of them inside a folder, and one carrying all four study
-attachments (a summary, slides, flashcards and a quiz) — instead of an empty
-shelf and a placeholder.
+documents, three of them inside a folder, and one carrying a summary
+companion — instead of an empty shelf and a placeholder.
 The documents live in `knowledge/`; delete them as your own knowledge arrives.
 
 Be deliberate about replacing it, because a starter that describes the wrong

@@ -76,7 +76,7 @@ These are yours, and no release touches them. Diff them against a fresh
 - `pnpm-workspace.yaml` / `.npmrc` and any lockfile
 
 ```sh
-npx @panaversity/ksor@latest init /tmp/fresh
+(cd /tmp && npx @panaversity/ksor@latest init fresh)   # init takes a NAME, not a path
 diff -ru /tmp/fresh/vercel.json ./vercel.json
 ```
 
