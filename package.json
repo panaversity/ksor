@@ -23,6 +23,7 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:db": "vitest run --config vitest.db.config.ts",
+    "test:agent": "vitest run --config vitest.agent.config.ts",
     "publint": "pnpm -r publint",
     "changeset": "changeset",
     "version": "pnpm changeset version && node scripts/sync-status-version.mjs",
