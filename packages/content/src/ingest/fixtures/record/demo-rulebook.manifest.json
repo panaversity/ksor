@@ -11,9 +11,7 @@
       "position": 1,
       "summary": "The official rules of the Maple Street Community Workshop, and how they bind every member.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -33,9 +31,7 @@
       "kind": "section",
       "position": 2,
       "governance": {
-        "audience": [
-          "public"
-        ]
+        "audience": ["public"]
       }
     },
     {
@@ -47,9 +43,7 @@
       "position": 1,
       "summary": "What every member does first in an emergency, before any machine-specific step.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -71,9 +65,7 @@
       "position": 2,
       "summary": "Who to call, where the kit is, and what is recorded after an injury.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -95,9 +87,7 @@
       "position": 3,
       "summary": "What to do when the power fails or a fire starts, and where the shut-offs are.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -117,9 +107,7 @@
       "kind": "section",
       "position": 3,
       "governance": {
-        "audience": [
-          "public"
-        ]
+        "audience": ["public"]
       }
     },
     {
@@ -131,9 +119,7 @@
       "position": 1,
       "summary": "How a member earns a machine badge and what a checkout covers.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -155,9 +141,7 @@
       "position": 2,
       "summary": "Which badges exist, what each permits, and how one is earned or revoked.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -179,9 +163,7 @@
       "position": 3,
       "summary": "What a guest or a minor may do in the workshop, and who is responsible for them.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -201,9 +183,7 @@
       "kind": "section",
       "position": 4,
       "governance": {
-        "audience": [
-          "public"
-        ]
+        "audience": ["public"]
       }
     },
     {
@@ -215,9 +195,7 @@
       "position": 1,
       "summary": "The rules that apply to every badged machine before its own rules do.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -239,9 +217,7 @@
       "position": 2,
       "summary": "How the table saw is set up, guarded and used, and what is never cut on it.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",
@@ -263,9 +239,7 @@
       "position": 3,
       "summary": "Which materials the laser cutter may cut, and which are banned for the fumes they make.",
       "governance": {
-        "audience": [
-          "public"
-        ],
+        "audience": ["public"],
         "doc_status": "stable",
         "generated": {
           "by": "ksor-fixture/1",

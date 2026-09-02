@@ -281,6 +281,7 @@ describe("checkLock accepts what composeLock writes", () => {
         assets: [{ path: "pol/chart.png", bytes: IMAGE }],
         indexes: [{ path: "index.md", text: INDEX_MD }],
         denials: [],
+        bundles: [],
       }),
     );
 

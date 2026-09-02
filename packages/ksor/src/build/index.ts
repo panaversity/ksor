@@ -4,10 +4,20 @@
  * and `build.lock.json`. Database-free, network-free. A refusal leaves the
  * tree exactly as it found it, with the slug on the first stderr line.
  */
-import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 
 import {
+  admittedViewersOf,
+  canonicalViewers,
   checkRecord,
   composeLock,
   formatRefusal,
@@ -24,11 +34,13 @@ import {
 import {
   attachmentKindOf,
   dirtyNotice,
+  parseInstanceDocument,
   provenanceGap,
   provenanceNotice,
 } from "@panaversity/ksor-content";
 
 import { exitCodes } from "../index.js";
+import { bundleDigest, planBundles, type Bundle } from "./bundles.js";
 import { gitFacts, ignoredGovernance, type GitFacts } from "./git.js";
 import { lifecycleNotice } from "./lifecycle-notice.js";
 
@@ -43,7 +55,7 @@ export interface BuildOptions {
   readonly drafts: "hidden" | "shown";
 }
 
-export const BUILD_USAGE = `Usage: ksor build [--instance <path>] [--as-of <instant>] [--strict] [--allow-unverifiable-ledger]
+export const BUILD_USAGE = `Usage: ksor build [--instance <path>] [--as-of <instant>] [--strict] [--allow-unverifiable-ledger] [--bundles]
 
 Generates every knowledge/**/index.md in memory, runs the record checker, and
 on green writes the indexes whose bytes changed plus build.lock.json — the
@@ -58,8 +70,24 @@ toolchain. A refusal (exit 1, slug first on stderr) writes nothing.
   --allow-unverifiable-ledger
                       build on a shallow clone, where the ledger's history
                       cannot be checked for deleted entries
-  --bundles           designed, not implemented (exit 2)
+  --bundles           also write one OKF bundle per viewer under
+                      .ksor/out/bundles/<viewer>/ — public, and [public, X]
+                      for each registered audience X — holding only what that
+                      viewer's machine surfaces publish, with its indexes
+                      regenerated for that tree; any OKF consumer reads it
+                      with no ksor in the loop. The lock beside them names
+                      the build. The directory is replaced on every run.
 `;
+
+/** What `--bundles` writes, record-relative. Gitignored by the scaffold's `.ksor/*` rule. */
+const BUNDLES_DIR = ".ksor/out/bundles";
+/**
+ * An audience identifier that can be a directory name. The policy admits any
+ * non-empty string as a registry key, and every other surface uses one only as
+ * a token — `--bundles` is the first to use it as a PATH, so `../x` written as
+ * given would land outside the output directory.
+ */
+const PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 interface Parsed {
   readonly instance: string | null;
@@ -140,11 +168,6 @@ export function runBuild(
     io.err(`error: bad-args\n${parsed}\n${BUILD_USAGE}`);
     return exitCodes.refused;
   }
-  if (parsed.bundles) {
-    io.out(`ksor build --bundles: designed but not implemented in ${options.version}.\n`);
-    return exitCodes.notImplemented;
-  }
-
   const start =
     parsed.instance === null
       ? cwd
@@ -255,6 +278,44 @@ export function runBuild(
   const ledgerText = record.files.get(".ksor/takedowns.yaml") ?? null;
   const ledger = parseLedger(ledgerText, ".ksor/takedowns.yaml");
   const denials = ledger.ok ? inForce(ledger.ledger) : [];
+  const asOf = parsed.asOf ?? Date.now();
+  const audiences = result.policy?.audiences ?? [];
+
+  // The bundles, planned on EVERY build and written only under `--bundles`:
+  // the lock records each one's digest either way, so it is the same lock
+  // whether or not the directories exist (build spec §2). Admission is the
+  // lock's own — `admittedViewersOf` over the same concepts, viewers, instant
+  // and denials `composeLock` uses below — never a second predicate.
+  const viewers = canonicalViewers(audiences);
+  const instance = parseInstanceDocument(record.files.get("instance.md") ?? "");
+  const bundles = planBundles({
+    // The checker refused an unreadable instance above, so the fallback is
+    // unreachable; it exists so a heading is never `undefined`.
+    title: instance.ok ? instance.instance.title : "Index",
+    viewers: Object.keys(viewers),
+    concepts: result.concepts.map((c) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description,
+      order: c.order,
+      admitted: admittedViewersOf(c, viewers, asOf, denials),
+    })),
+    files: record.files,
+    assets: record.assets,
+    dirs: record.dirs,
+  });
+  if (parsed.bundles) {
+    const unsafe = bundles.map((b) => b.viewer).filter((v) => !PATH_SEGMENT.test(v));
+    if (unsafe.length > 0) {
+      return refuse(
+        io,
+        "ksor-audience-identifier-invalid",
+        `the audience identifier${unsafe.length === 1 ? "" : "s"} ${unsafe.map((v) => JSON.stringify(v)).join(", ")} cannot name a directory, and --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ — written as given it would land somewhere else`,
+        "name audiences in plain words (letters, digits, `-`, `_`, `.`) in .ksor/governance.yaml and in every `ksor.audience` list, then rebuild",
+      );
+    }
+  }
+
   const lock = composeLock({
     ksorVersion: options.version,
     sourceCommit: facts.sourceCommit,
@@ -262,14 +323,14 @@ export function runBuild(
     // content that is in no commit, so a lock claiming `dirty: false` beside it
     // would be a false provenance claim (invariant: provenance is load-bearing).
     dirty: facts.dirty || pendingIndexes.length > 0 || staleIndexes.length > 0,
-    asOf: parsed.asOf ?? Date.now(),
+    asOf,
     drafts: options.drafts,
     instanceText: record.files.get("instance.md") ?? "",
     policyText: record.files.get(".ksor/governance.yaml") ?? "",
     peopleText: record.files.get(".ksor/people.yaml") ?? null,
     ledgerText,
     ledgerEntries: result.ledgerEntries,
-    audiences: result.policy?.audiences ?? [],
+    audiences,
     concepts: result.concepts.map((c) => ({
       id: c.id,
       status: c.status,
@@ -297,14 +358,21 @@ export function runBuild(
       text,
     })),
     denials,
+    bundles: bundles.map((b) => ({
+      viewer: b.viewer,
+      sha256: bundleDigest(b.files),
+      files: b.files.size,
+    })),
   });
+  const lockText = `${JSON.stringify(lock, null, 2)}\n`;
 
   // Write only what changed, so a no-op build leaves git quiet.
   for (const rel of pendingIndexes) {
     writeFileSync(path.join(root, rel), result.indexes.get(rel)!);
   }
   for (const rel of staleIndexes) unlinkSync(path.join(root, rel));
-  writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+  if (parsed.bundles) writeBundles(root, bundles, lockText);
+  writeFileSync(lockPath, lockText);
 
   const admitted = lock.documents.filter((d) => d.admitted.length > 0).length;
   // Why the count is what it is, and when it stops being true. A build that
@@ -328,7 +396,50 @@ export function runBuild(
       `${provenanceLine({ ...facts, dirty: lock.dirty }, root)}\n` +
       notice +
       `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
+      (parsed.bundles ? bundlesReport(bundles, viewers) : "") +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,
   );
   return 0;
+}
+
+/**
+ * Replace `.ksor/out/bundles/` with exactly this build's bundles. Replaced,
+ * not merged: a bundle an earlier build wrote for an audience the policy no
+ * longer registers, or a file a document no longer admits, would otherwise sit
+ * beside the fresh ones under the same directory — the sims leak of 2026-08-25
+ * (`pruneSims`) in a directory that exists to be sent somewhere. The lock goes
+ * beside them the way it sits beside `knowledge/` (KSP-001 4.1.2), so the
+ * output travels with the provenance that names it.
+ */
+function writeBundles(root: string, bundles: readonly Bundle[], lockText: string): void {
+  const out = path.join(root, BUNDLES_DIR);
+  rmSync(out, { recursive: true, force: true });
+  for (const bundle of bundles) {
+    for (const [rel, bytes] of bundle.files) {
+      const to = path.join(out, bundle.viewer, rel);
+      mkdirSync(path.dirname(to), { recursive: true });
+      writeFileSync(to, bytes);
+    }
+  }
+  writeFileSync(path.join(out, "build.lock.json"), lockText);
+}
+
+/** One line per bundle written, and a line per link it carries to a concept it excludes. */
+function bundlesReport(
+  bundles: readonly Bundle[],
+  viewers: Readonly<Record<string, readonly string[]>>,
+): string {
+  let text = "";
+  for (const bundle of bundles) {
+    const list = (viewers[bundle.viewer] ?? [bundle.viewer]).join(", ");
+    text += `  wrote ${BUNDLES_DIR}/${bundle.viewer}/ — the OKF bundle for viewer [${list}], ${bundle.files.size} file(s)\n`;
+    // Said, not fixed: the body is the record's, verbatim, and the target is a
+    // governed state (a draft, an embargo, a review date, a denial) — so the
+    // bundle carries the link and the reader is told where it leads.
+    for (const link of bundle.dangling) {
+      text += `    ${link.from} links to ${link.to}, which this bundle excludes — the link dangles for its reader\n`;
+    }
+  }
+  text += `  wrote ${BUNDLES_DIR}/build.lock.json — a copy, so the bundles travel with the build that made them\n`;
+  return text;
 }
