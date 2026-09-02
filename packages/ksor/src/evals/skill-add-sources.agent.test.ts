@@ -40,10 +40,14 @@
  * WHAT IT COSTS, and why it is gated. One arm on the default model ran to
  * $0.25 for a one-word reply (2026-09-02, claude-fable-5-1, `--bare`), so the
  * tier pins a mid-tier model unless `KSOR_EVAL_MODEL` says otherwise, and runs
- * on push to main and by hand, never per PR. It arms on `ANTHROPIC_API_KEY`
- * (CI: `--bare`, no OAuth) or, on a developer's machine, on a logged-in
- * `claude`; without either it prints that it was skipped, the way the
- * database and live-provider tiers do. Honest absence, never silent weakness.
+ * on push to main and by hand, never per PR. It authenticates the way the
+ * owner asked (2026-09-02): through `claude`'s OWN login, never an API key —
+ * a developer's logged-in CLI locally, and in CI a long-lived token from
+ * `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`. It never passes `--bare`,
+ * because bare mode does not read that token (code.claude.com/docs/en/headless:
+ * "Bare mode does not read CLAUDE_CODE_OAUTH_TOKEN"). Without a login it prints
+ * that it was skipped, the way the database and live-provider tiers do. Honest
+ * absence, never silent weakness.
  *
  * WHAT THREE ARMED RUNS SHOWED (2026-09-02, `SKILL_BASELINE`): on a clean
  * two-page PDF, both arms pass every deterministic gate. The skill's value was
@@ -115,11 +119,11 @@ const VERIFY = path.resolve(
   "verify.mjs",
 );
 
-const apiKey = process.env["ANTHROPIC_API_KEY"] ?? "";
+const oauthToken = process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";
 const claudeOnPath = spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0;
 const pdftotextOnPath = spawnSync("pdftotext", ["-v"], { encoding: "utf8" }).status === 0;
-/** CI arms only on the key; a developer's logged-in CLI is enough locally. */
-const armed = apiKey !== "" || (claudeOnPath && process.env["CI"] === undefined);
+/** CI arms only on a setup-token; a developer's logged-in CLI is enough locally. */
+const armed = claudeOnPath && (oauthToken !== "" || process.env["CI"] === undefined);
 const MODEL = process.env["KSOR_EVAL_MODEL"] ?? "claude-sonnet-5";
 const BUDGET_USD = process.env["KSOR_EVAL_BUDGET_USD"] ?? "4";
 
@@ -258,7 +262,6 @@ function agent(root: string, prompt: string): AgentResult {
     "Grep",
     "Skill",
   ];
-  if (apiKey !== "") args.push("--bare");
   // `CLAUDECODE` is set inside a Claude Code session and refuses nesting;
   // this is a subprocess with its own scaffold, which is the safe case.
   const env: NodeJS.ProcessEnv = { ...process.env };
@@ -440,7 +443,7 @@ describe.runIf(armed)("add-sources, run by an agent (with the skill vs without)"
 });
 
 describe.runIf(!armed)("add-sources, run by an agent (gated)", () => {
-  it("skipped — set ANTHROPIC_API_KEY (CI) or log in to `claude` (locally) to run the skill eval", () => {
+  it("skipped — run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN (CI), or log in to `claude` (locally), to run the skill eval", () => {
     expect(armed).toBe(false);
   });
 });
