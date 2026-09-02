@@ -111,8 +111,8 @@ Before changing anything, get a feel for how the record behaves. With
 - **Ask your coding agent to do the same.** `AGENTS.md` carries the working
   rules; read it before you change how documents are written here. The kit in
   `.agents/skills/` already knows this project: `intake-interview` (define the
-  record with you), `add-sources` (turn source material into governed
-  documents), and `format-checker` (the rules, as a program — also what
+  record with you), `add-sources` (turn what you have — files, or what you
+  know — into governed documents), and `format-checker` (the rules, as a program — also what
   `pnpm check` runs).
 
 **Treat the starters as scratch paper.** They ship approved by
@@ -693,7 +693,7 @@ different coding agent's way of finding the same working contract.
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AGENTS.md`                      | the working contract every coding agent reads first — the rules for writing knowledge here.                                                                                                             |
 | `CLAUDE.md`                      | one line, pointing at `AGENTS.md`. Claude Code looks for this filename, not that one.                                                                                                                   |
-| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn source material into governed documents), `format-checker` (the rules, as a program).                               |
+| `.agents/skills/`                | the agent kit: `intake-interview` (define the record with you), `add-sources` (turn files, or what you know, into governed documents), `format-checker` (the rules, as a program).                          |
 | `.claude/skills/`                | byte-identical copies of the kit — Claude Code discovers skills only here. The checker enforces the mirror, so the two cannot drift.                                                                     |
 | `.gemini/settings.json`          | points Gemini CLI at `AGENTS.md`; Gemini does not read that filename on its own.                                                                                                                        |
 | `.github/workflows/validate.yml` | your CI: runs the same checker on every pull request and push to main.                                                                                                                                  |

@@ -945,8 +945,10 @@ SAMEORIGIN`, which forbids any other site from framing them, and a browser
 
 - `.agents/skills/intake-interview/` — first run: interview the owner and
   write `instance.md` together.
-- `.agents/skills/add-sources/` — turn source material (documents, pages,
-  notes) into governed knowledge.
+- `.agents/skills/add-sources/` — turn what the owner has into governed
+  knowledge: a document, a page, notes, or what they tell you that nobody
+  wrote down. Converts files with a verified extraction, interviews a person
+  for the rest, and ends with the owner's approval.
 - `.agents/skills/format-checker/` — the rules above, as a program;
   `pnpm check` runs it and its errors explain how to fix themselves.
 
