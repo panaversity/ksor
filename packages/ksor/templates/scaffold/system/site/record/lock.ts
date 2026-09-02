@@ -33,6 +33,9 @@ export type Drafts = "hidden" | "shown";
 
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "a sha256 hex digest");
 const viewerList = z.array(z.string().min(1));
+const bundleEntry = z
+  .object({ viewer: z.string().min(1), sha256: hex64, files: z.number().int().nonnegative() })
+  .strict();
 
 const lockSchema = z
   .object({
@@ -66,8 +69,21 @@ const lockSchema = z
     companions: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
     assets: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
     indexes: z.array(z.object({ path: z.string().min(1), sha256: hex64 }).strict()),
+    bundles: z.array(bundleEntry),
   })
   .strict();
+
+/**
+ * One OKF bundle, as `ksor build --bundles` writes it for a canonical viewer
+ * (build spec §1 step 4): the digest is sha256 over the JSON of the bundle's
+ * sorted `[path, sha256]` pairs, so a recipient holding only the directory can
+ * recompute it and find the publication it came from.
+ */
+export interface LockBundle {
+  readonly viewer: string;
+  readonly sha256: string;
+  readonly files: number;
+}
 
 export interface LockDocument {
   /** Bundle-relative, with `.md`. */
@@ -116,6 +132,24 @@ export interface Lock {
    * stopped short of the file that lists what was published.
    */
   readonly indexes: readonly { readonly path: string; readonly sha256: string }[];
+  /**
+   * One digest per canonical viewer, recorded on EVERY build and not only when
+   * `--bundles` wrote the directories: the bundle set is a function of what
+   * `build_id` already hashes, so the lock is the same lock either way, and a
+   * `pnpm build` on a host that never passes the flag records the same digests
+   * the owner's `--bundles` run did. Outside `build_id` for the same reason —
+   * the documents, their admitted sets, the companions, the assets and the
+   * instance title are already in it, so hashing the bundles again could not
+   * move it (build spec §2). Listed so a directory can be MATCHED to a
+   * publication, not to widen what the id covers. Required on read like every
+   * other field, and NOT read around: a lock an older ksor wrote lacks the key,
+   * so `ksor build` refuses it as `ksor-lock-invalid` and says to delete it —
+   * it does not regenerate one it cannot read, because the lock is also a
+   * takedown baseline and a lock nothing can read is a baseline that quietly
+   * holds nothing. `ksor migrate` offers that deletion, which is the migration
+   * decision 28 pairs the removal with.
+   */
+  readonly bundles: readonly LockBundle[];
 }
 
 export type LockResult =
@@ -254,6 +288,8 @@ export interface LockInput {
   /** Bundle-relative path → the §8 index text this build generated (`index.md`, `policies/index.md`). */
   readonly indexes: readonly { readonly path: string; readonly text: string }[];
   readonly denials: readonly Denial[];
+  /** The digest of each canonical viewer's bundle, in the order `canonicalViewers` lists them. */
+  readonly bundles: readonly LockBundle[];
 }
 
 export function composeLock(input: LockInput): Lock {
@@ -310,6 +346,7 @@ export function composeLock(input: LockInput): Lock {
     companions,
     assets,
     indexes,
+    bundles: input.bundles.map((b) => ({ viewer: b.viewer, sha256: b.sha256, files: b.files })),
   };
 }
 

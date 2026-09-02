@@ -173,6 +173,10 @@ describe("composeLock + parseLock", () => {
     assets: [{ path: "policies/x.png", bytes: new Uint8Array([1, 2, 3]) }],
     indexes: [{ path: "index.md", text: "# R\n" }],
     denials: [],
+    bundles: [
+      { viewer: "public", sha256: "a".repeat(64), files: 2 },
+      { viewer: "internal", sha256: "b".repeat(64), files: 3 },
+    ],
   };
 
   it("composes the §2 shape, and the lock parses back to itself", () => {
@@ -205,8 +209,25 @@ describe("composeLock + parseLock", () => {
     // Absent phone book hashes as empty, the same way an absent ledger does —
     // so "declares no names" is a stated fact rather than a missing key.
     expect(lock.people_sha256).toBe(sha256Hex(""));
+    // One digest per canonical viewer — what `ksor build --bundles` writes for
+    // it — recorded on EVERY build, so the lock is the same lock whether or not
+    // the bundles were materialised, and a bundle directory can be matched to
+    // the publication that produced it.
+    expect(lock.bundles).toEqual(input.bundles);
     const parsed = parseLock(JSON.stringify(lock));
     expect(parsed.ok && parsed.lock).toEqual(lock);
+  });
+
+  it("build_id does not cover the bundle digests — they are a function of what it already hashes", () => {
+    const base = composeLock(input).build_id;
+    expect(composeLock({ ...input, bundles: [] }).build_id).toBe(base);
+  });
+
+  it("a lock written before bundle digests existed is refused, not read around", () => {
+    const { bundles: _omitted, ...older } = composeLock(input);
+    const parsed = parseLock(JSON.stringify(older));
+    expect(parsed.ok).toBe(false);
+    expect(!parsed.ok && parsed.why).toContain("bundles");
   });
 
   it("build_id excludes as_of, source_commit and dirty, and moves with the admitted set", () => {

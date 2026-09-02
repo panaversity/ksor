@@ -22,3 +22,9 @@ packages/ksor/templates/scaffold/.claude/skills/format-checker/check.mjs
 # resolves its bundled deps by upward walk; afterEach removes them)
 packages/ksor/ksor-fakeinstall-*/
 packages/ksor/ksor-tarball-run-*/
+
+# `ksor build --bundles` writes here. A scaffold gitignores it through its own
+# `.ksor/*` rule; this repo's fixture (workbench/example-corpus/) has no such
+# rule, so running the flag on it left an untracked copy of the whole record in
+# the working tree.
+**/.ksor/out/

@@ -101,6 +101,22 @@ checks, refuses with the slug first and nothing written, else writes the
 changed indexes and the lock — `source_commit` from the last commit touching
 an input, `dirty` from git status, the ledger checked for shrinkage against
 every historic version and the committed lock, a shallow clone refused.
+**`--bundles` writes one OKF bundle per canonical viewer** (issue #158): `.ksor/out/bundles/public/` and `.ksor/out/bundles/<audience>/` for
+each registered audience, each built for the viewer `[public, <audience>]`
+exactly — the admitted concepts, their companions, the assets their bodies
+reference, and every `index.md` regenerated for that filtered tree with
+`okf_version` at the root; no byte of a concept excluded for AUDIENCE, grepped
+in the test rather than inspected by name (an exclusion for a lifecycle or
+ledger reason leaves the excluded path in a held body's link, verbatim and
+reported); a copy of the lock beside them; the directory replaced on every run
+and gitignored by the scaffold's `.ksor/*` rule. The admission is the lock's own
+`admitted` set, never a second predicate. The lock records every bundle's digest
+on EVERY build, flag or not — the bundles are a function of what `build_id`
+already hashes, so `build_id` is unchanged and the lock is the same lock either
+way — and an audience identifier that cannot name a bundle directory is
+therefore refused on every build too, whether it is not a path segment
+(`ksor-audience-identifier-invalid`) or differs from another only in case
+(`ksor-audience-identifier-collides`).
 **KSP R23 runs beside the checker** in `ksor build` and `ksor ingest` — not
 in the emitted `check.mjs`, which stays the format gate: a `stable` body that differs from any committed version
 stable under a `generated.at` the tree has not ADVANCED past — the same
@@ -109,7 +125,7 @@ committed version of the path through a few `rev-parse` probes, one
 `git log`, and one `git cat-file --batch` per 256 objects; where history is
 unreadable each program prints
 `change-control: not checked` beside its verdict rather than passing.
-`--bundles` exits `2`. **The emitted `check.mjs` is generated** from the
+**The emitted `check.mjs` is generated** from the
 record module at package-build time into both skill trees (gitignored in the
 templates), read-only, refusing a stale index; a conformance fixture is judged
 identically by it and by `checkRecord`. **The starter is in the profile**:
@@ -144,7 +160,11 @@ names is left alone and an existing ledger is never regenerated — `ksor
 takedown` may have appended to it — but a row nothing accounts for is
 APPENDED, including the one a repointed denial leaves behind, which is the
 state `ksor ingest` and `ksor serve` refuse as `ksor-takedown-unledgered` and
-name this command as the remedy for. Without `--write` it prints a
+name this command as the remedy for. It also DELETES a
+`build.lock.json` this ksor cannot read (the lock gains fields, and `ksor build`
+refuses a stale one as `ksor-lock-invalid` rather than regenerating a takedown
+baseline it cannot parse) — the migration decision 28 pairs that removal with.
+Without `--write` it prints a
 unified diff and changes nothing. `--write-site` UPDATES every file of
 `system/site` this release emits — the byte-copied rule modules, the site's
 `next.config.mjs`, and its `package.json`, which is the only path by which a
@@ -242,10 +262,9 @@ lock was written by a newer `ksor` than the site's rule modules carry. The
 display title is `instance.md`'s `title:` key; there is no body H1 to read.
 
 **What is NOT built, on this branch or anywhere** — phase B of
-`research/okf-native.md` §4.2, none of it started:
+`research/okf-native.md` §4.2. `ksor build --bundles` (the export half of
+Class E) is built, above; the rest is not started:
 
-- **`ksor build --bundles`** parses and exits `2` with the honest notice. One
-  OKF bundle per registered audience, for exchange, is designed and unwritten.
 - **Change-control verification of WHO approved** (KSP R22, R24, R25 against
   repository identity). R23 IS built — `ksor-generated-stale`, above — so
   whether an edit to a stable concept bumped `generated.at` is now verified
@@ -952,10 +971,6 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   answers "designed but not implemented" with exit `2`. The two codes are a
   contract (product principle 4) — `2` says designed and coming, `1` says
   refused — so they are worth stating apart rather than together.
-- `ksor build --bundles` — parses, prints the honest notice, exits `2`. It is
-  phase B of `research/okf-native.md`, with `specs/ksor/build/spec.md` §1.4 as
-  its contract: one OKF bundle per registered audience under
-  `.ksor/out/bundles/<audience>/`, for exchange.
 - Change-control verification of WHO approved (KSP R22, R24, R25) against
   repository identity, which is what would let an approval say
   `checked: "change-control"` instead of `checked: "policy"`. R23 — an edit to

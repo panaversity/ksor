@@ -862,9 +862,10 @@ If the capitalization policy does not address the situation, the system should n
 > `ingest`/`schema`/`calibrate`/`gc` — the climbed rung, needing Postgres and a
 > provider key). Only `dev` remains designed, not yet implemented — it prints
 > an honest notice and exits `2`; the scaffold's own `pnpm dev` covers local
-> work until it lands. `ksor build --bundles` is likewise designed and exits
-> `2`. [`docs/status.md`](docs/status.md) is authoritative on which of these
-> are in the RELEASED version.
+> work until it lands. `ksor build --bundles` writes one OKF bundle per
+> canonical viewer — `public`, and `[public, X]` for each registered audience
+> X — for exchange. [`docs/status.md`](docs/status.md) is authoritative
+> on which of these are in the RELEASED version.
 
 ### Requirements
 
@@ -1811,10 +1812,18 @@ a red build leaves the tree as it found it.
 ```bash
 ksor build
 ksor build --as-of 2026-09-01T00:00:00Z   # pin the instant lifecycle is judged at
+ksor build --bundles                      # also write .ksor/out/bundles/<viewer>/
 ```
 
-`--bundles`, which would write one OKF bundle per registered audience for
-exchange, is designed and exits `2`.
+`--bundles` additionally writes one OKF bundle per viewer — `public`, and
+`[public, X]` for each audience X the policy registers — under
+`.ksor/out/bundles/<viewer>/`: only the concepts that viewer's machine surfaces
+publish, their companions and referenced assets, and every `index.md`
+regenerated for that filtered tree. No byte of a concept excluded for AUDIENCE
+reaches a bundle — the checker refuses an audience-widening link before one is
+planned — while a lifecycle or ledger exclusion leaves its path in a held
+body's link, verbatim and reported. Any OKF consumer reads a bundle with no
+ksor in the loop (`packages/ksor/docs/building.md`).
 
 ### `ksor migrate` — implemented
 

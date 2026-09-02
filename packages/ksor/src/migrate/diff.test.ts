@@ -43,6 +43,18 @@ describe("unifiedDiff", () => {
     );
   });
 
+  it("summarises a generated file rather than printing it, deleted or replaced", () => {
+    const before = "a\nb\nc\n";
+    const replaced = unifiedDiff({ path: "check.mjs", before, after: "a\n", generated: true });
+    expect(replaced).toContain("3 line(s) become 1");
+    // A generated file DELETED — a build.lock.json this ksor cannot read —
+    // said "3 line(s) become 0", which is not what happened to it.
+    const deleted = unifiedDiff({ path: "build.lock.json", before, after: null, generated: true });
+    expect(deleted, deleted).toContain("+++ /dev/null");
+    expect(deleted, deleted).toContain("@@ generated @@ deleted: 3 line(s).");
+    expect(deleted).not.toContain("become");
+  });
+
   it("renders every change in path order and drops the unchanged ones", () => {
     const out = renderDiff([
       { path: "b.md", before: "1\n", after: "2\n" },

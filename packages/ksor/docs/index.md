@@ -43,6 +43,10 @@ instead of their training memory. The corpus grows with each implemented verb.
     `system/gateways/content.ts` is emitted, adopter-owned and deletable; it
     decides tool names, what the record says it covers, and how much of the
     caller's context an answer costs. Includes the measurements.
+  - **[building.md](./building.md)** — `ksor build`, and `--bundles`: one OKF
+    bundle per viewer under `.ksor/out/bundles/`, holding only what that
+    viewer's machine surfaces publish, for handing the record to another
+    system with no ksor in the loop. Includes how the lock records each one.
   - **[deploying.md](./deploying.md)** — getting both surfaces onto a host. The
     scaffold emits a `Dockerfile` that names no vendor, and a `vercel.json` that
     points at it to put the site and the MCP door behind one domain. Includes

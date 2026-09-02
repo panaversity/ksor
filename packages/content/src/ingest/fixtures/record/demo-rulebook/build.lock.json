@@ -67,5 +67,6 @@
       "path": "machine-rules/index.md",
       "sha256": "af7307c95a28927472ee51551614958996a7f45391f10d652f93672205ad482c"
     }
-  ]
+  ],
+  "bundles": []
 }

@@ -521,7 +521,11 @@ ROOT, never `system/site/`), and every other host just serves the folder.
 record checked, `build.lock.json` written (commit it: it is the provenance
 every machine artefact stamps) — and a refusal stops the build before a byte
 is written. `ksor build --strict` additionally refuses an uncommitted input
-(`ksor-build-dirty`), which is the posture for a release.
+(`ksor-build-dirty`), which is the posture for a release. `ksor build
+--bundles` also writes one OKF bundle per viewer under
+`.ksor/out/bundles/<viewer>/` (gitignored) — only what that viewer's machine
+surfaces publish, readable by any OKF consumer with no ksor in the loop — for
+handing the record to another system.
 `KSOR_BASE_PATH=/repo pnpm build` targets sub-path hosting. With audiences
 registered in `.ksor/governance.yaml`, plain `pnpm build` is the `public`
 viewer; `KSOR_AUDIENCE=public,<audience> pnpm build` — a comma list, always

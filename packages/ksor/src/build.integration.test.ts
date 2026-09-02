@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import { checkRecord, sha256Hex, type Lock } from "@panaversity/ksor-content/record";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 
 import { VALID } from "./__fixtures__/record-conformance.js";
 
@@ -955,14 +956,16 @@ describe("ksor build — arguments", () => {
     expect(none.stderr.split("\n")[0]).toBe("error: ksor-instance-missing");
   });
 
-  it("a bad --as-of is refused before anything is read; --bundles is designed but not implemented", () => {
+  it("a bad --as-of is refused before anything is read; --bundles is an ordinary build that also writes the bundles", () => {
     const root = repo();
     const bad = build(root, "--as-of", "yesterday");
     expect(bad.status).toBe(1);
     expect(bad.stderr.split("\n")[0]).toBe("error: bad-args");
-    const bundles = build(root, "--bundles");
-    expect(bundles.status).toBe(2);
     expect(existsSync(path.join(root, "build.lock.json"))).toBe(false);
+    const bundles = build(root, "--bundles", "--as-of", AS_OF);
+    expect(bundles.status, bundles.stderr).toBe(0);
+    expect(existsSync(path.join(root, "build.lock.json"))).toBe(true);
+    expect(existsSync(path.join(root, ".ksor/out/bundles/public/index.md"))).toBe(true);
   });
 
   it("--help describes the verb and performs nothing", () => {
@@ -970,7 +973,462 @@ describe("ksor build — arguments", () => {
     const r = build(root, "--help");
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("--as-of");
+    expect(r.stdout).toContain("--bundles");
+    expect(r.stdout).toContain(".ksor/out/bundles/");
+    expect(r.stdout).not.toContain("not implemented");
     expect(existsSync(path.join(root, "build.lock.json"))).toBe(false);
+  });
+});
+
+/**
+ * Acceptance 6 (build spec §1 step 4, issue #158): one OKF bundle per
+ * canonical viewer under `.ksor/out/bundles/<viewer>/`, holding exactly what
+ * that viewer's machine surfaces publish. R5 applied to a directory someone
+ * will send somewhere: the audience predicate has to hold across a filesystem
+ * walk, so the public bundle is GREPPED for the internal concept rather than
+ * inspected by name.
+ */
+describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", () => {
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  /** Both concepts of `policies/` are admitted here: purchase approval is effective from 2026-09-01. */
+  const LATER = "2026-09-02T12:00:00Z";
+  const OUT = ".ksor/out/bundles";
+
+  /**
+   * The conformant record plus what the bundle rule has to move WITH a
+   * concept: a companion and a referenced asset on the internal document, and
+   * an asset nothing references.
+   */
+  function bundleRepo(): string {
+    const root = repo();
+    const boardPay = path.join(root, "knowledge/policies/board-pay.md");
+    writeFileSync(
+      boardPay,
+      `${readFileSync(boardPay, "utf8")}\n![The board diagram](board-diagram.png)\n`,
+    );
+    writeFileSync(
+      path.join(root, "knowledge/policies/board-pay.summary.md"),
+      "---\ntype: Summary\n---\n\nBoard pay in short.\n",
+    );
+    writeFileSync(path.join(root, "knowledge/policies/board-diagram.png"), PNG);
+    writeFileSync(path.join(root, "knowledge/policies/stray.png"), PNG);
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "companion and assets");
+    return root;
+  }
+
+  /** Every file under `dir`, bundle-relative, with the sha256 of its bytes. */
+  function tree(dir: string): Map<string, string> {
+    const out = new Map<string, string>();
+    const walk = (abs: string, rel: string): void => {
+      for (const entry of readdirSync(abs, { withFileTypes: true })) {
+        const next = rel === "" ? entry.name : `${rel}/${entry.name}`;
+        if (entry.isDirectory()) walk(path.join(abs, entry.name), next);
+        else out.set(next, sha256Hex(readFileSync(path.join(abs, entry.name))));
+      }
+    };
+    walk(dir, "");
+    return out;
+  }
+
+  /** Every byte of every file under `dir`, decoded byte-for-byte so nothing hides in a binary. */
+  function everyByte(dir: string): string {
+    return [...tree(dir).keys()]
+      .map((rel) => readFileSync(path.join(dir, rel)).toString("latin1"))
+      .join("\n");
+  }
+
+  /** The documented digest (build spec §2): sha256 over the JSON of the sorted (path, sha256) pairs. */
+  function digestOf(files: Map<string, string>): string {
+    return sha256Hex(JSON.stringify([...files].sort((a, b) => (a[0] < b[0] ? -1 : 1))));
+  }
+
+  it("the public bundle holds no byte of the internal concept; the internal bundle holds it with its companion and asset", () => {
+    const root = bundleRepo();
+    const r = build(root, "--bundles", "--as-of", LATER);
+    expect(r.status, r.stderr).toBe(0);
+    const pub = path.join(root, OUT, "public");
+    const internal = path.join(root, OUT, "internal");
+    expect([...tree(pub).keys()].sort()).toEqual([
+      "index.md",
+      "policies/index.md",
+      "policies/purchase-approval.md",
+    ]);
+    expect([...tree(internal).keys()].sort()).toEqual([
+      "index.md",
+      "policies/board-diagram.png",
+      "policies/board-pay.md",
+      "policies/board-pay.summary.md",
+      "policies/index.md",
+      "policies/purchase-approval.md",
+    ]);
+    // R5 across a filesystem walk: not the title, not the path, not the
+    // description, not the companion's prose.
+    const leaked = everyByte(pub);
+    for (const sentinel of ["Board pay", "board-pay", "Board pay in short", "board-diagram"]) {
+      expect(leaked, `"${sentinel}" reached the public bundle`).not.toContain(sentinel);
+    }
+    expect(everyByte(internal)).toContain("Board pay in short");
+    // Verbatim: frontmatter intact, every key preserved, the asset byte-equal.
+    expect(readFileSync(path.join(internal, "policies/board-pay.md"))).toEqual(
+      readFileSync(path.join(root, "knowledge/policies/board-pay.md")),
+    );
+    expect(readFileSync(path.join(internal, "policies/board-diagram.png"))).toEqual(PNG);
+    // Nothing of the record beyond the bundle: no instance, no policy, no lock inside it.
+    expect(existsSync(path.join(internal, "instance.md"))).toBe(false);
+    expect(existsSync(path.join(internal, ".ksor"))).toBe(false);
+    // What stdout says about each.
+    expect(r.stdout, r.stdout).toContain(`wrote ${OUT}/public/`);
+    expect(r.stdout).toContain(`wrote ${OUT}/internal/`);
+    expect(r.stdout).toContain("[public, internal]");
+  });
+
+  it("a directory with nothing admitted has no index and no bullet, and a link to an excluded concept is named", () => {
+    const root = bundleRepo();
+    // At AS_OF nothing in policies/ is admitted for public: board pay is
+    // internal, purchase approval is not yet effective, old threshold is
+    // deprecated. The public bundle is the root index alone.
+    const r = build(root, "--bundles", "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+    const pub = path.join(root, OUT, "public");
+    expect([...tree(pub).keys()]).toEqual(["index.md"]);
+    // The trailing blank line is the generator's shape for a childless
+    // directory — the same bytes `ksor build` would commit for an empty record.
+    expect(readFileSync(path.join(pub, "index.md"), "utf8")).toBe(
+      '---\nokf_version: "0.2"\n---\n\n# Acme\n\n',
+    );
+    const internal = path.join(root, OUT, "internal");
+    expect([...tree(internal).keys()].sort()).toEqual([
+      "index.md",
+      "policies/board-diagram.png",
+      "policies/board-pay.md",
+      "policies/board-pay.summary.md",
+      "policies/index.md",
+    ]);
+    expect(readFileSync(path.join(internal, "policies/index.md"), "utf8")).toBe(
+      "# Policies\n\n* [Board pay](board-pay.md) - Board pay, in one sentence.\n",
+    );
+    // Board pay links purchase approval, which this bundle excludes: the body
+    // is copied verbatim, so the link dangles, and the build says so rather
+    // than rewriting a document or refusing a governed state.
+    expect(r.stdout, r.stdout).toContain(
+      "policies/board-pay.md links to policies/purchase-approval.md",
+    );
+    expect(r.stdout).toContain("excludes");
+  });
+
+  it("a denied concept is in no bundle, and a revoked denial restores it", () => {
+    const root = bundleRepo();
+    const ledger = path.join(root, ".ksor/takedowns.yaml");
+    writeFileSync(
+      ledger,
+      `${readFileSync(ledger, "utf8")}- id: 2026-08-25T10:00:00Z-cccccc
+  stable_id: knowledge/policies/board-pay
+  scope: node
+  expected: present
+  by: human:ciso
+  at: 2026-08-25T10:00:00Z
+`,
+    );
+    const denied = build(root, "--bundles", "--as-of", LATER);
+    expect(denied.status, denied.stderr).toBe(0);
+    for (const viewer of ["public", "internal"]) {
+      const bytes = everyByte(path.join(root, OUT, viewer));
+      expect(bytes, `board pay reached the ${viewer} bundle while denied`).not.toContain(
+        "Board pay",
+      );
+      expect(bytes).not.toContain("board-diagram");
+    }
+    writeFileSync(
+      ledger,
+      `${readFileSync(ledger, "utf8")}- id: 2026-08-25T11:00:00Z-dddddd
+  revokes: 2026-08-25T10:00:00Z-cccccc
+  by: human:ciso
+  at: 2026-08-25T11:00:00Z
+`,
+    );
+    const restored = build(root, "--bundles", "--as-of", LATER);
+    expect(restored.status, restored.stderr).toBe(0);
+    expect(tree(path.join(root, OUT, "internal")).has("policies/board-pay.md")).toBe(true);
+    expect(tree(path.join(root, OUT, "public")).has("policies/board-pay.md")).toBe(false);
+  });
+
+  /**
+   * Two readers, neither of which is the writer. The BARE one is yaml plus the
+   * §8 grammar and nothing of ksor — the consumer the claim is made to. The
+   * KERNEL one hands the bundle back to `checkRecord` as if it were a record's
+   * own `knowledge/`: every index has to be exactly what the filtered tree
+   * generates, every link has to resolve inside the bundle, and every companion
+   * has to have its parent beside it.
+   */
+  it("reads back as a conformant OKF bundle with no ksor in the loop, and as a record by the kernel's own checker", () => {
+    const root = bundleRepo();
+    expect(build(root, "--bundles", "--as-of", LATER).status).toBe(0);
+    for (const viewer of ["public", "internal"]) {
+      const dir = path.join(root, OUT, viewer);
+      const files = tree(dir);
+      const isFile = (rel: string): boolean => files.has(rel);
+      const isDir = (rel: string): boolean =>
+        [...files.keys()].some((f) => f.startsWith(`${rel}/`));
+      for (const rel of files.keys()) {
+        if (!rel.endsWith(".md")) continue;
+        const raw = readFileSync(path.join(dir, rel), "utf8");
+        const fm = /^---\n([\s\S]*?)\n---\n/.exec(raw);
+        if (path.basename(rel) === "index.md") {
+          // OKF §8: no frontmatter, except okf_version at the bundle root.
+          if (rel === "index.md") {
+            expect(fm, `${viewer}/${rel} has no frontmatter block`).not.toBeNull();
+            expect(parseYaml(fm![1]!)).toEqual({ okf_version: "0.2" });
+          } else {
+            expect(fm, `${viewer}/${rel} carries frontmatter`).toBeNull();
+          }
+          const body = fm === null ? raw : raw.slice(fm[0].length);
+          const bullets = body.split("\n").filter((l) => l.startsWith("* "));
+          expect(bullets.length, `${viewer}/${rel} lists nothing`).toBeGreaterThan(0);
+          for (const line of bullets) {
+            const m = /^\* \[[^\]]+\]\(([^)]+)\)(?: - .+)?$/.exec(line);
+            expect(m, `${viewer}/${rel}: "${line}" is not a §8 bullet`).not.toBeNull();
+            const href = m![1]!;
+            const target = path.posix.join(path.posix.dirname(rel), href);
+            expect(
+              href.endsWith("/") ? isDir(target.replace(/\/$/, "")) : isFile(target),
+              `${viewer}/${rel} lists ${href}, which the bundle does not hold`,
+            ).toBe(true);
+          }
+          continue;
+        }
+        // OKF §11: every non-reserved .md has parseable frontmatter with a non-empty type.
+        expect(fm, `${viewer}/${rel} has no frontmatter`).not.toBeNull();
+        const parsed = parseYaml(fm![1]!) as Record<string, unknown>;
+        expect(typeof parsed["type"] === "string" && parsed["type"].length > 0).toBe(true);
+      }
+
+      // The kernel's reader: the bundle IS a record's knowledge/ — with the
+      // record's own instance and policy beside it and no ledger, because a
+      // denied concept is absent by design and a ledger naming it would refuse.
+      const asRecord = new Map<string, string>([
+        ["instance.md", readFileSync(path.join(root, "instance.md"), "utf8")],
+        [".ksor/governance.yaml", readFileSync(path.join(root, ".ksor/governance.yaml"), "utf8")],
+      ]);
+      const assets = new Map<string, Uint8Array>();
+      const dirs = new Set<string>();
+      for (const rel of files.keys()) {
+        const abs = path.join(dir, rel);
+        if (/\.(md|yaml)$/.test(rel)) asRecord.set(`knowledge/${rel}`, readFileSync(abs, "utf8"));
+        else assets.set(`knowledge/${rel}`, new Uint8Array(readFileSync(abs)));
+        for (let d = path.posix.dirname(rel); d !== "."; d = path.posix.dirname(d)) {
+          dirs.add(`knowledge/${d}`);
+        }
+      }
+      const checked = checkRecord(
+        { files: asRecord, dirs: [...dirs], assets },
+        { mode: "check", ledgerBaselines: [] },
+      );
+      expect(
+        checked.refusals.map((x) => `${x.slug} ${x.path}: ${x.why}`),
+        `the ${viewer} bundle, read as a record`,
+      ).toEqual([]);
+    }
+  });
+
+  it("two runs are byte-identical, a previous run's strays are pruned, and the lock records every bundle's digest whether or not it was written", () => {
+    const root = bundleRepo();
+    expect(build(root, "--bundles", "--as-of", LATER).status).toBe(0);
+    const first = {
+      public: tree(path.join(root, OUT, "public")),
+      internal: tree(path.join(root, OUT, "internal")),
+    };
+    const lockBytes = readFileSync(path.join(root, "build.lock.json"), "utf8");
+    // Provenance travels beside the bundles the way it sits beside knowledge/.
+    expect(readFileSync(path.join(root, OUT, "build.lock.json"), "utf8")).toBe(lockBytes);
+
+    // What an earlier, wider build might have left behind: a file in a bundle,
+    // and a whole bundle for an audience the policy no longer registers.
+    writeFileSync(path.join(root, OUT, "public/leak.md"), "---\ntype: Document\n---\n");
+    mkdirSync(path.join(root, OUT, "board"), { recursive: true });
+    writeFileSync(path.join(root, OUT, "board/index.md"), "# board\n");
+    expect(build(root, "--bundles", "--as-of", LATER).status).toBe(0);
+    expect(tree(path.join(root, OUT, "public"))).toEqual(first.public);
+    expect(tree(path.join(root, OUT, "internal"))).toEqual(first.internal);
+    expect(existsSync(path.join(root, OUT, "board"))).toBe(false);
+    expect(readdirSync(path.join(root, OUT)).sort()).toEqual([
+      "build.lock.json",
+      "internal",
+      "public",
+    ]);
+    expect(readFileSync(path.join(root, "build.lock.json"), "utf8")).toBe(lockBytes);
+
+    const lock = lockOf(root);
+    expect(lock.bundles).toEqual([
+      { viewer: "public", sha256: digestOf(first.public), files: first.public.size },
+      { viewer: "internal", sha256: digestOf(first.internal), files: first.internal.size },
+    ]);
+    // A plain build records the same digests: the bundle set is a function of
+    // what the lock already hashes, so the lock does not depend on the flag.
+    rmSync(path.join(root, ".ksor/out"), { recursive: true, force: true });
+    expect(build(root, "--as-of", LATER).status).toBe(0);
+    expect(readFileSync(path.join(root, "build.lock.json"), "utf8")).toBe(lockBytes);
+    expect(existsSync(path.join(root, ".ksor/out"))).toBe(false);
+  });
+
+  /** `bundleRepo()` with one more audience registered in `.ksor/governance.yaml`. */
+  function repoRegistering(...ids: readonly string[]): string {
+    const root = bundleRepo();
+    const policy = path.join(root, ".ksor/governance.yaml");
+    writeFileSync(
+      policy,
+      readFileSync(policy, "utf8").replace(
+        "audiences:\n",
+        `audiences:\n${ids.map((id) => `  ${JSON.stringify(id)}:\n    description: Added by the test\n`).join("")}`,
+      ),
+    );
+    return root;
+  }
+
+  it("a refusal writes no bundle, and an audience identifier that is not a path segment is refused before anything is written — on EVERY build, flag or not", () => {
+    const refused = bundleRepo();
+    writeFileSync(path.join(refused, "knowledge/bad.md"), "---\ntitle: only\n---\n");
+    const r = build(refused, "--bundles", "--as-of", LATER);
+    expect(r.status).toBe(1);
+    expect(r.stderr.split("\n")[0]).toBe("error: ksor-audience-missing");
+    expect(existsSync(path.join(refused, ".ksor/out"))).toBe(false);
+
+    const hostile = repoRegistering("../escape");
+    const bundles = build(hostile, "--bundles", "--as-of", LATER);
+    expect(bundles.status).toBe(1);
+    expect(bundles.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+    expect(bundles.stderr).toContain("../escape");
+    expect(bundles.stderr).toContain("fix:");
+    expect(existsSync(path.join(hostile, ".ksor/out"))).toBe(false);
+    expect(existsSync(path.join(hostile, ".ksor/escape"))).toBe(false);
+
+    // A PLAIN build refuses the same identifier. The lock records `bundles[]`
+    // on every build, so letting this through would commit a digest for a
+    // directory `--bundles` refuses to write — provenance for a thing that
+    // cannot exist. The owner learns about it at the build they already run.
+    const plain = build(hostile, "--as-of", LATER);
+    expect(plain.status).toBe(1);
+    expect(plain.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+    expect(plain.stderr).toContain("../escape");
+
+    // A plain path segment, and still refused: the lock copy sits beside the
+    // bundle directories, so an audience by its name would collide with it —
+    // found by asking what the one reserved sibling name does (hostile pass).
+    // Casefolded, for the same reason the collision rule is casefolded: on a
+    // case-insensitive filesystem `Build.Lock.json` IS the lock's name.
+    for (const id of ["build.lock.json", "Build.Lock.json"]) {
+      const reserved = repoRegistering(id);
+      const collide = build(reserved, "--bundles", "--as-of", LATER);
+      expect(collide.status, `${id} was accepted: ${collide.stdout}`).toBe(1);
+      expect(collide.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+      expect(collide.stderr).toContain("collide");
+      expect(existsSync(path.join(reserved, ".ksor/out"))).toBe(false);
+    }
+
+    // The prose the refusal prints is the regex, not a wider set: a leading
+    // `.` or `-` is refused, so `.hidden` cannot become a dotfile directory
+    // and `-x` cannot become something a shell reads as a flag.
+    for (const id of [".hidden", "-x"]) {
+      const dotted = build(repoRegistering(id), "--bundles", "--as-of", LATER);
+      expect(dotted.status, `${id} was accepted: ${dotted.stdout}`).toBe(1);
+      expect(dotted.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+      expect(dotted.stderr).toContain(id);
+    }
+
+    // A TRAILING `.` is refused for the reason the case rule exists: Win32
+    // path normalization strips it, so `internal.` and `internal` are two
+    // viewers in the policy and ONE directory there — the same merge, and the
+    // case fold alone does not see it. Refused on every platform, because a
+    // record must not build here and leak there.
+    for (const id of ["internal.", "sales.."]) {
+      const root = repoRegistering(id);
+      const trailing = build(root, "--bundles", "--as-of", LATER);
+      expect(trailing.status, `${id} was accepted: ${trailing.stdout}`).toBe(1);
+      expect(trailing.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+      expect(trailing.stderr).toContain(id);
+      expect(trailing.stderr).toContain("Windows");
+      expect(existsSync(path.join(root, ".ksor/out"))).toBe(false);
+    }
+    // A `.` INSIDE the name is still fine — nothing normalizes it away.
+    expect(build(repoRegistering("v1.2"), "--bundles", "--as-of", LATER).status).toBe(0);
+  });
+
+  it("two registered audiences that differ only in case are refused: they are two viewers and one directory", () => {
+    // `internal` is already registered; `Internal` passes the policy and the
+    // path-segment check, then merges into the SAME directory on macOS and
+    // Windows — the surviving bundle holding the internal-only concept while
+    // the lock's digest for that viewer describes a directory that is not
+    // there. Refused where the bundle set is computed, on every platform.
+    const root = repoRegistering("Internal");
+    const bundles = build(root, "--bundles", "--as-of", LATER);
+    expect(bundles.status, bundles.stdout).toBe(1);
+    expect(bundles.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+    expect(bundles.stderr).toContain('"Internal"');
+    expect(bundles.stderr).toContain('"internal"');
+    expect(bundles.stderr).toContain("fix:");
+    expect(existsSync(path.join(root, ".ksor/out"))).toBe(false);
+
+    // The same refusal without the flag, for the reason the lock records
+    // `bundles[]` without it.
+    const plain = build(root, "--as-of", LATER);
+    expect(plain.status, plain.stdout).toBe(1);
+    expect(plain.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+
+    // `public` is reserved by name; casefolded it is reserved too, or the
+    // registered audience would swallow the public bundle.
+    const shadow = build(repoRegistering("Public"), "--bundles", "--as-of", LATER);
+    expect(shadow.status, shadow.stdout).toBe(1);
+    expect(shadow.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+    expect(shadow.stderr).toContain('"Public"');
+
+    // Errors are documentation (principle 4): the sentence has to be true of
+    // the state it is printed for. Three colliding identifiers in one group,
+    // and a second group beside it, is not "both digests" — a two-identifier
+    // leftover that read wrong for every case the last fix widened this to.
+    const many = build(repoRegistering("INTERNAL", "Internal", "Staff", "staff"), "--as-of", LATER);
+    expect(many.status, many.stdout).toBe(1);
+    expect(many.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+    expect(many.stderr).not.toContain("both digests");
+    expect(many.stderr).toContain("each of those digests");
+  });
+
+  it("the emitted starter bundles its five documents for public, and git ignores the output", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ksor-starter-bundles-"));
+    roots.push(dir);
+    const init = spawnSync(process.execPath, [distCli, "init", "my-sor"], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(init.status, init.stderr).toBe(0);
+    const root = path.join(dir, "my-sor");
+    git(root, "config", "user.email", "t@example.com");
+    git(root, "config", "user.name", "t");
+    git(root, "config", "commit.gpgsign", "false");
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "first");
+    const r = build(root, "--bundles", "--as-of", AS_OF);
+    expect(r.status, r.stderr).toBe(0);
+    expect(readdirSync(path.join(root, OUT)).sort()).toEqual(["build.lock.json", "public"]);
+    expect([...tree(path.join(root, OUT, "public")).keys()].sort()).toEqual([
+      "governance-ladder.md",
+      "index.md",
+      "surfaces/for-agents.md",
+      "surfaces/for-people.md",
+      "surfaces/index.md",
+      "surfaces/overview.md",
+      "what-is-a-ksor.md",
+      // The starter's one companion, beside its parent — a companion travels
+      // by position (decision 24), so it is in the bundle its parent is in.
+      "what-is-a-ksor.summary.md",
+    ]);
+    expect(git(root, "status", "--porcelain", "--", ".ksor")).toBe("");
+    const ignored = spawnSync("git", ["check-ignore", "-q", ".ksor/out/bundles/public/index.md"], {
+      cwd: root,
+    });
+    expect(ignored.status, ".ksor/out/ is not gitignored in the scaffold").toBe(0);
   });
 });
 

@@ -1521,3 +1521,60 @@ describe("ksor migrate — a supersession pointer that names no concept", () => 
     );
   });
 });
+
+/**
+ * The upgrade path for a lock an older ksor wrote. `build.lock.json` gains
+ * keys as the record's surfaces grow (`bundles[]` is the newest), and a lock
+ * without one is `ksor-lock-invalid` — deliberately, because a lock nothing
+ * can read is a takedown baseline that quietly holds nothing (record spec).
+ * `ksor build` therefore REFUSES rather than regenerating it, so the first
+ * `pnpm build` after an upgrade — which is the deploy command under decision
+ * 29 — is red until the file is gone.
+ *
+ * Decision 28 allows removing a shape only when the removal is paired with a
+ * MIGRATION, and `ksor migrate` is that vehicle: it offers the deletion the
+ * refusal asks for, so the four steps in `docs/upgrading.md` carry it and no
+ * adopter has to be told to `rm` a committed file by hand.
+ */
+describe("ksor migrate — a build.lock.json this ksor cannot read", () => {
+  it("offers the deletion, applies it under --write, and `ksor build` writes a current lock", () => {
+    const root = repo(STARTER);
+    const migrated = run(root, "migrate", "--write", "--actor", ACTOR, "--approve-by", ACTOR);
+    expect(migrated.status, migrated.stderr).toBe(0);
+    expect(run(root, "build").status).toBe(0);
+
+    // What an adopter's committed lock looks like to a ksor that has since
+    // added a key: every other field current, the new one simply absent.
+    const lockPath = path.join(root, "build.lock.json");
+    const lock = JSON.parse(read(root, "build.lock.json")) as Record<string, unknown>;
+    expect(Object.hasOwn(lock, "bundles"), "the fixture must start from a lock that HAS it").toBe(
+      true,
+    );
+    delete lock["bundles"];
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+
+    const refused = run(root, "build");
+    expect(refused.status, refused.stdout).toBe(1);
+    expect(refused.stderr.split("\n")[0]).toBe("error: ksor-lock-invalid");
+
+    const offered = run(root, "migrate", "--actor", ACTOR);
+    expect(offered.status, offered.stderr).toBe(0);
+    expect(offered.stdout, `stdout:\n${offered.stdout}`).toContain("a/build.lock.json");
+    expect(offered.stdout).toContain("+++ /dev/null");
+    expect(existsSync(lockPath), "a diff run must change nothing").toBe(true);
+
+    const applied = run(root, "migrate", "--write", "--actor", ACTOR);
+    expect(applied.status, applied.stderr).toBe(0);
+    expect(applied.stdout).toContain("deleted build.lock.json");
+    expect(existsSync(lockPath)).toBe(false);
+
+    const rebuilt = run(root, "build");
+    expect(rebuilt.status, rebuilt.stderr).toBe(0);
+    expect(Object.hasOwn(JSON.parse(read(root, "build.lock.json")), "bundles")).toBe(true);
+
+    // And it is not a change migrate keeps offering.
+    const again = run(root, "migrate", "--actor", ACTOR);
+    expect(again.status, again.stderr).toBe(0);
+    expect(again.stdout).toContain("nothing to migrate");
+  });
+});
