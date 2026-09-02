@@ -1,5 +1,5 @@
 ---
-issue: draft 10 via the okf-native-spec branch (set to the PR URL when it opens; drafts 1 to 9 via readme-ksp-001; the proposal's own Discussion issue is still TBD)
+issue: https://github.com/panaversity/ksor/pull/161 (draft 10; drafts 1 to 9 via https://github.com/panaversity/ksor/pull/141; the proposal's own Discussion issue is still TBD)
 status: proposed
 last_updated: 2026-08-25
 ---

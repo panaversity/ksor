@@ -1,10 +1,40 @@
 ---
 issue: https://github.com/panaversity/ksor/pull/1
-status: proposed
-last_updated: 2026-08-18
+status: superseded
+last_updated: 2026-09-02
 ---
 
 # ksor primitives — the written proposal
+
+> **Supersession note (2026-09-02).** This proposal did its job — the
+> primitives were derived before code — and the code has since settled each
+> section its own way. It is kept as the evidence trail; AGENTS.md → Decisions
+> is the authority wherever the two disagree.
+>
+> - **Landed.** §1's verbs: `init`, `dev`, `build` and `serve` all ship
+>   (`docs/status.md`), and `serve` arrived as the graduated rung of decision 11
+>   — the predecessor's content kernel converted whole, behind
+>   `ksor serve`, speaking MCP over stateless Streamable HTTP (decision 13).
+>   §6's envelope requirement is met in the form the door serves: an answer is
+>   cited hits with a `generation`, and an abstention is the typed
+>   `abstained` outcome rather than a phrasing (`specs/ksor/serve/spec.md`).
+>   §5's boundary suite is in the tree and enrolls every workspace package.
+>   §2's instance format has been replaced by `instance.md` `format: 2`
+>   (decision 27), still strictly parsed, still refusing unknown keys.
+> - **Closed by decision 23.** §3's third capability channel, "MCP tools as a
+>   plugin contribution", is not how tools reach the door: the tool surface is
+>   adopter-owned CODE — ordinary `registerTool` in the scaffold's
+>   `system/gateways/content.ts` — and the door verifies its own served surface
+>   at boot rather than accepting registrations through a config API. A
+>   `defineGateway` config API was built and discarded on the way.
+> - **Parked.** §3's other two channels (content transforms as remark-tier
+>   plugins; ingest adapters with a source-address scheme) and its
+>   shadcn-shaped registry of corpus items; §2's published JSON Schema
+>   generated from the zod source and the Standard Schema boundary; §6's
+>   engagement lock and Work Record scaffold. None has an owner issue; each
+>   re-earns its place with a spec when the work arrives.
+> - **§4** was moved to `research/site-shell.md` and that file is now itself
+>   superseded — see the note in §4.
 
 The handover's first directive: before any code, derive the primitives from
 working TypeScript frameworks instead of inventing them. This is that
@@ -115,9 +145,11 @@ JSON on any host; `shadcn build`'s inline-the-content model is exactly
 > section's own closing line named Fumadocs the rewrite target; kept below as
 > the evidence trail.
 
-**Moved.** The shell question outgrew a section: the evidence, the argument,
-the unanswered structural question, and the candidate decision texts now live
-in [`research/site-shell.md`](./site-shell.md) — one fact, one file.
+**Moved, then superseded.** The shell question outgrew a section: the
+evidence, the argument, the unanswered structural question, and the candidate
+decision texts moved to `research/site-shell.md`. Decision 9's 2026-08-24
+revision retired the second shell it argued about, so that file is superseded
+and lives in git history (last at `c057265`), not the working tree.
 
 > **Revision note (2026-08-18):** this section recommended **Docusaurus**.
 > That recommendation is preserved in the new file and is now **challenged,
