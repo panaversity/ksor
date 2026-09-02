@@ -50,7 +50,7 @@ const shipped = readdirSync(SKILLS, { withFileTypes: true })
  * that is quietly narrowed fails against what it was understood to promise.
  */
 const TRIGGERS: Readonly<Record<string, readonly string[]>> = {
-  "add-sources": ["add this to the knowledge base"],
+  "add-sources": ["add this to the knowledge base", "nobody ever wrote down", "from memory"],
   "intake-interview": ["get started with"],
   "format-checker": ["pnpm check"],
 };
@@ -159,24 +159,36 @@ describe("the hello world's prompts are accounted for", () => {
  * fixable by editing a description. This asserts the CURRENT state so the day
  * it changes is a day someone decided to change it.
  */
-describe("the uncovered act: knowledge that exists only in someone's head", () => {
-  it("no shipped skill triggers on dictating a fact with no source", () => {
-    const dictation = ["tell you a fact", "write down what I", "from memory", "no source"];
-    for (const skill of shipped) {
+describe("knowledge that exists only in someone's head has a skill (#50, decided 2026-09-02)", () => {
+  // The decision: ONE skill, not a sibling. The record draws no line between a
+  // file and a person as a source — an interview attestation in
+  // `sources[].resource` passes `ksor build` today — and a real owner has
+  // both: the PDF, and the exception the PDF never mentions. So add-sources
+  // converts the file AND asks what it does not cover, every time. A sibling
+  // would have forced the agent to choose before it knew.
+  it("add-sources claims dictated knowledge, by name", () => {
+    const description = descriptionOf("add-sources").toLowerCase();
+    expect(description).toContain("nobody ever wrote down");
+    expect(description).toContain("from memory");
+  });
+
+  it("no OTHER skill claims it — the boundary stays disjoint", () => {
+    for (const skill of shipped.filter((s) => s !== "add-sources")) {
       const description = descriptionOf(skill).toLowerCase();
-      for (const phrase of dictation) {
-        expect(
-          description.includes(phrase),
-          `${skill} now claims to handle dictated knowledge (${JSON.stringify(phrase)}). ` +
-            "That is issue #50 and it is a design decision, not a description edit: " +
-            "`add-sources` is built around provenance, and a remembered fact has none. " +
-            "Update this test in the change that decides it.",
-        ).toBe(false);
+      for (const phrase of ["from memory", "nobody ever wrote down", "no source"]) {
+        expect(description.includes(phrase), `${skill} also claims ${JSON.stringify(phrase)}`).toBe(
+          false,
+        );
       }
     }
   });
 
-  it("add-sources is still about SOURCE material, so the gap is real", () => {
-    expect(descriptionOf("add-sources")).toContain("source material");
+  it("the skill ENDS with the approval act — a draft-only record publishes nothing", () => {
+    // Found on the journey walk: an owner who writes one elicited draft gets
+    // `1 document(s), 0 admitted` until they approve it. Every machine surface
+    // stays empty. The skill has to close the loop, not stop at the draft.
+    const body = readFileSync(path.join(SKILLS, "add-sources", "SKILL.md"), "utf8");
+    expect(body).toMatch(/ask them to approve/i);
+    expect(body).toMatch(/Never record an approval\s+nobody gave/);
   });
 });
