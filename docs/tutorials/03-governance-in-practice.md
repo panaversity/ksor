@@ -11,10 +11,12 @@ refuse to publish something, and each time it is right.
 Every command and every output below was run on 2026-09-02 and pasted as it
 appeared, with the convention from tutorial 2: a `build_id` is shown as
 `sha256:…`, because it hashes the toolchain version along with the record and
-yours will not match. Everything else will.
+yours will not match. Everything else will, except the ledger's entry ids,
+which carry the instant you ran the verb.
 
 **You need** the `handbook` from tutorial 2, and nothing else — no database,
-no key. Step 1 builds the site, with the dependencies hello world installed.
+no key. Each step gives you a prompt for your coding agent, and the same work
+under a **Do it yourself** fold.
 
 ---
 
@@ -26,13 +28,12 @@ npx ksor build
 ```
 
 ```
-ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T11:57:16.809Z
+ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T13:32:59.564Z
 source: 3177e1bc4a3977a852ca4b5c96ea7730a09f82c6
   wrote build.lock.json — build_id sha256:…
 ```
 
-Three documents, all public, all approved by `human:priya`. One audience, one
-act per document. Now the rest.
+Three documents, all public, all approved by `human:priya`. Now the rest.
 
 ## 1. A second audience
 
@@ -73,7 +74,7 @@ Then `npx ksor build`, and `npm run build` for the site.
 </details>
 
 ```
-ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T11:57:18.493Z
+ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T13:33:26.780Z
 ```
 
 Still three admitted — that count is documents admitted to _some_ viewer.
@@ -102,7 +103,7 @@ artifact the procedure is simply not in — not hidden, absent. Its `llms.txt`:
 - [Refund policy](/docs/refund-policy): Customers may return an item within 30 days with a receipt.
 ```
 
-Build for employees and it is there. This artifact goes behind whatever gate
+Build for employees and it is there. That artifact goes behind whatever gate
 already decides who is an employee — `packages/ksor/docs/deploying.md` names
 the options:
 
@@ -116,14 +117,21 @@ KSOR_AUDIENCE=public,internal npm run build
 - [Refund policy](/docs/refund-policy): Customers may return an item within 30 days with a receipt.
 ```
 
-Two things a viewer will not let you do, each refused as the site build
-starts, with nothing written — `KSOR_AUDIENCE=internal` alone, and a viewer
-naming an unregistered `staff` (`ksor-viewer-unregistered`):
+Two viewers the site build refuses as it starts, with nothing written.
+`KSOR_AUDIENCE=internal` alone:
 
 ```
 Error: ksor-viewer-omits-public: KSOR_AUDIENCE="internal" does not include public
   why: a viewer list always includes public — every reader of a restricted build is also a reader of the open one, and a build for a restricted audience alone would silently drop every public concept
   fix: build with KSOR_AUDIENCE=public,internal
+```
+
+And `KSOR_AUDIENCE=public,staff`, naming an audience nobody registered:
+
+```
+Error: ksor-viewer-unregistered: KSOR_AUDIENCE names "staff", which the record's registry does not declare (registered: internal)
+  why: an unknown identifier is a typo, and a typo in a viewer would silently build the public site under a name that promised more
+  fix: build with public and registered audiences only, or register "staff" in .ksor/governance.yaml and run ksor build
 ```
 
 Commit. The procedure is read by employees and by nobody else, and the public
@@ -154,7 +162,7 @@ verified:
 </details>
 
 ```
-ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T12:01:43.649Z
+ksor build: 3 document(s), 3 admitted to a machine surface at 2026-09-02T13:35:19.929Z
 ```
 
 Nothing about admission moved — a tier is not permission. What moved is the
@@ -169,7 +177,9 @@ Approved   Human: Priya Patel · 2026-09-02
 
 The tier is derived from `verified`, never declared: no entry is `unverified`,
 only machine actors is `machine-confirmed`, any `human:` actor is
-`human-reviewed`. A document declaring `trust_tier:` itself is refused by name.
+`human-reviewed`. A document that writes `trust_tier:` itself is refused,
+`ksor-derived-key`, because the build stamps that key and a declared one would
+publish it twice.
 
 **And the other direction.** Take the approval off a `stable` document and the
 record will not publish it at all:
@@ -193,8 +203,9 @@ ksor build: 1 problem(s) — nothing written:
 
 <details><summary>Do it yourself</summary>
 
-Two instants on the document, each with an explicit offset — a bare date is
-refused:
+Two instants on the document, each with an explicit offset — a bare
+`2026-10-01` is refused, `ksor-instant-form`, because an embargo has to compare
+across time zones:
 
 ```yaml
 stale_after: 2027-10-01T00:00:00Z
@@ -209,16 +220,16 @@ Then `npx ksor build`, and again with `--as-of 2026-10-01T00:00:00Z`.
 Today's build holds the policy off every machine surface and says so:
 
 ```
-ksor build: 3 document(s), 2 admitted to a machine surface at 2026-09-02T12:01:44.818Z
+ksor build: 3 document(s), 2 admitted to a machine surface at 2026-09-02T13:35:52.049Z
   1 document(s) held off the machine surfaces (llms.txt, llms-full.txt, the markdown twins and the bundles) — each still publishes as a page, with a badge:
     finance/expense-policy.md — not effective until 2026-10-01T00:00:00.000Z
-  this build decided that at 2026-09-02T12:01:44.818Z and static output cannot re-decide itself:
+  this build decided that at 2026-09-02T13:35:52.049Z and static output cannot re-decide itself:
     at 2026-10-01T00:00:00.000Z finance/expense-policy.md reaches its effective_from, and until a build runs after that
     instant these files disagree with `ksor serve`, which evaluates at request time.
     Rebuild and redeploy on a schedule if this record uses stale_after.
 ```
 
-The page still renders, with an **effective from 2026-10-01** badge: a person
+The page still renders, with an **Effective from** fact in its strip: a person
 reading ahead is fine, an agent citing a policy not yet in force is not. Now
 the same tree, evaluated on 1 October:
 
@@ -241,9 +252,9 @@ ksor build: 3 document(s), 2 admitted to a machine surface at 2027-10-01T00:00:0
 
 ```
 3c3
-<   "build_id": "sha256:cfa3794d…",
+<   "build_id": "sha256:0592c0be…",
 ---
->   "build_id": "sha256:81a0220c…",
+>   "build_id": "sha256:b83ab19b…",
 12c12
 <   "as_of": "2026-10-01T00:00:00.000Z",
 ---
@@ -299,14 +310,13 @@ ksor:
   superseded_by: returns-policy
 ```
 
-The successor must be `stable` and readable by every reader of the old
-document — a public one may not point at an internal one. Links follow the
-same rule.
+The same refusal fires if the successor is `[internal]` and the old document
+public — every reader of the old page must be able to read the new one.
 
 </details>
 
 ```
-ksor build: 4 document(s), 3 admitted to a machine surface at 2026-09-02T12:02:37.848Z
+ksor build: 4 document(s), 3 admitted to a machine surface at 2026-09-02T13:36:13.792Z
   wrote knowledge/index.md
 ```
 
@@ -337,10 +347,18 @@ Approved   Human: Priya Patel · 2026-09-02
 Replaces   Refund policy
 ```
 
-Withdrawal is an act with a name on it: leave `ksor.deprecated` off and the
-build refuses `ksor-deprecated-unattributed`. Who _may_ withdraw is the
-resolved owner or a takedown authority; your policy declares no `ownership`
-rule, so here it is `takedown_authorities`, and Priya is one.
+Withdrawal is an act with a name on it. Leave `ksor.deprecated` off and the
+build refuses:
+
+```
+error: ksor-deprecated-unattributed
+ksor build: 1 problem(s) — nothing written:
+
+  knowledge/refund-policy.md
+    problem: ksor-deprecated-unattributed
+    why: a `deprecated` concept must carry `ksor.deprecated: { by, at }` — who withdrew it
+    fix: record the deprecation by the owner or a takedown authority, usually with `ksor.superseded_by`
+```
 
 ## 5. Takedown, end to end
 
@@ -368,34 +386,43 @@ a takedown is a governance act and its ledger entry must name who performed it. 
   fix: pass --actor, e.g. --actor human:ciso
 ```
 
-Leave `--file-only` off and it refuses too (`ksor-takedown-dsn-missing`):
-your `instance.md` declares a database and this shell has no `KSOR_DB_URL`,
-and it will not record a withdrawal the door would go on ignoring. With both:
+Leave `--file-only` off and it refuses too: your `instance.md` declares a
+database, this shell has no `KSOR_DB_URL`, and it will not record a withdrawal
+the door would go on ignoring:
+
+```
+error: ksor-takedown-dsn-missing
+instance.md declares a database (named by database.dsn_env) and KSOR_DB_URL is unset — the door would keep serving this document until someone remembered to apply the entry
+  fix: export KSOR_DB_URL='postgresql://...' and rerun, or pass --file-only to record the entry now and `ksor takedown --apply` where the database is reachable
+```
+
+With both:
 
 ```
 takedown: knowledge/finance/late-claims denied (scope: node, expected: present)
-  recorded as `2026-09-02T12:02:58.154Z-836988` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger
+  recorded as `2026-09-02T13:36:37.644Z-8b7a1a` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger
   --file-only: the entry is written and the row is not — apply it with `ksor takedown --apply` where the database is reachable
 ```
 
 The act is a file, `.ksor/takedowns.yaml`, committed with the record:
 
 ```yaml
-- id: "2026-09-02T12:02:58.154Z-836988"
+- id: "2026-09-02T13:36:37.644Z-8b7a1a"
   stable_id: "knowledge/finance/late-claims"
   scope: node
   expected: present
   by: "human:priya"
-  at: "2026-09-02T12:02:58.154Z"
+  at: "2026-09-02T13:36:37.644Z"
   reason: "The director's-claim step is wrong; withdrawn until rewritten"
 ```
 
 ```
-ksor build: 4 document(s), 2 admitted to a machine surface at 2026-09-02T12:02:59.004Z
+ksor build: 4 document(s), 2 admitted to a machine surface at 2026-09-02T13:36:38.298Z
 ```
 
 Two. The procedure is `stable`, approved, and admitted to no viewer at all —
-not the employee build either. Takedown overrides every other act.
+the lock says `"admitted": []`, so not the employee build either. Takedown
+overrides every other act. Commit it.
 
 **Now rename the file.** Path is identity, so a renamed document is a new
 document — and not the one the ledger names. Move `late-claims.md` to
@@ -407,8 +434,8 @@ ksor build: 1 problem(s) — nothing written:
 
   .ksor/takedowns.yaml
     problem: ksor-takedown-dangling
-    why: entry `2026-09-02T12:02:58.154Z-836988` denies `knowledge/finance/late-claims`, which resolves to no concept — a renamed denied document would otherwise republish under its new path
-    fix: restore the file, or record its removal with `ksor takedown --actor <who> --removed 2026-09-02T12:02:58.154Z-836988` (and deny the new path if it was renamed)
+    why: entry `2026-09-02T13:36:37.644Z-8b7a1a` denies `knowledge/finance/late-claims`, which resolves to no concept — a renamed denied document would otherwise republish under its new path
+    fix: restore the file, or record its removal with `ksor takedown --actor <who> --removed 2026-09-02T13:36:37.644Z-8b7a1a` (and deny the new path if it was renamed)
 ```
 
 Without that check a rename would quietly republish a withdrawn document.
@@ -426,18 +453,18 @@ ledger:
 
 ```sh
 npx ksor takedown --actor human:priya --file-only \
-  --revoke 2026-09-02T12:02:58.154Z-836988 --reason "Rewritten and re-approved"
+  --revoke 2026-09-02T13:36:37.644Z-8b7a1a --reason "Rewritten and re-approved"
 ```
 
 </details>
 
 ```
-takedown: revoked `2026-09-02T12:02:58.154Z-836988`
-  recorded as `2026-09-02T12:03:49.782Z-b36303` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger
+takedown: revoked `2026-09-02T13:36:37.644Z-8b7a1a`
+  recorded as `2026-09-02T13:36:40.709Z-75de6e` in .ksor/takedowns.yaml — commit it: the site publishes from the ledger
 ```
 
 ```
-ksor build: 4 document(s), 3 admitted to a machine surface at 2026-09-02T12:03:50.485Z
+ksor build: 4 document(s), 3 admitted to a machine surface at 2026-09-02T13:36:41.256Z
 ```
 
 Three again. The ledger holds two entries and always will: what was withdrawn,
@@ -481,7 +508,7 @@ ksor build: 1 problem(s) — nothing written:
 
   .ksor/takedowns.yaml
     problem: ksor-ledger-shrank
-    why: the ledger is append-only and lost `2026-09-02T12:03:49.782Z-b36303` (seen in git history, build.lock.json)
+    why: the ledger is append-only and lost `2026-09-02T13:36:40.709Z-75de6e` (seen in git history, build.lock.json)
     fix: restore the deleted entries; lift a denial with a revocation entry, never by removing a line
 ```
 
