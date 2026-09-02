@@ -36,7 +36,12 @@ reviewed in the same pull request as its document, versioned with it, withdrawn
 when it is withdrawn, and cannot rot into a dead link because there is no link.
 
 **`slides.url:` — a deck hosted elsewhere.** For an adopter who already keeps
-one in Google Slides, Canva or SlideShare. It is a real mode and it is not the
+one in Google Slides, Canva or SlideShare — the providers whose share url the
+site can turn into an embed url. Any other host needs an explicit `embed:`
+url beside it, or the build refuses `ksor-slides-no-embed`
+(`system/site/lib/slides.ts:106-119`): a linked deck is meant to be shown,
+and a link that frames nothing is the kind of quiet failure an author would
+not notice. It is a real mode and it is not the
 default, because an embedded deck is exactly the artifact this product exists
 to eliminate: a second copy, unreviewed, that can disagree with the record and
 win.
@@ -135,15 +140,34 @@ RISES rather than sinking — a darker stage measured L 4.4 against the page's
 6. A restricted parent's deck appears in 0 files of a public build, against a
    positive control built for a viewer list that overlaps the parent's
    audience.
-7. `ksor-slides-two-sources`, `ksor-slides-empty` and `ksor-slides-insecure`
-   refuse in `pnpm build`. _Corrected 2026-08-25: was "in `pnpm check` and in
+7. `ksor-slides-two-sources`, `ksor-slides-empty`, `ksor-slides-insecure` and
+   `ksor-slides-no-embed` refuse in `pnpm build`. _Corrected 2026-08-25: was "in `pnpm check` and in
    `pnpm build`". The deck's shape is validated in `system/site/lib/slides.ts`
    at site-build time; none of the three slugs is in the record checker's set,
    so `pnpm check` accepts a deck declaring both sources._
 8. Share urls become embed urls for the named providers; an unknown host
-   renders as a link rather than an empty frame.
+   with no explicit `embed:` is refused rather than framed empty
+   (`ksor-slides-no-embed`), and with one it frames that url. _Corrected
+   2026-09-02: this read "an unknown host renders as a link rather than an
+   empty frame". The deriver returns null for one (`slides-embed.test.ts`,
+   "an unknown host is not an error"), but `SlidesSchema`'s own `superRefine`
+   turns that null into a refusal (`lib/slides.ts:106-119`, the same
+   `superRefine` that raises `ksor-slides-empty`, `-two-sources` and
+   `-insecure`), and that schema is what the collection validates every deck
+   against (`source.config.ts:125-130`) — so a build never ships the link-only
+   deck this clause described._
 
-## 7 · Out of scope
+## 7 · Status against acceptance (2026-09-02)
+
+Walked against the scaffold at this date: the four slugs are exactly the set
+`system/site/lib/slides.ts` raises, and `slides-embed.test.ts` asserts the
+provider derivations, https-only and the unknown-host null. 1–3 are asserted
+on the built page by no suite this walk could find — the click-to-load frame
+and "every slide in the shipped HTML" are browser behaviour — which keeps
+this spec a draft; 4–6 follow from the attachment rule the study-attachments
+spec holds.
+
+## 8 · Out of scope
 
 Generating slide IMAGES, exporting to PPTX or PDF, speaker timing, per-slide
 transitions, and any deck spanning more than one document — a deck belongs to

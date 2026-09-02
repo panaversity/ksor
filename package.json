@@ -23,6 +23,7 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:db": "vitest run --config vitest.db.config.ts",
+    "test:e2e": "KSOR_E2E=1 vitest run --config vitest.integration.config.ts packages/ksor/src/scaffold-e2e.integration.test.ts packages/ksor/src/shell-conformance.integration.test.ts packages/ksor/src/visibility-conformance.integration.test.ts",
     "test:agent": "vitest run --config vitest.agent.config.ts",
     "publint": "pnpm -r publint",
     "changeset": "changeset",
