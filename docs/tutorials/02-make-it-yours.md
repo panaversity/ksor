@@ -1,6 +1,6 @@
 # Make it yours — your knowledge, your record, in about half an hour
 
-You finished [hello world](./00-hello-world.md) with a record that publishes
+You finished [hello world](./01-hello-world.md) with a record that publishes
 six documents: five samples about KSoR itself, and one refund policy you wrote.
 By the end of this, the samples are gone, every document is about **your**
 organisation, every one of them was approved by a person with a name, and the

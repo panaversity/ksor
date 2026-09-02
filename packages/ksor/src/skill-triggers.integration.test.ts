@@ -122,7 +122,7 @@ describe("every shipped skill's trigger says what it fires on", () => {
 /** Every tutorial that hands the reader prompts, with the table that accounts for them. */
 const TUTORIALS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, string | null]>]> =
   [
-    ["docs/tutorials/00-hello-world.md", TUTORIAL_PROMPTS],
+    ["docs/tutorials/01-hello-world.md", TUTORIAL_PROMPTS],
     ["docs/tutorials/02-make-it-yours.md", TUTORIAL_2_PROMPTS],
   ];
 
