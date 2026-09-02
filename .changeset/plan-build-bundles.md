@@ -25,17 +25,27 @@ viewer, recorded on EVERY build whether or not the flag was passed, so a
 bundle directory can be matched to the publication that produced it. The
 digest is sha256 over the JSON of the bundle's sorted `[path, sha256]` pairs.
 `build_id` is unchanged: the bundles are a function of what it already
-hashes. A lock written by an earlier ksor lacks the key and is refused as
-`ksor-lock-invalid` — run `ksor build` once after upgrading, which `pnpm build`
-already does.
+hashes.
+
+**Upgrading:** a lock written by an earlier ksor lacks the key, so `ksor build`
+refuses it as `ksor-lock-invalid` and says to delete it. It does NOT regenerate
+one it cannot read — the lock is also a takedown baseline, and a baseline
+nothing can parse is one that quietly holds nothing. So the first `pnpm build`
+after upgrading (`ksor build && <site build>`, which is the deploy command too)
+is red until the stale `build.lock.json` is gone. `ksor migrate` now offers that
+deletion like any other change it carries, so the four steps in
+`docs/upgrading.md` cover it; deleting the file by hand and rebuilding does the
+same thing.
 
 Two new refusals, both raised on EVERY build — not only under `--bundles` —
 because the lock lists `bundles[]` either way and a digest for a directory the
 tool refuses to write would be a provenance claim about something that cannot
 exist. `ksor-audience-identifier-invalid`: a registered audience that cannot
-name a bundle directory (`../x`, `.hidden`, `-x`, or `build.lock.json`, whose
-name the lock copy beside the bundles already holds) — an identifier must start
-with a letter or a digit and may then use letters, digits, `-`, `_` and `.`.
+name a bundle directory (`../x`, `.hidden`, `-x`, `internal.`, or
+`build.lock.json`, whose name the lock copy beside the bundles already holds) —
+an identifier must start with a letter or a digit, may then use letters, digits,
+`-`, `_` and `.`, and may not END in `.`, which Windows strips from a path
+segment, so `internal.` and `internal` would be one directory there.
 `ksor-audience-identifier-collides`: two registered audiences differing only in
 case, such as `internal` and `Internal`, which are two viewers in your policy
 and ONE directory on macOS and Windows — the second bundle would merge into the

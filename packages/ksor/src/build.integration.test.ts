@@ -1111,6 +1111,23 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
       expect(dotted.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
       expect(dotted.stderr).toContain(id);
     }
+
+    // A TRAILING `.` is refused for the reason the case rule exists: Win32
+    // path normalization strips it, so `internal.` and `internal` are two
+    // viewers in the policy and ONE directory there — the same merge, and the
+    // case fold alone does not see it. Refused on every platform, because a
+    // record must not build here and leak there.
+    for (const id of ["internal.", "sales.."]) {
+      const root = repoRegistering(id);
+      const trailing = build(root, "--bundles", "--as-of", LATER);
+      expect(trailing.status, `${id} was accepted: ${trailing.stdout}`).toBe(1);
+      expect(trailing.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-invalid");
+      expect(trailing.stderr).toContain(id);
+      expect(trailing.stderr).toContain("Windows");
+      expect(existsSync(path.join(root, ".ksor/out"))).toBe(false);
+    }
+    // A `.` INSIDE the name is still fine — nothing normalizes it away.
+    expect(build(repoRegistering("v1.2"), "--bundles", "--as-of", LATER).status).toBe(0);
   });
 
   it("two registered audiences that differ only in case are refused: they are two viewers and one directory", () => {
@@ -1140,6 +1157,16 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     expect(shadow.status, shadow.stdout).toBe(1);
     expect(shadow.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
     expect(shadow.stderr).toContain('"Public"');
+
+    // Errors are documentation (principle 4): the sentence has to be true of
+    // the state it is printed for. Three colliding identifiers in one group,
+    // and a second group beside it, is not "both digests" — a two-identifier
+    // leftover that read wrong for every case the last fix widened this to.
+    const many = build(repoRegistering("INTERNAL", "Internal", "Staff", "staff"), "--as-of", LATER);
+    expect(many.status, many.stdout).toBe(1);
+    expect(many.stderr.split("\n")[0]).toBe("error: ksor-audience-identifier-collides");
+    expect(many.stderr).not.toContain("both digests");
+    expect(many.stderr).toContain("each of those digests");
   });
 
   it("the emitted starter bundles its five documents for public, and git ignores the output", () => {

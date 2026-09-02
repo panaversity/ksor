@@ -27,6 +27,7 @@ import {
   loadRecord,
   parseInstant,
   parseLedger,
+  parseLock,
   parsePolicy,
   resolveInstanceDir,
   sortRefusals,
@@ -522,6 +523,8 @@ export async function runMigrate(
   changes.push(...checkerChanges(root, options.templatesDir));
   const manifest = manifestChange(root);
   if (manifest !== null) changes.push(manifest);
+  const staleLock = staleLockChange(root);
+  if (staleLock !== null) changes.push(staleLock);
 
   // ── the site, which the adopter owns and only this can update ──────────
   if (parsed.writeSite) {
@@ -868,6 +871,30 @@ function checkerChanges(root: string, templatesDir: string): FileChange[] {
     }
   }
   return out;
+}
+
+/**
+ * A committed `build.lock.json` this ksor cannot read. The lock gains keys as
+ * the record's surfaces grow, and `ksor build` REFUSES one that is missing any
+ * of them rather than regenerating it — a lock nothing can read is a takedown
+ * baseline that quietly holds nothing (record spec §4), which is the state
+ * `ksor-lock-invalid` exists to stop. So the refusal is right and the upgrade
+ * still has to get past it: `pnpm build` is `ksor build && <site build>`, the
+ * deploy command under decision 29, so an adopter who took a new ksor would
+ * find their build and their deploy red on a file only a human could delete.
+ *
+ * Decision 28 permits removing a shape only when the removal is paired with a
+ * MIGRATION, and this is the pairing: migrate offers exactly the deletion the
+ * refusal asks for, so `docs/upgrading.md`'s four steps carry it. Deleted and
+ * never rewritten — only a build can compute a lock, and inventing one here
+ * would forge the provenance the file exists to hold.
+ */
+function staleLockChange(root: string): FileChange | null {
+  const abs = path.join(root, "build.lock.json");
+  if (!existsSync(abs)) return null;
+  const before = readFileSync(abs, "utf8");
+  if (parseLock(before).ok) return null;
+  return { path: "build.lock.json", before, after: null, generated: true };
 }
 
 /**

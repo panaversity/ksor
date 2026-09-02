@@ -39,7 +39,9 @@ export function unifiedDiff(change: FileChange): string {
   if (change.generated === true) {
     return (
       header +
-      `@@ generated @@ replaced wholesale: ${before.length} line(s) become ${after.length}. ` +
+      (change.after === null
+        ? `@@ generated @@ deleted: ${before.length} line(s). `
+        : `@@ generated @@ replaced wholesale: ${before.length} line(s) become ${after.length}. `) +
       "This file is built from ksor's own rules and is never hand-edited.\n"
     );
   }

@@ -89,10 +89,18 @@ const LOCK_NAME = "build.lock.json";
  * given would land outside the output directory. The first character must be a
  * letter or a digit, which is what stops `.`, `..`, a dotfile and a name a
  * shell reads as a flag; `-`, `_` and `.` are fine after it.
+ *
+ * The LAST character may not be a `.`. Win32 path normalization strips a
+ * trailing dot from a path segment, so `internal.` and `internal` are two
+ * viewers in the policy and ONE directory on Windows — the case rule's merge
+ * exactly, and the case fold cannot see it. Refused on every platform, for the
+ * reason that rule gives: a record must not build here and leak there. A `.`
+ * INSIDE the name (`v1.2`) is untouched; nothing normalizes it away.
  */
-const PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const PATH_SEGMENT = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$/;
 /** {@link PATH_SEGMENT} in words, in ONE place, so the refusal and the docs cannot drift from the regex. */
-const PATH_SEGMENT_PROSE = "a letter or a digit first, then letters, digits, `-`, `_` and `.`";
+const PATH_SEGMENT_PROSE =
+  "a letter or a digit first, then letters, digits, `-`, `_` and `.`, and never a `.` last";
 
 interface Parsed {
   readonly instance: string | null;
@@ -184,7 +192,7 @@ function viewerRefusal(viewers: readonly string[]): ViewerRefusal | null {
   if (unsafe.length > 0) {
     return {
       slug: "ksor-audience-identifier-invalid",
-      why: `the audience identifier${unsafe.length === 1 ? "" : "s"} ${list(unsafe)} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, and one named ${LOCK_NAME} would collide with the lock. build.lock.json records that bundle's digest on EVERY build, flag or not, so this is refused here rather than only under --bundles`,
+      why: `the audience identifier${unsafe.length === 1 ? "" : "s"} ${list(unsafe)} cannot name a bundle directory: --bundles writes each viewer's bundle to ${BUNDLES_DIR}/<identifier>/ beside a copy of ${LOCK_NAME}, so an identifier that is not a plain path segment would land somewhere else, one ending in \`.\` names a DIFFERENT directory on Windows (which strips a trailing dot from a path segment, merging it into the name without one), and one named ${LOCK_NAME} would collide with the lock. build.lock.json records that bundle's digest on EVERY build, flag or not, so this is refused here rather than only under --bundles`,
       fix: `name audiences in plain words (${PATH_SEGMENT_PROSE}) in .ksor/governance.yaml and in every \`ksor.audience\` list, then rebuild`,
     };
   }
@@ -206,7 +214,7 @@ function viewerRefusal(viewers: readonly string[]): ViewerRefusal | null {
   if (collided.length > 0) {
     return {
       slug: "ksor-audience-identifier-collides",
-      why: `${collided.map((g) => list(g)).join("; ")} differ only in case, so each set is several viewers naming ONE directory: --bundles writes ${BUNDLES_DIR}/<identifier>/ per viewer, and on a case-insensitive filesystem (macOS and Windows, by default) the later bundle merges into the earlier one — leaving a directory that holds concepts the viewer named on it may not read, and a digest in build.lock.json that no longer describes it. build.lock.json records both digests on EVERY build, flag or not, so this is refused here rather than only under --bundles`,
+      why: `${collided.map((g) => list(g)).join("; ")} differ only in case, so each set is several viewers naming ONE directory: --bundles writes ${BUNDLES_DIR}/<identifier>/ per viewer, and on a case-insensitive filesystem (macOS and Windows, by default) the later bundle merges into the earlier one — leaving a directory that holds concepts the viewer named on it may not read, and a digest in build.lock.json that no longer describes it. build.lock.json records each of those digests on EVERY build, flag or not, so this is refused here rather than only under --bundles`,
       fix: `give each audience in .ksor/governance.yaml a name that differs by more than case — \`public\` is reserved, casefolded too — and update every \`ksor.audience\` list that named the one you dropped, then rebuild`,
     };
   }

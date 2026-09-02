@@ -45,6 +45,7 @@ easier to read when nothing else is uncommitted.
 | `.gitignore`                                    | the entries a new release needs negated                                                     |
 | `.agents/` and `.claude/` format-checker        | the emitted checker, so your own `pnpm check` and your CI agree with the tool               |
 | root `package.json` **scripts**                 | scripts a release broke — a removed flag, a step that now needs `ksor build` in front of it |
+| `build.lock.json`                               | DELETED when this ksor cannot read it — see below                                           |
 | `system/site/**`                                | **only with `--write-site`** — every file of the site this release emits                    |
 
 `--write-site` is the one to remember, because it is the only path by which a
@@ -53,6 +54,19 @@ security bump reaches an existing project: the site's `package.json` is where
 
 It is an **update, never a creation**. A record with no `system/site` of its own
 is not given one.
+
+### A lock a newer ksor cannot read is deleted, never rewritten
+
+`build.lock.json` gains fields as the record's surfaces grow, and `ksor build`
+REFUSES a lock missing one (`ksor-lock-invalid`) instead of regenerating it: the
+lock is also a takedown baseline, and a baseline nothing can parse is one that
+quietly holds nothing. So the file has to GO before the first build on a new
+ksor, and step 3 is what removes it — the diff shows the deletion like any
+other. Step 4 then writes the current one.
+
+Skip the migration and step 4 tells you the same thing: `ksor build` exits 1
+naming the file, and so does `pnpm build`, which runs it first. Nothing is lost
+— a lock is computed from the tree, never edited.
 
 ### The site manifest is merged, not replaced
 
@@ -97,7 +111,7 @@ that supplies it. Two you will meet often:
 
 ## After it applies
 
-`pnpm build` regenerates every index and rewrites `build.lock.json`; `pnpm check`
+`pnpm build` regenerates every index and writes a fresh `build.lock.json`; `pnpm check`
 runs the record checker that shipped with the new tool. If you serve the record,
 `ksor schema --apply` and then a full `pnpm refresh` publish a generation the new
 door can read — and a calibrated `vector_floor` measured under an older serving

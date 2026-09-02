@@ -149,7 +149,11 @@ names is left alone and an existing ledger is never regenerated — `ksor
 takedown` may have appended to it — but a row nothing accounts for is
 APPENDED, including the one a repointed denial leaves behind, which is the
 state `ksor ingest` and `ksor serve` refuse as `ksor-takedown-unledgered` and
-name this command as the remedy for. Without `--write` it prints a
+name this command as the remedy for. It also DELETES a
+`build.lock.json` this ksor cannot read (the lock gains fields, and `ksor build`
+refuses a stale one as `ksor-lock-invalid` rather than regenerating a takedown
+baseline it cannot parse) — the migration decision 28 pairs that removal with.
+Without `--write` it prints a
 unified diff and changes nothing. `--write-site` UPDATES every file of
 `system/site` this release emits — the byte-copied rule modules, the site's
 `next.config.mjs`, and its `package.json`, which is the only path by which a

@@ -30,7 +30,9 @@ is not an instant, an unknown flag), `ksor-instance-missing`,
 `.ksor/governance.yaml` or `.ksor/takedowns.yaml` that is present and
 git-ignored — it is in no commit, so a clone would build without it),
 `ksor-lock-invalid` (a committed lock this ksor cannot parse — delete and
-rebuild). `--help` prints
+rebuild; it is NOT regenerated, because the lock is a takedown baseline and
+one nothing can parse holds nothing, and `ksor migrate` offers that deletion
+so the upgrade is not a hand-`rm`). `--help` prints
 the contract and performs nothing.
 
 1. **Indexes, in memory.** One per directory, in OKF §8 form: the heading is
@@ -79,7 +81,9 @@ the contract and performs nothing.
    longer registers must not sit beside the fresh ones — and a copy of the
    lock is written beside them so the output travels with its provenance. An
    audience identifier that cannot name a directory (`../x`, a leading `.` or
-   `-`) is refused before anything is written
+   `-`, or a TRAILING `.`, which Win32 path normalization strips — so
+   `internal.` and `internal` are one directory there) is refused before
+   anything is written
    (`ksor-audience-identifier-invalid`), as are two identifiers differing only
    in case (`ksor-audience-identifier-collides`) — two viewers and one
    directory on a case-insensitive filesystem. Both run on EVERY build, flag or
@@ -179,7 +183,9 @@ Committed (AGENTS.md vocabulary), root-level, outside `.ksor/`.
   function of what the id already hashes (the documents, their `admitted`
   sets, the companions, the assets, the instance), so hashing them again could
   not move it, and the lock is the same lock whether or not the directories
-  exist. A lock without the key is `ksor-lock-invalid` (decision 28).
+  exist. A lock without the key is `ksor-lock-invalid` — refused, never read
+  around (decision 28), and `ksor migrate` offers the deletion the refusal
+  names, which is the migration decision 28 pairs a removal with.
 - `build_id` = sha256 over everything a projection reads: the sorted
   `documents[]`, `companions[]`, `assets[]` and `indexes[]` `(path, sha256)` pairs, `instance_sha256`,
   `policy_sha256`, `people_sha256`, `ledger_sha256`, `ksor_version`, `drafts`, and each

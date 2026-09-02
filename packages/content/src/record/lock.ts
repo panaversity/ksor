@@ -142,8 +142,12 @@ export interface Lock {
    * instance title are already in it, so hashing the bundles again could not
    * move it (build spec §2). Listed so a directory can be MATCHED to a
    * publication, not to widen what the id covers. Required on read like every
-   * other field: a lock an older ksor wrote is `ksor-lock-invalid` and is
-   * regenerated, never read around (decision 28).
+   * other field, and NOT read around: a lock an older ksor wrote lacks the key,
+   * so `ksor build` refuses it as `ksor-lock-invalid` and says to delete it —
+   * it does not regenerate one it cannot read, because the lock is also a
+   * takedown baseline and a lock nothing can read is a baseline that quietly
+   * holds nothing. `ksor migrate` offers that deletion, which is the migration
+   * decision 28 pairs the removal with.
    */
   readonly bundles: readonly LockBundle[];
 }
