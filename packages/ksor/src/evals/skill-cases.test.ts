@@ -3,8 +3,9 @@
  * passes every gate for its fixture, and each careless act — smoothing the
  * two statements into one, misreading the figure, dropping a row, dropping a
  * thousands separator, keeping the footer, inventing a currency — turns
- * exactly the gate built for it red and no other. The fixture is under test here as much as the skill: a gate
- * that fails a good conversion is a wrong gate.
+ * exactly the gate built for it red and no other. The fixture is under test
+ * here as much as the skill: a gate that fails a good conversion is a wrong
+ * gate.
  */
 
 import { describe, expect, it } from "vitest";
