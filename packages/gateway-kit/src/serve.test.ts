@@ -55,4 +55,13 @@ describe("requireEnv — fail loud, never half-boot", () => {
     expect(() => requireEnv({}, "KSOR_INSTANCE_URI")).toThrowError("KSOR_INSTANCE_URI is required");
     expect(() => requireEnv({ KSOR_X: "   " }, "KSOR_X")).toThrowError("KSOR_X is required");
   });
+
+  it("carries the thrower's slug when it has one, and none otherwise", () => {
+    // The gateway prints `error: <slug>` first when an error carries one; an
+    // environment refusal that names a rule needs somewhere to put it.
+    expect(new RequiredEnvError("x is required").slug).toBeNull();
+    expect(new RequiredEnvError("no key", "ksor-provider-key-missing").slug).toBe(
+      "ksor-provider-key-missing",
+    );
+  });
 });

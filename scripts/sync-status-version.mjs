@@ -14,12 +14,17 @@
  * version`, so the bump and the sentence move in one commit, in the Version PR
  * a human still reviews.
  *
- * Rewrites exactly the published-package sentence and nothing else.
+ * Rewrites exactly the published-package sentence and nothing else, and only
+ * for a RELEASE: a snapshot or prerelease version is refused by name, because
+ * the sentence names what a plain `npm install` resolves and a snapshot never
+ * is that (`scripts/lib/status-version.ts`).
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { syncStatusVersion } from "./lib/status-version.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const version = JSON.parse(
@@ -27,25 +32,16 @@ const version = JSON.parse(
 ).version;
 
 const statusPath = path.join(repoRoot, "docs/status.md");
-const before = readFileSync(statusPath, "utf8");
-const SENTENCE = /(`@panaversity\/ksor`\s+\*\*)([0-9]+\.[0-9]+\.[0-9]+)(\*\*\s+on npm)/;
+const result = syncStatusVersion(readFileSync(statusPath, "utf8"), version);
 
-const found = SENTENCE.exec(before);
-if (found === null) {
-  // Loud, never silent: the assertion this feeds reads the same sentence, so a
-  // rename here would leave the release blocked with no explanation.
-  console.error(
-    "sync-status-version: docs/status.md has no `@panaversity/ksor` **x.y.z** on npm sentence.\n" +
-      "  why: docs/status.md is the authority on what is built, and the release gate reads that\n" +
-      "       exact sentence to check it against packages/ksor/package.json\n" +
-      "  fix: restore the sentence, or update this script and the assertion together",
-  );
+if (result.kind === "refused") {
+  // The slug is the first stderr line (product principle 4), so a release
+  // log can be grepped for it; the why and the fix follow.
+  console.error(result.message);
   process.exit(1);
-}
-
-if (found[2] === version) {
-  console.log(`sync-status-version: docs/status.md already names ${version}`);
+} else if (result.kind === "unchanged") {
+  console.log(`sync-status-version: docs/status.md already names ${result.version}`);
 } else {
-  writeFileSync(statusPath, before.replace(SENTENCE, `$1${version}$3`));
-  console.log(`sync-status-version: docs/status.md ${found[2]} -> ${version}`);
+  writeFileSync(statusPath, result.text);
+  console.log(`sync-status-version: docs/status.md ${result.from} -> ${result.to}`);
 }

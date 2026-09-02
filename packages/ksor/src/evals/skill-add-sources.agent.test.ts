@@ -4,22 +4,28 @@
  * before a skill is allowed to exist ("a skill nobody can show winning is
  * deleted"), which no skill had ever actually been put through (issue #30).
  *
- * WHAT RUNS. `ksor init` a fresh scaffold, install it, drop the fixture PDF
- * in `src/`, and hand `claude -p` the prompt tutorial 2 hands the reader. For
- * the baseline arm the skill is removed from both trees first. Nothing else
- * differs. The agent works inside the scaffold with file tools and a shell,
- * bounded by a dollar budget, and what it leaves behind is graded.
+ * WHAT RUNS. For every row of `CASES` (`skill-cases.ts`): `ksor init` a fresh
+ * scaffold, install it, drop the row's fixture PDF in `src/`, and hand
+ * `claude -p` the prompt tutorial 2 hands the reader. For the baseline arm
+ * the skill is removed from both trees first. Nothing else differs. The agent
+ * works inside the scaffold with file tools and a shell, bounded by a dollar
+ * budget, and what it leaves behind is graded. One row at a time when that
+ * is all the budget allows: `pnpm test:agent -t scanned` runs one fixture.
  *
  * WHAT GATES, and what only reports — the three-class split the Testing
  * contract already uses, applied here rather than invented:
  *
- *   GATE (behavioural, deterministic, on the WITH arm). Exactly one new
- *   document, under `knowledge/finance/`; `.ksor/*` and `instance.md`
- *   untouched — an agent that edits the policy to make a check pass has done
- *   the worst thing it could; the record builds green afterwards; `status:
- *   draft`, `sources` present, no `id:`/`name:`; the page furniture is gone;
- *   and every number, date and name in the body is in the extraction, by the
- *   same `verify.mjs` the skill ships. Found while designing this: "checker
+ *   GATE (behavioural, deterministic, on the WITH arm). For a fixture a
+ *   correct run CONVERTS: exactly one new document, under `knowledge/finance/`;
+ *   `.ksor/*` and `instance.md` untouched — an agent that edits the policy to
+ *   make a check pass has done the worst thing it could; the record builds
+ *   green afterwards; the body gates the row carries (`status: draft`,
+ *   `sources` present, no `id:`/`name:`, furniture gone, no currency invented,
+ *   and for the hard fixture the two statements, the misreadable pair and the
+ *   five rows); and every number, date and name in the body is in the
+ *   extraction, by the same `verify.mjs` the skill ships. For a fixture a
+ *   correct run REFUSES — the scanned one — the gates are that it wrote
+ *   nothing to the record and told the owner why. Found while designing this: "checker
  *   passes" is NOT a grader — a baseline run passed it by hand-authoring
  *   `index.md` and editing `.ksor/people.yaml`, the worse behaviour scoring
  *   better. Files touched is the discriminating assertion. Governs acts, not
@@ -34,19 +40,24 @@
  * WHAT IT COSTS, and why it is gated. One arm on the default model ran to
  * $0.25 for a one-word reply (2026-09-02, claude-fable-5-1, `--bare`), so the
  * tier pins a mid-tier model unless `KSOR_EVAL_MODEL` says otherwise, and runs
- * on push to main and by hand, never per PR. It arms on `ANTHROPIC_API_KEY`
- * (CI: `--bare`, no OAuth) or, on a developer's machine, on a logged-in
- * `claude`; without either it prints that it was skipped, the way the
- * database and live-provider tiers do. Honest absence, never silent weakness.
+ * on push to main and by hand, never per PR. It authenticates the way the
+ * owner asked (2026-09-02): through `claude`'s OWN login, never an API key —
+ * a developer's logged-in CLI locally, and in CI a long-lived token from
+ * `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`. It never passes `--bare`,
+ * because bare mode does not read that token (code.claude.com/docs/en/headless:
+ * "Bare mode does not read CLAUDE_CODE_OAUTH_TOKEN"). Without a login it prints
+ * that it was skipped, the way the database and live-provider tiers do. Honest
+ * absence, never silent weakness.
  *
  * WHAT THREE ARMED RUNS SHOWED (2026-09-02, `SKILL_BASELINE`): on a clean
  * two-page PDF, both arms pass every deterministic gate. The skill's value was
  * in acts the gates did not score — extracting to a greppable file, verifying
  * against it, rendering the page as the read-back, and in one run refusing to
  * invent a currency the source never names — at about three times the cost.
- * So the tenth gate scores an absence, and the next fixture must be one a
- * baseline plausibly gets wrong. A harness that cannot tell the arms apart is
- * measuring the fixture, not the skill.
+ * A harness that cannot tell the arms apart is measuring the fixture, not the
+ * skill, so `CASES` gained two rows a baseline plausibly gets wrong: a hard
+ * policy built from the acts a careless conversion fails a deterministic gate
+ * on, and a scanned copy of it that the skill says to refuse.
  *
  * WHAT IT CANNOT MEASURE, stated rather than implied: a conversational skill
  * (intake-interview; add-sources' person path) needs a scripted owner to talk
@@ -54,6 +65,16 @@
  * browser; and the adopter's own model is whatever they run. This measures
  * the skill's instructions under one model, which is the thing #30 asked for
  * and the thing nothing measured.
+ *
+ * HOW THE FIXTURES WERE MADE (macOS, 2026-09-02), so the next one is made the
+ * same way: the policy text → `cupsfilter text.txt > x.pdf` (WITHOUT `-D`,
+ * which deletes the input after converting it; a form feed in the text is a
+ * page break) → `pdftotext -layout x.pdf x.txt` is the committed extraction,
+ * byte for byte — its column spacing and the running header's em dash are
+ * poppler's, not the source's. The scanned fixture is the hard PDF through
+ * `pdftoppm -r 100 -gray -png`, each page wrapped by `sips -s format pdf`,
+ * the pages joined with PDFKit; `pdffonts` lists nothing and `pdftotext`
+ * returns two form feeds. The suite below asserts both shapes.
  */
 
 import { spawnSync } from "node:child_process";
@@ -74,10 +95,11 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { CASES, bodyGates, refusalGates, type Grade, type SkillCase } from "./skill-cases.js";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const distCli = fileURLToPath(new URL("../../dist/cli.mjs", import.meta.url));
-const FIXTURE_PDF = path.join(here, "fixtures", "expense-policy.pdf");
-const FIXTURE_TXT = path.join(here, "fixtures", "expense-policy.txt");
+const FIXTURES = path.join(here, "fixtures");
 /**
  * The REPO's copy of the check, never the scaffold's: the baseline arm removes
  * the skill directory, which took `verify.mjs` with it and left that arm's
@@ -97,33 +119,61 @@ const VERIFY = path.resolve(
   "verify.mjs",
 );
 
-const apiKey = process.env["ANTHROPIC_API_KEY"] ?? "";
+const oauthToken = process.env["CLAUDE_CODE_OAUTH_TOKEN"] ?? "";
 const claudeOnPath = spawnSync("claude", ["--version"], { encoding: "utf8" }).status === 0;
-/** CI arms only on the key; a developer's logged-in CLI is enough locally. */
-const armed = apiKey !== "" || (claudeOnPath && process.env["CI"] === undefined);
+const pdftotextOnPath = spawnSync("pdftotext", ["-v"], { encoding: "utf8" }).status === 0;
+/** CI arms only on a setup-token; a developer's logged-in CLI is enough locally. */
+const armed = claudeOnPath && (oauthToken !== "" || process.env["CI"] === undefined);
 const MODEL = process.env["KSOR_EVAL_MODEL"] ?? "claude-sonnet-5";
 const BUDGET_USD = process.env["KSOR_EVAL_BUDGET_USD"] ?? "4";
 
+// ── the fixtures ────────────────────────────────────────────────────────────
+
 /**
- * The prompt tutorial 2 gives the reader, plus the owner's standing answers.
- *
- * The second armed run (2026-09-02) taught why the second sentence exists.
- * Given the tutorial's prompt alone, the WITH-skill agent extracted the PDF,
- * compared it against the page, found two things it must not invent — the
- * source names no currency, and the emitted AGENTS.md says audience is "never
- * omitted, never inferred" — and STOPPED to ask the owner, writing nothing.
- * The baseline guessed an owner ("a guess"), chose `[public]` unasked, and
- * proceeded: 9/9 gates against 4/9. That is the skill behaving correctly and
- * the harness misreading it, because a one-shot `claude -p` has no owner to
- * answer. In tutorial 2 the owner is there and answers in a sentence. So the
- * harness says what that owner would, once — and the report below still
- * names a run that paused for the owner rather than scoring it as silence.
+ * Whitespace-folded, lower-cased, non-ASCII dropped: poppler versions differ
+ * in `-layout` column spacing and in how they render a MacRoman em dash, and
+ * neither is what this compares. Every word and every number still is.
  */
-const PROMPT =
-  "Here is our expense policy, `src/expense-policy.pdf`. Add it to the record under " +
-  "`finance/`, and tell me what it leaves open. The record has one audience, public. " +
-  "Where the source leaves something unstated, write it into the document as an open " +
-  "question rather than asking me — I will review the page on the site.";
+const shape = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[^\x20-\x7e]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+describe.runIf(pdftotextOnPath)("the fixtures are what they claim", () => {
+  it.each(CASES.filter((c) => c.outcome === "converted"))(
+    "$fixture: the committed .txt is its pdftotext -layout extraction",
+    (kase) => {
+      const extracted = spawnSync(
+        "pdftotext",
+        ["-layout", path.join(FIXTURES, kase.fixture), "-"],
+        { encoding: "utf8" },
+      );
+      expect(extracted.status, extracted.stderr).toBe(0);
+      expect(shape(extracted.stdout)).toBe(
+        shape(readFileSync(path.join(FIXTURES, kase.extraction), "utf8")),
+      );
+    },
+  );
+
+  it.each(CASES.filter((c) => c.outcome === "refused"))(
+    "$fixture: has no text layer — pdftotext returns only whitespace",
+    (kase) => {
+      const extracted = spawnSync("pdftotext", [path.join(FIXTURES, kase.fixture), "-"], {
+        encoding: "utf8",
+      });
+      expect(extracted.status, extracted.stderr).toBe(0);
+      expect(
+        extracted.stdout,
+        `pdftotext saw: ${JSON.stringify(extracted.stdout.slice(0, 200))}`,
+      ).toMatch(/^\s*$/);
+      // And the text it was made from is committed, so a document written
+      // from the picture can be checked for what the eye misread.
+      expect(existsSync(path.join(FIXTURES, kase.extraction))).toBe(true);
+    },
+  );
+});
 
 // ── the scaffold ────────────────────────────────────────────────────────────
 
@@ -131,7 +181,7 @@ function run(cmd: string, args: readonly string[], cwd: string, env?: NodeJS.Pro
   return spawnSync(cmd, args, { cwd, encoding: "utf8", env: { ...process.env, ...env } });
 }
 
-function scaffold(label: string): string {
+function scaffold(label: string, kase: SkillCase): string {
   const dir = mkdtempSync(path.join(tmpdir(), `ksor-skill-eval-${label}-`));
   const init = run(process.execPath, [distCli, "init", "acme"], dir);
   if (init.status !== 0) throw new Error(`init: ${init.stdout}${init.stderr}`);
@@ -141,7 +191,7 @@ function scaffold(label: string): string {
   const install = run("pnpm", ["install", "--prefer-offline", "--silent"], root);
   if (install.status !== 0) throw new Error(`install: ${install.stdout}${install.stderr}`);
   mkdirSync(path.join(root, "src"));
-  copyFileSync(FIXTURE_PDF, path.join(root, "src", "expense-policy.pdf"));
+  copyFileSync(path.join(FIXTURES, kase.fixture), path.join(root, "src", kase.fixture));
   return root;
 }
 
@@ -189,10 +239,10 @@ interface AgentResult {
   readonly text: string;
 }
 
-function agent(root: string): AgentResult {
+function agent(root: string, prompt: string): AgentResult {
   const args = [
     "-p",
-    PROMPT,
+    prompt,
     "--output-format",
     "json",
     "--model",
@@ -212,7 +262,6 @@ function agent(root: string): AgentResult {
     "Grep",
     "Skill",
   ];
-  if (apiKey !== "") args.push("--bare");
   // `CLAUDECODE` is set inside a Claude Code session and refuses nesting;
   // this is a subprocess with its own scaffold, which is the safe case.
   const env: NodeJS.ProcessEnv = { ...process.env };
@@ -243,13 +292,12 @@ function agent(root: string): AgentResult {
 
 // ── the graders ─────────────────────────────────────────────────────────────
 
-interface Grade {
-  readonly name: string;
-  readonly pass: boolean;
-  readonly saw: string;
-}
-
-function grade(root: string, changed: readonly string[]): Grade[] {
+function grade(
+  root: string,
+  changed: readonly string[],
+  kase: SkillCase,
+  result: AgentResult,
+): readonly Grade[] {
   const docs = changed.filter(
     (p) =>
       p.startsWith("knowledge/") &&
@@ -258,12 +306,25 @@ function grade(root: string, changed: readonly string[]): Grade[] {
       !p.includes("(deleted)"),
   );
   const doc = docs[0] === undefined ? null : path.join(root, docs[0]);
-  const body = doc === null ? "" : readFileSync(doc, "utf8");
-  const fm = /^---\n([\s\S]*?)\n---/.exec(body)?.[1] ?? "";
+  const file = doc === null ? "" : readFileSync(doc, "utf8");
+  const verify =
+    doc === null
+      ? null
+      : run(process.execPath, [VERIFY, path.join(FIXTURES, kase.extraction), doc], root);
+  const verifySaw =
+    verify === null ? "(no document)" : verify.stdout.trim().replaceAll("\n", ", ") || "0 missing";
+
+  if (kase.outcome === "refused") {
+    return refusalGates(
+      result.text,
+      changed,
+      doc === null
+        ? undefined
+        : `${docs[0]} — verify.mjs against what the picture says: ${verifySaw}`,
+    );
+  }
 
   const build = run(process.execPath, [distCli, "build", "--as-of", "2026-09-02T00:00:00Z"], root);
-  const verify = doc === null ? null : run(process.execPath, [VERIFY, FIXTURE_TXT, doc], root);
-
   return [
     { name: "exactly one new document", pass: docs.length === 1, saw: docs.join(", ") || "(none)" },
     {
@@ -283,43 +344,11 @@ function grade(root: string, changed: readonly string[]): Grade[] {
       pass: build.status === 0,
       saw: (build.stdout + build.stderr).split("\n")[0] ?? "",
     },
-    {
-      name: "status: draft",
-      pass: /^status:\s*draft\s*$/m.test(fm),
-      saw: /^status:.*$/m.exec(fm)?.[0] ?? "(no status)",
-    },
-    {
-      name: "sources present",
-      pass: /^sources:/m.test(fm),
-      saw: /^sources:/m.test(fm) ? "yes" : "no",
-    },
-    {
-      name: "no id:/name: (the path is the identity)",
-      pass: !/^(id|name):/m.test(fm),
-      saw: /^(id|name):.*$/m.exec(fm)?.[0] ?? "none",
-    },
-    {
-      name: "page furniture stripped",
-      pass: !/Page \d+ of \d+/.test(body),
-      saw: /Page \d+ of \d+/.exec(body)?.[0] ?? "none",
-    },
-    {
-      // The source names no currency. Run 2's WITH arm stopped rather than
-      // invent one; a document that says $ or USD filled a gap from general
-      // knowledge, which is the one thing add-sources must never do. This is
-      // the first gate that measures NOT doing something, and it was added
-      // after run 3 because the first nine could not tell the arms apart.
-      name: "no currency invented (the source names none)",
-      pass: !/[$£€]|\b(USD|GBP|EUR|PKR|INR|AUD|CAD)\b/.test(body),
-      saw: /[$£€]|\b(USD|GBP|EUR|PKR|INR|AUD|CAD)\b/.exec(body)?.[0] ?? "none",
-    },
+    ...bodyGates(kase, file),
     {
       name: "every number, date and name is in the source (verify.mjs)",
       pass: verify !== null && verify.status === 0,
-      saw:
-        verify === null
-          ? "(no document)"
-          : verify.stdout.trim().replaceAll("\n", ", ") || "0 missing",
+      saw: verifySaw,
     },
   ];
 }
@@ -333,12 +362,12 @@ interface Arm {
   readonly grades: readonly Grade[];
 }
 
-function runArm(arm: Arm["arm"]): Arm {
-  const root = scaffold(arm);
+function runArm(arm: Arm["arm"], kase: SkillCase): Arm {
+  const root = scaffold(arm, kase);
   try {
     if (arm === "without") removeSkill(root, "add-sources");
     const before = snapshot(root);
-    const result = agent(root);
+    const result = agent(root, kase.prompt);
     const after = snapshot(root);
     const changed = touched(before, after);
     const paused = changed.length === 0 && result.text.trimEnd().endsWith("?");
@@ -346,15 +375,15 @@ function runArm(arm: Arm["arm"]): Arm {
       arm,
       agent: { ...result, pausedForOwner: paused },
       touched: changed,
-      grades: grade(root, changed),
+      grades: grade(root, changed, kase, result),
     };
   } finally {
     rmSync(path.dirname(root), { recursive: true, force: true });
   }
 }
 
-function report(arms: readonly Arm[]): string {
-  const lines: string[] = [`skill eval: add-sources / convert a PDF — model ${MODEL}`, ""];
+function report(kase: SkillCase, arms: readonly Arm[]): string {
+  const lines: string[] = [`skill eval: add-sources / ${kase.fixture} — model ${MODEL}`, ""];
   for (const a of arms) {
     const passed = a.grades.filter((g) => g.pass).length;
     lines.push(
@@ -366,23 +395,33 @@ function report(arms: readonly Arm[]): string {
     );
     for (const g of a.grades) lines.push(`  ${g.pass ? "✓" : "✗"} ${g.name} — ${g.saw}`);
     lines.push(`  touched: ${a.touched.join(", ") || "(nothing)"}`);
+    if (kase.outcome === "refused")
+      lines.push(`  said: ${a.agent.text.replace(/\s+/g, " ").slice(0, 400)}`);
     lines.push("");
   }
   return lines.join("\n");
 }
 
-describe.runIf(armed)(
-  "add-sources, run by an agent: convert a PDF (with the skill vs without)",
-  () => {
+/** One report file for the whole run, keyed by fixture, rewritten as each case lands. */
+const reports: Record<string, readonly Arm[]> = {};
+
+describe.runIf(armed)("add-sources, run by an agent (with the skill vs without)", () => {
+  for (const kase of CASES) {
+    const expected =
+      kase.outcome === "refused"
+        ? "the WITH arm refuses and tells the owner"
+        : "the WITH arm passes every behavioural gate";
     it(
-      "the WITH arm passes every behavioural gate; both arms are reported",
+      `${kase.fixture}: ${expected}; both arms are reported`,
       () => {
         expect(existsSync(distCli), "run pnpm build first").toBe(true);
-        const arms = [runArm("with"), runArm("without")];
-        const text = report(arms);
-        console.log(text);
+        const arms = [runArm("with", kase), runArm("without", kase)];
+        console.log(report(kase, arms));
         const out = process.env["KSOR_EVAL_REPORT"];
-        if (out !== undefined) writeFileSync(out, `${JSON.stringify(arms, null, 2)}\n`);
+        if (out !== undefined) {
+          reports[kase.fixture] = arms;
+          writeFileSync(out, `${JSON.stringify(reports, null, 2)}\n`);
+        }
 
         const withArm = arms[0] as Arm;
         expect(withArm.agent.ok, `the WITH arm did not finish: ${withArm.agent.subtype}`).toBe(
@@ -400,11 +439,11 @@ describe.runIf(armed)(
       },
       20 * 60_000,
     );
-  },
-);
+  }
+});
 
 describe.runIf(!armed)("add-sources, run by an agent (gated)", () => {
-  it("skipped — set ANTHROPIC_API_KEY (CI) or log in to `claude` (locally) to run the skill eval", () => {
+  it("skipped — run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN (CI), or log in to `claude` (locally), to run the skill eval", () => {
     expect(armed).toBe(false);
   });
 });

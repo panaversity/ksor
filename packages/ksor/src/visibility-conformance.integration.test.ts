@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
+import { e2eSkipNote } from "./e2e-gate.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 import { starterApprover } from "./e2e-starter.js";
 
@@ -504,7 +505,7 @@ LEGACYCANARY body.
 );
 
 describe.runIf(!enabled)("visibility conformance (gated)", () => {
-  it("skipped — set KSOR_E2E=1 to run the canary sweep", () => {
-    expect(enabled).toBe(false);
+  it("the canary sweep, in a real browser", (ctx) => {
+    ctx.skip(e2eSkipNote("packages/ksor/src/visibility-conformance.integration.test.ts"));
   });
 });

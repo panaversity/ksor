@@ -76,3 +76,87 @@ describe("the boot report's column fits every label the door prints", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * …and every boot block a DOCUMENT shows is the block the door prints.
+ *
+ * The width above is asserted against the door's own call sites, which is why
+ * moving it from 10 to 12 and adding a `generation` row was green everywhere
+ * while `01-hello-world.md` went on showing the old shape — a reader following
+ * it saw one thing on the page and another in their terminal, and a second
+ * tutorial in the same tree showed the new one. Docs are priority #1, and a
+ * pasted block is the part of a tutorial a reader trusts most.
+ *
+ * So the docs are held to the code: the alignment, and the presence of the
+ * `generation` row the door prints on every path — the try and the catch alike.
+ */
+describe("every boot block in the docs is the shape the door prints", () => {
+  const repoRoot = path.join(here, "..", "..", "..");
+
+  /** Every fenced block in the repo's markdown that opens with the boot header. */
+  function documentedBlocks(): { file: string; lines: string[] }[] {
+    const out: { file: string; lines: string[] }[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === "node_modules" || entry.name === "dist" || entry.name.startsWith("."))
+          continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!entry.name.endsWith(".md")) continue;
+        const lines = readFileSync(full, "utf8").split("\n");
+        for (let i = 0; i < lines.length; i += 1) {
+          if (!(lines[i] ?? "").startsWith("ksor serve · ")) continue;
+          const block: string[] = [];
+          for (let j = i + 1; j < lines.length && (lines[j] ?? "").startsWith("  "); j += 1) {
+            block.push(lines[j] as string);
+          }
+          out.push({ file: path.relative(repoRoot, full), lines: block });
+        }
+      }
+    };
+    walk(repoRoot);
+    return out;
+  }
+
+  const blocks = documentedBlocks();
+
+  it("finds boot blocks at all — a walk that found none would pass silently", () => {
+    expect(blocks.length, "documents showing a `ksor serve` boot block").toBeGreaterThan(0);
+  });
+
+  it("every label's value starts at the door's own column", () => {
+    const crooked: string[] = [];
+    for (const { file, lines } of blocks) {
+      for (const line of lines) {
+        // The elision a tutorial uses when it quotes part of a block.
+        if (line.trim() === "...") continue;
+        const body = line.slice(2);
+        const label = (/^\S+(?: \S+)?/.exec(body) ?? [""])[0] as string;
+        if (label.length >= VALUE_COLUMN) continue; // degrades to one space, by design
+        const at = body.length - body.replace(/^\S+(?: \S+)?\s+/, "").length;
+        if (at !== VALUE_COLUMN) {
+          crooked.push(`${file}: "${label}" value at ${at}, not ${VALUE_COLUMN}`);
+        }
+      }
+    }
+    expect(
+      crooked,
+      `boot block(s) out of step with VALUE_COLUMN (${VALUE_COLUMN}): ${crooked.join("; ")} — ` +
+        "re-paste the block from a real `ksor serve`",
+    ).toEqual([]);
+  });
+
+  it("every block shows the `generation` row, which the door always prints", () => {
+    const missing = blocks
+      .filter(({ lines }) => !lines.some((l) => l.startsWith("  generation")))
+      .map(({ file }) => file);
+    expect(
+      missing,
+      `boot block(s) with no generation row: ${missing.join(", ")} — the door prints one on ` +
+        "every path, including the one where it could not resolve it",
+    ).toEqual([]);
+  });
+});

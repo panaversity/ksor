@@ -497,9 +497,14 @@ runs over every entry in the ledger at `pnpm check`, `ksor build` and ingest, so
 a line appended by hand in a pull request is refused exactly as the verb would
 refuse it. The read-only modes
 (`--list`, `--ledger`) need no actor — nobody is performing an act by looking.
-They do not need a database either: on a record that declares none they read
-the committed `.ksor/takedowns.yaml`, which is the whole record of the act
-anyway.
+They do not need a database either: `--ledger` always reads the committed
+`.ksor/takedowns.yaml`, which is the record of every act, and `--list` reads
+the door's denylist rows when `KSOR_DB_URL` is set and otherwise the ledger's
+denials, each labelled `not applied (no database)` because no row exists for
+a door to refuse on. A denial itself, on this record with `KSOR_DB_URL` unset,
+is refused by name (`ksor-takedown-dsn-missing`) unless `--file-only` records
+the entry alone — `--apply` writes its row later, where the database is
+reachable.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
 build** — the site reads the committed ledger (`.ksor/takedowns.yaml`), not

@@ -204,9 +204,10 @@ export function renderDrift(report: DriftReport, window: string): string {
  * zero would drag every statistic here toward a number nobody measured, in the
  * direction that makes a floor look safer than it is.
  *
- * Scoped by CORPUS as well as tenant, for the reason `readLedger` records: a
- * tenant serving two corpora would otherwise measure one record's floor
- * against the other's traffic. Read through `runAuditRead` — the serving role
+ * Scoped by CORPUS as well as tenant, because every governance write records
+ * `corpus_id`: a tenant serving two corpora — the shape the second record
+ * prepares for — would otherwise measure one record's floor against the
+ * other's traffic. Read through `runAuditRead` — the serving role
  * has no SELECT on this table at all, deliberately, and widening that to read
  * a monitor would trade an audit guarantee for a convenience.
  */

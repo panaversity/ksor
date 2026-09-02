@@ -1326,146 +1326,17 @@ It is simply stored in a form that both humans and machines can manage.
 
 # 10. Run your first KSoR
 
-Now we will create a small KSoR locally.
+Creating a project is a fifteen-minute, hands-on tutorial of its own, and it
+lives in one place so it can be run and pasted exactly as it appears:
 
-You need **Node.js 24 or newer**.
+> **[Hello world — a governed record, in about fifteen minutes](./01-hello-world.md)**
 
-Check your installed version:
+You need **Node.js 24 or newer** and nothing else for Part 1. You write one
+document, watch the record refuse to publish it until a human approves it,
+and then — in Part 2 — ask your own coding agent a question and get an answer
+that names which document and which publication it came from.
 
-```bash
-node --version
-```
-
-The examples below use **pnpm**.
-
-If you use npm, replace the first command with:
-
-```bash
-npx @panaversity/ksor init …
-```
-
-and later use:
-
-```bash
-npm install
-npm run dev
-```
-
-If you use Bun, use:
-
-```bash
-bunx …
-bun install
-bun run dev
-```
-
----
-
-## Create the project
-
-Run:
-
-```bash
-pnpm dlx @panaversity/ksor init my-knowledge-sor
-cd my-knowledge-sor
-pnpm install
-pnpm dev
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-You now have a working KSoR project.
-
-You should see a human-readable knowledge website.
-
-When you edit Markdown files inside:
-
-```text
-knowledge/
-```
-
-the site reloads with your changes.
-
-The generated project is ordinary source code that you own.
-
-Nothing is downloaded at build time, and nothing phones home.
-
----
-
-## The important next step
-
-Creating the project is not what makes it a real KSoR.
-
-You now need to define:
-
-> **What knowledge is this KSoR authoritative for?**
-
-Open the project in the coding agent you already use.
-
-For example:
-
-- Claude Code,
-- Cursor,
-- Copilot,
-- or another coding agent.
-
-Tell the agent what the knowledge base is for.
-
-The project includes:
-
-```text
-AGENTS.md
-```
-
-which contains the working rules for the agent.
-
-The agent will interview you and help replace the placeholder information in:
-
-```text
-instance.md
-```
-
-Day to day, you can write your knowledge in ordinary Markdown and in whatever human language you normally use.
-
-The coding agent can help with the structure and checks around it.
-
----
-
-## Two commands you should know
-
-Run:
-
-```bash
-pnpm check
-```
-
-before sharing a change.
-
-This validates your knowledge files.
-
-Run:
-
-```bash
-pnpm build
-```
-
-to build the static site.
-
-The output goes into:
-
-```text
-system/site/out/
-```
-
----
-
-## Understand the project structure
-
-Your project looks roughly like this:
+What you come back from it with is a project that looks roughly like this:
 
 ```text
 my-knowledge-sor/
@@ -1481,68 +1352,29 @@ my-knowledge-sor/
 └── instance.md             # what this KSoR is authoritative for
 ```
 
-Let's understand each part.
+Three things in that tree are worth naming before you run it, because they
+are the ones a beginner mistakes for each other:
 
-### `knowledge/`
+- **`knowledge/`** is the authoritative governed record — readable by humans,
+  diffable through Git, usable by agents. It is the only part that is
+  institutional knowledge.
+- **`system/site/`** is the human-readable projection. It is **not** another
+  source of truth; the source of truth remains the governed record.
+- **`AGENTS.md` and `.agents/`** help coding agents maintain the project. They
+  are maintenance infrastructure, **not** authoritative institutional
+  knowledge. That distinction is important.
 
-This is the authoritative governed record.
-
-The knowledge is:
-
-- readable by humans,
-- diffable through Git,
-- usable by agents.
-
----
-
-### `.ksor/governance.yaml`
-
-This contains the portable governance policy.
-
-It can define things such as:
-
-- audiences,
-- ownership,
-- approval,
-- takedown authority.
-
-The publisher validates the knowledge against this policy.
-
----
-
-### `instance.md`
-
-This defines the identity and authoritative scope of the KSoR.
-
-In simple language, it answers:
-
-> **What is this KSoR the official knowledge source for?**
-
----
-
-### `system/site/`
-
-This is the human-readable projection of the knowledge.
-
-It is **not** another source of truth.
-
-The source of truth remains the governed record.
-
----
-
-### `AGENTS.md` and `.agents/`
-
-These files help coding agents maintain the project.
-
-They are maintenance infrastructure.
-
-They are **not** authoritative institutional knowledge.
-
-That distinction is important.
+`instance.md` answers _what is this KSoR the official knowledge source for?_,
+and `.ksor/governance.yaml` carries the portable policy the publisher
+validates every document against: audiences, ownership, approval, takedown
+authority.
 
 ---
 
 # 11. Your first exercise
+
+Once hello world is behind you, this is the exercise this introduction
+leaves you with.
 
 Do not start by trying to model an entire company.
 
@@ -1619,58 +1451,6 @@ Now you are beginning to define:
 That is the important shift.
 
 ---
-
-## Later: serve the record directly to AI agents
-
-The human website is only one projection of the KSoR.
-
-Later, you may want AI agents to query the KSoR directly through MCP.
-
-That allows features such as:
-
-- governed retrieval,
-- citations,
-- abstention.
-
-To do that, you add:
-
-- Postgres,
-- pgvector,
-- an embedding key.
-
-Then run:
-
-```bash
-pnpm provision
-```
-
-once to provision the infrastructure.
-
-Use:
-
-```bash
-pnpm refresh
-```
-
-to publish the knowledge.
-
-Then use:
-
-```bash
-pnpm serve
-```
-
-to serve it.
-
-These commands are deliberately separate.
-
-Why?
-
-Because:
-
-> **Publishing institutional truth should be a deliberate event, not an accidental side effect of starting a server.**
-
-The full walkthrough is in [Serve to AI Agents](../../README.md#serve-to-ai-agents), and it is the subject of a later tutorial in this series.
 
 > **Status note:** KSoR is in active development (beta). [`docs/status.md`](../status.md) is always authoritative for what the current release supports. Star and watch the [repo](https://github.com/panaversity/ksor) to follow along.
 

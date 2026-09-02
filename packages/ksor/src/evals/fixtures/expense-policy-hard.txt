@@ -1,0 +1,47 @@
+ACME OPERATIONS — EXPENSE POLICY
+Finance manual §7, 2026 edition, revision 3                           Page 1 of 2
+
+1. Scope
+This policy covers every expense claimed by an employee of Acme Operations,
+including travel between the offices listed in section 3.
+
+2. Limits
+An employee may claim up to 75 per day for meals while travelling, unless the
+rates table in section 3 says otherwise for the city. A single purchase above
+2,500 needs the approval of a director before it is made. Claims are paid
+within 10 working days of approval.
+
+3. Rates by city
+The meal rate and the lodging cap depend on where the employee stays. The
+hardship factor multiplies the meal rate; a factor of 1.000 leaves it as it is.
+
+   City       Meals per day   Lodging per night   Monthly cap      Factor
+   Berlin                75                 180         1,100       1.000
+   Vienna                70                 165         1,000       1.000
+   Zurich                95                 240         1,250       1.250
+   Prague                55                 120           850       1.000
+   Warsaw                60                 130           900       1.125
+
+A stay in a city not listed here is claimed at the Berlin rates.
+
+4. Receipts
+Every claim above 25 needs a receipt. A claim without one is paid at the
+manager's discretion and never above 25.
+
+Uncontrolled when printed. The current edition is on the finance intranet.
+ACME OPERATIONS — EXPENSE POLICY
+Finance manual §7, 2026 edition, revision 3                        Page 2 of 2
+
+5. Payment
+Approved claims are reimbursed within ten (10) business days of the approval
+date, to the account on the employee's payroll record.
+
+6. Approval
+Claims are approved by the claimant's line manager. Claims by a director are
+approved by Priya Patel, Head of Finance.
+
+7. Exceptions
+Travel booked through the company account needs no claim.
+
+Uncontrolled when printed. The current edition is on the finance intranet.
+
