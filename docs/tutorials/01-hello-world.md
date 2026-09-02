@@ -293,12 +293,13 @@ If port 8080 is taken, the refusal tells you so and offers
 
 ```
 ksor serve · handbook
-  db        direct endpoint · local
-  audience  public
-  trust     unverified
-  auth      DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
-  abstain   OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
-  serving   http://127.0.0.1:8080/mcp
+  db          direct endpoint · local
+  audience    public
+  generation  1 · 7 nodes · source 5bfbaafd809e199e44453ad94837300cf6e4e0ad-dirty
+  trust       unverified
+  auth        DISABLED — 127.0.0.1 only, and a public bind will refuse to boot
+  abstain     OFF — no floor calibrated; out-of-corpus questions will be answered, not refused
+  serving     http://127.0.0.1:8080/mcp
 ```
 
 Read that `abstain` line — it is telling you the truth about what this record

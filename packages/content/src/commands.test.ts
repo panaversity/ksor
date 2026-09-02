@@ -59,8 +59,27 @@ describe("usageFor", () => {
     expect(block).not.toContain("ksor grant");
   });
 
-  it("matches the verb whole — `gc` never receives `grant`'s block", () => {
-    expect(usageFor("gc")).toContain("Reap generations");
-    expect(usageFor("gc")).not.toContain("Authorize ingest");
+  /**
+   * A heading matches only when it names the verb WHOLE, and the reachable case
+   * is a verb that does NOT exist: `ksor g --help` reaches `usageFor("g")` —
+   * the dispatcher answers `--help` before it knows the verb — and matching a
+   * heading by PREFIX printed `grant`'s block for it, exit 0: the binary
+   * documenting a verb it refuses to run. The whole usage is the honest answer.
+   *
+   * What this replaced asserted that `usageFor("gc")` never carries `grant`'s
+   * help, which no prefix rule could produce — "ksor grant" does not start with
+   * "ksor gc" — so it was green against the very code it claimed to guard
+   * (review finding 3).
+   */
+  it("a verb that only PREFIXES a real one gets the whole usage, not that verb's block", () => {
+    const block = usageFor("g");
+    expect(block, "`ksor g --help` must not be answered with `grant`'s block").not.toBe(
+      usageFor("grant"),
+    );
+    for (const verb of ["ksor schema", "ksor ingest", "ksor grant", "ksor gc"]) {
+      expect(block, `the whole usage lists every verb; ${verb} is missing:\n${block}`).toContain(
+        verb,
+      );
+    }
   });
 });

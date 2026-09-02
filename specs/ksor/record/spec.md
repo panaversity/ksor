@@ -379,12 +379,17 @@ the checker green over a hold that denied nothing, and
 argument verbatim made `--instance .` read the record's PARENT as the root and
 report `ksor-policy-missing` about a record whose policy was present, with a
 fix that overwrites it. `--list` and
-`--ledger` read and need no actor (decision 21), and need no database either:
-with no `database:` they answer from the committed ledger — the denials in
-force, and every entry with its id, which is what `--revoke` takes. With a
-`database:` `--list` reads the denylist rows in force and `--ledger` reads the
-§7 trail, which additionally records the apply. `--export` is removed, with
-`.ksor-denylist.json` and the scaffold's `export-denylist` step.
+`--ledger` read and need no actor (decision 21), and need no database either.
+`--ledger` is the FILE's history on every rung: it reads
+`.ksor/takedowns.yaml` and never resolves a DSN — every entry with its id,
+which is what `--revoke` takes. It read the database's §7 trail whenever the
+record declared a `database:`, so on the record `ksor init` emits — a
+`database:` named, its DSN not yet set — reading a committed file exited `3`
+demanding a connection string (found on a live walk, 2026-09-02). `--list` is a
+question about the DOOR, so it reads the denylist rows in force where the DSN is
+set, and otherwise answers from the ledger's denials LABELLED
+`not applied (no database)` rather than demanding one. `--export` is removed,
+with `.ksor-denylist.json` and the scaffold's `export-denylist` step.
 
 **One writer at a time, and the write is an APPEND.** The verb reads the
 ledger, decides what the act is, and writes — three steps that used to have

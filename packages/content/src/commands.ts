@@ -157,9 +157,15 @@ export function usageFor(command: string): string {
   // which the previous slice cut off, so `ingest --help` printed no
   // description and `calibrate --help` printed ingest's (round-3 review).
   const isHeading = (l: string): boolean => /^ {2}ksor \S/.test(l);
-  // The verb a heading names, whole: `gc` must not match `grant`'s heading by
-  // prefix, and a heading of the SAME verb is a second invocation form rather
-  // than the end of the block. `calibrate` has two — the measuring form and
+  // The verb a heading names, WHOLE, and a heading of the SAME verb is a second
+  // invocation form rather than the end of the block. Whole because `--help` is
+  // answered before the verb is known, so `ksor g --help` reaches this with a
+  // verb that does not exist: matching by prefix printed `grant`'s block for it
+  // under exit 0 — the binary documenting a verb it refuses to run — where the
+  // whole usage is the honest answer. (The comment here previously said `gc`
+  // must not match `grant` by prefix, which no prefix rule could produce, and
+  // the test that guarded it was green against the code it replaced — review
+  // finding 3.) `calibrate` has two — the measuring form and
   // `--check` — with its description under the second, and stopping at any
   // heading printed the first form's flags and not one sentence about what the
   // verb does; the paragraph was reachable only by getting the arguments wrong
