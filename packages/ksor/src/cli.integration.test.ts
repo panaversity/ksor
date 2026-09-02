@@ -538,3 +538,156 @@ describe("ksor takedown — the arguments an adopter actually types", () => {
     }
   });
 });
+
+/**
+ * The provider-key refusal opened with its sentence and exit 3 — a good
+ * sentence, and no stable first line, while every exit-1 refusal opens with
+ * `error: <slug>` (product principle 4). Exit 3 is an exit code, not a name;
+ * an agent branching on `stderr.split("\n")[0]` got prose from the one
+ * refusal a first-hour walk with no key meets first (found live, 2026-09-02).
+ */
+describe("a missing provider key names its rule first, on both planes", () => {
+  function keylessRecord(): string {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-keyless-"));
+    mkdirSync(path.join(root, "knowledge"), { recursive: true });
+    writeFileSync(
+      path.join(root, "instance.md"),
+      [
+        "---",
+        "format: 2",
+        "name: keyless",
+        'title: "Keyless"',
+        'description: "A record whose provider key is not in the environment."',
+        "database:",
+        "  dsn_env: KSOR_DB_URL",
+        "---",
+        "",
+        "Body.",
+        "",
+      ].join("\n"),
+    );
+    return root;
+  }
+
+  /** The DSN is SET (unreachable — nothing may connect), the key is not. */
+  function keylessEnv(): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      KSOR_DB_URL: "postgres://nobody@127.0.0.1:1/none",
+    };
+    delete env["GEMINI_API_KEY"];
+    return env;
+  }
+
+  it.each([["serve"], ["ingest"]])(
+    "ksor %s: exit 3, `error: ksor-provider-key-missing` first",
+    (verb) => {
+      const root = keylessRecord();
+      try {
+        const r = spawnSync(
+          process.execPath,
+          [distCli, verb, "--instance", path.join(root, "instance.md")],
+          { cwd: root, encoding: "utf8", env: keylessEnv() },
+        );
+        expect(r.status, `ksor ${verb}: ${r.stdout}${r.stderr}`).toBe(3);
+        expect(r.stderr.split("\n")[0], `ksor ${verb}`).toBe("error: ksor-provider-key-missing");
+        // The human message survives the slug: the variable, by name.
+        expect(r.stderr, `ksor ${verb} names the variable`).toContain("GEMINI_API_KEY");
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+});
+
+/**
+ * The record `ksor init` EMITS names its DSN variable from birth
+ * (`database.dsn_env: KSOR_DB_URL`) and a level-0 adopter never sets it. On
+ * that shape `--ledger` — a read of a committed file — exited 3 demanding a
+ * connection string, and so did `--list`, while three documents said neither
+ * needs a database. The level-0 test above uses a record with NO `database:`
+ * block, which is not the record anyone is handed (found on a live walk,
+ * 2026-09-02).
+ */
+describe("ksor takedown reads the ledger on the record init emits, with no DSN in the shell", () => {
+  const template = fileURLToPath(new URL("../templates/scaffold/instance.md", import.meta.url));
+
+  /** The emitted instance.md — the template, stamped as init stamps it — beside a policy and one document. */
+  function emittedRecord(): string {
+    const root = mkdtempSync(path.join(tmpdir(), "ksor-takedown-emitted-"));
+    mkdirSync(path.join(root, ".ksor"), { recursive: true });
+    mkdirSync(path.join(root, "knowledge", "policies"), { recursive: true });
+    const instance = readFileSync(template, "utf8")
+      .replaceAll("KSOR-STAMP-NAME", "emitted")
+      .replaceAll("KSOR-STAMP-VERSION", "0.0.0");
+    expect(
+      instance,
+      "the template still names a DSN variable — this suite is about that shape",
+    ).toContain("dsn_env: KSOR_DB_URL");
+    writeFileSync(path.join(root, "instance.md"), instance, "utf8");
+    writeFileSync(
+      path.join(root, ".ksor", "governance.yaml"),
+      'version: "0.1"\napproval_authorities:\n  - actors: [human:ciso]\ntakedown_authorities:\n  actors: [human:ciso]\n',
+      "utf8",
+    );
+    writeFileSync(path.join(root, "knowledge", "policies", "x.md"), "# X\n", "utf8");
+    return root;
+  }
+
+  /** No DSN anywhere: the level-0 shell. */
+  function dsnlessEnv(): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    delete env["KSOR_DB_URL"];
+    return env;
+  }
+
+  const run = (root: string, ...args: readonly string[]) =>
+    spawnSync(process.execPath, [distCli, "takedown", "--instance", root, ...args], {
+      cwd: root,
+      encoding: "utf8",
+      env: dsnlessEnv(),
+    });
+
+  it("--ledger and --list answer from .ksor/takedowns.yaml; a denial needs --file-only and says so", () => {
+    const root = emittedRecord();
+    try {
+      // The act, without a database: refused by name, with the flag that
+      // records the entry now named in the fix — the act is not weakened.
+      const bare = run(root, "--actor", "human:ciso", "--reason", "legal", "knowledge/policies/x");
+      expect(bare.status, bare.stdout + bare.stderr).toBe(1);
+      expect(bare.stderr.split("\n")[0]).toBe("error: ksor-takedown-dsn-missing");
+      expect(bare.stderr, "the remedy names --file-only").toContain("--file-only");
+
+      const denied = run(
+        root,
+        "--actor",
+        "human:ciso",
+        "--reason",
+        "legal",
+        "--file-only",
+        "knowledge/policies/x",
+      );
+      expect(denied.status, denied.stdout + denied.stderr).toBe(0);
+
+      // A read of a committed file never asks for a connection string.
+      const ledger = run(root, "--ledger");
+      expect(ledger.status, ledger.stdout + ledger.stderr).toBe(0);
+      expect(ledger.stderr, "no DSN was demanded").not.toMatch(/KSOR_DB_URL|dsn_env/);
+      expect(ledger.stdout).toContain("takedown_denied");
+      expect(ledger.stdout).toContain("human:ciso");
+      expect(ledger.stdout, "the entry id --revoke takes").toMatch(/"ledger_id":"[^"]+"/);
+
+      // …and what is denied is listed as the LEDGER's word, labelled as such:
+      // no row exists for a door to refuse on, and the line must not read as
+      // if one did.
+      const list = run(root, "--list");
+      expect(list.status, list.stdout + list.stderr).toBe(0);
+      expect(list.stderr, "no DSN was demanded").not.toMatch(/KSOR_DB_URL|dsn_env/);
+      expect(list.stdout).toContain("knowledge/policies/x");
+      expect(list.stdout).toContain("not applied (no database)");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+});

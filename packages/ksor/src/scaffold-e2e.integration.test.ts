@@ -2,7 +2,6 @@
 // The page.evaluate callback runs in the browser; only this file needs DOM types.
 import { spawn, spawnSync } from "node:child_process";
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -17,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildScaffold } from "./e2e-build.js";
+import { e2eSkipNote } from "./e2e-gate.js";
 import { cleanupLocalKsor, expectLocalKsorResolved, injectLocalKsor } from "./e2e-local-ksor.js";
 import { starterApprover } from "./e2e-starter.js";
 
@@ -166,6 +166,55 @@ ${body}
 
   const write = (name: string, text: string): void =>
     writeFileSync(path.join(project, "knowledge", `${name}.md`), text);
+
+  /**
+   * Append to a COMMITTED `stable` concept the way the record obliges an
+   * adopter to: in ONE write, advance `generated.at` to an instant after the
+   * edit and re-approve at the same instant.
+   *
+   * `generated.at` dates the TEXT and `ksor.approval.at` ratifies the text of
+   * that date, so editing a stable body without moving the stamp makes the
+   * approval that ratified the old sentence read as ratifying the new one —
+   * which `ksor build` now refuses (`ksor-generated-stale`, KSP R23). This
+   * suite is that rule's first real catch: it appended a hot-reload marker to
+   * a committed starter and left the stamp, and every later `buildScaffold`
+   * refused. The FIXTURE was wrong, not the rule, so the obligation lives in a
+   * helper rather than at the one call site that has it today — the next edit
+   * to a committed stable body inherits it instead of rediscovering it.
+   *
+   * Re-dating (rather than demoting the document to `draft`, or editing only
+   * frontmatter) is the option that keeps the rule armed over the walkthrough's
+   * own record: the starter stays stable, stays approved, stays published to
+   * every surface the later clauses assert, and the check still runs against
+   * its committed history on every build.
+   */
+  const appendToStable = (name: string, appended: string): void => {
+    const file = path.join(project, "knowledge", `${name}.md`);
+    const before = readFileSync(file, "utf8");
+    // Whole seconds with an explicit offset — the only instant form the
+    // profile reads (`ksor-instant-form`, record spec §2.4).
+    const at = `${new Date().toISOString().slice(0, 19)}Z`;
+    const fence = before.indexOf("\n---\n", 4);
+    expect(
+      fence,
+      `${name}.md: no closing frontmatter fence in:\n${before.slice(0, 400)}`,
+    ).toBeGreaterThan(0);
+    // Only the two stamps this edit invalidates. A `verified` entry carries an
+    // `at` of its own and dates somebody else's act, so it is left alone.
+    const redated = before
+      .slice(0, fence)
+      .split("\n")
+      .map((line) =>
+        /^\s*(generated|approval):/.test(line) ? line.replace(/at: [^,}\s]+/, `at: ${at}`) : line,
+      )
+      .join("\n");
+    const stamps = redated.split(`at: ${at}`).length - 1;
+    expect(
+      stamps,
+      `expected \`generated.at\` and \`ksor.approval.at\` to be re-dated in:\n${redated}`,
+    ).toBe(2);
+    writeFileSync(file, redated + before.slice(fence) + appended);
+  };
 
   /** The visible text of a built page's article, tags and scripts stripped. */
   const visible = (route: string): string => {
@@ -452,7 +501,9 @@ ${body}
         "the dev server must be this project's",
       ).toContain("- name: walkthrough");
       const marker = "hot-reload-proof-4173";
-      appendFileSync(path.join(project, "knowledge", "what-is-a-ksor.md"), `\n${marker}\n`);
+      // A committed, approved starter — so the edit re-dates it (see
+      // `appendToStable`), which is what an adopter's own agent has to do.
+      appendToStable("what-is-a-ksor", `\n${marker}\n`);
       try {
         await expect
           .poll(async () => (await fetch(url)).text(), { timeout: 60_000, interval: 2_000 })
@@ -1643,7 +1694,7 @@ function walkOut(dir: string): string[] {
 }
 
 describe.runIf(!enabled)("scaffold e2e (gated)", () => {
-  it("skipped — set KSOR_E2E=1 to run the full scaffold walkthrough", () => {
-    expect(enabled).toBe(false);
+  it("the full scaffold walkthrough, in a real browser", (ctx) => {
+    ctx.skip(e2eSkipNote("packages/ksor/src/scaffold-e2e.integration.test.ts"));
   });
 });

@@ -15,13 +15,19 @@
  * disabled" and "abstain OFF" are the two lines that actually need to be seen.
  */
 
+import type { PublishedGeneration } from "@panaversity/ksor-content";
+
 /**
  * The column values start at, measured from the label — the two-space indent is
  * added on top. It must stay STRICTLY GREATER than the longest label the report
  * prints, which `boot-report.integration.test.ts` asserts against the real call
  * sites rather than against a list someone has to remember to update.
+ *
+ * 12, not 10, since `generation` joined the block (2026-09-02): ten characters
+ * exactly filled the old field, which is the crooked case review finding 63
+ * describes. Every documented block moved two columns with it.
  */
-export const VALUE_COLUMN: number = 10;
+export const VALUE_COLUMN: number = 12;
 
 /**
  * A label that does not FIT the column still gets a space. `padEnd` returns the
@@ -42,6 +48,45 @@ export function bootLine(label: string, text: string): string {
 
 export function bootHeader(corpusId: string): string {
   return `ksor serve · ${corpusId}`;
+}
+
+/**
+ * What this door is SERVING — or that it is serving nothing.
+ *
+ * The block said db, audience, trust, auth, abstain, serving and came up green
+ * on a provisioned record nobody had ever ingested, which is exactly where
+ * `ksor init`'s own next steps leave an adopter who skipped the publish step.
+ * Every search then answered `reason: "unpublished"`, correctly, to an agent —
+ * and nothing had told the operator (found live, 2026-09-02). The absence is
+ * stated in capitals like the other two lines that decide trust, and the
+ * remedy travels with it.
+ */
+export function generationPosture(
+  published: PublishedGeneration | null,
+  /** The publish step, spelled for the manager that ran this process — `refreshCommand`. */
+  refresh: string,
+): string {
+  if (published === null) return `NONE — nothing published; run ${refresh}`;
+  const { generation, nodes, sourceCommit } = published;
+  return `${generation} · ${nodes} ${nodes === 1 ? "node" : "nodes"} · source ${sourceCommit}`;
+}
+
+/**
+ * The publish step, in the words of the manager that spawned this process.
+ *
+ * `npm_config_user_agent` is the same signal `ksor init` reads to emit the
+ * adopter's scaffold (#28): every manager sets it for the scripts it runs, so
+ * `npm run serve` is told `npm run refresh` rather than a pnpm spelling its
+ * scaffold does not carry. No manager in the loop — `ksor serve` typed
+ * directly, a container entrypoint — names the VERB, which is the name every
+ * runbook here uses for the individual step (AGENTS.md → Vocabulary).
+ */
+export function refreshCommand(userAgent: string | undefined): string {
+  const head = (userAgent ?? "").split("/")[0]?.trim();
+  if (head === "pnpm") return "pnpm refresh";
+  if (head === "npm") return "npm run refresh";
+  if (head === "bun") return "bun run refresh";
+  return "ksor ingest --flip";
 }
 
 /**

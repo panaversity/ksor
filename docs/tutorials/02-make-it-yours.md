@@ -357,7 +357,7 @@ whole job.
 
 **What is not done yet.** The abstention floor is still unmeasured, so the
 door answers questions outside the record instead of declining them — that is
-tutorial 4, with the served rung. And `late-claims.md` has an open question
+[tutorial 4, Serve it — with a floor](./04-serve-it.md). And `late-claims.md` has an open question
 with Priya's name on it. She should answer it, and the answer should arrive the
 way everything else did: her words, a new approval, a new build.
 

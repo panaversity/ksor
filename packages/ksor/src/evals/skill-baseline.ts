@@ -12,6 +12,10 @@
  * baseline. If the harness changes in a way that makes rows incomparable —
  * the prompt, the graders, the fixture — say so in `note` on the first new
  * row, the way run 3 does.
+ *
+ * The two fixtures `CASES` gained after run 3 — `expense-policy-hard.pdf` and
+ * `scanned-policy.pdf` — have no row yet: the second fixture's first armed run
+ * is pending, and its row lands with the run that produces it, never before.
  */
 
 export interface SkillArmResult {

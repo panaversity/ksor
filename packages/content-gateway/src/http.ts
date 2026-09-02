@@ -40,6 +40,7 @@ import { runProbe, withProbeDeadline } from "@panaversity/ksor-content";
 import {
   abstainPosture,
   authPosture,
+  generationPosture,
   snapshotPosture,
   bootLine,
   UNDESCRIBED_RECORD,
@@ -302,10 +303,11 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
       // only the probe let /ready answer in 10.25s while claiming 8 (found
       // live, 2026-08-21).
       verdict: withProbeDeadline(
+        // The probe's statement reads what is PUBLISHED rather than `SELECT 1`:
+        // one round trip either way, and /health then reports a refresh that
+        // happened after boot instead of the generation the boot saw.
         (verifyBoot === null ? Promise.resolve() : verifyBoot()).then(() =>
-          runProbe(pool, instance.tenantId, (client) =>
-            client.query("SELECT 1 FROM corpora LIMIT 1"),
-          ),
+          runProbe(pool, instance.tenantId, (client) => composition.probePublished(client)),
         ),
       ).then(
         () => ({ ok: true }) as const,
@@ -402,6 +404,12 @@ export async function runHttp(composition: Composition): Promise<ServerType> {
         ? "passed"
         : "NOT PASSED — every request is being refused until schema, governance, the audience " +
           "list and the embedding space all verify; the reason is in this server's logs",
+      // What is being served, by the SAME function as the boot line — a door
+      // serving nothing said nothing here either, and a person curling /health
+      // after skipping `refresh` read a body with every field green.
+      generation: bootVerified()
+        ? generationPosture(composition.published, composition.refreshHint)
+        : "not resolved — boot checks have not passed",
       // The SAME decision as the boot line, taken by the same function: this
       // was a second hand-written copy of the ladder and it had the same hole —
       // a floor with no digest reported as `floor 0.631` on a door refusing

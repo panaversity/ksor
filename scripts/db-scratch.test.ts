@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { REAP_AFTER_MS, parseScratchName } from "./lib/db-scratch.js";
+import { REAP_AFTER_MS, parseScratchName, sampleScratchName } from "./lib/db-scratch.js";
 
 const NOW = Date.UTC(2026, 7, 30, 12, 0, 0);
 const stamp = (at: number): string => at.toString(36);
@@ -56,15 +56,53 @@ describe("parseScratchName refuses anything it cannot prove is ours", () => {
   });
 });
 
-describe("the shape guard rule 12 requires", () => {
-  it("evaluates to a name the reaper can parse", () => {
-    // The two halves of the contract meeting. Rule 12 makes every suite write
-    // a name carrying `Date.now().toString(36)` and a `randomBytes` suffix;
-    // this is that name, evaluated, being one the reaper recognises. The guard
-    // asserts the same round trip itself, so a change to either side fails
-    // twice rather than silently leaking every scratch database forever.
-    const built = `ksor_idle_${Date.now().toString(36)}_${"3f2c8e"}`;
-    expect(parseScratchName(built)).not.toBeNull();
+describe("sampleScratchName evaluates the expression a suite wrote", () => {
+  // Written as source text, not as a template literal this file would itself
+  // evaluate: the sampler's input is what the guard captures from a suite.
+  const STAMP = "${Date.now().toString(36)}";
+  const RANDOM = '${randomBytes(3).toString("hex")}';
+
+  it("turns the tier's literal into the name that suite will mint", () => {
+    const sample = sampleScratchName("`ksor_idle_" + STAMP + "_" + RANDOM + "`", NOW);
+    expect(sample).toBe(`ksor_idle_${stamp(NOW)}_012345`);
+    expect(parseScratchName(sample ?? "", NOW)?.createdAtMs).toBe(NOW);
+  });
+
+  it("evaluates the join form the reaper suite assembles by hand", () => {
+    const sample = sampleScratchName(
+      '["ksor", slug, (Date.now() - agoMs).toString(36), randomBytes(3).toString("hex")].join("_")',
+      NOW,
+    );
+    expect(sample).toBe(`ksor_x_${stamp(NOW)}_012345`);
+    expect(parseScratchName(sample ?? "", NOW)).not.toBeNull();
+  });
+
+  it("stands an interpolation it cannot evaluate in as slug material", () => {
+    const sample = sampleScratchName("`ksor_role_race_${n}_" + STAMP + "_" + RANDOM + "`", NOW);
+    expect(sample).toBe(`ksor_role_race_x_${stamp(NOW)}_012345`);
+    expect(parseScratchName(sample ?? "", NOW)).not.toBeNull();
+  });
+
+  it("gives randomBytes(2) its real four hex characters, which the reaper refuses", () => {
+    // The defect this exists for: `randomBytes(` is present, so a text check
+    // passes, and the name it mints is one no reaper will ever drop.
+    const sample = sampleScratchName(
+      "`ksor_idle_" + STAMP + '_${randomBytes(2).toString("hex")}`',
+      NOW,
+    );
+    expect(sample).toBe(`ksor_idle_${stamp(NOW)}_0123`);
+    expect(parseScratchName(sample ?? "", NOW)).toBeNull();
+  });
+
+  it("gives a trailing interpolation its place, where it displaces the random field", () => {
+    const sample = sampleScratchName("`ksor_idle_" + STAMP + "_" + RANDOM + "_${suffix}`", NOW);
+    expect(sample).toBe(`ksor_idle_${stamp(NOW)}_012345_x`);
+    expect(parseScratchName(sample ?? "", NOW)).toBeNull();
+  });
+
+  it("answers null for an expression that is neither shape", () => {
+    expect(sampleScratchName('"ksor_idle_test"', NOW)).toBeNull();
+    expect(sampleScratchName("scratchDb()", NOW)).toBeNull();
   });
 });
 

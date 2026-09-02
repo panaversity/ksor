@@ -186,6 +186,10 @@ describe("deferred boot checks gate the door, not just the probe", () => {
       storedTextSearchConfig: "deferred",
       assertGovernanceServable: "deferred",
       servingPolicy: "deferred",
+      // What is being served — a row, so it sits beside the policy in the set:
+      // the boot line and /health say NONE on a never-ingested record instead
+      // of coming up green about nothing.
+      publishedGeneration: "deferred",
       // Moved into the set (review finding 3): it was the one fail-closed check
       // that a cold start turned OFF for the life of the process, so a door that
       // recovered served cosine across two embedding spaces with the calibrated

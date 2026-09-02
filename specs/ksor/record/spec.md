@@ -1,5 +1,5 @@
 ---
-status: draft
+status: ratified
 date: 2026-08-25
 claim: a system of record is where the official version lives, and vendor-free is the ownership argument — a record that is literally an open bundle any OKF consumer can read with no ksor in the loop is the strongest form of "what a customer owns is the source"
 ---
@@ -32,12 +32,15 @@ hold; every timestamp in that revision is an instant.
 | `instance.md`                         | the instance document (§3) — **beside** the bundle, not in it                                                                                                                                                                      |
 | `.ksor/governance.yaml`               | the Governance Policy (§4) — committed; the root of authority                                                                                                                                                                      |
 | `.ksor/takedowns.yaml`                | the takedown ledger (§5) — committed, append-only                                                                                                                                                                                  |
+| `.ksor/people.yaml`                   | the phone book — actor id to display name; committed, hashed into `build_id` as `people_sha256` (build spec §2), confers no authority (decision 8 revision 2026-09-01)                                                             |
 | `.ksor/out/`                          | build output, ignored                                                                                                                                                                                                              |
 | `build.lock.json`                     | written by `ksor build`, committed (build spec)                                                                                                                                                                                    |
 
 The scaffold `.gitignore` reads `.ksor/*`, `!.ksor/governance.yaml`,
-`!.ksor/takedowns.yaml` (the directory form `.ksor/` cannot be negated —
-verified against git). The bundle root is `knowledge/`, so a bare OKF
+`!.ksor/people.yaml`, `!.ksor/takedowns.yaml` (the directory form `.ksor/`
+cannot be negated — verified against git). _2026-09-02: the phone book's
+negation was missing from this sentence; it has been emitted since 0.0.52
+(`1e60b9d`, the commit that added the file, added the negation with it)._ The bundle root is `knowledge/`, so a bare OKF
 consumer handed that directory sees a conformant bundle and nothing of the
 site or the system. Identity: a concept's id is its bundle-relative path
 without `.md` (OKF §2); ksor's `stable_id` is `knowledge/<id>`. `sor_id` is
@@ -97,9 +100,33 @@ badly — it makes the bullet unreadable and drops the concept from the index,
 the sidebar and the reading order while its page stays published and the door
 keeps serving it. **On reserved types:** `sources`, `ksor.owner`. **When
 `stable`:** `generated` (with `at`) and `ksor.approval`, with `generated.at
-<= ksor.approval.at` (R23 — a comparison of two authored instants; whether an
-edit updated `generated.at` is the author's obligation until change-control
-verification lands, plan §4.2). **When `deprecated`:** `ksor.deprecated:
+<= ksor.approval.at` (R23 — a comparison of two authored instants), and —
+wherever a checkout with history is at hand — a body that has not changed
+since any committed version of the same path that was `stable`, unless
+`generated.at` is strictly LATER than that version's (`ksor-generated-stale`,
+R23's other half: the stamp dates the text, so an edit must ADVANCE it, and
+the advanced stamp then needs a fresh approval by the first rule). An
+unchanged stamp and a backdated one refuse alike — moving a stamp backward
+changes it without advancing it, and leaves the old approval post-dating the
+new text. Only the body is compared — the bytes after the closing
+fence, line endings and trailing whitespace normalised — so a frontmatter-only
+edit (a `verified` entry, a re-approval) is not a change to the text the stamp
+dates. Every committed version is read, not HEAD's alone: an edit committed
+without a bump matches HEAD and it is the version behind it that tells — and
+a body committed under a stamp and then reverted still refuses, because that
+stamp now names two texts; the printed remedy (move the stamp, re-approve)
+clears it, and rewriting history is never asked for. A path
+with no committed stable version passes — stable for the first time, or
+renamed, since path is identity. The check is run beside the checker by the
+two publishing verbs — `ksor build` and `ksor ingest` — and never by the
+emitted `check.mjs` (the format gate reads no document history) nor by a
+staged tree;
+where history cannot be read (no
+repository, no commit yet, a shallow boundary) each prints `change-control:
+not checked` (or how many versions a shallow clone let it read) beside its
+verdict, and never passes a check that did not run. WHO reviewed a commit
+(R22, R25) is still unverified, and `approval.checked` stays `policy`.
+**When `deprecated`:** `ksor.deprecated:
 { by, at }` by the resolved owner or a takedown authority (R23's last
 sentence), and usually `ksor.superseded_by`. `verified` is never required: a
 stable, approved, unverified concept is the honest state and sits at tier
@@ -379,12 +406,17 @@ the checker green over a hold that denied nothing, and
 argument verbatim made `--instance .` read the record's PARENT as the root and
 report `ksor-policy-missing` about a record whose policy was present, with a
 fix that overwrites it. `--list` and
-`--ledger` read and need no actor (decision 21), and need no database either:
-with no `database:` they answer from the committed ledger — the denials in
-force, and every entry with its id, which is what `--revoke` takes. With a
-`database:` `--list` reads the denylist rows in force and `--ledger` reads the
-§7 trail, which additionally records the apply. `--export` is removed, with
-`.ksor-denylist.json` and the scaffold's `export-denylist` step.
+`--ledger` read and need no actor (decision 21), and need no database either.
+`--ledger` is the FILE's history on every rung: it reads
+`.ksor/takedowns.yaml` and never resolves a DSN — every entry with its id,
+which is what `--revoke` takes. It read the database's §7 trail whenever the
+record declared a `database:`, so on the record `ksor init` emits — a
+`database:` named, its DSN not yet set — reading a committed file exited `3`
+demanding a connection string (found on a live walk, 2026-09-02). `--list` is a
+question about the DOOR, so it reads the denylist rows in force where the DSN is
+set, and otherwise answers from the ledger's denials LABELLED
+`not applied (no database)` rather than demanding one. `--export` is removed,
+with `.ksor-denylist.json` and the scaffold's `export-denylist` step.
 
 **One writer at a time, and the write is an APPEND.** The verb reads the
 ledger, decides what the act is, and writes — three steps that used to have
@@ -518,6 +550,9 @@ duplicate key, non-plain tag, second document, non-mapping),
 `description`, §2.2), `ksor-audience-missing`, `ksor-audience-unregistered`,
 `ksor-stable-ungenerated`, `ksor-stable-unapproved`,
 `ksor-approver-unauthorised`, `ksor-generated-after-approval`,
+`ksor-generated-stale` (§2.2 — the one rule that reads git history, run
+beside `checkRecord` by `ksor build` and `ksor ingest`, each of which says
+when it could not run; the emitted `check.mjs` does not run it),
 `ksor-deprecated-unattributed`, `ksor-deprecator-unauthorised`,
 `ksor-reserved-type-unsourced`, `ksor-reserved-type-unowned`,
 `ksor-source-unresourced`, `ksor-actor-form` (§2.3 — the four
@@ -591,6 +626,27 @@ and lock refusals (`ksor-viewer-omits-public`, `ksor-viewer-unregistered`,
 checker (build spec §3).
 
 ## 7 · Acceptance
+
+_Ratified 2026-09-02: every line below has a suite in the tree, walked at this
+date. 1 `ksor/src/checker-drift.integration.test.ts` ("every refusal the record
+checker can raise has a fixture record"; kernel and emitted `check.mjs` judge it
+identically) with `record-module-drift.integration.test.ts` for the site's
+copies, and `record/refusal-slugs.integration.test.ts` holding `REFUSAL_SLUGS`
+to §6's list. 2 `lib/lifecycle-conformance.db.test.ts` and the audience table's
+db suite. 3 `ksor/src/site-staging.integration.test.ts` ("[public] with a fresh
+lock: … leaks nothing"). 4 `record/index-file.test.ts` (the golden),
+`index-file.integration.test.ts` (the vendored §8 example) and
+`checker-drift.integration.test.ts` (a stale index refused, nothing written).
+5 `ksor/src/migrate.integration.test.ts` — the pre-profile starter fixture,
+`--approve-by`, the tier expansion, and "the repository's own fixture corpus is
+a migrated record". 6 `ksor/src/okf-reader.integration.test.ts`, whose only
+imports are `node:*`, `vitest` and `yaml`. 7 `record/ledger.test.ts`
+(dangling, readded), `record/git-ledger.integration.test.ts` (a tampered or
+deleted entry against history), `build.integration.test.ts:582`
+(`ksor-takedown-dangling` first on stderr), and the door's half in
+`governance-gate.db.test.ts`, `ingest/unledgered.db.test.ts` and
+`content-gateway/src/refusal-governance.db.test.ts`. The OKF pin holds:
+`okf-SPEC.md` is 37,748 bytes at sha256 `26aa5da0…`._
 
 1. A fixture of profile documents — every valid shape in §2 (a mixed-audience
    folder with its committed index included), one document per refusal in

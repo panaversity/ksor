@@ -469,7 +469,64 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     pinnedGeneration: null,
   };
 
-  // Query embed BEFORE any DB connection; any failure except an empty
+  // Is anything PUBLISHED at all? Asked FIRST, before the query is embedded.
+  //
+  // A record with NO PUBLISHED GENERATION is its own answer: nothing has ever
+  // been ingested, so every question gets "the record does not cover this" and
+  // the agent states it as fact about a record that is simply empty. Following
+  // `ksor init`'s own next-steps reaches this state — it provisions and serves
+  // without publishing — and /ready answered {"ready":true} the whole time
+  // (round-7 review of #43, reproduced live). The question used to be asked
+  // only on the empty path, AFTER the embed — so with the provider dead an
+  // empty record reported the provider's outage (`unavailable`) rather than
+  // its own emptiness, and README's promise of `reason: "unpublished"` was
+  // false in exactly the state a first-hour walk reaches; with the provider
+  // up, it was paid for a question no row could match (found live,
+  // 2026-09-02). One round trip per search is what the honest answer costs.
+  const activeGeneration = await runRead(
+    ctx.pool,
+    inst.tenantId,
+    async (client) => {
+      const r = await client.query(
+        "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
+        [inst.tenantId, inst.corpusId],
+      );
+      return Number(r.rows[0]?.active_generation ?? 0);
+    },
+    servingScope(ctx),
+  );
+  if (activeGeneration === 0) {
+    const audited = await logRead(ctx.pool, {
+      tenantId: inst.tenantId,
+      corpusId: inst.corpusId,
+      actor,
+      action: "search_abstained",
+      instanceDigest: ctx.instanceDigest,
+      detail: {
+        ...actScope(ctx),
+        abstained: true,
+        result_count: 0,
+        query_chars: queryChars,
+        k,
+        k_effective: kb,
+        top_cosine: null,
+        degraded: false,
+      },
+    });
+    return {
+      ok: false,
+      abstained: false,
+      reason: "unpublished",
+      gate: gateState(inst),
+      top_cosine: null,
+      hits: [],
+      snapshot: null,
+      ...(kNote === undefined ? {} : { k_note: kNote }),
+      ...(audited ? {} : { audit: "degraded" as const }),
+    };
+  }
+
+  // Query embed BEFORE any further DB work; any failure except an empty
   // query DEGRADES to keyword-only — never a 500 (embed outage is the
   // provider's incident, not the record's).
   let queryVector: readonly number[] | string | null = null;
@@ -560,30 +617,6 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
         degraded: degradedReason !== undefined,
       },
     });
-    // A record with NO PUBLISHED GENERATION is a third thing again: nothing has
-    // ever been ingested, so every question gets "the record does not cover
-    // this" and the agent states it as fact about a record that is simply
-    // empty. Following `ksor init`'s own next-steps reaches this state — it
-    // provisions and serves without publishing — and /ready answered
-    // {"ready":true} the whole time (round-7 review of #43, reproduced live).
-    //
-    // Asked ONLY on the empty path, where there is nothing to pin, so a served
-    // answer pays nothing for it.
-    const unpublished =
-      generation === undefined &&
-      (await runRead(
-        ctx.pool,
-        inst.tenantId,
-        async (client) => {
-          const r = await client.query(
-            "SELECT active_generation FROM corpora WHERE tenant_id = $1 AND corpus_id = $2",
-            [inst.tenantId, inst.corpusId],
-          );
-          return Number(r.rows[0]?.active_generation ?? 0) === 0;
-        },
-        servingScope(ctx),
-      ));
-
     // "The record does not cover this" and "I could not look properly" are
     // DIFFERENT answers, and only the first is an abstention. When the embed
     // provider is down the vector arm did not run at all, so an empty result is
@@ -603,9 +636,10 @@ export async function search(ctx: ServiceContext, query: string, k = 10): Promis
     // invalid key — the same state a CI key rejection produced that morning.
     //
     // The floor is irrelevant to the question being asked here. What matters is
-    // whether we were able to look.
+    // whether we were able to look. (An UNPUBLISHED record answered above,
+    // before anything was embedded.)
     const unavailable = embedFailed;
-    const reason = unavailable ? "unavailable" : unpublished ? "unpublished" : "abstained";
+    const reason = unavailable ? "unavailable" : "abstained";
     return {
       ok: false,
       abstained: reason === "abstained",

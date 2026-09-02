@@ -497,9 +497,14 @@ runs over every entry in the ledger at `pnpm check`, `ksor build` and ingest, so
 a line appended by hand in a pull request is refused exactly as the verb would
 refuse it. The read-only modes
 (`--list`, `--ledger`) need no actor — nobody is performing an act by looking.
-They do not need a database either: on a record that declares none they read
-the committed `.ksor/takedowns.yaml`, which is the whole record of the act
-anyway.
+They do not need a database either: `--ledger` always reads the committed
+`.ksor/takedowns.yaml`, which is the record of every act, and `--list` reads
+the door's denylist rows when `KSOR_DB_URL` is set and otherwise the ledger's
+denials, each labelled `not applied (no database)` because no row exists for
+a door to refuse on. A denial itself, on this record with `KSOR_DB_URL` unset,
+is refused by name (`ksor-takedown-dsn-missing`) unless `--file-only` records
+the entry alone — `--apply` writes its row later, where the database is
+reachable.
 
 **The MCP door stops serving it immediately. The SITE stops at its next
 build** — the site reads the committed ledger (`.ksor/takedowns.yaml`), not
@@ -611,7 +616,14 @@ CI — and a first deploy without it serves an empty record. Full walkthrough:
   audiences registered in `.ksor/governance.yaml`; never omitted, never
   inferred). A `stable` document carries `generated: { by, at }` and
   `ksor.approval: { by, at }` by an actor the policy authorises, with
-  `generated.at` no later than the approval; a `deprecated` one carries
+  `generated.at` no later than the approval — and `generated.at` dates the
+  TEXT: edit a stable document's body and `ksor build` and `ksor ingest`
+  compare it against every committed version that was stable, and refuse
+  `ksor-generated-stale` until you move the stamp PAST the edit and re-approve
+  — leaving the stamp alone and backdating it are refused alike, because
+  neither advances it (a frontmatter-only edit, such as adding a `verified`
+  entry, is not a body change; `pnpm check` reads no document history, so it passes an
+  edit the build will refuse); a `deprecated` one carries
   `ksor.deprecated: { by, at }` and usually `ksor.superseded_by: <id>`
   (a stable document every reader of this one may read). Optional: `order`
   (reading position), `sources` (`{ id, resource, title }`, cited in the body

@@ -16,6 +16,7 @@ export const REFUSAL_SLUGS = [
   "ksor-stable-unapproved",
   "ksor-approver-unauthorised",
   "ksor-generated-after-approval",
+  "ksor-generated-stale",
   "ksor-deprecated-unattributed",
   "ksor-deprecator-unauthorised",
   "ksor-reserved-type-unsourced",

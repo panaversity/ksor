@@ -82,6 +82,11 @@ function historyBaseline(): LedgerBaseline[] {
   return [{ source: "git history", entries: facts.historicLedger }];
 }
 
+// KSP R23 (`ksor-generated-stale`) is NOT run here. It reads every committed
+// version of a stable concept, and this checker is the format gate an agent
+// runs after each edit; the publishing verbs — `ksor build` and `ksor ingest`
+// — are where a stamp is verified against history, so an edit this gate
+// passes can still be refused there.
 const record = checkRecord(loadRecord(root), {
   mode: "check",
   ledgerBaselines: [...historyBaseline(), ...lockBaseline()],

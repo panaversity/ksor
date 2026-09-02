@@ -152,6 +152,11 @@ describe("the emitted check.mjs judges the conformance fixture exactly as the ke
       // migrate/rules.test.ts, which cover a missing title, a missing
       // description, an underivable `generated.at` and an unattributed denial.
       "ksor-migrate-underivable": "migrate.integration.test.ts",
+      // Reads git history, which a text map cannot carry, and runs in the
+      // publishing verbs rather than the emitted checker: reached against
+      // `ksor build` in build.integration.test.ts and against `ksor ingest`
+      // in content's change-control.db.test.ts.
+      "ksor-generated-stale": "build.integration.test.ts (KSP R23 describe)",
     };
     const uncovered = REFUSAL_SLUGS.filter((s) => !covered.has(s) && elsewhere[s] === undefined);
     expect(uncovered, `slugs with no fixture record: ${uncovered.join(", ")}`).toEqual([]);

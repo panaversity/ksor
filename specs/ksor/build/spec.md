@@ -55,9 +55,19 @@ the contract and performs nothing.
    and bullets). Every status and every audience is listed: this is the
    record's own map, and anyone with the repository has the files.
 2. **Check.** Runs the record checker (record spec §6) against the tree with
-   the fresh indexes. Any refusal exits `1` with the slug on the first
-   stderr line; nothing is written, so a red build leaves the tree as it
-   found it.
+   the fresh indexes, and beside it the change-control check against git
+   history (record spec §2.2, `ksor-generated-stale`): a `stable` body that
+   differs from a committed version stable under a `generated.at` this tree
+   has not advanced past — the same instant, or one moved backward —
+   refuses here as it does at ingest (the emitted `check.mjs` does not run
+   it — it is the format gate, and reads no document history). Any refusal exits
+   `1` with the slug on the first stderr line; nothing is written, so a red
+   build leaves the tree as it found it. Where history cannot be read —
+   outside a repository, before the first commit, or on a shallow clone
+   admitted by `--allow-unverifiable-ledger` — stdout carries
+   `change-control: not checked — …` (or `checked against the N committed
+version(s) this shallow clone holds`) beside the provenance line, and the
+   build never counts a check that did not run as passed.
 3. **Write.** Index files whose bytes changed — and delete a committed index
    whose directory earns none, since it would be stale forever — then
    `build.lock.json` (§2). Stdout names every file written and the
@@ -301,7 +311,17 @@ diffs (decision 4).
    no index and no lock written; a stale index alone is never a refusal
    here; a dirty input is refused only under `--strict`, and a stale
    COMMITTED index is one — `--strict` refuses it and a loose build that
-   rewrites it stamps `dirty: true`.
+   rewrites it stamps `dirty: true`. A stable body edited under an unmoved
+   or BACKDATED `generated.at` is `ksor-generated-stale` — uncommitted, or
+   committed without a bump and built on a clean tree — naming the commit
+   whose body differs and the stamp, with a bump alone then refused
+   `ksor-generated-after-approval` and bump plus re-approval building; a
+   frontmatter-only edit, a concept stable for the first time and a renamed
+   one are not refused; a body committed only in a hand-resolved MERGE — in
+   neither parent — is compared too, and the merge is the commit named; a record below its repository root is read at its
+   own path; a repository with no commit builds and prints `change-control:
+not checked`, a shallow clone under `--allow-unverifiable-ledger` prints
+   how many versions it read.
 4. After a `[public]` site build: `llms.txt`, `llms-full.txt`, `/md/index.md`
    and `server.json` carry the lock's stamps; no draft appears in any page,
    sidebar entry, search entry or machine artefact; `out/` contains no byte
@@ -319,7 +339,18 @@ diffs (decision 4).
    contains no byte of it, read back by a bare OKF parser; the `internal`
    bundle contains both.
 
-## 5 · Out of scope
+## 5 · Status against acceptance (2026-09-02)
+
+Walked against the built CLI at this date. `ksor build --help` prints the §1
+contract; on `workbench/example-corpus` the lock carries exactly the §2 keys
+(`format` 1, `okf.commit` `ad30107c…`, `spec_sha256` `26aa5da0…`). Acceptance
+1–5 are asserted by `packages/ksor/src/build.integration.test.ts`,
+`site-staging.integration.test.ts` and the per-manager scaffold walks. **6
+does not hold**: `ksor build --bundles` prints `designed but not implemented
+in 0.0.58` and exits `2`, as §1 says — the bundles clause is the line that
+keeps this spec a draft, and it flips when `--bundles` lands with its test.
+
+## 6 · Out of scope
 
 SLSA/Sigstore attestation of the lock (P-Verified). Running the site build
 itself. Import. A REST surface. `log.md`.

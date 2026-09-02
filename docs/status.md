@@ -17,7 +17,9 @@ after 0.0.55 (they remain in the history below as what 0.0.38 added).
 `add-sources` 2.0.0 takes a file or a person as its source and ships
 `verify.mjs`. A fourth test tier, `pnpm test:agent`, runs a skill by a real
 coding agent with and without it (decision 31); **it needs an
-`ANTHROPIC_API_KEY` repository secret, which is a pending owner action** —
+`CLAUDE_CODE_OAUTH_TOKEN` repository secret (from `claude setup-token`; the
+tier uses `claude -p`'s own login, never an API key), which is a pending owner
+action** —
 until then `skill-evals.yml` runs and reports itself skipped. **`ksor dev` is the only verb still unimplemented**: it
 reports "designed but not implemented" and exits `2`. An unknown verb is
 refused with exit `1` and a stable `error: unknown-verb` stderr slug. The
@@ -114,7 +116,16 @@ already hashes, so `build_id` is unchanged and the lock is the same lock either
 way — and an audience identifier that cannot name a bundle directory is
 therefore refused on every build too, whether it is not a path segment
 (`ksor-audience-identifier-invalid`) or differs from another only in case
-(`ksor-audience-identifier-collides`). **The emitted `check.mjs` is generated** from the
+(`ksor-audience-identifier-collides`).
+**KSP R23 runs beside the checker** in `ksor build` and `ksor ingest` — not
+in the emitted `check.mjs`, which stays the format gate: a `stable` body that differs from any committed version
+stable under a `generated.at` the tree has not ADVANCED past — the same
+instant, or one moved backward — is `ksor-generated-stale`, read from every
+committed version of the path through a few `rev-parse` probes, one
+`git log`, and one `git cat-file --batch` per 256 objects; where history is
+unreadable each program prints
+`change-control: not checked` beside its verdict rather than passing.
+**The emitted `check.mjs` is generated** from the
 record module at package-build time into both skill trees (gitignored in the
 templates), read-only, refusing a stale index; a conformance fixture is judged
 identically by it and by `checkRecord`. **The starter is in the profile**:
@@ -183,9 +194,12 @@ applies the ledger in file order, and records the `build_id` it published;
 `GOVERNANCE_SINCE` is 2.5, so a carried-forward generation refuses to serve
 until it is re-ingested. `ksor takedown` is ledger-first (record spec §5):
 the entry, then the row, with `--revoke`, `--removed`, `--file-only` and
-`--apply`, and `--export` and `.ksor-denylist.json` are gone. `--list` and
-`--ledger` read without a database too, from the committed ledger — the rung
-`ksor init` emits, and the only place `--revoke`'s entry id can be found there.
+`--apply`, and `--export` and `.ksor-denylist.json` are gone. `--ledger` reads
+the committed ledger and never resolves a DSN — the rung `ksor init` emits
+names `KSOR_DB_URL` from birth, and a read of a file must not demand it — and
+it is the only place `--revoke`'s entry id can be found there; `--list` reads
+the door's denylist rows when the DSN is set and otherwise the ledger's
+denials, labelled `not applied (no database)`.
 The write is serialised and APPEND-ONLY: the read, the decision and the write
 happen under `.ksor/takedowns.yaml.lock` (a holder still there after 30s is
 `ksor-ledger-locked`, exit `3`, nothing written), and the entry is appended
@@ -251,11 +265,12 @@ display title is `instance.md`'s `title:` key; there is no body H1 to read.
 `research/okf-native.md` §4.2. `ksor build --bundles` (the export half of
 Class E) is built, above; the rest is not started:
 
-- **Change-control verification of approvals and ledger actors** (KSP R22–R25
-  against repository history). Until it exists an approval is POLICY-checked,
-  and every envelope says so in its own idiom: `approval.checked: "policy"`.
-  Whether an edit to a stable concept bumped `generated.at` is likewise
-  unverified — the checker compares two authored instants and no more.
+- **Change-control verification of WHO approved** (KSP R22, R24, R25 against
+  repository identity). R23 IS built — `ksor-generated-stale`, above — so
+  whether an edit to a stable concept bumped `generated.at` is now verified
+  against history wherever there is one. What remains needs an identity the
+  platform can vouch for; until it exists an approval is POLICY-checked, and
+  every envelope says so in its own idiom: `approval.checked: "policy"`.
 - **`llms.txt` v2 URL forms and path-scoped files.** The site emits the form
   it emitted before.
 - **OKF import** (R26) — reading a foreign bundle INTO a record. Demand-gated:
@@ -956,10 +971,11 @@ date`. The same badge marks the row in the sidebar, in every listing and in
   answers "designed but not implemented" with exit `2`. The two codes are a
   contract (product principle 4) — `2` says designed and coming, `1` says
   refused — so they are worth stating apart rather than together.
-- Change-control verification (KSP R22–R25) against repository history, which
-  is what would let an approval say `checked: "change-control"` instead of
-  `checked: "policy"`, and what would verify that an edit to a stable concept
-  bumped its `generated.at`. Phase B.
+- Change-control verification of WHO approved (KSP R22, R24, R25) against
+  repository identity, which is what would let an approval say
+  `checked: "change-control"` instead of `checked: "policy"`. R23 — an edit to
+  a stable concept must ADVANCE its `generated.at` — is built
+  (`ksor-generated-stale`). Phase B for the rest.
 - `llms.txt` v2 URL forms and path-scoped files. Phase B.
 - OKF import (R26) — reading a foreign bundle into a record. Demand-gated: a
   second ingest adapter plus a verb, when someone asks for it.

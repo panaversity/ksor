@@ -259,7 +259,9 @@ Never copy a floor from another corpus.
 It also prints its own caveat, and it is worth reading: the probes it writes are
 derived from your passages, so they share vocabulary a real question will not.
 The floor it reports is an upper bound on separation until you check it against
-questions the corpus did not write (`--queries-file`).
+questions a person wrote: in-corpus ones with `--queries-file`, and — because
+the built-in out-of-corpus probes are all far-domain — questions just outside
+your scope with `--ooc-file`.
 
 A rerun on an unchanged record costs nothing: no new generation, no embedding,
 no rows. Edit a document and the next run picks up exactly that change.
@@ -724,6 +726,7 @@ map rather than a substitute.
 | the home page and `/llms.txt` are empty                              | every document is still a draft — correct, not broken                                                      | approve one and rebuild                                                                |
 | `ksor-record-empty`                                                  | every document was deleted — a record is never empty, so nothing was written                               | add one document of your own (or restore one from git) before deleting the last starter |
 | `ksor-approver-unauthorised`                                         | a document is approved by an actor `.ksor/governance.yaml` no longer names — usually `human:you` after the interview | re-attribute the approval to your handle, or restore the actor to `approval_authorities` |
+| `ksor-generated-stale` at `pnpm build` or `pnpm refresh`             | a `stable` document's body changed since a commit where it was stable, and `generated.at` was not advanced past that commit's (left alone, or moved backward) — the stamp dates the text, and `pnpm check` reads no document history, so it passed | set `generated.at` to an instant after the edit and re-approve (`ksor.approval.at` may not precede it) |
 | a new document never appears on the built site                       | drafts reach no built surface at all                                                                       | publish it — `status: stable` plus both governance keys                                |
 | an expired document still shows on the site but not through the door | the static build evaluated `stale_after` at build time                                                     | rebuild and redeploy; schedule a rebuild if you use it                                 |
 | Vercel: `no services are declared`                                   | Root Directory was auto-filled with `system/site`                                                          | set it to `./`                                                                         |

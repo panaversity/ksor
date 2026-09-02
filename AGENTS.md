@@ -163,6 +163,7 @@ pnpm guard                # guard-invariants.mjs (<1s)
 pnpm check:corpus         # the SHIPPED docs' frontmatter and links (<1s)
 pnpm test:unit            # *.test.ts, colocated, pure (<3s)
 pnpm build && pnpm test:integration   # built artifacts + repo-tree suites (~2 min)
+pnpm test:e2e             # the KSOR_E2E browser suites, after the playwright install
 pnpm publint               # package manifest/tarball correctness (needs build)
 ```
 
@@ -288,7 +289,10 @@ reverse it, and a reversed decision keeps its entry with a revision note.
    degrades to readable text in a plain renderer, which is what
    "framework-free" was protecting._ _Revision 2026-09-01: the closed root set is
    recorded as gaining TWO members it had already gained in silence —
-   `.ksor/people.yaml` (0.0.53) and `.mcp.json` (0.0.54). Both were emitted and
+   `.ksor/people.yaml` (0.0.52 — this revision first said 0.0.53, corrected
+   2026-09-02 against the tags: `1e60b9d` added the file and its `.gitignore`
+   negation, and both are present at `@panaversity/ksor@0.0.52` and absent at
+   `0.0.51`) and `.mcp.json` (0.0.54). Both were emitted and
    asserted in `init.integration.test.ts` with no row in the init spec's
    emitted-tree contract and no revision here, which is exactly the review step
    this decision names as where additions are locked. The omission was not
@@ -744,7 +748,18 @@ gateway` package, serve-by-spawn) is superseded._
     for and did not get: a policy allowlist is AUTHORISATION, not
     verification. Every envelope says `checked: policy` for exactly that
     reason, and change-control verification against repository history is
-    what would let it say otherwise._
+    what would let it say otherwise._ _Revision 2026-09-02 (KSP R23): the
+    first verification tooth. `ksor-generated-stale` verifies the
+    `generated.at` instant against repository history — a `stable` body that
+    differs from a committed version stable under a stamp this tree has not
+    ADVANCED past (the same instant, or one moved backward) refuses at
+    `ksor build` and `ksor ingest` (not at the emitted `check.mjs`, which stays
+    the format gate), and where history is unreadable each says
+    `change-control: not checked` rather than passing.
+    It verifies WHAT changed and WHEN it was stamped, not WHO: R22 and R25
+    still await an identity source the tool can verify, and
+    `approval.checked` stays `"policy"` — the flip is a public-envelope change
+    and is not made as a side effect of this._
 
 22. **Navigation is a SHAPE, not a length** (2026-08-22, issue #55 — the first
     DELIBERATE divergence from the converted oracle). `classify()` labelled any
@@ -1217,7 +1232,9 @@ gateway` package, serve-by-spawn) is superseded._
     an edit bumped `generated.at` is UNVERIFIED until change-control
     verification lands — the checker compares two authored instants and no
     more, and every envelope says `checked: policy` rather than implying
-    otherwise. Actor ids are published with the content, exactly as a commit
+    otherwise. _(Verified since 2026-09-02 for the STAMP, not the approver:
+    `ksor-generated-stale`, decision 21's revision of that date; the envelope
+    still says `checked: policy`.)_ Actor ids are published with the content, exactly as a commit
     author is in a public repository. Stale documents leave the open web at
     the next build, so a record with `stale_after` dates needs a scheduled
     rebuild.
@@ -1461,7 +1478,10 @@ gateway` package, serve-by-spawn) is superseded._
 
     **What it costs.** A one-word reply on the default model measured $0.25,
     so the tier pins a mid-tier model and runs on push to main, not per PR.
-    An `ANTHROPIC_API_KEY` repository secret is an owner action; until it
+    It authenticates through `claude`'s own login, never an API key (owner,
+    2026-09-02): a logged-in CLI locally, and in CI a `claude setup-token`
+    token in `CLAUDE_CODE_OAUTH_TOKEN` — which bare mode does not read, so the
+    tier never passes `--bare`. That secret is an owner action; until it
     exists the tier runs and prints that it skipped. Companion generation no
     longer has a skill to fire; an owner asks their agent in plain words and
     AGENTS.md carries the rule.
@@ -1653,11 +1673,18 @@ assertion.
   owns its own scratch DATABASE, named uniquely per run and stamped with the
   instant it was made (guard rule 12) — a fixed name let two runs on one
   cluster drop each other's database mid-test, and the stamp is what lets the
-  tier's reaper tell a leak from a live run's database (issue #166).
+  tier's reaper tell a leak from a live run's database (issue #166). The tier
+  also carries the suites whose SHAPE is a real socket and a real clock —
+  `probe-deadline.db.test.ts` opens a listening socket and waits eight real
+  seconds and reads no `KSOR_DB_URL` at all. They run unconditionally, so a
+  machine with no database pays their wall clock for nothing; that is the
+  cheaper half of the trade, because gating them on a variable they never read
+  would mean the readiness budget is only ever asserted in CI. The unit tier
+  cannot hold them: it admits neither sockets nor waiting.
 - `*.agent.test.ts` — a shipped skill run by a REAL coding agent (`claude -p`)
   in a fresh scaffold, with the skill and without it, graded on what it leaves
   behind (`pnpm test:agent`; `skill-evals.yml` runs it on push to main and by
-  hand, never per PR — it spends model tokens). Gated on `ANTHROPIC_API_KEY`
+  hand, never per PR — it spends model tokens). Gated on `CLAUDE_CODE_OAUTH_TOKEN`
   in CI or a logged-in `claude` locally, and it announces its own skip. The
   three-class split below applies: the deterministic graders GATE (files
   touched, the record builds, values verified), cost and the baseline arm are
