@@ -1420,6 +1420,58 @@ gateway` package, serve-by-spawn) is superseded._
     figures cited above come from `research/i18n.md`, whose own frontmatter says
     nothing in it is implemented or decided; check them before acting.
 
+31. **The scaffold ships three skills; a skill is measured by a real agent
+    or it is not kept** (owner-delegated, 2026-09-02; issues #30, #31, #50).
+    Four independent reviews of the plan to build a system of record, run
+    before building any of it, converged on what follows.
+
+    **Pruned to three.** `make-slides` and `make-summary` are removed: 45% of
+    all shipped skill text, 21.6% identical to each other by their own
+    commit's admission, downstream of a record existing, invisible to the
+    agent surface, unused by every fixture and tutorial, and never shown to
+    beat their absence — which this file already made the condition for
+    keeping a skill. Their one rule stays in the emitted AGENTS.md; the site
+    renders companions unchanged. `format-checker`'s prose is cut to what
+    AGENTS.md does not say; the program is untouched.
+
+    **One skill for a file and a person, not two.** #31 (convert a folder of
+    PDFs) and #50 (write down what only lives in someone's head) land as
+    `add-sources` 2.0.0, not as siblings. The record draws no line between
+    the kinds: an interview attestation in `sources[].resource` passes
+    `ksor build`; the fidelity rules read identically; and a real owner has
+    BOTH — the policy PDF and the exception it never mentions — so the person
+    step runs after every file. A sibling forces the agent to choose before it
+    knows, and reintroduces the three-way trigger collision #50 warned of.
+    Conversion verifies with a shipped script (`verify.mjs`: every number,
+    date and name in the body is in the extraction) rather than a rule the
+    model is asked to follow; a scanned PDF is refused, never OCR'd and hoped.
+
+    **The harness is a real agent, in TypeScript, gated like the database
+    tier.** `skill-creator`'s `run_eval.py` was proposed and measured: it is a
+    trigger eval only (its docstring says so), spawns `claude -p` per prompt,
+    shares one stub directory across parallel workers (1/3 vs 2/2 on the same
+    query), and the with/without content comparison it describes is an
+    interactive workflow, not a script. A single model call through the
+    Gemini seam cannot see the acts that distinguish a good run (which files
+    it did NOT touch). So: `*.agent.test.ts`, `claude -p` in a fresh
+    scaffold, two arms, deterministic graders gate and the baseline is
+    reported. What it cannot measure is stated in the suite: conversational
+    skills need a scripted owner (a second shape, not built), and the
+    adopter's own model is whatever they run.
+
+    **What it costs.** A one-word reply on the default model measured $0.25,
+    so the tier pins a mid-tier model and runs on push to main, not per PR.
+    An `ANTHROPIC_API_KEY` repository secret is an owner action; until it
+    exists the tier runs and prints that it skipped. Companion generation no
+    longer has a skill to fire; an owner asks their agent in plain words and
+    AGENTS.md carries the rule.
+
+    **Reversed** per clause: a companion skill returns with the with/without
+    comparison this file demands, recorded in its PR; the one-skill cut
+    reverses if a measured trigger collision shows the person path firing on
+    prompts meant for the interview; the harness shape reverses if a
+    conversational harness lands and proves cheaper per finding.
+
 **Open questions — decide independently when the work arrives:** ~~how
 retrieval and abstention are implemented for `serve`~~ — decided 2026-08-19,
 decision 11: the predecessor kernel converts (revision trail: recorded as
@@ -1602,6 +1654,14 @@ assertion.
   instant it was made (guard rule 12) — a fixed name let two runs on one
   cluster drop each other's database mid-test, and the stamp is what lets the
   tier's reaper tell a leak from a live run's database (issue #166).
+- `*.agent.test.ts` — a shipped skill run by a REAL coding agent (`claude -p`)
+  in a fresh scaffold, with the skill and without it, graded on what it leaves
+  behind (`pnpm test:agent`; `skill-evals.yml` runs it on push to main and by
+  hand, never per PR — it spends model tokens). Gated on `ANTHROPIC_API_KEY`
+  in CI or a logged-in `claude` locally, and it announces its own skip. The
+  three-class split below applies: the deterministic graders GATE (files
+  touched, the record builds, values verified), cost and the baseline arm are
+  REPORTED. Decision 31.
 
 The tiers are a contract, not a preference: a file that reads the filesystem
 belongs in the second one however small it is. Seven did not, and drifted there
@@ -1615,8 +1675,9 @@ fixture is judged identically by all three, and the drift tests are what make
 the copies trustworthy rather than merely present. A rule asserted in one
 program alone is the shape decision 18 was written about.
 
-Agent evals land with `ksor serve` (CI-only — they spend model tokens), in
-three classes, and being explicit about which class gates is the design:
+Agent evals — of the served door and of the shipped skills alike — are
+CI-only because they spend model tokens, and come in three classes; being
+explicit about which class gates is the design:
 **behavioural** evals gate (abstains out-of-corpus, citations resolve,
 unpublished generations never served); **relevance** evals are reported, never
 gating — their gold is generated from the corpus under test, so a wrong rule

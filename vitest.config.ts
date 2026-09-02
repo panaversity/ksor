@@ -9,6 +9,13 @@ export default defineConfig({
     // real Postgres and must never be collected here, or an exported
     // KSOR_DB_URL runs heavy DB suites in the parallel unit tier and they
     // race (found live 2026-08-19).
-    exclude: ["**/*.integration.test.ts", "**/*.db.test.ts", "**/node_modules/**", "**/dist/**"],
+    exclude: [
+      "**/*.integration.test.ts",
+      "**/*.db.test.ts",
+      // The agent tier spends model tokens; it runs from its own config only.
+      "**/*.agent.test.ts",
+      "**/node_modules/**",
+      "**/dist/**",
+    ],
   },
 });
