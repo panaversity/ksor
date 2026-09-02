@@ -34,13 +34,16 @@ import {
   keyRingFromEnv,
   MissingProviderKeyError,
   parseInstanceText,
+  publishedGeneration,
+  readPublished,
   type ContentInstance,
+  type PublishedGeneration,
   type ServiceContext,
   instancePathOf,
   providerKeyEnv,
 } from "@panaversity/ksor-content";
 
-import { bootHeader, bootLine } from "./boot-report.js";
+import { bootHeader, bootLine, generationPosture, refreshCommand } from "./boot-report.js";
 import { classSuffix, isRefusal } from "./refusal-body.js";
 
 import { loadGateway } from "./gateway-load.js";
@@ -66,6 +69,19 @@ export interface Composition {
    */
   readonly requestedViewer: readonly string[];
   readonly version: string;
+  /**
+   * What this door is serving, as of the last time the store answered: the
+   * boot checks read it, and every readiness probe re-reads it in place of the
+   * bare `SELECT 1` it used to run, so `/health` reports a `pnpm refresh` that
+   * happened after boot without a statement of its own. `null` is "nothing
+   * published" — the state the boot report and `/health` both name, because
+   * a door serving nothing is not a door with nothing to say.
+   */
+  readonly published: PublishedGeneration | null;
+  /** The publish step, spelled for the manager that ran this process. */
+  readonly refreshHint: string;
+  /** The readiness probe's statement: one round trip that also refreshes `published`. */
+  readonly probePublished: (client: pg.PoolClient) => Promise<void>;
   /**
    * Re-runs EVERY fail-closed boot check — schema compatibility, the
    * governance gate, and the viewer list this door may serve — or resolves
@@ -145,7 +161,9 @@ export async function compose(rawInstancePath: string, version: string): Promise
     // Matched by TYPE, never by message prose: a reworded message must not
     // silently revert this to exit 1 (review, 2026-08-19).
     if (error instanceof MissingProviderKeyError) {
-      throw new RequiredEnvError(error.message);
+      // …and it carries the SLUG across, so the first stderr line is the
+      // stable name and not the sentence (`bootErrorLines`).
+      throw new RequiredEnvError(error.message, error.slug);
     }
     throw error;
   }
@@ -177,6 +195,11 @@ export async function compose(rawInstancePath: string, version: string): Promise
   // run" rather than null, because null is what a PASS looks like and this is
   // the state where nothing has been compared yet.
   let spaceSkipReason: string | null = "not yet verified — boot checks have not passed";
+
+  // What this door serves. Written by the boot checks and by every readiness
+  // probe after them; read by the boot report and /health.
+  let published: PublishedGeneration | null = null;
+  const refreshHint = refreshCommand(process.env["npm_config_user_agent"]);
 
   // EVERY fail-closed boot check, in one place, so that deferring them defers
   // ALL of them and retrying retries ALL of them.
@@ -228,6 +251,13 @@ export async function compose(rawInstancePath: string, version: string): Promise
     const policy = await servingPolicy(pool, instance);
     viewer = validateViewer(policy?.registry ?? [], requestedViewer);
     console.error(bootLine("audience", viewer.join(",")));
+
+    // …and WHAT is being served — a row, like the policy, so it belongs to the
+    // deferred set with everything else the database decides. NONE is a legal
+    // state (a provisioned record before its first `refresh`), not a refusal;
+    // it is the state the block used to come up green on without a word.
+    published = await publishedGeneration(pool, instance);
+    console.error(bootLine("generation", generationPosture(published, refreshHint)));
 
     // One database, one embedding space. This was the ONE fail-closed check a
     // cold start switched off for the life of the process: it was caught here,
@@ -308,6 +338,7 @@ export async function compose(rawInstancePath: string, version: string): Promise
           "request until the boot checks pass",
       ),
     );
+    console.error(bootLine("generation", "not resolved — read once the boot checks pass"));
     // Memoize the IN-FLIGHT attempt, not only the settled result.
     //
     // The door awaits this on every request until it passes, and `bootChecks`
@@ -417,6 +448,13 @@ export async function compose(rawInstancePath: string, version: string): Promise
     // inside the deferred set, so this is written after the object is built.
     get spaceSkipReason(): string | null {
       return spaceSkipReason;
+    },
+    get published(): PublishedGeneration | null {
+      return published;
+    },
+    refreshHint,
+    probePublished: async (client: pg.PoolClient): Promise<void> => {
+      published = await readPublished(client, instance);
     },
     requestedViewer,
     version,

@@ -40,7 +40,6 @@ import {
   ledgerActs,
   ledgerDenials,
   listTakedowns,
-  readLedger,
   type LedgerRow,
   type TakedownRow,
 } from "./takedown-ops.js";
@@ -63,8 +62,8 @@ import {
 } from "./takedown-verb.js";
 import {
   buildShippedProvider,
+  MissingProviderKeyError,
   providerKeyEnv,
-  providerNeedsApiKey,
 } from "./lib/providers/registry.js";
 import type { EmbeddingProvider } from "./lib/embedding.js";
 import { ManifestError } from "./ingest/manifest.js";
@@ -158,10 +157,24 @@ export function usageFor(command: string): string {
   // which the previous slice cut off, so `ingest --help` printed no
   // description and `calibrate --help` printed ingest's (round-3 review).
   const isHeading = (l: string): boolean => /^ {2}ksor \S/.test(l);
-  const start = lines.findIndex((l) => isHeading(l) && l.trimStart().startsWith(`ksor ${command}`));
+  // The verb a heading names, WHOLE, and a heading of the SAME verb is a second
+  // invocation form rather than the end of the block. Whole because `--help` is
+  // answered before the verb is known, so `ksor g --help` reaches this with a
+  // verb that does not exist: matching by prefix printed `grant`'s block for it
+  // under exit 0 — the binary documenting a verb it refuses to run — where the
+  // whole usage is the honest answer. (The comment here previously said `gc`
+  // must not match `grant` by prefix, which no prefix rule could produce, and
+  // the test that guarded it was green against the code it replaced — review
+  // finding 3.) `calibrate` has two — the measuring form and
+  // `--check` — with its description under the second, and stopping at any
+  // heading printed the first form's flags and not one sentence about what the
+  // verb does; the paragraph was reachable only by getting the arguments wrong
+  // (found on a live walk, 2026-09-02).
+  const verbOf = (l: string): string | undefined => l.trimStart().split(/\s+/)[1];
+  const start = lines.findIndex((l) => isHeading(l) && verbOf(l) === command);
   if (start === -1) return USAGE;
   const rest = lines.slice(start + 1);
-  const end = rest.findIndex(isHeading);
+  const end = rest.findIndex((l) => isHeading(l) && verbOf(l) !== command);
   // Trim trailing blank lines, then add exactly ONE newline. The previous form
   // only fired when trailing whitespace already existed, so every verb except
   // `gc` printed with no final newline and the shell prompt landed mid-line —
@@ -256,29 +269,27 @@ function resolveDsn(instance: ContentInstance): string | number {
 /** The ingest composition root's provider step (oracle cli.py:58-74). */
 function composeProvider(instance: ContentInstance): EmbeddingProvider | number {
   try {
-    let apiKey: string | null = null;
-    if (providerNeedsApiKey(instance.embeddingProvider)) {
+    return buildShippedProvider(instance.embeddingProvider, {
       // ASKED of the registry, not spelled here. `GEMINI_API_KEY` was written
       // into this root and two others, so a second provider could not obtain a
       // key even though the registry would build it — a seam that is
       // vendor-neutral in shape, re-bound to one vendor by its wiring (#25).
-      const keyEnv = providerKeyEnv(instance.embeddingProvider) ?? "";
-      apiKey = process.env[keyEnv] || null;
-      if (apiKey === null) {
-        return fail(
-          ENVIRONMENT,
-          `${keyEnv} is required (the instance's embedding provider ` +
-            `${JSON.stringify(instance.embeddingProvider)} needs a key)\n` +
-            `  fix: export ${keyEnv}=... and rerun`,
-        );
-      }
-    }
-    return buildShippedProvider(instance.embeddingProvider, {
-      apiKey,
+      // A set-but-empty variable is no key.
+      apiKey: process.env[providerKeyEnv(instance.embeddingProvider) ?? ""] || null,
       modelId: instance.embeddingModel,
       dim: instance.embeddingDim,
     });
   } catch (exc) {
+    // The registry's refusal, verbatim, so the door and the write plane say the
+    // same sentence — and its SLUG first, because exit 3 is an exit code and
+    // not a name: this printed the sentence alone while every exit-1 refusal
+    // opened with `error: <slug>` (product principle 4; found live, 2026-09-02).
+    if (exc instanceof MissingProviderKeyError) {
+      return fail(
+        ENVIRONMENT,
+        `error: ${exc.slug}\n${exc.message}\n  fix: export ${exc.keyEnv ?? "the key"}=... and rerun`,
+      );
+    }
     return refuse(
       "ksor-instance-format",
       `instance embedding.provider: ${exc instanceof Error ? exc.message : String(exc)}`,
@@ -926,13 +937,22 @@ function printLedger(rows: readonly LedgerRow[]): void {
   }
 }
 
-/** One denial in force per line: what, at which scope, why. */
-function printDenials(rows: readonly TakedownRow[]): void {
+/**
+ * One denial in force per line: what, at which scope, why — and, when the
+ * lines come from the FILE rather than the door's rows, a fourth column saying
+ * so, because a ledger entry is the act and a row is its projection, and only
+ * the row is what the door refuses on.
+ */
+function printDenials(rows: readonly TakedownRow[], label: string | null = null): void {
   if (rows.length === 0) {
     process.stdout.write("takedown: nothing is denied in this corpus\n");
     return;
   }
-  for (const r of rows) process.stdout.write(`${r.stableId}\t${r.scope}\t${r.reason}\n`);
+  for (const r of rows) {
+    process.stdout.write(
+      `${r.stableId}\t${r.scope}\t${r.reason}${label === null ? "" : `\t${label}`}\n`,
+    );
+  }
 }
 
 async function takedownCommand(args: string[]): Promise<number> {
@@ -1046,6 +1066,21 @@ async function takedownCommand(args: string[]): Promise<number> {
 
   // ── the read-only modes: no actor, no ledger write ──────────────────────
   if (mode.kind === "list" || mode.kind === "ledger" || mode.kind === "apply") {
+    // `--ledger` is the FILE's history, always, and never resolves a DSN. The
+    // ledger is the record of every act (record spec §5) and the row is its
+    // projection; the flag read the database's §7 trail whenever the record
+    // declared one, so on the record `ksor init` emits — `database:` named,
+    // DSN not yet set — a read of a committed file exited 3 demanding a
+    // connection string, while three documents said it needed none (found on
+    // a live walk, 2026-09-02). It is also the one route to the entry id
+    // `--revoke` takes that never needs a database.
+    if (mode.kind === "ledger") {
+      process.stdout.write(
+        "ledger: from .ksor/takedowns.yaml — the committed record of every governance act\n",
+      );
+      printLedger(ledgerActs(parsedLedger.ledger));
+      return 0;
+    }
     if (instance === null) {
       if (mode.kind === "apply") {
         process.stdout.write(
@@ -1054,19 +1089,27 @@ async function takedownCommand(args: string[]): Promise<number> {
         );
         return 0;
       }
-      // Both flags are answerable from the committed file at this rung, and
-      // refusing them broke the documented workflow: `--revoke` takes a LEDGER
-      // ENTRY id and `--ledger` is what lists it, so a level-0 adopter had to
-      // open the YAML by hand to revoke anything.
+      // Answerable from the committed file at this rung, and refusing it broke
+      // the documented workflow: a level-0 adopter had to open the YAML by
+      // hand to see what was denied.
       process.stdout.write(
-        `${mode.kind === "ledger" ? "ledger" : "takedown"}: from .ksor/takedowns.yaml — ` +
-          "instance.md declares no database, so the committed ledger is the whole state\n",
+        "takedown: from .ksor/takedowns.yaml — instance.md declares no database, so the " +
+          "committed ledger is the whole state\n",
       );
-      if (mode.kind === "ledger") {
-        printLedger(ledgerActs(parsedLedger.ledger));
-      } else {
-        printDenials(ledgerDenials(parsedLedger.ledger));
-      }
+      printDenials(ledgerDenials(parsedLedger.ledger));
+      return 0;
+    }
+    // `--list` is a question about the DOOR — which rows it refuses on — so
+    // with a DSN it reads the rows. Without one there is no door to ask, and
+    // the honest answer is the ledger's denials LABELLED as not applied, not a
+    // demand for a connection string: the emitted record names its DSN
+    // variable from birth and the level-0 adopter never sets it.
+    if (mode.kind === "list" && (process.env[instance.dsnEnv] ?? "") === "") {
+      process.stdout.write(
+        `takedown: from .ksor/takedowns.yaml — ${instance.dsnEnv} is unset, so no denylist row ` +
+          "was read; each denial below is the ledger's word, not a row the door refuses on\n",
+      );
+      printDenials(ledgerDenials(parsedLedger.ledger), "not applied (no database)");
       return 0;
     }
     const dsn = resolveDsn(instance);
@@ -1081,11 +1124,6 @@ async function takedownCommand(args: string[]): Promise<number> {
           : `takedown: applied ${applied.changed} denial row(s) from .ksor/takedowns.yaml\n`,
       );
       for (const line of unmergedLines(applied.unmerged)) process.stderr.write(line + "\n");
-      return 0;
-    }
-    if (mode.kind === "ledger") {
-      // The §7 trail, read through the auditor role (schema 2.3).
-      printLedger(await withPool(dsn, (pool) => readLedger(pool, instance!, 50)));
       return 0;
     }
     printDenials(await withPool(dsn, (pool) => listTakedowns(pool, instance!)));

@@ -5,11 +5,64 @@ import {
   authPosture,
   bootHeader,
   bootLine,
+  generationPosture,
+  refreshCommand,
   SDK_RESPONSE_MODE_WARNING,
   UNDESCRIBED_RECORD,
   snapshotPosture,
   withoutSdkResponseModeWarning,
 } from "./boot-report.js";
+
+describe("generationPosture — what this door is serving, or that it is serving nothing", () => {
+  // The door booted green on a provisioned, never-ingested record and printed
+  // db/audience/trust/auth/abstain/serving — six lines about a record with
+  // nothing in it, and not one saying so. Following `ksor init`'s own steps
+  // reaches this state (found live, 2026-09-02).
+  it("says NONE, and names the command that publishes, when nothing is published", () => {
+    const out = generationPosture(null, "npm run refresh");
+    expect(out).toContain("NONE");
+    expect(out).toContain("nothing published");
+    expect(out, "the remedy travels with the absence").toContain("run npm run refresh");
+  });
+
+  it("states the generation, what it holds and where it came from", () => {
+    const out = generationPosture(
+      { generation: 1, nodes: 7, sourceCommit: "3807493d3f2f1b4c" },
+      "pnpm refresh",
+    );
+    expect(out).toBe("1 · 7 nodes · source 3807493d3f2f1b4c");
+    expect(out, "a served record needs no remedy").not.toContain("refresh");
+  });
+
+  it("never claims a count it does not have", () => {
+    expect(generationPosture({ generation: 3, nodes: 1, sourceCommit: "unspecified" }, "x")).toBe(
+      "3 · 1 node · source unspecified",
+    );
+  });
+});
+
+describe("refreshCommand — the publish step, spelled for the manager that ran serve", () => {
+  // `npm_config_user_agent` is set by whichever manager spawned this process,
+  // the same signal `ksor init` reads to emit the scaffold (#28). An adopter
+  // who typed `npm run serve` is told `npm run refresh`, not a pnpm spelling
+  // their scaffold does not carry.
+  it.each([
+    ["pnpm/11.22.0 npm/? node/v24.5.0 darwin arm64", "pnpm refresh"],
+    ["npm/11.4.2 node/v24.5.0 darwin arm64 workspaces/false", "npm run refresh"],
+    ["bun/1.3.6 npm/? node/v24.3.0 darwin arm64", "bun run refresh"],
+  ])("%s → %s", (agent, expected) => {
+    expect(refreshCommand(agent)).toBe(expected);
+  });
+
+  it("names the verb itself when no manager is in the loop", () => {
+    // `ksor serve` typed directly, or a container's entrypoint: the scaffold's
+    // script name would be a guess, and the verb is what every runbook here
+    // calls the step.
+    expect(refreshCommand(undefined)).toBe("ksor ingest --flip");
+    expect(refreshCommand("yarn/4.0.0 npm/? node/v24")).toBe("ksor ingest --flip");
+    expect(refreshCommand("")).toBe("ksor ingest --flip");
+  });
+});
 
 describe("the boot report reads as one aligned block", () => {
   it("starts every value at the same column, whatever the label's length", () => {

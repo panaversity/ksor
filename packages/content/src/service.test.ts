@@ -83,8 +83,23 @@ describe("a declared-but-uncalibrated floor refuses to serve (fail closed, repre
 import { EmptyQueryError as EmbedEmptyQueryError } from "./lib/query-embed.js";
 
 describe("an empty query from the embed door re-raises as a client error, not a degrade", () => {
+  /**
+   * A pool that answers every statement with one ACTIVE generation. `search`
+   * asks whether anything is published before it embeds (2026-09-02), so the
+   * embed door is only reached on a record that has a generation; this stub
+   * is that record, and nothing else about it is consulted.
+   */
+  const publishedPool = {
+    connect: async () => ({
+      on(): void {},
+      removeListener(): void {},
+      release(): void {},
+      query: async () => ({ rows: [{ active_generation: 1 }] }),
+    }),
+    idleCount: 0,
+  } as unknown as never;
   const base = {
-    pool: {} as never,
+    pool: publishedPool,
     instance: {
       name: "c",
       corpusId: "c",

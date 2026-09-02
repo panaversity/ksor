@@ -259,7 +259,9 @@ Never copy a floor from another corpus.
 It also prints its own caveat, and it is worth reading: the probes it writes are
 derived from your passages, so they share vocabulary a real question will not.
 The floor it reports is an upper bound on separation until you check it against
-questions the corpus did not write (`--queries-file`).
+questions a person wrote: in-corpus ones with `--queries-file`, and — because
+the built-in out-of-corpus probes are all far-domain — questions just outside
+your scope with `--ooc-file`.
 
 A rerun on an unchanged record costs nothing: no new generation, no embedding,
 no rows. Edit a document and the next run picks up exactly that change.
