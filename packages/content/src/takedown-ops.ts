@@ -1,5 +1,5 @@
 /**
- * The takedown READ plane — what is denied, and the §7 acts that made it so.
+ * The takedown READ plane — what is denied, and the acts that made it so.
  *
  * The WRITES moved out (record spec §5): the ledger `.ksor/takedowns.yaml` is
  * the record of every denial, revocation and amendment, and `ingest/
@@ -16,7 +16,7 @@
 
 import type pg from "pg";
 
-import { runAuditRead, runRead } from "./db.js";
+import { runRead } from "./db.js";
 import type { ContentInstance } from "./instance.js";
 import { inForce, type Ledger } from "./record/ledger.js";
 
@@ -29,40 +29,26 @@ export interface TakedownRow {
   readonly createdAt: Date;
 }
 
-/** The ledger, readable at last — through the auditor role (schema 2.3). */
+/**
+ * One governance act, in the shape the §7 trail records it — the act, who, and
+ * the detail. `ledgerActs` builds these from the committed FILE.
+ *
+ * There is no reader of the database's own trail here any more. `readLedger`
+ * lived at this spot and lost its last caller when `--ledger` became the file's
+ * history on every rung: a projection nobody prints is code without a claim
+ * (coding principle 1), and the trail itself is unaffected — it is still
+ * written by `ingest/ledger-apply.ts` and `ingest/generation.ts`, still
+ * readable only through `runAuditRead`, and still read by
+ * `ksor calibrate --check` and by `ksor migrate`. What the deletion removes is
+ * a second answer to "what has been done to this record", which the ledger
+ * already answers from the repository and without a database.
+ */
 export interface LedgerRow {
   readonly action: string;
   readonly actor: string;
   readonly generation: number | null;
   readonly detail: Record<string, unknown>;
   readonly createdAt: Date;
-}
-
-export async function readLedger(
-  pool: pg.Pool,
-  instance: ContentInstance,
-  limit: number,
-): Promise<LedgerRow[]> {
-  return runAuditRead(pool, instance.tenantId, async (client) => {
-    const r = await client.query(
-      // Scoped by CORPUS as well as tenant. Every governance write records
-      // corpus_id and `listTakedowns` already scoped by it; this did not, so a
-      // tenant serving two corpora — the shape AGENTS.md's open question 1 is
-      // preparing for — got one record's audit answer polluted with the
-      // other's, under the verb whose whole purpose is a per-record governance
-      // trail (round-9 review of PR 43).
-      "SELECT action, actor, generation, detail, created_at FROM retrieval_log" +
-        " WHERE tenant_id = $1 AND corpus_id = $2 ORDER BY created_at DESC, id DESC LIMIT $3",
-      [instance.tenantId, instance.corpusId, limit],
-    );
-    return r.rows.map((row: Record<string, unknown>) => ({
-      action: String(row.action),
-      actor: String(row.actor),
-      generation: row.generation === null ? null : Number(row.generation),
-      detail: (row.detail ?? {}) as Record<string, unknown>,
-      createdAt: row.created_at as Date,
-    }));
-  });
 }
 
 export async function listTakedowns(
@@ -120,10 +106,10 @@ export function ledgerDenials(ledger: Ledger): TakedownRow[] {
  * What `--ledger` prints: every entry the file records, newest first, in the
  * shape the database trail uses — the act, who, and the detail.
  *
- * NOT the database's §7 trail (`readLedger`), which also records the APPLY of
- * each entry to the door. The file's own history is what the flag prints on
- * every rung — it is the record of the act (record spec §5), it is where
- * `--revoke`'s entry ids live, and it never needs a DSN.
+ * NOT the database's §7 trail, which also records the APPLY of each entry to
+ * the door and which no verb prints. The file's own history is what the flag
+ * prints on every rung — it is the record of the act (record spec §5), it is
+ * where `--revoke`'s entry ids live, and it never needs a DSN.
  */
 export function ledgerActs(ledger: Ledger): LedgerRow[] {
   return [...ledger.entries]
