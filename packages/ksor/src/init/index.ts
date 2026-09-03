@@ -154,6 +154,14 @@ function handoff(io: InitIo, name: string, targetWasDot: boolean, manager: Packa
       `  ${install}\n` +
       `  ${run("dev").padEnd(15)} # the site, live at http://localhost:3000\n` +
       "\n" +
+      // `ksor init` runs `git init` and leaves ZERO commits, so a scaffold
+      // followed verbatim publishes its first generation with `source
+      // unspecified` — untraceable to any commit — and skips the R23
+      // change-control check, which has nothing to compare against. One commit
+      // before the first publish is the whole fix (found by walking 0.0.59).
+      "Commit before you publish — a build traces to a reviewed commit:\n" +
+      "  git add -A && git commit -m 'Scaffold the record'\n" +
+      "\n" +
       "Then, for the agent surface (needs Postgres and a provider key):\n" +
       `  ${run("provision").padEnd(15)} # once: copy .env.example to .env and set KSOR_DB_URL,\n` +
       "                  #   then apply the schema\n" +

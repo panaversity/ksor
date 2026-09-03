@@ -38,7 +38,12 @@ const body = raw.replace(/^---\n[\s\S]*?\n---\n?/, "").replace(/\[\^[^\]]+\]:?/g
 
 const tokens = new Set();
 for (const m of body.matchAll(/\d[\d,.:/-]*\d|\d/g)) tokens.add(m[0]);
-for (const m of body.matchAll(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g)) tokens.add(m[0]);
+// A name is capitalised words on ONE line. `\s+` here would cross a blank
+// line, so a `## Meals` heading followed by a paragraph opening `On travel…`
+// was extracted as the name "Meals On" and reported as invented — a false
+// positive on ordinary markdown, hit on the first document an agent writes
+// (found by walking the published 0.0.59).
+for (const m of body.matchAll(/\b[A-Z][a-z]+(?:[^\S\r\n]+[A-Z][a-z]+)+\b/g)) tokens.add(m[0]);
 
 const missing = [...tokens].filter((t) => !extraction.includes(fold(t))).sort();
 for (const t of missing) console.log(t);
