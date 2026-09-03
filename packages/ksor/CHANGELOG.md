@@ -1,5 +1,80 @@
 # @panaversity/ksor
 
+## 0.0.60
+
+### Patch Changes
+
+- 2a7ef92: Five things a live walk of the published 0.0.59 found, fixed.
+
+  **`verify.mjs` reported ordinary markdown as an invented name.** Its name regex
+  let `\s+` cross a blank line, so a `## Meals` heading followed by a paragraph
+  opening `On travel…` was extracted as the name "Meals On" and reported as
+  changed-or-introduced. That fires on the first document an agent converts —
+  the check meant to make conversion trustworthy was crying wolf. Names are now
+  capitalised words on ONE line; a name the source never mentions is still caught.
+
+  **A scaffold followed verbatim published its first generation untraceably.**
+  `ksor init` runs `git init` and leaves zero commits, and its own epilogue went
+  install → dev → provision → refresh with no commit in between — so every
+  adopter's first publish said `source: unspecified` and skipped the R23
+  change-control check, which had no history to compare against. The epilogue now
+  says to commit before publishing, which is the whole fix.
+
+  **A plain build left a stale bundle tree unmentioned.** `ksor build` recomputes
+  every `bundles[].sha256` in the lock but only `--bundles` writes the directory,
+  so after one `--bundles` run and any ordinary build the lock claimed a digest
+  nothing on disk produced, while the tree that exists to be SENT somewhere aged
+  silently. A plain build now says which build the directory came from and how to
+  refresh it. Reported, never deleted: it is the adopter's output and may be
+  mid-handover.
+
+  **Tutorial 01's first build block was one line short.** R23 landed the day after
+  that walk, so the shipped block omitted `change-control: not checked` on a page
+  whose headline claim is that every output was pasted as it appeared. Re-captured
+  on 0.0.59, with a paragraph on what both honesty lines mean and when they go.
+
+  **The dev server's `/llms.txt` does not change after an approval.** Not a bug and
+  not fixable in the route: `output: "export"` requires a static route handler, so
+  `pnpm dev` computes it once per process while the document's page beside it
+  updates. Stated in the emitted README's troubleshooting table and in the tutorial
+  step whose own prompt is "Why isn't my refund policy in llms.txt?" — verified by
+  testing both alternatives, each of which breaks the export.
+
+- 6c47618: Measure WHICH skill a real agent reaches for, and record what the first sweeps
+  found.
+
+  A live walk of the published 0.0.59 reported that `add-sources` did not fire on
+  its headline prompt. The tempting repair is to reword the description until it
+  does, which is a guess. This is the instrument that replaces the guess: N runs
+  per phrase, in a fresh scaffold with all three skills present, graded on which
+  skill the agent actually invoked, across more than one model. Reported, never
+  gating — a model is stochastic and a threshold over a handful of runs flakes.
+
+  **The model is a column, because the answer depends on it.** Same phrase, same
+  scaffold, same harness: `claude-sonnet-5` fired `add-sources` 3/3 where
+  `claude-opus-5` fired nothing 0/2. The walk used the CLI default and the first
+  probe pinned Sonnet, which is why they disagreed — neither was wrong, and
+  neither alone measured the trigger.
+
+  **The finding is narrower than the walk suggested.** `add-sources` fires on four
+  of five phrases on both models, and both controls behave: a different skill wins
+  the intake phrase, and nothing fires on a question about the repo itself. It
+  misses exactly one shape on Opus — the owner pointing at a file already in the
+  repo and naming a destination.
+
+  **And the obvious repair does not work.** Naming that shape in the description
+  was tried and measured: unchanged at 0/3. So the cause is not the wording — an
+  instruction concrete enough to act on gets acted on, and no skill is consulted.
+  The clause was reverted rather than kept, because it is resident context in
+  every session and bought nothing a measurement can see. The negative result is
+  recorded beside the rows it explains.
+
+  Also fixed while building it: the CLI can emit raw control characters inside its
+  JSON, which `JSON.parse` rejects outright — the harness lost the whole transcript
+  to a stray byte. It now falls back to a scrubbed parse.
+
+  Test infrastructure only; nothing an adopter installs behaves differently.
+
 ## 0.0.59
 
 ### Patch Changes
