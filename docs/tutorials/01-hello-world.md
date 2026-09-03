@@ -113,15 +113,23 @@ npx ksor build
 </details>
 
 ```
-ksor build: 6 document(s), 5 admitted to a machine surface at 2026-09-01T19:34:49.422Z
+ksor build: 6 document(s), 5 admitted to a machine surface at 2026-09-03T04:12:04.205Z
 source: unspecified — knowledge/ is in a git repository with no commits yet, so this build cannot be traced back to a reviewed commit.
   fix: commit the record (git add knowledge && git commit) and re-run
+  change-control: not checked — the repository has no commits yet, so whether a stable concept's body changed under its `generated.at` (KSP R23) was not checked
   wrote knowledge/index.md
-  wrote build.lock.json — build_id sha256:6d96d4514dcb13df48d980c1218bed9c5cf40734201f4c8d3ab361f1fbe70b75
+  wrote build.lock.json — build_id sha256:bfc0918da9d2e3444e6f4ea87ae1853a86f21cd4362d149c4ab09855272042ca
 ```
 
+Two lines are worth reading. `source: unspecified` is the record saying it
+cannot trace this build to a reviewed commit — you have not made one yet — and
+`change-control: not checked` is the same honesty about a different question:
+with no history, whether an approved document was edited after its approval
+(KSP R23) is unanswerable, so it is reported rather than passed. Both go away
+at the commit two steps down.
+
 Your timestamp will differ. So will the `build_id` if you are on a later ksor
-than the 0.0.55 these were captured on — the id hashes the TOOLCHAIN along with
+than the 0.0.59 these were captured on — the id hashes the TOOLCHAIN along with
 the record, because "what produced this" is part of what a publication is. What
 you can reproduce right now is the claim itself: run `ksor build` twice without
 changing anything and the id is identical both times. Same record, same
@@ -138,6 +146,12 @@ Nobody has approved it.
 
 > **Ask your agent:**
 > Why isn't my refund policy in `llms.txt`? Then approve it and build again.
+
+Read that answer against the build's own count rather than the dev server:
+`pnpm dev` serves `/llms.txt` from a static route it computes once per process
+(the static export requires that), so it keeps showing the pre-approval list
+until you restart it. The document's own page updates either way, and the built
+site is always current.
 
 <details><summary>Do it yourself</summary>
 

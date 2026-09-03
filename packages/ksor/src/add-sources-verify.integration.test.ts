@@ -127,6 +127,27 @@ describe("a faithful conversion passes", () => {
     expect(r.missing).toEqual([]);
   });
 
+  it("a heading above a capitalised paragraph is not a name (found live on 0.0.59)", () => {
+    // `\s+` crossed the blank line, so `## Meals` followed by a paragraph
+    // opening `On travel…` was extracted as the name "Meals On" and reported
+    // as invented — a false positive on ordinary markdown, hit on the first
+    // document an agent produces.
+    const r = verify(
+      "Meals cost 75 per day while travelling.",
+      "---\ntitle: x\n---\n\n## Meals\n\nOn travel, 75 per day.\n",
+    );
+    expect(r.missing, "a heading and the next paragraph are not one name").toEqual([]);
+    expect(r.status).toBe(0);
+  });
+
+  it("still catches a name the source never mentions, in that same shape", () => {
+    const r = verify(
+      "Meals cost 75 per day while travelling.",
+      "---\ntitle: x\n---\n\n## Meals\n\nOn travel, 75 per day. Approved by John Roe.\n",
+    );
+    expect(r.missing).toEqual(["John Roe"]);
+  });
+
   it("matches with whitespace collapsed — an extraction wraps its lines", () => {
     const r = verify(
       "approved by Jane\nDoe, Head of\nOperations",

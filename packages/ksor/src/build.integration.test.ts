@@ -1298,6 +1298,43 @@ describe("ksor build — acceptance 6: --bundles, one OKF bundle per viewer", ()
     return root;
   }
 
+  it("a plain build says the bundles on disk are from an older build, and --bundles clears it", () => {
+    // A plain build recomputes every `bundles[].sha256` in the root lock but
+    // does not touch the directory, which only `--bundles` writes. So the lock
+    // claimed a digest nothing on disk produced, and the tree that exists to be
+    // SENT somewhere aged with nothing said (found by walking 0.0.59).
+    const root = bundleRepo();
+    expect(build(root, "--bundles").status).toBe(0);
+    const wrote = JSON.parse(
+      readFileSync(path.join(root, ".ksor/out/bundles/build.lock.json"), "utf8"),
+    ) as { build_id: string };
+
+    // Any edit that moves build_id; the body of a stable concept, re-dated as
+    // R23 requires, is the ordinary one.
+    const welcome = path.join(root, "knowledge/welcome.md");
+    writeFileSync(
+      welcome,
+      `${readFileSync(welcome, "utf8")
+        .replace("at: 2026-08-20T09:00:00Z", "at: 2026-08-24T09:00:00Z")
+        .replace("at: 2026-08-21T09:00:00Z", "at: 2026-08-24T10:00:00Z")}\nOne more sentence.\n`,
+    );
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", "edit");
+
+    const plain = build(root);
+    expect(plain.status, plain.stdout + plain.stderr).toBe(0);
+    expect(plain.stdout, "the notice names the build the directory came from").toContain(
+      `bundles: .ksor/out/bundles/ is from build ${wrote.build_id}, not this one`,
+    );
+    expect(plain.stdout, "and what to do about it").toContain("re-run with `--bundles`");
+    // Reported, never deleted: it is the adopter's output and may be mid-handover.
+    expect(existsSync(path.join(root, ".ksor/out/bundles/build.lock.json"))).toBe(true);
+
+    const refreshed = build(root, "--bundles");
+    expect(refreshed.status).toBe(0);
+    expect(refreshed.stdout, "refreshing clears it").not.toContain("is from build");
+  });
+
   it("a refusal writes no bundle, and an audience identifier that is not a path segment is refused before anything is written — on EVERY build, flag or not", () => {
     const refused = bundleRepo();
     writeFileSync(path.join(refused, "knowledge/bad.md"), "---\ntitle: only\n---\n");

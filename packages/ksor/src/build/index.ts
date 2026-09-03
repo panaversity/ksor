@@ -462,7 +462,7 @@ export function runBuild(
       (change.notice === null ? "" : `  ${change.notice}\n`) +
       notice +
       `${pendingIndexes.map((w) => `  wrote ${w}\n`).join("")}${staleIndexes.map((r) => `  removed ${r} (its directory earns no index)\n`).join("")}` +
-      (parsed.bundles ? bundlesReport(bundles, viewers) : "") +
+      (parsed.bundles ? bundlesReport(bundles, viewers) : staleBundlesNotice(root, lock.build_id)) +
       `  wrote build.lock.json — build_id ${lock.build_id}\n`,
   );
   return 0;
@@ -488,6 +488,39 @@ function writeBundles(root: string, bundles: readonly Bundle[], lockText: string
     }
   }
   writeFileSync(path.join(out, LOCK_NAME), lockText);
+}
+
+/**
+ * `.ksor/out/bundles/` from an EARLIER build, when this run did not write it.
+ *
+ * A plain `ksor build` recomputes every `bundles[].sha256` in the root lock —
+ * they are a function of what `build_id` already hashes — but it does not
+ * touch the directory, which only `--bundles` writes. So after one
+ * `--bundles` run and any ordinary build, the root lock claims a digest that
+ * nothing on disk produces, and the tree that exists to be SENT somewhere goes
+ * on aging with nothing said (found by walking the published 0.0.59).
+ *
+ * Reported, never deleted and never refused: the directory is the adopter's
+ * output, its co-located lock still describes its own bytes coherently, and a
+ * build that removed it would destroy something an adopter may be mid-way
+ * through handing over. Honest absence, never silent weakness.
+ */
+function staleBundlesNotice(root: string, buildId: string): string {
+  const beside = path.join(root, BUNDLES_DIR, LOCK_NAME);
+  if (!existsSync(beside)) return "";
+  let wrote: string;
+  try {
+    wrote = (JSON.parse(readFileSync(beside, "utf8")) as { build_id?: unknown }).build_id as string;
+  } catch {
+    // Unreadable is stale by any reading, and says so the same way.
+    wrote = "unreadable";
+  }
+  if (wrote === buildId) return "";
+  return (
+    `  bundles: ${BUNDLES_DIR}/ is from build ${wrote}, not this one — the lock records ` +
+    "this build's digests, so what is on disk no longer matches them\n" +
+    "    fix: re-run with `--bundles` before sending them, or delete the directory\n"
+  );
 }
 
 /** One line per bundle written, and a line per link it carries to a concept it excludes. */
