@@ -28,3 +28,9 @@ packages/ksor/ksor-tarball-run-*/
 # rule, so running the flag on it left an untracked copy of the whole record in
 # the working tree.
 **/.ksor/out/
+
+# `scripts/record-orcarouter-gui-evidence.py` writes the console screenshots and
+# the manifest that hashes them here. They are produced BY a run, so committing
+# them would ship a picture nobody took on the run that reports it; the delivery
+# check re-runs the recorder from a clean checkout and reads what it left behind.
+/orca-evidence/
