@@ -37,6 +37,72 @@ development environment.
 
 ---
 
+## Question
+
+How should the base environment of ksor be structured, including its agent constitution (AGENTS.md), agent-skills roster, and TypeScript toolchain, to uphold KSoR's product guarantees of governed knowledge and machine-checked validity?
+
+## Evidence
+
+The base environment plan was derived from a study of fresh clones of vercel/eve, vercel/workflow, vercel/ai, and vercel/next.js (2026-08-17), a toolchain-currency pass verified against npm/official sources the same day, and a skills-ecosystem scan via `npx skills find`.
+
+Key findings from studying Vercel repos (convergent across all four):
+
+1. AGENTS.md is the single canonical agent contract.
+2. Skills are two-tier: `.agents/skills/` for repo maintenance and `skills/` for public product skills.
+3. Docs ship inside the npm package (`prepack` copy).
+4. Conventions are machine-enforced with why-bearing errors (e.g., `guard-invariants.mjs`).
+5. Agent evals are first-class tests.
+
+Regrets/Anti-patterns identified from Vercel repos:
+
+- Inability to retrofit `strict: true` in `next.js`.
+- Bespoke build pipelines.
+- Dual-branch release models, OS/bundler test matrices, API extractor compat ratchets, and custom convention engines were considered scale machinery to defer.
+
+Specific decisions were made for language (TypeScript 7.0.2), runtime (Node >=24), package manager (pnpm 11.22.0), module system (Pure ESM), strictness (eve's flag set), build (tsdown ^0.22), test (Vitest ^4.1), lint/format (oxlint + oxfmt), task runner (Minimal turbo.json ^2.9), release (Changesets + trusted publishing), validation (zod internally, Standard Schema at boundaries), MCP (SDK v2, stateless spec 2026-07-28), human surface (Docusaurus 3.10.2), and CI (GitHub Actions, hygiene from eve).
+
+The document also outlines a target repository layout, AGENTS.md constitution shape, agent skills roster (Tier 1, 2, 3, and external installs), corpus integrity as the test suite, and bootstrap order.
+
+## Decision
+
+The core decision is that **ksor's repo must be the first KSoR**, applying product guarantees to its own development environment.
+
+The plan was implemented with owner-directed changes (2026-08-18), including:
+
+- Decision record in AGENTS.md → Decisions.
+- Tier-1 skills roster cut to `implement-spec` + `find-skills`.
+- Always-on rules folded into AGENTS.md.
+- Shared tsconfig base moved to repo root.
+- Predecessor treated as reference, not authority.
+- `evals/` placeholder removed.
+- Changelog at `packages/ksor/CHANGELOG.md`.
+- `check-snippets` deferred.
+- Lint/format run zero-config (oxlint/oxfmt).
+- Hook installer became committed `.githooks/pre-commit` + repo-local `core.hooksPath`.
+- Turbo and guard baseline machinery cut.
+- `isolatedDeclarations` enabled.
+
+Specific toolchain and architectural decisions are pinned as per "The decision ledger" section. The repository layout, AGENTS.md constitution, agent skills roster, corpus integrity strategy, and bootstrap order are defined.
+
+## Rejected
+
+- **Retrofitting `strict: true`**: Rejected due to difficulties encountered by `next.js` in attempting this later.
+- **Bespoke build pipelines**: Rejected as unnecessary for ksor's current needs.
+- **Dual-branch release models, OS/bundler test matrices, api-extractor compat ratchets, custom convention engines**: Deferred as scale machinery not yet needed.
+- **Dedicated `docs/decisions.md`**: Rejected in favor of living in `AGENTS.md → Decisions`.
+- **Root changelog file**: Rejected in favor of `packages/ksor/CHANGELOG.md`.
+- **Evals placeholder**: Removed, evals land with `ksor serve`.
+- **Turbo and guard baseline machinery**: Cut on owner's call due to low current utility ("code is liability").
+- **Custom convention engines (konsistent-style) and custom lint plugins**: Deferred; guard script first, engine when a rule is violated twice.
+- **DCO + signed-commit enforcement, issue-triage automation, turbo remote-cache tuning, TS project references, scenario/TUI test tiers**: Deliberately deferred.
+
+## Reversal
+
+- **Human surface (shell choice)**: The initial decision for Docusaurus was superseded on 2026-08-18, and the shell choice was reopened, leading to open questions in AGENTS.md and proposal §4. This indicates that new evidence or considerations regarding the human surface could lead to a reversal of the Docusaurus decision.
+- **Custom convention engines / lint plugins**: If a guard rule is violated twice, it may trigger reconsideration and adoption of a custom convention engine.
+- **Deferred items**: The "Deliberately deferred" list implies that if conditions change (e.g., increased scale, specific needs arise), these items could be reconsidered and implemented. For example, if Windows CI becomes a critical need, it would be added.
+- **TypeScript programmatic API dependency**: If ksor unexpectedly needs to depend on the TS programmatic API, despite TS7.0.2 not having a stable compiler API until 7.1, the TypeScript version or strategy might need to be reevaluated.
+
 ## 1. What the study found (convergent across all four repos)
 
 Every Vercel framework repo, independent of age, has converged on the same five

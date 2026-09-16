@@ -117,7 +117,7 @@ what it climbs is the trust tiers (product principle 7).
 | `packages/ksor/docs/`                                      | user docs, shipped inside the npm tarball                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `workbench/example-corpus/`                                | living KSoR fixture: dev target, test + eval surface                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `docs/status.md`                                           | the only authority on what is implemented (npm links it)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `research/`                                                | plans and records; frontmatter is guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `research/`                                                | plans and records; tracked frontmatter and the common research spine are guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `specs/`                                                   | one-page feature contracts; frontmatter is guard-enforced                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `.agents/skills/`                                          | repo-maintenance skills (`.claude/skills` symlinks here)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `scripts/`                                                 | guards, corpus checks, boundary tests — plain node/vitest                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -1720,6 +1720,22 @@ Three rules paid for with shipped defects (post-mortems in
 - **Assert on shipped bytes and computed values, not behavior alone.**
 - **The test tier must install the same tree the artifact installs.**
 - **A failing assertion must print the value it actually saw.**
+
+### Research records
+
+`research/` contains evidence, decisions, proposals, reviews, and handover
+records. These genres may keep their own detailed sections, but every research
+record has the same five level-2 landmarks:
+
+- **Question** — what the research was trying to establish.
+- **Evidence** — what was actually inspected, measured, tested, or observed.
+- **Decision** — what was decided from that evidence.
+- **Rejected** — alternatives that were rejected and why.
+- **Reversal** — evidence that would cause the decision to be reconsidered.
+
+The landmarks are the agent-facing spine; genre-specific detail may follow them.
+Evidence and proposals must not be presented as the same kind of claim.
+Superseded research is marked rather than deleted.
 
 ## Documentation
 

@@ -94,7 +94,75 @@ A leader who reads only three more things should read the Motivation (1.1), the 
 
 ---
 
-## Status of This Document
+## Question
+
+How can an open, vendor-neutral framework be established to provide one governed, authoritative knowledge record for an organization, usable by humans, AI systems, and other knowledge systems, without creating competing sources of truth, and what are the architectural components, governance requirements, and conformance classes for such a system?
+
+## Evidence
+
+The proposal identifies a critical problem: AI agents, when confronted with conflicting information from various sources (e.g., old wiki pages, slide decks, current policies), will confidently select a "best match" and provide incorrect answers with plausible, but wrong, citations. This error stems from the organization's failure to establish authoritative knowledge, a gap made expensive by AI agents operating at scale.
+
+The KSoR framework is built on three core lines and one operating principle: "One authoritative record," "One governance boundary," "Many open projections," and "Govern knowledge once. Project it many ways."
+
+The architecture separates nine key responsibilities to avoid monolithic product authority: Authoritative record (OKF), Retrieval (Postgres + pgvector), Human publication (Fumadocs), AI discovery (`llms.txt` v2), Agent interaction (MCP), Knowledge exchange (OKF), Identity and access (OAuth/OIDC), Publication integrity (SLSA/Sigstore), and Observability (OpenTelemetry). These responsibilities are bound to existing open standards and reference components, which remain replaceable if conformance rules are met.
+
+The "Trust Ladder" categorizes knowledge channels by reach and guarantee: Open web files (weakest), Governed agent access (real guarantees), and Attested computation (strongest, experimental). This explicitly states the trade-off between reach and trust.
+
+Authority is established through a defined write-side lifecycle: knowledge starts as a draft, is reviewed by its owner, approved by an authorized actor, and then published as "stable." Changes require renewed approval or reversion to draft. An AI can author drafts but never approve its own work.
+
+The proposal protects against confident wrong answers, restricted knowledge leaks, unauditable agent decisions, and vendor lock-in. The cost is discipline: a single, reviewed repository, named owners, an approval workflow, and automated checks that enforce rules.
+
+KSoR normatively targets OKF v0.2, `llms.txt` v2, and MCP as foundational standards. Conformance classes (A-E) and optional profiles (P-Protected, P-Verified, P-Attested) are defined to allow for partial or full implementations.
+
+## Decision
+
+The core decision being asked of leadership is to review and adopt KSoR Standard Proposal 001 as the standard for how the organization's knowledge is governed and served to people and AI systems. This adoption signifies a commitment to an open, vendor-neutral framework with defined conformance, allowing independent teams and suppliers to build against it without proprietary dependencies.
+
+The decision is to establish:
+
+- **One authoritative record**: Markdown in the KSoR Profile of OKF.
+- **One governance boundary**: Policy determines which concepts are approved, visible, and current for a given audience, evaluated before any disclosure.
+- **Many open projections**: Human sites, AI discovery (`llms.txt` v2), agent surfaces (MCP), and exchange bundles (OKF).
+- A defined write-side lifecycle where knowledge progresses from draft to stable through owner review and authorized approval.
+- Nine architectural responsibilities bound to open standards (Postgres + pgvector for retrieval, Fumadocs for human serving, OAuth/OIDC for identity, SLSA/Sigstore for publication integrity, OpenTelemetry for observability).
+- A trust ladder explicitly stating guarantees for each projection rung.
+- 27 normative governance requirements (R1-R27) covering authority, disclosure, machine surfaces, exchange, integrity, observation, authoring, and change control.
+- Specific conformance classes (A-E) and optional profiles (P-Protected, P-Verified, P-Attested) for implementation.
+
+## Rejected
+
+- **Monolithic application**: The proposal explicitly rejects a single monolithic application in favor of a framework that defines a governed authoritative core and open boundaries, with replaceable implementations.
+- **Proprietary database or service for the record**: Rejected. The record MUST be maintainable in ordinary version control without requiring proprietary databases or services to read, diff, review, or migrate.
+- **Treating databases/indexes/serving layers as the source**: Rejected. The canonical data flow is _from_ the record, _through_ governance, _to_ projections, not the reverse.
+- **Manufacturing verification from approval**: R17 explicitly states that approval is not verification, and one MUST NOT be conflated with the other, nor copied into the other by a publisher.
+- **Unauthorised content removal post-hoc**: Rejected. Governance predicates MUST be evaluated _within_ the retrieval operation itself, not through post-hoc removal from generated prose (R7).
+- **Shadow authority**: The creation of a separately authored AI knowledge base that can introduce or override institutional knowledge is explicitly prohibited (R4).
+- **Client-side concealment for static artifacts**: Public static artifacts MUST be built from the authorized corpus; concealment via client-side code is prohibited (R6).
+- **Inferring public visibility from omission**: Rejected. `ksor.audience` is required, and implementations MUST NOT infer public visibility from its absence (4.2.4.2).
+- **Using trust tiers as access control**: Rejected. Trust tiers are advisory quality filters and MUST NOT be used for access control (4.2.3.2).
+- **Capturing restricted content in telemetry by default**: Telemetry MUST NOT capture restricted document bodies, retrieved passages, complete prompts, or generated answers by default (R20).
+- **A2A or other agent-to-agent protocols**: Out of scope for this standard, as KSoR is not an agent.
+- **A REST/OpenAPI surface**: Out of scope, as discovery, direct Markdown consumption, MCP, and OKF cover the defined boundaries.
+- **A graph database**: Out of scope, as the corpus already forms a graph through Markdown links.
+- **W3C PROV and schema.org JSON-LD**: Out of scope for version 0.1, though may be standardized in future proposals.
+- **Conflating verification and computation attestation**: R7.1 states they are distinct and MUST NOT be conflated.
+- **Conformance test suite as part of this proposal**: A companion proposal defining the test suite is anticipated, implicitly rejecting its inclusion here.
+- **Proprietary runtime protocol for Attested Computation**: The P-Attested profile is experimental, and standardizing a proprietary runtime protocol is rejected against the principle of this proposal.
+
+## Reversal
+
+- **Adoption of the proposal**: If the organization determines that the costs of discipline (maintaining one reviewed repository, named owners, approval workflows, automated checks) outweigh the protections against confident wrong answers, restricted knowledge leaks, unauditable agent decisions, and vendor lock-in, the proposal could be reversed.
+- **Vendor-neutrality**: If specific architectural components (e.g., Postgres, Fumadocs) prove to be indispensable without viable conformant alternatives, or if the organization consciously opts for a proprietary stack for strategic reasons, the commitment to vendor-neutrality could be reversed.
+- **Reach vs. Guarantee trade-off**: The "Trust Ladder" inherently presents a trade-off where wider reach means weaker guarantees. If a future requirement demands both maximal reach and maximal guarantee simultaneously for specific knowledge, the current architecture's understanding of this trade-off might be reversed, necessitating a fundamental change.
+- **Separation of nine responsibilities**: If a single product emerges that can genuinely and transparently provide all nine responsibilities without compromising governance or creating knowledge authority, the decision to separate these jobs could be reconsidered, though the proposal argues against it.
+- **Attested Computation (P-Attested Profile)**: This profile is experimental due to the lack of an interoperable conformance test and a defined attestation runtime protocol. If the OKF v0.2 specification on attestation runtime protocols does not materialize or proves unworkable, the P-Attested profile might be reversed or fundamentally re-designed.
+- **Open Knowledge Format (OKF) as foundational**: While foundational, if OKF itself proves unstable, unmaintainable, or insufficient for future KSoR needs (despite the adapter boundary), the commitment to OKF as the native record format could be reconsidered.
+- **Audience overlap rule (4.2.4.2, R11)**: The rule for links and supersession pointers ("permitted only when the target's audience list contains `public` or contains every identifier in the source's list") implies a strict disclosure control. If this rule proves too restrictive for practical interoperability or knowledge sharing within an organization, it might be relaxed, effectively reversing a part of the disclosure policy.
+- **`generated.at` postdating `ksor.approval.at` (R23)**: If a scenario arises where a stable concept is legitimately altered and `generated.at` postdates `ksor.approval.at` _without_ renewed approval or a `draft` status, and this is deemed acceptable, the current mechanical check that fails the build would need to be reversed or modified.
+- **Governance Policy scope resolution**: If the deterministic rule resolution (deepest path wins, explicit type breaks tie) for ownership and approval authorities proves inadequate or leads to unintended policy interpretations, the resolution mechanism could be reversed.
+- **Required `generated.at` on stable concepts (4.2.2.3)**: If future needs arise where a stable concept does not have a `generated.at` for legitimate reasons and the `status: stable` is still desired, this requirement would need to be reversed.
+
+---
 
 This document is a **draft proposal** for community review. It is not a finished standard. It has no formal standing until it is reviewed, revised, and adopted through the process described in Section 13.
 

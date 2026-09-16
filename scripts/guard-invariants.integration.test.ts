@@ -48,7 +48,9 @@ function harness(): string {
   writeFileSync(path.join(root, "AGENTS.md"), "# Agents\n");
   symlinkSync("AGENTS.md", path.join(root, "CLAUDE.md"));
 
-  mkdirSync(path.join(root, ".agents", "skills", "sample-skill"), { recursive: true });
+  mkdirSync(path.join(root, ".agents", "skills", "sample-skill"), {
+    recursive: true,
+  });
   writeFileSync(
     path.join(root, ".agents", "skills", "sample-skill", "SKILL.md"),
     "---\nname: sample-skill\ndescription: fixture\n---\n\nbody\n",
@@ -66,6 +68,8 @@ function harness(): string {
     JSON.stringify({ name: "@panaversity/ksor", dependencies: {} }),
   );
 
+  const researchRoot = path.join(root, "research");
+  mkdirSync(researchRoot, { recursive: true });
   return path.join(root, "scripts", "guard-invariants.mjs");
 }
 
@@ -82,6 +86,71 @@ function dbSuiteNaming(at: string, expression: string): void {
     `import { randomBytes } from "node:crypto";\nconst dbName = ${expression};\n`,
   );
 }
+
+function createResearchFile(harnessRoot: string, fileName: string, content: string): string {
+  const researchFilePath = path.join(harnessRoot, "research", fileName);
+  writeFileSync(researchFilePath, content);
+  return researchFilePath;
+}
+
+const validFrontmatter = `---
+issue: https://github.com/panaversity/ksor/pull/1
+status: accepted
+last_updated: 2026-08-18
+---
+`;
+
+const minimalValidContent = `
+## Question
+
+## Evidence
+
+## Decision
+
+## Rejected
+
+## Reversal
+`;
+
+describe("guard-invariants — rule 4 research file validation", () => {
+  it("passes for a valid research file with all required frontmatter and headings", () => {
+    const at = harness();
+    createResearchFile(
+      path.dirname(path.dirname(at)),
+      "valid.md",
+      validFrontmatter + minimalValidContent + "\n# Other Section\n",
+    );
+    const result = runGuard(at);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("fails when a research file is missing one required heading", () => {
+    const at = harness();
+    createResearchFile(
+      path.dirname(path.dirname(at)),
+      "missing-heading.md",
+      validFrontmatter + `## Question\n## Evidence\n## Decision\n## Rejected\n`,
+    );
+    const result = runGuard(at);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("rule 4");
+    expect(result.stderr).toContain("missing research sections: Reversal");
+  });
+
+  it("fails when a research file is missing one required frontmatter key", () => {
+    const at = harness();
+    createResearchFile(
+      path.dirname(path.dirname(at)),
+      "missing-frontmatter.md",
+      `---\nissue: some-issue\nstatus: proposed\n---\n` + minimalValidContent,
+    );
+    const result = runGuard(at);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("rule 4");
+    expect(result.stderr).toContain("missing frontmatter: last_updated");
+  });
+});
 
 describe("guard-invariants — rule 12 evaluates the suite's own literal", () => {
   const STAMP = "${Date.now().toString(36)}";

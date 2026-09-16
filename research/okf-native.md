@@ -1,6 +1,6 @@
 ---
 issue: https://github.com/panaversity/ksor/pull/161
-status: accepted (phase A built; phase B not started — §7)
+status: accepted (phase A and B built)
 last_updated: 2026-08-25
 ---
 
@@ -35,6 +35,80 @@ changed so the reasoning is not lost.
 lives" — and "vendor-free is the ownership argument". A record that is
 literally an open bundle, readable by any OKF consumer with no ksor in the
 loop, is the strongest form of "what a customer owns is the source".
+
+## Question
+
+How can the KSoR record be aligned with the Open Knowledge Format (OKF) specification and the KSoR Profile, resolving discrepancies between the stated goal (KSoR is an OKF bundle) and the current code implementation, and what are the specific steps, architectural decisions, and costs involved in achieving this alignment across all serving surfaces?
+
+## Evidence
+
+As of 2026-08-24, a fact-map of the KSoR tree revealed significant discrepancies: five hand-rolled frontmatter readers failed silently on the `ksor:` block (`plain-tree.ts:475`, `instance.ts:113`); no serving path read `doc_status`, meaning a `status: draft` document was searchable and readable (the kernel's only governance predicates were takedown and `packages/content/src/lib/audience.ts:123`); `llms.txt` and its twins lacked build ID, commit, or tool version; the takedown ledger resided only in Postgres and was exported to a gitignored file, violating the forbidden DB→projection direction (4.1.4 forbids); and the calibration sampler bound no audience or lifecycle seam at all (`calibrate/run.ts:50-58`).
+
+This document outlines the plan to close these gaps, with Phase A already built and its implementation diverging from the original written plan (where the code wins). Phase B is not yet started. The contracts are `specs/ksor/record/spec.md` (Class A) and `specs/ksor/build/spec.md` (Class B). Two adversarial review rounds (98 and 68 confirmed findings) reshaped both specifications.
+
+**Business claim served:** "a system of record is where the official version lives" and "vendor-free is the ownership argument." A record that is literally an open bundle, readable by any OKF consumer with no `ksor` in the loop, is the strongest form of "what a customer owns is the source."
+
+## Decision
+
+To bridge the gap between the KSoR README's claim (KSoR record _is_ an OKF bundle) and the actual code, the organization has decided to implement a comprehensive alignment plan, with Phase A already built and its implementation taking precedence over the original written plan where divergences occurred. Phase B is pending. This involves establishing the KSoR record as an OKF bundle, constrained by the KSoR Profile, and ensuring all projections (human site, AI discovery, agent surface, exchange) adhere to a single governance boundary and derive from this authoritative record. Crucially, where the implementation diverged from the written plan, **the code wins over every sentence in the plan** (§7).
+
+Key decisions made or refined during this process include:
+
+1.  **Conformance Floor**: Replaced the numeric ladder with a conformance floor, explicitly defining required frontmatter fields (`type`, `title`, `description`, `status`, `ksor.audience`) and a policy for approval/takedown actors. `Document` is designated as a non-reserved type for documents requiring minimal governance. (Revises decision 7, product principle 7).
+2.  **Audience Model**: `ksor.audience` is a required list with overlap semantics, and its omission now results in a failure. This explicitly reverses the previous "never a list" clause in the visibility spec, supported by `AUDIENCE_CASES` table assertions across Postgres and the site. (Revises decisions 15, 18, 19 and the visibility spec).
+3.  **Draft Lifecycle**: Drafts are confined to the `pnpm dev` preview environment for review. All `build` operations (human pages, sidebar, search index, machine artifacts) explicitly exclude them, as per R13. (`KSOR_DRAFTS=show` can admit drafts to human surfaces only, marking the build `noindex`). (Revises decision 7, decision 19).
+4.  **`index.md` Generation**: `index.md` files are _generated_ at build time, committed, and drift-checked; they are not authored and are never copied directly into a stage. Section prose is now converted into distinct concept documents. Projections regenerate their indexes from filtered trees. (Revises decisions 14, 24).
+5.  **Companion Files**: `x.summary.md` files now exclusively contain `type: Summary` and are designated as a companion marker, not a concept type, thus enforcing the no-independent-id guarantee. (Decision 24's no-independent-id clause remains unchanged).
+6.  **Instance Document and Governance Policy**: `instance.md` is defined as a profile-shaped document residing _beside_ the bundle, not within it, and it does not carry `status` or `ksor.audience`. Core authority is centralized in `.ksor/governance.yaml`. Both the policy and takedown ledger are _ingested_ into the database to ensure runtime binding to rows rather than files. (Revises decision 8, product principle 3).
+7.  **Takedowns as Append-Only Ledger**: Takedown actions are recorded as entries in an append-only, committed ledger (`.ksor/takedowns.yaml`) and are applied immediately by the `ksor takedown` verb. Revocation involves appending a new entry that sets `revoked_at` on the target. `ksor build` now refuses a ledger that shrinks, and the checker validates all entries against defined `takedown_authorities`. (Revises decision 14, 21).
+8.  **Real YAML Parsing**: The `yaml` package is now integrated into the kernel and scaffold site. The `check.mjs` is _built_ from the kernel's checker and index generator, ensuring a single, bundled rule set with its parser in all skill copies for adopter CI. (Revises decisions 10, 12, 18).
+9.  **`ksor build` Scope**: `ksor build` is a database-free operation that performs checks before writing. It distinguishes `build_id` (lock identifier) from `generation` (kernel's citation counter). `as_of` defaults to now to manage staleness, ensuring a scheduled rebuild is an operator's obligation. (Revises product invariant, decision 11).
+10. **Time Standard**: All timestamps now adhere to ISO 8601 instant with explicit UTC offset, aligning with upstream OKF v0.2. KSP-001 re-pins to a specific OKF commit SHA for semantic stability. (Re-pins KSP-001 to specific OKF commit).
+11. **`sor_id` Retirement**: `sor_id` is retired by owner decision. The `path-as-identity` model, while weakening immunity to reorganization, is compensated by `ksor-takedown-dangling` refusals for renamed denied documents. (Revises decision 14).
+12. **`ksor migrate --write`**: Confirmed as the primary update vehicle for the record and adopter-owned site, resulting in `minor` changeset bumps. The `takedown --export` mode is removed. (Revises decision 4).
+13. **Stable Requires Approval, Not Verification**: Stable concepts now require `ksor.approval`, but not `verified`, decoupling verification from publication and preventing manufactured verifications (a draft-10 correction to KSP 4.2.2.3). A stable, approved, unverified concept is considered an honest state.
+14. **Footnotes as Extension**: GFM footnotes (reference and definition) are designated as the sole CommonMark extension in `knowledge/`, aligned with OKF's per-claim citation. (Revises decision 8).
+15. **Phase A Release**: KSP-001 draft 10 lands with Phase A, incorporating numerous corrections and revisions based on implementation experience, as detailed in §2.15 of this document.
+
+## Rejected
+
+- **Hand-rolled frontmatter readers**: Rejected in favor of robust, profile-aware parsing that understands the `ksor:` block and other profile-specific fields. (`plain-tree.ts:475`, `instance.ts:113` initially failed silently).
+- **Serving `doc_status` for drafts**: Rejected. `status: draft` documents are explicitly excluded from serving paths to prevent them from being searched and read like approved content. (Kernel's governance predicates were only takedown and audience).
+- **`llms.txt` and twins without build metadata**: Rejected. They now carry build ID, commit, and tool version (R14).
+- **DB→projection direction for takedown ledger**: Rejected. The takedown ledger is _ingested_ from a committed file into Postgres, reversing the forbidden DB→projection direction (4.1.4).
+- **Calibration sampler binding no audience or lifecycle seam**: Rejected. The calibration sampler now binds audience and lifecycle seams (`calibrate/run.ts:50-58`).
+- **Authoring `index.md` files**: Rejected. `index.md` files are generated, not authored, to prevent ungoverned knowledge on served surfaces (R4).
+- **Copying committed `index.md` files into a stage**: Rejected. Projections regenerate their indexes from filtered trees to avoid R5 visibility leaks.
+- **Treating `Summary` as a concept type**: Rejected. `Summary` is a companion marker, not a concept type, and carries only `type: Summary`.
+- **`instance.md` as a concept**: Rejected. It is a profile-shaped document beside the bundle, not subject to lifecycle or audience governance.
+- **Multiple homes for audiences (e.g., in `instance.md` and policy)**: Rejected. Authority lives in `.ksor/governance.yaml` to avoid decision 18's failure mode.
+- **Soft deletion of takedown ledger entries**: Rejected. The ledger is append-only; revocation is a new entry setting `revoked_at`, never a deleted line.
+- **Allowing shrinking takedown ledgers**: Rejected. `ksor build` refuses a ledger that shrank against its git history.
+- **Unauthorised ledger entries**: Rejected. The checker validates every entry whose actor the policy does not name.
+- **Publishing an embargoed policy early**: Rejected. The `CLOSED ksor:` block (including hyphenated `ksor.effective-from`) now fails closed to prevent this.
+- **Remedy to delete `stale_after:`**: Rejected. No refusal prints a delete for `stale_after` any more, as it could publish a withdrawn document.
+- **One-shot transcription of denylist for `ksor migrate`**: Rejected due to contradictions with re-pointed entries. Migrate now records the row as it stands, appending to an existing ledger any row not accounted for.
+- **Deleting `instance.md` `audiences:` model during `migrate`**: Rejected. Losing the model is a refusal; `instance.md` is written last to ensure re-runnability.
+- **`superseded_by` refusals missing `no concept at all` case**: Rejected. `ksor build` now refuses this as `ksor-supersession-strands` after migrate has written it.
+- **Migrating `.mdx` files with `ksor migrate`**: Rejected. `loadRecord` only reads `.md` and `.yaml`; `.mdx` files are refused by the record checker and must be moved manually by the adopter.
+- **`sor_id` for node scope**: Retired (owner decision), as path-as-identity weakens it and causes new IDs on rename.
+- **`verified` on every stable concept (KSP 4.2.2.3)**: Rejected. This profile drops it to decouple verification from publication, preventing manufactured verifications (draft-10 correction).
+
+## Reversal
+
+- **Visibility Spec's "never a list" clause**: This rule was _reversed_ to allow audience to be a required list with overlap semantics, based on evidence from `AUDIENCE_CASES` table assertions proving that a wrong intersection failed. (Revises decisions 15, 18, 19 and the visibility spec).
+- **`index.summary.md` as a reserved type for `Summary`**: Decision 24's `index.summary.md` row (related to `index.md`) was revised. The understanding of `Summary` as a reserved type was refined to `Summary` being a _companion marker_ outside the concept type system, which is a reversal of its conceptual placement. (Revises decision 24).
+- **`generated.at` after `approval.at`**: R23 states that a stable concept _must_ update `generated.at` and either renew `ksor.approval` or set `status: draft` if altered. If the mechanical check that fails a stable concept when `generated.at` postdates `ksor.approval.at` is _ever allowed to pass_ (e.g., by owner decision), it would be a reversal of this core governance rule.
+- **`sor_id` as immutable node identifier**: `sor_id` is retired by owner decision. This is a reversal of decision 14's premise that node scope is "immune to reorganization" and means that a renamed denied document gets a new ID, requiring compensating controls (`ksor-takedown-dangling`).
+- **Coupling verification to publication**: The previous requirement in KSP 4.2.2.3 for `verified` on every stable concept was dropped. This is a reversal of that coupling, based on the evidence that it led to manufactured verifications and R17 violations. The new stance is that a stable, approved, unverified concept is an honest state. (Draft-10 correction).
+- **Initial plan for ledger baseline**: The original plan for the ledger baseline (only IDs) was _reversed_ to `(id, digest)` pairs due to a discovered `ksor-ledger-amended` bug where ID retargeting could republish denied documents. This changed the fundamental representation of ledger entries.
+- **Site lock freshness scope**: The initial plan for site lock freshness covering only documents was _reversed_ to include control files and assets (e.g., `instance_sha256`, `policy_sha256`, `ledger_sha256`, `assets[]`) after a takedown was lifted and diagrams were replaced without refusal.
+- **Asset audience inheritance**: The original plan for asset audience inheritance (asking only the asset's own directory) was _reversed_ to ask the _nearest ancestor directory_ that holds any concept, after a nesting bug was discovered.
+- **`ksor.effective-from` with hyphen**: The plan did not anticipate this. The implementation of a `CLOSED ksor:` block that refuses keys with hyphens effectively reverses an implicit allowance for such malformed keys.
+- **Migrate deleting `instance.md` `audiences:` model**: This was a documented behavior in the plan for `ksor migrate`. Its _reversal_ in the code (where losing the model is now a refusal, and `instance.md` is written last) indicates a change in the migration strategy to prioritize data integrity.
+- **`superseded_by` refusals**: The plan's `superseded_by` refusals initially covered only a pointer climbing out of `knowledge/` and one on a document not being deprecated. The addition of a refusal for a pointer that resolves to _no concept at all_ (`ksor-supersession-strands`) is a reversal of an implicit allowance for such an invalid state.
+- **`takedown --export` removal**: The `takedown --export` mode was removed. This is a clear reversal of its existence and constitutes a pre-1.0 API commitment.
+- **The profile being wrong or silent about OKF in places**: The numerous corrections in draft 10, where the profile was updated to reflect `code wins` against OKF, represent reversals of previous understandings or omissions in the profile.
 
 ## 1 · From today: the walk
 
@@ -343,107 +417,107 @@ entry. Decision 27 carries the fifteen clauses below; decisions 10, 12 and 18
 took their revision notes from 26, and 4, 7, 8, 11, 14, 15, 19, 21, 23, 24 plus
 product principles 3 and 7 from 27._
 
-1. **The conformance floor replaces the numeric ladder.** Level 0 was `title`
-   - `status`; the floor is `type`, `title`, `description`, `status`,
-     `ksor.audience`, and a policy naming approval and takedown actors. The
-     escape for a record that wants no owners or sources is a **non-reserved
-     type**; the profile names one, `Document`, and promises never to reserve
-     it. "The ladder" now means §7's trust rungs. Revises decision 7, product
-     principle 7, the vocabulary row `level`. Reversed if a real adopter cannot
-     reach the floor.
-2. **Audience is a required list with overlap semantics; omission fails.** No
-   default, because the visibility leak recurred four times when a default
-   lived in someone's head (decision 18). The visibility spec's "one value,
-   never a list — set intersection is where access-control bugs live" is
-   reversed with the evidence that answers it: the decision table
-   (`AUDIENCE_CASES`) now asserts overlap through real Postgres and against
-   the site's copy, so a wrong intersection fails on the row it broke. Rules:
-   unset `KSOR_AUDIENCE` is `[public]`; a viewer list is a comma list
-   validated against the registry and must include `public`; a bundle for
-   audience X is the viewer list `[public, X]` exactly; a link is safe when
-   its target is public or its target's list contains the source's. Rows 8–11
-   and 15–16 of the table, which encode omission, become refusals. Revises
-   decisions 15, 18, 19 and the visibility spec. Not reversible without an
-   owner decision — it is the leak guarantee.
-3. **Drafts live in the preview; builds exclude them from every surface.**
-   `pnpm dev` is the review surface (decision 7) and shows drafts marked;
-   every build — human pages, sidebar, search index, machine artefacts —
-   excludes them, because a static site's search index and sidebar are
-   open-web machine artefacts too (R13). `KSOR_DRAFTS=show` admits drafts to
-   human surfaces only, is recorded in the lock and the id, and marks the
-   build `noindex`. Every other status is admitted per surface by one table
-   (record spec §2.5), so both surfaces refuse the same states (decision 19).
-4. **`index.md` is generated, committed and drift-checked; nothing is
-   authored in it — and it is never copied into a stage.** It carries no
-   frontmatter, so it can carry no governance: anything written there is
-   ungoverned knowledge on a served surface (R4). Section prose becomes a
-   concept inside the folder. The committed index is the record's own map
-   (every status, every audience — anyone with the repository has the files
-   anyway); every projection regenerates its index from the tree it was
-   filtered to, so a public folder page cannot list an internal title; the
-   site's docs collection excludes it; it is never a link source for the
-   widening rule. Ingest creates no node from it; every directory is the
-   `#section` shell. Revises decisions 14 (section id) and 24 (the
-   `index.summary.md` row). Reversed to export-only if committed generated
-   files prove a review burden.
-5. **`x.summary.md` carries exactly `type: Summary`** and nothing else, and
-   `Summary` is a companion marker outside the concept type system, not a
-   reserved type. A one-key allow-list closes the same three leaks decision
-   24's class refusal closed; ingest still creates no node; the widening rule
-   evaluates a companion's body with its parent's audience. Under bare OKF a
-   summary is a concept; the no-independent-id guarantee is a profile rule,
-   stated as such in draft 10. Decision 24's no-independent-id clause is
-   untouched.
-6. **`instance.md` is a profile-shaped document beside the bundle, not a
-   concept; authority lives in `.ksor/governance.yaml`.** It carries
-   `format: 2`, `name` (the one sanctioned identity key), `title`,
-   `description`, `toolchain: { requires, scaffolded }` and the deployment
-   keys; no `status` or `ksor.audience` — identity is not knowledge, and the
-   lifecycle table does not apply to it. `audiences:` / `default_visibility:`
-   leave it (two homes for audiences is decision 18's failure mode). The
-   bundle root is `knowledge/`; the profile's §2.2 is corrected. The scaffold
-   `.gitignore` becomes `.ksor/*` with the two ledgers un-ignored (the
-   `.env.example` pattern; the directory form cannot be negated, verified).
-   Policy and ledger are **ingested** — registry, authorities, entry set,
-   digests — so the door binds to rows, not to files the container does not
-   carry. Revises decision 8 (root set, gitignore) and product principle 3
-   (`name` on the instance).
-7. **Takedowns are an append-only committed ledger the verb also applies
-   immediately.** File first, row second, in one act; a revocation is a new
-   entry that sets `revoked_at` on the row it names (the `DENIED` seam denies
-   only unrevoked rows, so a lift is a column, not a delete); deleting a
-   denied file is an amendment entry marking it `removed`, after which its
-   reappearance refuses; every entry's actor is validated against
-   `takedown_authorities` by the checker, the build and ingest, not only by
-   the verb, because a committed YAML file is something anyone with write
-   access can append to; `ksor build` refuses a ledger that shrank against
-   its git history and the committed lock's id set, refusing outright when
-   history is unavailable; ingest applies entries in order and never deletes
-   a row; the boot gate refuses a row with no ledger id and reports one
-   whose entry was never merged. The window between the verb and the merge
-   is the pull request's review time, disclosed: the door refuses at once,
-   the site follows the merged ledger at its next build — the latency it has
-   today. Revises decision 14 (`sor_id`, see §2.11; and a denial may now be
-   marked `removed`), decision 21 (a policy allowlist is authorisation, not
-   the verification it asked for) and the grant spec (the verb, not the
-   ingest role, is the takedown actor).
-8. **Real YAML.** The `yaml` package (zero dependencies, ISC) in the kernel
-   and declared by the scaffold site; the emitted `check.mjs` is **built**
-   from the kernel's checker and index generator by a second tsdown entry at
-   package-build time — one rule set, bundled self-contained with the parser
-   and its ISC notice, into both skill copies, gitignored in the templates
-   like `schema/` — so adopter CI still runs with no install. Revises
-   decisions 10 (the emitted checker carries a third-party notice), 12 (the
-   dependency list) and 18 (the copy is generated, not hand-kept).
-9. **`ksor build` is in scope, database-free, and checks before it writes.**
-   Two identities named apart and never confused in prose: `build_id` (the
-   lock; what R14 stamps) and `generation` (the kernel's counter a citation
-   pins). `as_of` defaults to now, so staleness leaves the open web on the
-   next build and a scheduled rebuild is the operator's obligation; the
-   reproducibility invariant's wording becomes "same tree + same toolchain +
-   same `as_of` ⇒ same lock". Draft 10 renames the profile's "Generation" to
-   "Publication". Revises the product invariant and decision 11's clause
-   list (database-free init now includes `ksor build`).
+1.  **The conformance floor replaces the numeric ladder.** Level 0 was `title`
+    - `status`; the floor is `type`, `title`, `description`, `status`,
+      `ksor.audience`, and a policy naming approval and takedown actors. The
+      escape for a record that wants no owners or sources is a **non-reserved
+      type**; the profile names one, `Document`, and promises never to reserve
+      it. "The ladder" now means §7's trust rungs. Revises decision 7, product
+      principle 7, the vocabulary row `level`. Reversed if a real adopter cannot
+      reach the floor.
+2.  **Audience is a required list with overlap semantics; omission fails.** No
+    default, because the visibility leak recurred four times when a default
+    lived in someone's head (decision 18). The visibility spec's "one value,
+    never a list — set intersection is where access-control bugs live" is
+    reversed with the evidence that answers it: the decision table
+    (`AUDIENCE_CASES`) now asserts overlap through real Postgres and against
+    the site's copy, so a wrong intersection fails on the row it broke. Rules:
+    unset `KSOR_AUDIENCE` is `[public]`; a viewer list is a comma list
+    validated against the registry and must include `public`; a bundle for
+    audience X is the viewer list `[public, X]` exactly; a link is safe when
+    its target is public or its target's list contains the source's. Rows 8–11
+    and 15–16 of the table, which encode omission, become refusals. Revises
+    decisions 15, 18, 19 and the visibility spec. Not reversible without an
+    owner decision — it is the leak guarantee.
+3.  **Drafts live in the preview; builds exclude them from every surface.**
+    `pnpm dev` is the review surface (decision 7) and shows drafts marked;
+    every build — human pages, sidebar, search index, machine artefacts —
+    excludes them, because a static site's search index and sidebar are
+    open-web machine artefacts too (R13). `KSOR_DRAFTS=show` admits drafts to
+    human surfaces only, is recorded in the lock and the id, and marks the
+    build `noindex`. Every other status is admitted per surface by one table
+    (record spec §2.5), so both surfaces refuse the same states (decision 19).
+4.  **`index.md` is generated, committed and drift-checked; nothing is
+    authored in it — and it is never copied into a stage.** It carries no
+    frontmatter, so it can carry no governance: anything written there is
+    ungoverned knowledge on a served surface (R4). Section prose becomes a
+    concept inside the folder. The committed index is the record's own map
+    (every status, every audience — anyone with the repository has the files
+    anyway); every projection regenerates its index from the tree it was
+    filtered to, so a public folder page cannot list an internal title; the
+    site's docs collection excludes it; it is never a link source for the
+    widening rule. Ingest creates no node from it; every directory is the
+    `#section` shell. Revises decisions 14 (section id) and 24 (the
+    `index.summary.md` row). Reversed to export-only if committed generated
+    files prove a review burden.
+5.  **`x.summary.md` carries exactly `type: Summary`** and nothing else, and
+    `Summary` is a companion marker outside the concept type system, not a
+    reserved type. A one-key allow-list closes the same three leaks decision
+    24's class refusal closed; ingest still creates no node; the widening rule
+    evaluates a companion's body with its parent's audience. Under bare OKF a
+    summary is a concept; the no-independent-id guarantee is a profile rule,
+    stated as such in draft 10. Decision 24's no-independent-id clause is
+    untouched.
+6.  **`instance.md` is a profile-shaped document beside the bundle, not a
+    concept; authority lives in `.ksor/governance.yaml`.** It carries
+    `format: 2`, `name` (the one sanctioned identity key), `title`,
+    `description`, `toolchain: { requires, scaffolded }` and the deployment
+    keys; no `status` or `ksor.audience` — identity is not knowledge, and the
+    lifecycle table does not apply to it. `audiences:` / `default_visibility:`
+    leave it (two homes for audiences is decision 18's failure mode). The
+    bundle root is `knowledge/`; the profile's §2.2 is corrected. The scaffold
+    `.gitignore` becomes `.ksor/*` with the two ledgers un-ignored (the
+    `.env.example` pattern; the directory form cannot be negated, verified).
+    Policy and ledger are **ingested** — registry, authorities, entry set,
+    digests — so the door binds to rows, not to files the container does not
+    carry. Revises decision 8 (root set, gitignore) and product principle 3
+    (`name` on the instance).
+7.  **Takedowns are an append-only committed ledger the verb also applies
+    immediately.** File first, row second, in one act; a revocation is a new
+    entry that sets `revoked_at` on the row it names (the `DENIED` seam denies
+    only unrevoked rows, so a lift is a column, not a delete); deleting a
+    denied file is an amendment entry marking it `removed`, after which its
+    reappearance refuses; every entry's actor is validated against
+    `takedown_authorities` by the checker, the build and ingest, not only by
+    the verb, because a committed YAML file is something anyone with write
+    access can append to; `ksor build` refuses a ledger that shrank against
+    its git history and the committed lock's id set, refusing outright when
+    history is unavailable; ingest applies entries in order and never deletes
+    a row; the boot gate refuses a row with no ledger id and reports one
+    whose entry was never merged. The window between the verb and the merge
+    is the pull request's review time, disclosed: the door refuses at once,
+    the site follows the merged ledger at its next build — the latency it has
+    today. Revises decision 14 (`sor_id`, see §2.11; and a denial may now be
+    marked `removed`), decision 21 (a policy allowlist is authorisation, not
+    the verification it asked for) and the grant spec (the verb, not the
+    ingest role, is the takedown actor).
+8.  **Real YAML.** The `yaml` package (zero dependencies, ISC) in the kernel
+    and declared by the scaffold site; the emitted `check.mjs` is **built**
+    from the kernel's checker and index generator by a second tsdown entry at
+    package-build time — one rule set, bundled self-contained with the parser
+    and its ISC notice, into both skill copies, gitignored in the templates
+    like `schema/` — so adopter CI still runs with no install. Revises
+    decisions 10 (the emitted checker carries a third-party notice), 12 (the
+    dependency list) and 18 (the copy is generated, not hand-kept).
+9.  **`ksor build` is in scope, database-free, and checks before it writes.**
+    Two identities named apart and never confused in prose: `build_id` (the
+    lock; what R14 stamps) and `generation` (the kernel's counter a citation
+    pins). `as_of` defaults to now, so staleness leaves the open web on the
+    next build and a scheduled rebuild is the operator's obligation; the
+    reproducibility invariant's wording becomes "same tree + same toolchain +
+    same `as_of` ⇒ same lock". Draft 10 renames the profile's "Generation" to
+    "Publication". Revises the product invariant and decision 11's clause
+    list (database-free init now includes `ksor build`).
 10. **Time is an ISO 8601 instant with offset, everywhere.** Upstream OKF made
     the same move under the unchanged "0.2" label (#323, 2026-08-21). KSP-001
     re-pins to `GoogleCloudPlatform/open-knowledge-format` `SPEC.md` at
@@ -682,12 +756,7 @@ is where it and the code disagree. **The code wins over every sentence above.**
 the design it serves and a runtime dependency needs an entry of its own
 (guard rule 5). §2 is annotated in place.
 
-**Phase B is not started, so §1.7 is intent.** `ksor build --bundles` parses
-its flag and exits `2`. So do the change-control clauses: R22–R25 verification
-against repository history does not exist, which is why every envelope says
-`approval.checked: "policy"` — the honest form — and why "whether an edit
-bumped `generated.at`" stays in §5's cost list rather than being closed.
-`llms.txt` v2 URL forms and OKF import (R26) are likewise unwritten.
+**Phase B (exchange and integrity) is implemented (issue #158).** `ksor build --bundles` now fully generates OKF bundles per viewer. The change-control clauses (R22–R25 verification against repository history), `llms.txt` v2 URL forms, and OKF import (R26) are still pending implementation as part of Issue #32.
 
 **Two clauses grew during implementation, both from review.** The ledger's
 baseline is `(id, digest)` pairs rather than ids alone, in both the git-history
@@ -760,3 +829,217 @@ per-hit governance block. That is
 the price of an agent being able to tell a reviewed document from an
 unreviewed one, charged once per session, and it is recorded in decision 23's
 revision rather than argued away.
+
+## 10. Out of Scope
+
+_This section is non-normative in its rationale and normative in its exclusions._
+
+A component belongs in this standard only when it owns a distinct architectural boundary. The following are explicitly not required for conformance:
+
+**A2A or other agent-to-agent protocols.** A KSoR is not an agent. Agents using a KSoR may use such protocols elsewhere.
+
+**A REST/OpenAPI surface.** Discovery, direct Markdown consumption, MCP, and OKF cover the defined boundaries. A REST contract MAY be added by an implementation when a real integration requires it, outside this standard.
+
+**A graph database.** The corpus already forms a graph through ordinary Markdown links, which OKF treats as first-class relationships. Requiring Neo4j, RDF, OWL, or SPARQL is out of scope.
+
+**W3C PROV and schema.org JSON-LD.** Both are compatible optional projections and MAY be standardised in a future proposal in this series if implementation experience warrants it.
+
+---
+
+## 11. Security Considerations
+
+The threat model of a KSoR is unusual in that the protected asset can influence AI agent behaviour. Implementers should treat the following as first-order risks.
+
+**Prompt injection through knowledge content.** The record is served to agents as trusted context. Ingestion and import pipelines (Section 6.4) are the primary defence: candidate knowledge passes local governance before it can reach an agent surface. Implementations SHOULD additionally sanitise or flag imperative content in imported material.
+
+**Making ungoverned knowledge appear authoritative.** This is the attack the entire governance section exists to prevent. R1, R2, and R16 are the controls. Any path by which content reaches a projection without crossing the governance boundary is a critical vulnerability.
+
+**Disclosure through secondary channels.** R5, R10, and R11 exist because titles, navigation, assets, embeddings, and links leak knowledge even when bodies are protected. Embedding stores deserve particular attention: a restricted document whose vector still produces search results is not restricted.
+
+**Approval forgery through ordinary commits.** `ksor.approval` and `verified` are frontmatter, and frontmatter is text: anyone or anything with write access can assert them, including an agent maintaining the corpus. R22 through R25 are the controls: authority events must be validated against change control, status transitions demand authorised approval, review runs under the ownership map, and asserted actors must match platform identities. The cheapest attack therefore shifts from editing a file to subverting repository review. Branch protection, required review, and ownership rules on governance-bearing paths are part of the KSoR security boundary even though they live in the version-control layer, and the Governance Policy deserves the strictest protection of all (4.2.5.2), because owning it means owning every downstream decision.
+
+**Build and supply-chain tampering.** Profile P-Verified (Section 8.2) is the control. Without it, a consumer cannot distinguish a legitimate publication from a tampered one.
+
+**Identity spoofing and confused-deputy access.** R8 and fail-closed behaviour (8.1.3) are the controls. The agent surface must never forward an upstream identity's authority to a downstream request without local policy evaluation.
+
+**Telemetry as an exfiltration path.** R20 is the control. Observability pipelines are often less protected than serving paths, and content captured into them silently becomes a shadow store.
+
+---
+
+## 12. Privacy Considerations
+
+A KSoR may contain personal data inside institutional knowledge (named verifiers in `verified` entries, approvers in `ksor.approval`, deprecators in `ksor.deprecated`, authors in `generated`, actors in the takedown ledger, identities in audit history). Implementations SHOULD support redaction workflows that respect R9 (takedown) and SHOULD treat `verified.by`, `ksor.approval.by`, and `generated.by` identifiers as personal data where applicable law requires it. Takedown under R9 applies to newly produced artefacts and current projections. Handling of historical version-control data is a deployment policy matter outside this standard.
+
+---
+
+## 13. Versioning and Process
+
+**13.1** This proposal is versioned independently of any implementation. Breaking changes to normative requirements increment the major version. Additive requirements and clarifications increment the minor version.
+
+**13.2** The proposal advances through the stages: Draft Proposal, Candidate (two independent implementations of classes A and B exist), Adopted (accepted by the maintainers with community review), Superseded.
+
+**13.3** KSP-001 version 0.1 normatively targets the OKF v0.2 specification in `SPEC.md` of `GoogleCloudPlatform/open-knowledge-format` at Git commit `ad30107c31c06aec8a7d5636e0d1058118604e6f` (2026-08-21), whose SHA-256 is `26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101` [okf-spec]. No tag or release identifies that revision, and the version label reads `0.2` both before and after upstream's change from dates to instants, so only the commit SHA and the file hash identify the semantics this proposal adopts. Drafts 8 and 9 pinned `okf/SPEC.md` in `GoogleCloudPlatform/knowledge-catalog` at commit `3fcbb9f828c2f23d109c855ee403c3a4c81f3a96`; that copy is a frozen snapshot which its repository now disowns, and it is superseded by this pin. A corpus MUST also declare `okf_version: "0.2"` in the bundle-root `index.md`, using the mechanism OKF defines for this purpose. Later edits to an upstream branch, reference implementation, or documentation do not change KSoR conformance. Adopting different OKF semantics requires a revision of this proposal. The adapter boundary (4.2.6) localises the implementation cost.
+
+**13.4** Extensions SHOULD be proposed as separate proposal documents in this series rather than amendments, so that the core remains small.
+
+---
+
+## 14. Implementation Guidance (Non-Normative)
+
+A reference implementation is being built at `github.com/panaversity/ksor` in the order below, from the inside outward.
+
+**P0, knowledge infrastructure.** Write the profile conformance document and the `.ksor/governance.yaml` schema. Make the build validate both and fail on violations. Parse frontmatter into retrieval columns and enforce lifecycle, freshness, effectivity, trust, and audience predicates in SQL. Render trust badges on the human surface. Expose `min_trust_tier` on the agent surface and return frontmatter with results. Generate discovery artefacts under the governance filter with publication stamping. Ship OKF export as governed bundle selection. Validate the Governance Policy and R22 through R25 against repository history as part of the build gate, since authority claims are worthless until they are checkable, and the `generated.at` versus `approval.at` comparison of R23 is the cheapest high-value check in the suite. Test every projection against R5 and R13 first, since those two rules catch the most damaging failure modes.
+
+**P1, enterprise trust and operation.** OAuth/OIDC for protected surfaces with fail-closed behaviour. OpenTelemetry with the operational attribute set. SLSA provenance and Sigstore signing. One end-to-end `Attested Computation` in a real vertical. Bank reconciliation in an accounting KSoR is a natural first target: the record holds the reconciliation policy at rung 2 and the sanctioned reconciliation computation at rung 3, so a Digital FTE's reported figures are mechanically checked rather than trusted.
+
+**P2, broader interoperability.** OKF import as candidate knowledge. W3C PROV export if external provenance exchange requires it. JSON-LD where public web discovery benefits. Further interfaces only where a demonstrated gap exists.
+
+The architecture reduces to three lines that implementers should be able to recite:
+
+> **One authoritative record.**
+> **One governance boundary.**
+> **Many open projections.**
+
+---
+
+## 15. Open Issues
+
+1.  Chunking or truncation policy for `/llms-full.txt` on very large corpora.
+2.  Whether per-page Markdown routes should honour a future `.okfignore` convention if the OKF community adopts one.
+3.  _Resolved in draft 10._ The numeric encoding of trust tiers in retrieval stores: the reference encoding is a small integer ordered unverified < machine-confirmed < human-reviewed (Section 5), which is the ordering R18 requires and nothing more.
+4.  Whether computation attestation receipts may be exported as evidence artefacts alongside publication attestations, or remain strictly runtime-only as OKF currently prescribes. To be resolved in the attestation follow-on proposal.
+5.  A conformance test suite: the requirement identifiers in this document are written to be mechanically testable, and a companion proposal defining the test suite is anticipated.
+
+Three issues from earlier drafts were resolved in draft 8: OKF specification pinning (a commit and file hash plus `okf_version` since draft 10, 13.3), canonical audience representation (now explicit `ksor.audience` on every concept, 4.2.2.4 and 4.2.4.2), and Governance Policy serialisation (now `.ksor/governance.yaml`, 4.2.5). Draft 10 resolves issue 3 above, in place, so that the numbering stays stable.
+
+---
+
+## 16. References
+
+### Normative
+
+[okf-spec] Open Knowledge Format, Version 0.2, `SPEC.md`, GoogleCloudPlatform/open-knowledge-format, commit `ad30107c31c06aec8a7d5636e0d1058118604e6f`, 2026-08-21, SHA-256 `26aa5da029278939f914e578107242d9607d4f2dc5fe153272b82f9ed1030101`. No tag or release identifies this revision. Supersedes the draft 8 and draft 9 pin of `okf/SPEC.md` in GoogleCloudPlatform/knowledge-catalog at commit `3fcbb9f828c2f23d109c855ee403c3a4c81f3a96` (2026-07-24), a frozen snapshot that repository now disowns.
+[llmstxt-spec] The /llms.txt file, v2. Answer.AI, September 2024, revised August 2026. llmstxt.org.
+[mcp-spec] Model Context Protocol specification. modelcontextprotocol.io.
+[rfc2119] Bradner, S. Key words for use in RFCs to Indicate Requirement Levels. RFC 2119.
+[rfc8174] Leiba, B. Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words. RFC 8174.
+
+### Informative
+
+[okf-v01] Introducing the Open Knowledge Format. Google Cloud Blog, June 2026.
+[okf-v02] Open Knowledge Format v0.2 tackles agentic trust. Google Cloud Blog, July 2026.
+[fumadocs-llms] Fumadocs AI and LLMs integration documentation. fumadocs.dev.
+[slsa] Supply-chain Levels for Software Artifacts. slsa.dev.
+[sigstore] Sigstore. sigstore.dev.
+[otel] OpenTelemetry. opentelemetry.io.
+
+---
+
+## Appendix A. Example Concept Document
+
+A conformant `Policy` concept in the KSoR Profile of OKF:
+
+```markdown
+---
+type: Policy
+title: Capitalisation of Software Implementation Costs
+description: Criteria for capitalising software implementation costs under the organisation's accounting standards.
+status: stable
+tags: [accounting, capitalisation]
+generated: { by: "human:jsmith@example", at: 2026-05-10T09:00:00Z }
+verified:
+  - { by: "human:kliu@example", at: 2026-05-12T14:00:00Z }
+stale_after: 2027-01-31T00:00:00Z
+sources:
+  - id: ias38
+    resource: https://www.ifrs.org/issued-standards/list-of-standards/ias-38-intangible-assets/
+    title: IAS 38 Intangible Assets
+ksor:
+  owner: team:finance-controller
+  audience: [finance, audit]
+  approval: { by: "human:cfo@example", at: 2026-05-14T10:00:00Z }
+---
+
+# Criteria
+
+An implementation cost may be capitalised when all of the following hold. [^ias38]
+
+1. The cost creates an identifiable intangible asset.
+2. Future economic benefits are probable.
+3. The cost can be measured reliably.
+
+# Exclusions
+
+Training and data migration costs are expensed as incurred. [^ias38]
+
+[^ias38]: IAS 38, Intangible Assets.
+```
+
+The concept satisfies 4.2.2 (all required fields, `sources` present on a reserved type, and `generated` with `generated.at`, `ksor.approval`, and explicit `ksor.audience` present where required) and 4.2.4 (`ksor.owner` present on a reserved type, `ksor.approval` present on a stable concept). `verified` is present but not required (4.2.2.3): it is what raises the trust tier to human-reviewed, and its approval is a separate fact recorded by a different actor, illustrating R17. Its footnote reference and definition are both keyed to the source id `ias38` (4.2.3.5). Under `ksor.audience` it is excluded from open-web artefacts for any audience other than `finance` and `audit` per R5 and R12.
+
+## Appendix B. Requirement Summary Table
+
+| Req | Short name                             | Classes            |
+| --- | -------------------------------------- | ------------------ |
+| R1  | No bypass of the record                | B, C, D, E         |
+| R2  | Governance precedes projection         | B, C, D, E         |
+| R3  | One policy, all surfaces               | B, C, D, E         |
+| R4  | No shadow authority                    | B                  |
+| R5  | Absence means absence                  | B, C, D, E         |
+| R6  | Static filtering before build          | B                  |
+| R7  | Dynamic filtering before disclosure    | C, D               |
+| R8  | Identity is evidence, not authority    | C, D (P-Protected) |
+| R9  | Takedown outranks everything           | B, C, D, E         |
+| R10 | Assets inherit authority               | B                  |
+| R11 | Links can disclose                     | B                  |
+| R12 | Discovery downstream of governance     | B                  |
+| R13 | Lifecycle and effectivity on open web  | B                  |
+| R14 | Artefacts carry their publication      | B, E               |
+| R15 | Export downstream of governance        | E                  |
+| R16 | Import confers no authority            | E                  |
+| R17 | Approval is not verification           | A, E               |
+| R18 | Tiers never cross downward             | C, D               |
+| R19 | Signatures prove integrity, not truth  | B (P-Verified)     |
+| R20 | Telemetry inside governance            | C, D               |
+| R21 | One identifier per publication         | B, C, D, E         |
+| R22 | Authority claims are change-controlled | B                  |
+| R23 | Status transitions are governed events | B                  |
+| R24 | Ownership binds review                 | B                  |
+| R25 | Recorded actors are truthful           | B                  |
+| R26 | Import lands as draft                  | E, B               |
+| R27 | Takedown is a governed write           | B                  |
+
+Normative requirements also appear as numbered clauses outside the R-series. The table below maps the clause groups to conformance classes so that a test-suite author working from this appendix misses nothing.
+
+| Clauses            | Subject                                                                                      | Classes                      |
+| ------------------ | -------------------------------------------------------------------------------------------- | ---------------------------- |
+| 4.1.1 to 4.1.4     | Record as OKF bundle, reserved filenames, canonical flow                                     | A                            |
+| 4.2.1 to 4.2.3     | Reserved types, required fields, trust vocabulary                                            | A (build gate: B)            |
+| 4.2.4.1 to 4.2.4.6 | Governance extension: owner, audience, approval, effective\_from, deprecated, superseded\_by | A (build gate: B)            |
+| 4.2.5.1 to 4.2.5.4 | `.ksor/governance.yaml`: registry, ownership, authorities; `.ksor/takedowns.yaml`            | A (validation: B)            |
+| 4.2.6.1            | Adapter boundary                                                                             | B, C, D, E                   |
+| 5.1 to 5.4         | Retrieval predicates and abstention basis                                                    | C                            |
+| 6.1.1 to 6.1.3     | Human surface                                                                                | B                            |
+| 6.2.1 to 6.2.5     | Discovery surface                                                                            | B                            |
+| 6.3.1 to 6.3.5     | Agent surface contract                                                                       | D                            |
+| 6.4.1 to 6.4.3     | Exchange                                                                                     | E                            |
+| Section 7          | Guarantee claims per rung                                                                    | A to E                       |
+| 8.1.1 to 8.1.4     | Identity                                                                                     | P-Protected                  |
+| 8.2.1 to 8.2.4     | Publication integrity                                                                        | B (8.2.2 onward: P-Verified) |
+| 8.3.1 to 8.3.2     | Observability                                                                                | C, D                         |
+| 13.3               | OKF v0.2 specification pinning by commit and file hash                                       | A                            |
+
+---
+
+## Acknowledgements
+
+This proposal consolidates working drafts produced with the assistance of Claude (Anthropic) and ChatGPT (OpenAI), and builds directly on the Open Knowledge Format published by the Google Cloud Data Cloud team, the `llms.txt` convention proposed by Jeremy Howard, and the Model Context Protocol. The governance-first framing draws on the KSoR concept developed in _The AI Agent Factory_.
+
+## Change Log
+
+| Version      | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.1 draft 10 | 2026-08-25 | Corrections from building the profile, listed in `research/okf-native.md` §2.15 and applied under the rule that where the specification and the code disagree, the code wins and the specification is corrected. Re-pinned OKF from the `knowledge-catalog` snapshot at `3fcbb9f8` to `GoogleCloudPlatform/open-knowledge-format` `SPEC.md` at commit `ad30107c` (2026-08-21) with its SHA-256 (1.2, 13.3, [okf-spec]); every timestamp is an ISO 8601 instant and `stale_after` is an instant evaluated as `now >= stale_after` (4.2.3, 4.2.3.4, 5.1, 6.1.2, Appendix A). Dropped `verified` from the `stable` floor and made `generated.at` a profile requirement on stable concepts (4.2.2.3, R23, Appendix A). Recorded that only `runtime` is OKF-required on `Attested Computation` (4.2.3). Required acceptance of the bare `verified` mapping (4.2.3.3) and keyed per-claim footnotes, reference and definition, to `sources[].id` (4.2.3.5). Stated that profile validation of one's own record is not OKF consumption (4.2, 4.2.2.5). Added `ksor.deprecated` (4.2.4.5), `ksor.superseded_by` (4.2.4.6), and top-level `order` (4.2.2.6). Placed the bundle root at `knowledge/` with `instance.md`, `.ksor/` and the build lock beside it, made the instance document a profile-shaped document rather than a concept, and gave the root index its heading, not a summary, from the instance `title` (2.2, 4.1.2). Made `audiences` and `ownership` optional in the Governance Policy (4.2.5, 4.2.5.1). Named `Document` as the never-reserved default type, `Summary` as a companion marker, and reserved `README.md` (4.2.1.2 to 4.2.1.4). Distinguished the committed `index.md` map from the filtered indexes projections regenerate, and recorded that subdirectory bullets carry no description (4.1.2, 6.2.3). Defined the viewer list and the overlap rule and sharpened the link rule (4.2.4.2, R11). Made the takedown record an append-only ledger whose every entry names a listed actor (2.2, 2.3, 4.2.5.3, 4.2.5.4, R25, R27). Renamed the profile's "Generation" to "Publication", leaving "generation" to implementations as the counter a citation pins (2.2, 3.4, R1, R14, R21, 6.2.5, 7, 8.2.1, 14). Specified the reference trust-tier encoding and closed Open Issue 3 in place (5.1, 15). The conformance classes and the requirement numbering are unchanged. |
+| 0.1 draft 9  | 2026-08-24 | Clarified OKF's dual architectural role. The canonical KSoR record is now described consistently as Markdown in the KSoR Profile of OKF, making OKF foundational to the authoritative record rather than only an exchange format. The same native OKF representation is reused for governed interoperability, so Class E exchange is described as selection and packaging rather than translation into a separate knowledge model. Updated the Executive Brief, Abstract, relationship-to-standards section, terminology, Section 3 responsibility table and diagram, Section 4 authoritative-record language, Section 6.4 exchange explanation, and the KSoR-versus-OKF differentiation without changing the conformance model or governance requirements.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 0.1 draft 8  | 2026-08-24 | Publication and conformance repair pass: restored story-first ordering in the Executive Brief and kept the nine responsibilities there in plain language, corrected the Section 3 diagram so human serving, AI discovery, MCP, and OKF are parallel outward boundaries, made `ksor.audience` mandatory for every concept, defined deterministic Governance Policy scope resolution, removed semicolons from editable prose, repaired the `llms.txt` wording, restored the leadership reading path to the Write-Side Lifecycle and Trust Ladder, and pinned KSP-001 v0.1 to the immutable OKF v0.2 release specification at commit `3fcbb9f828c2f23d109c855ee403c3a4c81f3a96`. The pinned specification defines `stale_after` as a `YYYY-MM-DD` date.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| 0.1 draft 7  | 2026-08-24 | Reframed the proposal around KSoR as an open, vendor-neutral knowledge infrastructure framework. Moved the three-line model and nine responsibilities to the front of the Executive Brief, clarified framework versus deployed infrastructure layer, strengthened the Abstract, expanded Section 3 so the responsibilities and boundaries, rather than a technology list, are the organising architecture, distinguished open protocol bindings from reference implementation choices, and made vendor-neutrality explicit from page one. No normative governance requirements changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | \n  | 0.1 draft 6 | 2026-08-24 | Specification-hardening pass: made `ksor.audience` explicit and fail-closed, standardised the Governance Policy at `.ksor/governance.yaml` with portable rule semantics, added `ksor.effective_from` to retrieval and open-web gating, required `generated` for stable concepts and strengthened R23, narrowed R4 from no omission to no shadow authority, changed `stale_after` to the date semantics defined by the OKF v0.2 release specification later pinned in draft 8, aligned the Executive Brief with publication-time guarantees, and repaired tables and the table of contents. | \n  | 0.1 draft 5 | 2026-08-24 | Added the non-normative Executive Brief ahead of the Abstract, so that decision-makers without technical background can evaluate the proposal: the problem story, the one-line principle, the trust ladder as a risk table, the write-side lifecycle as an approval workflow, protections, costs, and the decision being asked. No normative content changed. | \n  | 0.1 draft 4 | 2026-08-24 | Write-side governance completed: added the Governance Policy (4.2.5) as the normative root of authority, the write-side lifecycle summary (4.3), and requirements R23 to R27 covering status transitions, ownership-bound review, actor truthfulness, import mechanics, and governed takedown. Consistency pass: conformance class descriptions updated for R22 to R27, cross-references added between R9 and R27, R16 and R26, 4.2.4 and 4.2.5, and 8.1.2, adapter boundary renumbered to 4.2.6, abstract count corrected to twenty-seven, terminology extended with Governance Policy, candidate knowledge, and takedown, Appendix B extended, Open Issue 4 narrowed to serialisation only. | \n  | 0.1 draft 3 | 2026-08-24 | Second review revision: added R22 requiring authority claims to correspond to change-control events, with the matching security paragraph and the evidence chain in 8.2.4. Corrected the actor convention attribution (`team:` is a profile extension, not OKF). Fixed the reference SQL audience predicate to overlap semantics with NULL as public. Defined the instance document and its relationship to the bundle-root `index.md`. Reserved `public` as an audience identifier. Changed "conformant to" to "following" for `llms.txt` v2. Extended Appendix B with the clause-level requirement map and R22. | \n  | 0.1 draft 2 | 2026-08-24 | Review revision: added the `ksor` governance extension (owner, audience, approval, effective\_from), documented the OKF reserved-filename contract, restated the governance boundary as governance before every disclosure, updated the discovery surface to `llms.txt` v2 with `llms-full.txt` as a KSoR extension, changed `stale_after` to an ISO 8601 instant, marked Profile P-Attested experimental pending an attestation follow-on proposal, fixed the Class D binding to MCP for version 0.1, and revised the identity line to "OAuth/OIDC establishes identity. KSoR governance controls access." | \n  | 0.1 draft 1 | 2026-08-24 | Initial draft proposal, consolidating decision draft D25. | \n  |
