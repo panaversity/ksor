@@ -61,6 +61,8 @@ The result is not merely a documentation site, knowledge base, vector database, 
 
 > **KSoR is an open knowledge infrastructure framework that makes governed knowledge usable by people, AI agents, and other knowledge systems without giving any one vendor ownership of the record.**
 
+**KSoR has a twin.** [DSoR — the Data System of Record](https://github.com/panaversity/dsor) — is the governed layer for what is operationally _true_ and what an AI worker may _do_. KSoR tells the worker how the organization operates. DSoR checks the facts for itself, carries out the action safely, and keeps the evidence. An AI worker needs both, and neither takes the worker's word for anything. See [KSoR and DSoR](#ksor-and-dsor-twin-systems-of-record-for-ai-workers).
+
 <p align="center">
   <a href="https://docs.google.com/presentation/d/1lLF3PZBQ3vbeSdCKqPbMDTN9a6bgP6msDvbBIrEdeko/edit?usp=sharing">
     <img src="https://raw.githubusercontent.com/panaversity/ksor/main/slides-ksor-8-concepts.png" alt="KSoR in eight concepts — title slide: One Book Everyone Must Follow" width="90%">
@@ -502,6 +504,89 @@ AI-native organizations need both.
 
 A capable enterprise agent may read policy from a KSoR, retrieve current account data from a CRM, apply the governed rule, execute an action, and record the resulting state back into the traditional SoR.
 
+The first step in that sentence is KSoR's. The rest — reading current state, acting on it, and proving afterwards what was done and why — is where an agent can do real damage, and it is the job of KSoR's twin.
+
+---
+
+## KSoR and DSoR: Twin Systems of Record for AI Workers
+
+A new employee needs two things from an organization before anyone lets them work alone. They need **the handbook**: the policies, procedures, and definitions that say how things are done here. And they need **the desk that controls the systems**: a login of their own, a list of what they may do, a spending limit, a manager who signs off on large actions, and a logbook.
+
+An AI worker needs the same two things, for the same reasons, and one more: it can be confidently wrong, it can be tricked by text it reads, and it retries things a person would not.
+
+- **KSoR is the handbook, governed.** It is authoritative for what the organization officially knows, requires, and prescribes.
+- **[DSoR](https://github.com/panaversity/dsor) — the Data System of Record — is the desk, governed.** It stands between the AI worker and the organization's real systems: the ERP, the accounting package, the database. It does not replace them. It checks who is asking and under whose authority, reads the current state for itself, applies the rules, waits for a human's approval when the rules demand one, makes sure nothing happens twice, and keeps the evidence.
+
+They are twins: born of the same idea, built on the same principles, and meant to serve an AI worker together.
+
+```text
+                          AI WORKER
+                 (the agent runtime — REASON)
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+        KSoR            Context store           DSoR
+        KNOW              REMEMBER          STATE and ACT
+          │                   │                   │
+   the governed         notes, skills,      permissions, limits,
+   knowledge record     past experience     approvals, evidence
+                        (never authoritative)       │
+                                                    ▼
+                                         ERP · CRM · ledger · database
+```
+
+> **KSoR governs what an AI worker may _know_. DSoR governs what it may _do_.**
+
+### The same principles, applied to two different things
+
+|                         | KSoR                                                               | DSoR                                                                                         |
+| ----------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Authoritative for       | Institutional knowledge                                            | Operational state, and the actions taken on it                                               |
+| The question it answers | **What do we know, and how should we operate?**                    | **What is true right now, and what may safely be done?**                                     |
+| Holds                   | Policies, procedures, standards, definitions, decision criteria    | A governed interface to customers, invoices, payments, balances, approvals, workflow state   |
+| How it changes          | Review, approval by an authorized person, versioning               | Commands through one fixed pipeline: identity, delegated authority, rules, approval, evidence |
+| When it says no         | It **abstains**: the record does not contain enough to answer       | It **refuses, or waits for a human**: the caller lacks the authority, or a rule demands approval |
+| What it can prove       | Which document, which version, which publication an answer came from | Who asked, under whose authority, which rules ran, which data was read, who approved, what happened |
+| Agent surface           | MCP: `search`, `outline`, `read`                                   | MCP: one tool for each governed operation                                                    |
+| Trusts the model?       | No. Authority comes from the governed record, not from model memory | No. Authority comes from its own checks, not from anything the agent claims                  |
+
+Both keep the durable asset independent of any model or vendor, both arrange replaceable components around a governance boundary that does not move, and both publish a status page that is the only authority on what is actually built.
+
+### Where they meet: a policy becomes a control
+
+A policy is a sentence. Software cannot enforce a sentence.
+
+Take the approved purchasing policy from [Knowledge Boundaries](#knowledge-boundaries) below: purchases over $50,000 need the CFO's approval. That sentence lives in the KSoR, with an owner, an approval, and a version. In DSoR, a human translates it into a **control**: a small machine-checkable rule attached to the purchasing operation. The control records exactly which KSoR document, which version, and which content hash it was built from.
+
+```text
+KSoR   policy      "Purchases over $50,000 require CFO approval."        version 4, approved
+          │
+          │  a human compiles it, another human reviews it
+          ▼
+DSoR   control     amount exceeds 50,000 USD → REQUIRE_APPROVAL(CFO)     built from version 4
+          │
+          ▼
+       an action   the AI worker's purchase waits until the CFO approves, from her own login
+```
+
+So when someone asks "why did the system allow this?", the answer can be walked from the action, to the control, to the exact policy sentence and version. When the policy changes in the KSoR, DSoR is designed to mark the control _stale_ and tell its owner. It never quietly stops enforcing it.
+
+That is the division of labor, and neither twin crosses it:
+
+- **KSoR never decides whether an action is permitted.** It says what the policy is.
+- **DSoR never decides what the policy is.** It enforces what was approved, and points back to it.
+- **An agent's memory decides nothing.** For knowledge, the KSoR wins. For current state, DSoR wins. Memory only helps the agent decide where to look.
+
+### Independent, and better together
+
+Neither twin requires the other. A KSoR is complete with no DSoR anywhere near it, and everything on this page stands by itself. DSoR names KSoR as its default source of policy authority but accepts any governed source, and every rule in its specification is vendor-neutral.
+
+Together they give an AI worker the two things no model can supply for itself: **what is authoritative to know, and what is authorized to do.**
+
+### Where DSoR stands today
+
+DSoR is younger than KSoR, and this page will not claim more for it than its own status page does. Today the [DSoR repository](https://github.com/panaversity/dsor) holds a specification (v1.4.0, 268 requirements, written so that students and junior developers can follow it), normative JSON Schemas with tests, and the first step of a build-it-yourself tutorial. **Its reference implementation has not been started.** Nothing in the released `@panaversity/ksor` package integrates with DSoR, and how DSoR learns that a KSoR policy has a new version is not yet specified on either side. DSoR's [`docs/status.md`](https://github.com/panaversity/dsor/blob/main/docs/status.md) is the authority on what exists.
+
 ---
 
 ## KSoR Is More Than a Knowledge Base
@@ -851,6 +936,8 @@ If asked:
 the agent should retrieve the organization's capitalization policy, apply the relevant criteria, cite the governing source, and distinguish between what the KSoR states and any reasoning required to apply it.
 
 If the capitalization policy does not address the situation, the system should not invent a policy.
+
+And when that agent moves from answering to acting — posting the journal entry, releasing a payment — `controls/approval-thresholds.md` is still only the policy. Enforcing it on the action itself is the work of [DSoR](#ksor-and-dsor-twin-systems-of-record-for-ai-workers).
 
 ---
 
@@ -1447,7 +1534,7 @@ If an approved purchasing policy answers the question, KSoR should provide the a
 
 > Does this particular purchase require CFO approval?
 
-The system may need to combine the governed rule with operational facts from another System of Record.
+The system may need to combine the governed rule with operational facts from another System of Record. The KSoR supplies the rule and its source. The facts — and, if the agent goes on to make the purchase, the enforcement of that rule on the action — belong to [DSoR](#ksor-and-dsor-twin-systems-of-record-for-ai-workers), which reads the current state for itself and holds the purchase until the CFO approves.
 
 ### Outside the KSoR
 
@@ -1496,6 +1583,8 @@ The KSoR tells the agent **how the organization operates**.
 Traditional Systems of Record tell the agent **what is currently true**.
 
 Together they provide the context required for reliable enterprise action.
+
+Context is not the same as control. An agent that reaches those operational systems directly, with their passwords and their full APIs, is limited only by its own judgment. [DSoR](#ksor-and-dsor-twin-systems-of-record-for-ai-workers) is the governed layer on that right-hand branch: the agent reaches current state, and changes it, only through DSoR's checks. KSoR governs the left branch of this picture, and its twin governs the right.
 
 ---
 
@@ -1692,6 +1781,8 @@ It does **not** replace:
 Those systems remain authoritative for their respective operational state.
 
 KSoR adds the authoritative **knowledge layer** agents need in order to understand how to interpret that state and what to do with it.
+
+Nor does KSoR try to be the layer that lets an agent _act_ on those systems. It holds no operational state, grants no permission to change anything, and executes nothing. That is [DSoR](https://github.com/panaversity/dsor), its twin: the governed layer through which an AI worker reads current state and takes action.
 
 ---
 
@@ -1955,6 +2046,8 @@ See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 > **You cannot build predictable AI systems on an undefined source of truth.**
 
 For enterprises, KSoR gives agents one governed institutional truth. For education, it gives teaching agents one governed academic truth. The AI may reason, adapt, and personalize, but it does not get to invent which knowledge is authoritative.
+
+> **KSoR and [DSoR](https://github.com/panaversity/dsor) are twins in the service of AI workers: one governs what the worker may know, the other governs what it may do.**
 
 ---
 
