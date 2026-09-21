@@ -112,7 +112,10 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
   }
 }
 
-// Rule 4 — research/ plans must carry issue, status, last_updated frontmatter.
+// Rule 4 — research/ records must carry tracked frontmatter and a common
+// research spine. The spine is deliberately small: different research genres
+// may keep their own detailed sections, but agents need the same landmarks for
+// question, evidence, decision, rejected alternatives, and reversal conditions.
 {
   const researchRoot = path.join(repoRoot, "research");
   if (existsSync(researchRoot)) {
@@ -124,18 +127,39 @@ if (!isSymlinkTo(path.join(repoRoot, "CLAUDE.md"), "AGENTS.md")) {
             ? [path.join(dir, e.name)]
             : [],
       );
+
+    const requiredSections = ["Question", "Evidence", "Decision", "Rejected", "Reversal"];
+
     for (const abs of walkMd(researchRoot)) {
       const file = path.relative(researchRoot, abs);
-      const fm = parseFrontmatter(readFileSync(abs, "utf8"));
-      const missing = ["issue", "status", "last_updated"].filter(
+      const source = readFileSync(abs, "utf8");
+      const fm = parseFrontmatter(source);
+
+      const missingFrontmatter = ["issue", "status", "last_updated"].filter(
         (k) => !fm || !(k in fm) || fm[k] === "",
       );
-      if (missing.length > 0) {
+
+      if (missingFrontmatter.length > 0) {
         violate(
           4,
-          `research/${file} is missing frontmatter: ${missing.join(", ")}`,
-          "plans are tracked artifacts, not a shadow backlog — without an owner issue and a status they rot silently",
+          `research/${file} is missing frontmatter: ${missingFrontmatter.join(", ")}`,
+          "research records are tracked artifacts, not a shadow backlog — without an owner issue and status they rot silently",
           "add the missing keys to the frontmatter (issue may name the tracking issue/PR)",
+        );
+      }
+
+      const headings = new Set(
+        [...source.matchAll(/^##\s+(.+?)\s*$/gm)].map((match) => match[1].trim()),
+      );
+
+      const missingSections = requiredSections.filter((section) => !headings.has(section));
+
+      if (missingSections.length > 0) {
+        violate(
+          4,
+          `research/${file} is missing research sections: ${missingSections.join(", ")}`,
+          "agents and maintainers need predictable landmarks for the research question, evidence, decision, rejected alternatives, and reversal conditions",
+          `add these level-2 sections: ${missingSections.join(", ")}`,
         );
       }
     }

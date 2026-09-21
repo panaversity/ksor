@@ -20,6 +20,53 @@ findings below reversed what the screenshots appeared to show; they are marked.
 
 ---
 
+## Question
+
+What are the prevailing design strategies for leading documentation sites, how does the KSoR scaffolded template compare against these strategies and KSoR's specific governance requirements, and what changes are necessary to align the template with best practices and KSoR's product principles?
+
+## Evidence
+
+Research was conducted by analyzing two main strategies in the field: the developer-docs convention (convergent across Next.js, Vite, Stripe, Tailwind, Vercel) and the dual-audience turn (Vercel, Anthropic, Fumadocs). The governed-record convention was also studied from GOV.UK Design System, IETF/RFC Editor, and MDN. All third-party claims were fetched from primary sources on 2026-08-21.
+
+The KSoR scaffolded template was evaluated by emitting a scaffold with the built CLI, populating it with governed documents, building with `pnpm build`, and then measuring/screenshotting in Chromium. This process identified specific metrics (e.g., prose column width, characters per line, body type, console errors, external requests) and revealed findings (F1-F11) related to agent surface governance, per-page markdown, status visibility, supersession linking, provenance links, color usage, home page messaging, empty right rail, sidebar footer, and `llms.txt` flatness. Two findings reversed initial screenshot interpretations.
+
+## Decision
+
+The core decisions involve aligning the KSoR site template with best practices for agent-first documentation and governed records, based on the findings from the field research and template measurements. Key decisions, many of which have already been closed/fixed, include:
+
+- **Agent Surface Governance**: `llms.txt` now carries caveat status and successor routes, and `llms-full.txt` emits each document's frontmatter (F1 closed).
+- **Per-Page Markdown**: Every document is emitted as markdown at a path-derived address (`/md/<path>.md`), with an alternate link in the page head and a visible "This document as markdown" line (F2 closed).
+- **Status Visibility**: Caveat statuses are now visible in the sidebar, search results, home page, and folder indexes (F3 closed).
+- **Bidirectional Supersession**: The successor document now names what it replaced, derived by scanning the record (F4 closed).
+- **Linkable Provenance**: HTTP(S) URLs in provenance entries now render as clickable links (F5 closed).
+- **Distinct Caution Color**: The supersession notice uses a distinct caution color (F6 closed).
+- **Home Page Messaging**: The home page now renders the record's authority sentence (from `instance.md`) and drops framework marketing copy (F7 half-closed).
+- **Right Rail Usage**: The decision to move the governance strip into the right rail was reversed; the rail remains quiet due to small-screen visibility issues (F8 refused).
+- **Accessibility**: The supersession notice uses `role="region"` with `aria-labelledby` for screen reader navigation (F9 closed).
+- **Sidebar Footer**: The theme switch moved to the footer row beside the mark, removing the empty input-shaped box (F11 closed).
+
+## Rejected
+
+The following approaches or features were explicitly rejected based on research and KSoR principles:
+
+- **AI search/chat over the docs**: Rejected due to requiring a runtime and vendor API key, forfeiting static export, and putting a generation model between the reader and record.
+- **`Accept: text/markdown` content negotiation**: Rejected as it requires a Node host at serve time, which is incompatible with `output: "export"`.
+- **Cross-link graph (`graph.json`, `.graph.md`)**: Rejected as it is suited for a documentation _estate_ of many sites, whereas KSoR is one corpus per project.
+- **Marketing home page, dark-only theme, versions switcher, mega-nav**: Rejected as conventions of a _product_ docs site, not a governed record.
+- **Tightening prose measure below 86 characters**: Rejected as the measured value is already within the recommended range.
+- **Stock illustrations on the front door**: Rejected as they cannot be true of the adopter's corpus and contradict the purpose of an authoritative record.
+- **Moving governance strip to right rail**: Rejected (F8) because it would vanish on smaller screens, violating the principle that governance facts must be visible before a click.
+- **Grouping `llms.txt` by folder**: Rejected (F10) because it would break the one-reading-order guarantee shared by both shells, which is deemed more important than hierarchical display.
+
+## Reversal
+
+The research identified several reversals or changes in previous understandings:
+
+- **Interpretation of screenshot measurements**: Initial visual assessment of column width and sprawl (F8) was _reversed_ by actual Chromium measurements, which showed correct character counts and contained sprawl. This reinforced the rule to "assert on computed values, and print the value you actually saw."
+- **Home page design**: The initial adoption of "first page renders inside the docs shell" was _reversed_ by the owner on 2026-08-22 in favor of a landing page cover. Similarly, the "asymmetric hero, live artifact beside the identity" and "humans/agents switch" were _adopted then reversed_ by the owner, leading to the record itself being the primary display.
+- **Moving governance strip to right rail (F8)**: The proposed fix was _refused_ (2026-08-21) based on evidence from the API revealing mobile visibility issues, leading to a reversal of the design approach for this element.
+- **`llms.txt` grouping (F10)**: The initial attempt to group `llms.txt` by folder was _refused and reverted_ on 2026-08-21 due to a conflict with the two-shell conformance suite's requirement for a canonical, interleaved reading order. This represented a reversal from a hierarchical to a flat structure to preserve a stronger guarantee.
+
 ## 1 · The field is running two strategies, and only one of them is famous
 
 ### 1a. The developer-docs convention — settled, and we already meet it
