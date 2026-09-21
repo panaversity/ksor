@@ -21,9 +21,11 @@ describe("the registry rows", () => {
       "fake",
       "gemini",
       "openai",
+      "orcarouter",
     ]);
     expect(PROVIDERS["gemini"]?.needsApiKey).toBe(true);
     expect(PROVIDERS["openai"]?.needsApiKey).toBe(true);
+    expect(PROVIDERS["orcarouter"]?.needsApiKey).toBe(true);
     expect(PROVIDERS["fake"]?.needsApiKey).toBe(false);
 
     // The variable is the registry's to name, not a composition root's — the
@@ -31,6 +33,7 @@ describe("the registry rows", () => {
     // reads `process.env[keyEnv]` cannot accidentally require one.
     expect(PROVIDERS["gemini"]?.keyEnv).toBe("GEMINI_API_KEY");
     expect(PROVIDERS["openai"]?.keyEnv).toBe("OPENAI_API_KEY");
+    expect(PROVIDERS["orcarouter"]?.keyEnv).toBe("ORCAROUTER_API_KEY");
     expect(PROVIDERS["fake"]?.keyEnv).toBeNull();
   });
 
@@ -47,7 +50,7 @@ describe("the registry rows", () => {
 
   it("refuses an unknown name loudly, naming the registered set", () => {
     expect(() => buildShippedProvider("anthropic", { apiKey: "k" })).toThrow(
-      'unknown embedding provider "anthropic" — registered: fake, gemini, openai',
+      'unknown embedding provider "anthropic" — registered: fake, gemini, openai, orcarouter',
     );
     expect(() => providerNeedsApiKey("typo")).toThrow(/unknown embedding provider/);
   });

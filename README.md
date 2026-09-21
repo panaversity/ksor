@@ -1874,6 +1874,10 @@ ksor grant
 ksor takedown
 ksor calibrate
 ksor gc
+# the AI provider credential and what it can reach:
+ksor connect
+ksor models
+ksor console
 ```
 
 ### `ksor init` — implemented
