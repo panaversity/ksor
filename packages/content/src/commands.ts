@@ -84,7 +84,12 @@ import { widestViewer } from "./lib/policy-row.js";
 import { overlapAdvice } from "./calibrate/overlap.js";
 import { detectSourceCommit, provenanceGap, provenanceNotice } from "./lib/provenance.js";
 import { GeminiTextGenerator } from "./lib/providers/gemini.js";
+import type { TextGenerator } from "./lib/embedding.js";
+import { OrcaRouterTextGenerator } from "./lib/orcarouter/transport.js";
+import { resolveEndpoints } from "./lib/orcarouter/endpoints.js";
+import { operatorCredential, operatorResolver } from "./lib/orcarouter/store.js";
 import { runGc } from "./ingest/gc.js";
+import { runConnect, runConsole, runModels } from "./orcarouter-commands.js";
 
 const REFUSED = 1;
 const ENVIRONMENT = 3;
@@ -138,6 +143,26 @@ Usage:
   ksor gc --instance PATH [--dry-run]
       Reap generations the §5 algebra allows (never active/rollback, 40-min
       token grace, ≥2 complete generations remain).
+  ksor connect orcarouter [--key | --oob | --status | --clear]
+      Give this record an OrcaRouter credential, by either entry. With no flag,
+      authorize in a browser (OAuth 2.0 + PKCE, S256) and store the key it
+      mints. --key pastes an sk-orca-… you already hold instead; --oob
+      authorizes with a code you copy across, for a session that cannot receive
+      a redirect. Both entries store the same kind of key in the .env beside
+      the record, and nothing downstream can tell which was used.
+  ksor models [--capability chat|embedding|image|video|rerank] [--input MODALITY]
+              [--json]
+      What this record's OrcaRouter credential can reach, read from
+      GET {api}/models. The options are filtered to the capability asked for —
+      an attachment narrows them further, to the models whose catalog record
+      declares that input modality. When the endpoint does not answer, the
+      built-in verified seed is shown and marked DEGRADED.
+  ksor console [--no-browser]
+      Serve the OrcaRouter admin console on an ephemeral loopback port: both
+      entries (paste a key, or authorize in a browser with OAuth 2.0 + PKCE),
+      the stored credential masked, and the model list this credential can
+      reach. Local on purpose — the record's site is a static export and a
+      provider key does not belong on a public surface.
 
 --instance PATH is an instance.md, or a directory at or below the record
 root: --instance . works from anywhere inside it.
@@ -760,20 +785,41 @@ async function calibrateCommand(args: string[]): Promise<number> {
   if (values["queries-file"] !== undefined) {
     queries = parseQueriesFile(readFileSync(values["queries-file"], "utf8"));
   }
-  let textGenerator: GeminiTextGenerator | null = null;
+  let textGenerator: TextGenerator | null = null;
   if (queries === null) {
-    const apiKey = process.env["GEMINI_API_KEY"];
-    if (apiKey === undefined || apiKey === "") {
-      return refuse(
-        "bad-args",
-        "the synthesized door needs GEMINI_API_KEY (it writes one probe question per sampled " +
-          "passage) — or calibrate with zero LLM: --queries-file PATH (one in-corpus question per line).\n" +
-          "  note: this is the TEXT generator, not the embedding provider. A record on " +
-          "`embedding.provider: openai` still embeds with OPENAI_API_KEY; only question " +
-          "synthesis is Gemini-only today, and --queries-file avoids it entirely",
-      );
+    // A record on OrcaRouter synthesizes through OrcaRouter, with the same
+    // credential it embeds with. Splitting the two would mean a user who chose
+    // one provider for their record still needed a second vendor's key to
+    // calibrate it — and the door is recorded beside every floor, so which
+    // vendor wrote a question is already provenance.
+    if (instance.embeddingProvider === "orcarouter") {
+      const credential = await operatorCredential();
+      if (credential === null) {
+        return refuse(
+          "bad-args",
+          "the synthesized door needs an OrcaRouter credential (it writes one probe question per " +
+            "sampled passage) — or calibrate with zero LLM: --queries-file PATH.\n" +
+            "  fix: run `ksor connect orcarouter`, or set ORCAROUTER_API_KEY",
+        );
+      }
+      textGenerator = new OrcaRouterTextGenerator({
+        resolver: operatorResolver(),
+        apiBase: resolveEndpoints().apiBase,
+      });
+    } else {
+      const apiKey = process.env["GEMINI_API_KEY"];
+      if (apiKey === undefined || apiKey === "") {
+        return refuse(
+          "bad-args",
+          "the synthesized door needs GEMINI_API_KEY (it writes one probe question per sampled " +
+            "passage) — or calibrate with zero LLM: --queries-file PATH (one in-corpus question per line).\n" +
+            "  note: this is the TEXT generator, not the embedding provider. A record on " +
+            "`embedding.provider: openai` still embeds with OPENAI_API_KEY; only question " +
+            "synthesis is Gemini-only today, and --queries-file avoids it entirely",
+        );
+      }
+      textGenerator = new GeminiTextGenerator({ apiKey });
     }
-    textGenerator = new GeminiTextGenerator({ apiKey });
   }
   const ooc =
     values["ooc-file"] === undefined
@@ -1347,6 +1393,12 @@ export async function runContentCli(argv: readonly string[]): Promise<number> {
         return await takedownCommand(rest);
       case "gc":
         return await gcCommand(rest);
+      case "connect":
+        return await runConnect(rest);
+      case "models":
+        return await runModels(rest);
+      case "console":
+        return await runConsole(rest);
       default:
         return refuse("unknown-verb", `unknown command ${JSON.stringify(command)}\n` + USAGE);
     }

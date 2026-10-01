@@ -97,6 +97,10 @@ export {
   MissingProviderKeyError,
 } from "./lib/providers/registry.js";
 export type { EmbeddingProvider, Intent, TextGenerator } from "./lib/embedding.js";
+// OrcaRouter — the registry entry's transport, the two credential entries, and
+// the live model catalog, re-exported as ONE surface so a caller (or the
+// site's generated catalog artefact) never reaches into a submodule.
+export * from "./lib/orcarouter/index.js";
 export {
   embedQueryVlit,
   EmptyQueryError as QueryEmbedEmptyError,

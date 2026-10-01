@@ -97,6 +97,10 @@ const usage =
   "  grant      authorize ingest for this corpus (or --revoke it)\n" +
   "  takedown   deny a document from every surface (or --list / --revoke it)\n" +
   "  gc         collect superseded generations\n" +
+  "  connect    give this record an OrcaRouter credential — paste a key, or\n" +
+  "             authorize in a browser (OAuth 2.0 + PKCE)\n" +
+  "  models     what that credential can reach, from the live model catalog\n" +
+  "  console    both entries and the model list, on one local page\n" +
   "\n" +
   "Exit codes: 1 refused · 2 designed but not implemented · 3 environment\n" +
   `Docs: node_modules/${pkg.name}/docs · ${pkg.homepage}\n`;
@@ -249,7 +253,10 @@ async function main(args: readonly string[]): Promise<number> {
     verb === "grant" ||
     verb === "takedown" ||
     verb === "calibrate" ||
-    verb === "gc"
+    verb === "gc" ||
+    verb === "connect" ||
+    verb === "models" ||
+    verb === "console"
   ) {
     return runContentCli(args.slice(args.indexOf(verb)));
   }

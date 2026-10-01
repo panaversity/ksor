@@ -18,6 +18,12 @@
 import { EMBED_DIM, EMBED_MODEL, EMBED_TASK_DOCUMENT, EMBED_TASK_QUERY } from "../../config.js";
 import { EMBED_TIMEOUT_S, QUERY_EMBED_TIMEOUT_S } from "../embedding.js";
 import type { EmbeddingProvider } from "../embedding.js";
+import {
+  ApiKeyCredentialSource,
+  OrcaRouterEmbeddingProvider,
+  resolveEndpoints,
+  type OrcaCredentialResolver,
+} from "../orcarouter/index.js";
 import { FakeEmbeddingProvider } from "./fake.js";
 import { GeminiEmbeddingProvider } from "./gemini.js";
 import { OpenAiEmbeddingProvider } from "./openai.js";
@@ -30,6 +36,20 @@ export interface ProviderBuildOptions {
   queryTaskLabel: string;
   documentTimeoutS: number;
   queryTimeoutS: number;
+  /**
+   * The relay base, for the provider that needs one resolved rather than
+   * hardcoded. Absent means "resolve the shipped endpoints from the
+   * environment" — which is what every composition root wants and what a test
+   * overrides to point at a local server.
+   */
+  apiBase?: string;
+  /**
+   * Where the credential comes from. The default for `orcarouter` is the key
+   * the composition root already resolved; a root that has a PKCE-issued or
+   * stored credential supplies its own adapter here, and NOTHING downstream
+   * can tell the difference.
+   */
+  credentialResolver?: OrcaCredentialResolver;
 }
 
 /** One registry row: how to build the adapter, and whether it needs an API
@@ -125,6 +145,34 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     // `lib/embedding.ts` names as the one that cannot mis-route a plane.
     taskLabels: { document: "", query: "" },
   },
+  // OrcaRouter — an OpenAI-compatible gateway whose wire format this adapter
+  // speaks. It is a REGISTRY entry rather than a custom base URL on the openai
+  // row because it is a distinct service with a distinct credential model:
+  // its key may be pasted OR minted by an OAuth 2.0 + PKCE authorization
+  // (`lib/orcarouter/`), and a 401 from it is a terminal reauthentication
+  // requirement rather than a bad key. Folding it into `openai` as a base-URL
+  // override would erase both facts.
+  orcarouter: {
+    build: (opts: ProviderBuildOptions): EmbeddingProvider =>
+      new OrcaRouterEmbeddingProvider({
+        resolver:
+          opts.credentialResolver ??
+          ((): ReturnType<OrcaCredentialResolver> =>
+            new ApiKeyCredentialSource(opts.apiKey).acquire()),
+        apiBase: opts.apiBase ?? resolveEndpoints().apiBase,
+        modelId: opts.modelId,
+        dim: opts.dim,
+        documentTaskLabel: opts.documentTaskLabel,
+        queryTaskLabel: opts.queryTaskLabel,
+        documentTimeoutS: opts.documentTimeoutS,
+        queryTimeoutS: opts.queryTimeoutS,
+      }),
+    needsApiKey: true,
+    keyEnv: "ORCAROUTER_API_KEY",
+    // SYMMETRIC, like every OpenAI-wire vendor: no task type, so both labels
+    // are empty and the intent cannot mis-route a plane.
+    taskLabels: { document: "", query: "" },
+  },
   // ksor addition: deterministic and key-free, so the DB tier and CI exercise
   // ingest + retrieval without a vendor key. Its model id is always
   // "fake-embed-001" (never the defaulted EMBED_MODEL — see fake.ts).
@@ -176,7 +224,15 @@ export function providerKeyEnv(name: string): string | null {
  */
 export function buildShippedProvider(
   name: string,
-  opts: { apiKey: string | null; modelId?: string; dim?: number },
+  opts: {
+    apiKey: string | null;
+    modelId?: string;
+    dim?: number;
+    /** Relay base for a provider that resolves one; default is the shipped endpoint. */
+    apiBase?: string;
+    /** Overrides where the credential comes from — the two OrcaRouter adapters land here. */
+    credentialResolver?: OrcaCredentialResolver;
+  },
 ): EmbeddingProvider {
   const entry = entryFor(name);
   if (entry.needsApiKey && !opts.apiKey) {
@@ -190,5 +246,9 @@ export function buildShippedProvider(
     queryTaskLabel: entry.taskLabels.query,
     documentTimeoutS: EMBED_TIMEOUT_S(),
     queryTimeoutS: QUERY_EMBED_TIMEOUT_S(),
+    ...(opts.apiBase === undefined ? {} : { apiBase: opts.apiBase }),
+    ...(opts.credentialResolver === undefined
+      ? {}
+      : { credentialResolver: opts.credentialResolver }),
   });
 }
