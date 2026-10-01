@@ -95,6 +95,15 @@ default refusal of dependency install scripts covers the OTHER half of that
 posture, and this sentence is the disclosure.
 
 <!-- /ksor:pm -->
+<!-- ksor:pm npm bun -->
+
+`package.json` also holds one dependency of a dependency back: `overrides`
+keeps `mdast-util-to-markdown` at 2.1.2. With the `fumadocs-core` this scaffold
+pins, version 2.1.3 makes the site build recurse until it runs out of stack
+([fumadocs#3604](https://github.com/fuma-nama/fumadocs/issues/3604)). Delete the
+override when you move `fumadocs-core` to 16.15.15 or later, which has the fix.
+
+<!-- /ksor:pm -->
 
 ---
 
