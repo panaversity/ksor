@@ -1289,6 +1289,124 @@ describe("the stage holds when nothing changed", () => {
 });
 
 /**
+ * One development evaluation that the record changes under: stage, delete a
+ * document, move another out of its folder the way `git mv` leaves it, narrow a
+ * third to an audience this viewer does not hold, and wait for the record
+ * watcher to carry that into the stage.
+ *
+ * The moved document's ARRIVAL is the signal, not a timeout. The changes are
+ * synchronous, so no refresh can run between them, and a refresh runs
+ * synchronously too: once the arrival is on disk, the refresh that wrote it has
+ * finished, and it planned from a record that had already lost the others.
+ */
+const REFRESH_HARNESS = `
+import { existsSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+
+const { knowledgeSourceDir } = await import("./lib/stage-knowledge.ts");
+const walk = (dir, prefix = "") =>
+  readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) =>
+      e.isDirectory() ? walk(path.join(dir, e.name), prefix + e.name + "/") : [prefix + e.name],
+    )
+    .sort();
+
+const stage = path.resolve(knowledgeSourceDir());
+const record = path.resolve("../../knowledge");
+const before = walk(stage);
+// Let the watcher come up first: off macOS and Windows it is Node's own
+// implementation, one watcher per directory.
+await sleep(500);
+rmSync(path.join(record, "doomed.md"));
+renameSync(path.join(record, "leaving", "moved.md"), path.join(record, "arrived.md"));
+rmdirSync(path.join(record, "leaving"));
+const narrowed = path.join(record, "narrowed.md");
+writeFileSync(narrowed, readFileSync(narrowed, "utf8").replace("audience: [public]", "audience: [internal]"));
+const arrival = path.join(stage, "arrived.md");
+const deadline = Date.now() + 15_000;
+while (!existsSync(arrival) && Date.now() < deadline) await sleep(50);
+console.log(JSON.stringify({ before, after: walk(stage), arrived: existsSync(arrival) }));
+`;
+
+/**
+ * `pnpm dev` carries the record into the stage as the owner writes it, and a
+ * removal is part of that. It was not: the refresh wrote every new and edited
+ * file and removed none, so a document deleted while the dev server ran went
+ * on answering 200 at its url and stayed in the sidebar, and a moved one was
+ * listed twice, once at each path, until a restart. The comment on
+ * `refreshStage` held removals back on a 2026-08-18 measurement that a deleted
+ * staged file took the dev server down; re-measured on fumadocs-mdx 15.4.0 and
+ * Next 16.3.3 the server recovers on its own, so the refresh now removes what
+ * its plan no longer holds.
+ */
+describe("the dev refresh carries removals into the stage", () => {
+  let work: string;
+  let fixture: Fixture;
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-stage-refresh-")));
+    fixture = writeRecord(path.join(work, "record"));
+    const knowledge = path.join(fixture.root, "knowledge");
+    mkdirSync(path.join(knowledge, "leaving"), { recursive: true });
+    writeFileSync(
+      path.join(knowledge, "doomed.md"),
+      STABLE("Doomed DOOMEDTITLE", "DOOMEDDESC", "public"),
+    );
+    writeFileSync(
+      path.join(knowledge, "leaving", "moved.md"),
+      STABLE("Moved MOVEDTITLE", "MOVEDDESC", "public"),
+    );
+    writeFileSync(
+      path.join(knowledge, "narrowed.md"),
+      STABLE("Narrowed NARROWEDTITLE", "NARROWEDDESC", "public"),
+    );
+    writeFileSync(path.join(fixture.site, "refresh.mjs"), REFRESH_HARNESS);
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  it("a deleted document, a moved one's old path, the folder it emptied and a narrowed one leave the stage", () => {
+    const clean = { ...process.env };
+    delete clean["KSOR_AUDIENCE"];
+    delete clean["KSOR_DRAFTS"];
+    const r = spawnSync(process.execPath, ["refresh.mjs"], {
+      cwd: fixture.site,
+      encoding: "utf8",
+      env: { ...clean, NODE_ENV: "development" },
+      timeout: EVALUATION_TIMEOUT_MS,
+    });
+    expect(r.status, `${r.stderr}${String(r.error ?? "")}`).toBe(0);
+    const { before, after, arrived } = JSON.parse(r.stdout.trim().split("\n").pop() ?? "") as {
+      before: string[];
+      after: string[];
+      arrived: boolean;
+    };
+
+    // What the change removes was staged, so its absence below means something.
+    expect(before).toEqual(
+      expect.arrayContaining(["doomed.md", "leaving/index.md", "leaving/moved.md", "narrowed.md"]),
+    );
+    expect(
+      arrived,
+      `the watcher never carried the move in; the stage held ${after.join(", ")}`,
+    ).toBe(true);
+    // Exactly these are gone and exactly the one arrived: nothing the record
+    // still holds went with them, and the moved document is listed once.
+    expect(before.filter((f) => !after.includes(f))).toEqual([
+      "doomed.md",
+      "leaving/index.md",
+      "leaving/moved.md",
+      "narrowed.md",
+    ]);
+    expect(after.filter((f) => !before.includes(f))).toEqual(["arrived.md"]);
+    expect(
+      existsSync(path.join(fixture.stage, "leaving")),
+      "the folder the move emptied is still in the stage",
+    ).toBe(false);
+  });
+});
+
+/**
  * A build tool may not hang on a lock file, and this one did — twice, live:
  * `pnpm dev` repeating "waiting on .staged-knowledge.lock" on every request
  * with no build running, until the file was deleted by hand.
