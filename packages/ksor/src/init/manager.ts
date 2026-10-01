@@ -94,6 +94,21 @@ const SCRIPT_BODIES: Record<Exclude<PackageManager, "pnpm">, Record<string, stri
 };
 
 /**
+ * Versions of dependencies of dependencies that npm and bun must be told to
+ * hold, written as `overrides`, which both read. pnpm needs none here: its
+ * committed lockfile already holds each one.
+ *
+ * mdast-util-to-markdown 2.1.3 (2026-09-27) writes bold and italic only
+ * through a handler's `attention`. The MDX stringifier of the fumadocs-core
+ * 16.15.4 that the site pins wraps every handler without it, so the site
+ * build recursed until the stack overflowed (issue #276,
+ * fuma-nama/fumadocs#3604, fixed in fumadocs-core 16.15.15). Remove the entry,
+ * and the README paragraph that explains it, in the change that moves the site
+ * to that Fumadocs: init-manager.integration.test.ts fails until they are gone.
+ */
+const OVERRIDES = { "mdast-util-to-markdown": "2.1.2" } as const;
+
+/**
  * Rewrite the scaffold's root package.json for the manager. Structured — a
  * JSON transform, never string surgery — because the manifest is the one
  * file where a half-applied spelling map would still parse and then lie.
@@ -108,6 +123,7 @@ export function transformManifest(source: string, manager: PackageManager): stri
     ...rest,
     scripts: { ...parsed.scripts, ...SCRIPT_BODIES[manager] },
     workspaces: [...WORKSPACE_GLOBS],
+    overrides: { ...OVERRIDES },
   };
   return `${JSON.stringify(out, null, 2)}\n`;
 }

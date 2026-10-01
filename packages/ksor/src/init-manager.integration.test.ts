@@ -58,6 +58,7 @@ function manifest(root: string): {
   scripts: Record<string, string>;
   workspaces?: string[];
   packageManager?: string;
+  overrides?: Record<string, string>;
 } {
   return JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as never;
 }
@@ -196,6 +197,44 @@ describe("ksor init meets the invoking package manager", () => {
     expect(readme).toContain("48 hours");
     expect(stdout).toContain("bun install");
     expect(stdout).not.toContain("pnpm");
+  });
+
+  /**
+   * Issue #276. mdast-util-to-markdown 2.1.3 writes bold and italic only
+   * through a handler's `attention`, and the MDX stringifier of the
+   * fumadocs-core the site pins wraps every handler without it, so the site
+   * build recursed until the stack overflowed (fuma-nama/fumadocs#3604). The
+   * pnpm lockfile already holds 2.1.2, but npm and bun ship no lockfile, so
+   * their manifests hold it. Once the site moves to fumadocs-core 16.15.15 or
+   * later, which has the fix, the bound only keeps adopters on an old release.
+   * This test then fails until the bound is removed in the same change.
+   */
+  it("holds mdast-util-to-markdown at 2.1.2 where no lockfile does, only while Fumadocs needs it", () => {
+    const pnpm = scaffold(AGENTS.pnpm).root;
+    expect(manifest(pnpm).overrides).toBeUndefined();
+    const locked = readFileSync(path.join(pnpm, "pnpm-lock.yaml"), "utf8").match(
+      /mdast-util-to-markdown@\d+\.\d+\.\d+/g,
+    );
+    expect([...new Set(locked)]).toEqual(["mdast-util-to-markdown@2.1.2"]);
+
+    for (const name of ["npm", "bun"] as const) {
+      const root = scaffold(AGENTS[name]).root;
+      expect(manifest(root).overrides, name).toEqual({ "mdast-util-to-markdown": "2.1.2" });
+      // JSON carries no comment, so the README is where the adopter learns why.
+      const readme = readFileSync(path.join(root, "README.md"), "utf8");
+      expect(readme, name).toContain("keeps `mdast-util-to-markdown` at 2.1.2");
+    }
+
+    const site = JSON.parse(
+      readFileSync(path.join(pnpm, "system", "site", "package.json"), "utf8"),
+    ) as { dependencies: Record<string, string> };
+    const core = site.dependencies["fumadocs-core"] ?? "";
+    const [major = 0, minor = 0, patch = 0] = core.split(".").map(Number);
+    const hasFix = major * 1e6 + minor * 1e3 + patch >= 16_015_015;
+    expect(
+      hasFix,
+      `fumadocs-core ${core} has the fix: drop the bound in manager.ts and its README paragraph`,
+    ).toBe(false);
   });
 
   it("is deterministic per manager: two npm scaffolds are byte-identical", () => {
