@@ -672,15 +672,15 @@ function fillStage(recordDir: string, stageDir: string, development: boolean): v
 }
 
 /**
- * Dev only: carry edits AND ARRIVALS into the stage, so `pnpm dev` shows the
- * record as the owner is writing it rather than as it stood when the server
- * started — the regenerated indexes included, so a retitled document is
+ * Dev only: carry edits, ARRIVALS and REMOVALS into the stage, so `pnpm dev`
+ * shows the record as the owner is writing it rather than as it stood when the
+ * server started — the regenerated indexes included, so a retitled document is
  * retitled in its folder's listing too.
  *
- * Adds and edits — never removals. The 2026-08-18 measurement this refused
- * adds on ("fumadocs' own watcher cannot see a dot-prefixed collection
- * directory") no longer holds: on fumadocs-mdx 15.3.0 a file written into
- * `.staged-knowledge` DOES regenerate the collection, twice-observed as
+ * Arrivals first. The 2026-08-18 measurement this refused adds on ("fumadocs'
+ * own watcher cannot see a dot-prefixed collection directory") no longer
+ * holds: on fumadocs-mdx 15.3.0 a file written into `.staged-knowledge` DOES
+ * regenerate the collection, twice-observed as
  * `[MDX] generated files` in the dev log. What actually kept a new document
  * off every surface was this function, which walked the STAGE and skipped
  * anything the stage did not already hold — so a plan entry with no file on
@@ -692,11 +692,23 @@ function fillStage(recordDir: string, stageDir: string, development: boolean): v
  * this way before the stage existed (0.0.40 serves an added document at 200),
  * so this is a regression repaired rather than a feature.
  *
- * REMOVALS still wait for the restart `pnpm dev` already needs for
- * instance.md: the same measurement found a deleted file leaves fumadocs'
- * generated imports pointing at something gone, which takes the dev server
- * down rather than showing a stale page. An arrival has no such failure mode
- * — nothing points at a file that has only just appeared.
+ * REMOVALS used to wait for a restart: the same 2026-08-18 measurement found a
+ * deleted file left fumadocs' generated imports pointing at something gone,
+ * which took the dev server down. On fumadocs-mdx 15.4.0 and Next 16.3.3 it
+ * does not stay down. Measured 2026-10-01 on a fresh scaffold: each document
+ * deleted or moved while `pnpm dev` ran regenerated the collection (`[MDX]
+ * generated files`), answered 404 at its old url within about a second and
+ * left the sidebar, and every other page answered 200 with no restart.
+ *
+ * What remains is a race, not an outage. Turbopack can compile
+ * `.source/server.ts` before fumadocs has rewritten it, so the log shows
+ * `Module not found` for the removed file and a request in that window answers
+ * 500: another page, polled every 20ms, did so one to four times in 6 of 8
+ * removals, then answered 200 again. Both watchers react to the same unlink,
+ * so nothing here can order them. Errors that clear themselves are still the
+ * better failure: before this, a deleted document went on serving at 200 and
+ * stayed in the sidebar, and a moved one was listed twice, until someone
+ * thought to restart (issue #274).
  */
 function refreshStage(recordDir: string, stageDir: string): void {
   // Under the lock like every other write here: a save landing while another
@@ -719,6 +731,9 @@ function refreshStage(recordDir: string, stageDir: string): void {
       mkdirSync(path.dirname(staged), { recursive: true });
       writeFileSync(staged, bytes);
     }
+    // Removals from the plan too: a staged file the plan no longer holds was
+    // deleted, moved, or withdrawn from this viewer, and is not the record.
+    pruneExcept(stageDir, new Set(plan.entries.map((e) => path.resolve(stageDir, e.rel))));
     writeManifest(stageDir, plan.manifest);
   });
 }
@@ -867,6 +882,14 @@ function publishSims(sourceDir: string): void {
  * nothing else writes it), so what is not published now does not belong.
  */
 function pruneSims(target: string, published: ReadonlySet<string>): void {
+  pruneExcept(target, published);
+}
+
+/**
+ * Every file under `target` whose resolved path `keep` does not hold, removed,
+ * and every directory that leaves empty. `target` itself always stays.
+ */
+function pruneExcept(target: string, keep: ReadonlySet<string>): void {
   const walk = (dir: string): boolean => {
     let entries;
     try {
@@ -882,7 +905,7 @@ function pruneSims(target: string, published: ReadonlySet<string>): void {
         else empty = false;
         continue;
       }
-      if (published.has(path.resolve(here))) {
+      if (keep.has(path.resolve(here))) {
         empty = false;
         continue;
       }
