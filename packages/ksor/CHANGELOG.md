@@ -1,5 +1,51 @@
 # @panaversity/ksor
 
+## 0.0.61
+
+### Patch Changes
+
+- c8df2a0: `pnpm dev` now drops a document that is deleted or moved while it runs (#274).
+
+  The dev server keeps a staged copy of the record, and its watcher carried edits
+  and new documents into that copy but never removals. A document deleted during
+  a review went on answering 200 at its old url and stayed in the sidebar, and a
+  moved one was listed twice, once at each path, until the dev server restarted.
+  Nothing told the owner to restart.
+
+  The refresh now removes every staged file the record no longer holds, and every
+  folder that leaves empty, so the deleted or moved document answers 404 at its
+  old url and leaves the sidebar within about a second. A document whose audience
+  is edited so that the dev viewer may no longer read it leaves the same way.
+
+  Removals were held back because a 2026-08-18 measurement found that deleting a
+  staged file took the dev server down. On fumadocs-mdx 15.4.0 and Next 16.3.3
+  it recovers on its own, but the race behind it remains: Turbopack can compile
+  before fumadocs has regenerated the collection, so the dev log may show
+  `Module not found` for the removed file, and a request in that moment can
+  answer with a 500. Measured on a fresh scaffold, another page polled every 20ms
+  did so one to four times in 6 of 8 removals, then answered 200 again. Builds
+  are unaffected: they never run the watcher.
+
+  An existing project takes the fix with `ksor migrate --write-site`, which
+  reissues `system/site/lib/stage-knowledge.ts` with the rest of the site.
+
+- 7d2e28a: A new npm or bun scaffold builds its site again.
+
+  `mdast-util-to-markdown@2.1.3`, published 2026-09-27, broke the MDX stringifier
+  of `fumadocs-core@16.15.4`, the version the scaffold pins. Any page with bold or
+  italic text sent it into recursion without end, so `npm run build` and
+  `bun run build` failed with `RangeError: Maximum call stack size exceeded`
+  (fuma-nama/fumadocs#3604). The npm and bun scaffolds ship no lockfile, so a
+  fresh install picked up 2.1.3. Their root `package.json` now has
+  `"overrides": { "mdast-util-to-markdown": "2.1.2" }`, and their README explains
+  it. The pnpm scaffold has not changed, because its committed lockfile already
+  holds 2.1.2.
+
+  If you scaffolded with npm or bun and your build now fails this way, add the
+  same `overrides` entry to your root `package.json` and install again. Remove the
+  entry when you move `fumadocs-core` to 16.15.15 or later, which has the
+  upstream fix.
+
 ## 0.0.60
 
 ### Patch Changes
