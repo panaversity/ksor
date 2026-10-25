@@ -29,6 +29,7 @@ interface Pending {
 
 /** Send the reader to the issuer. Returns only if it could not start. */
 export async function beginSignIn(returnTo: string): Promise<void> {
+  callback = null;
   const config: AuthConfig | null = authConfig;
   if (config === null) return;
 
@@ -73,7 +74,9 @@ function decodeClaims(idToken: string): IdClaims | null {
   try {
     const payload = idToken.split(".")[1];
     if (payload === undefined) return null;
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const binary = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const json = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     const parsed: unknown = JSON.parse(json);
     return typeof parsed === "object" && parsed !== null ? (parsed as IdClaims) : null;
   } catch {
@@ -83,8 +86,11 @@ function decodeClaims(idToken: string): IdClaims | null {
 
 const str = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
+let callback: { readonly key: string; readonly result: Promise<CallbackResult> } | null = null;
+
 /**
  * Redeem the code the issuer sent back, and store the session.
+ * Keep the result for this page load so an effect replay cannot consume it twice.
  *
  * The id_token's claims are decoded, NOT verified, and that is deliberate: they
  * are used only to render a name in this browser's own navbar. A forged token
@@ -94,7 +100,18 @@ const str = (value: unknown): string | null => (typeof value === "string" ? valu
  * audience per request). Verifying here would mean shipping a JWKS client to
  * defend against the reader's own devtools.
  */
-export async function completeSignIn(params: URLSearchParams): Promise<CallbackResult> {
+export function completeSignIn(params: URLSearchParams): Promise<CallbackResult> {
+  const key = params.toString();
+  if (callback?.key === key) return callback.result;
+  const result = exchangeCode(new URLSearchParams(params)).catch((): CallbackResult => ({
+    ok: false,
+    reason: "Sign-in could not complete. Return to the record and try again.",
+  }));
+  callback = { key, result };
+  return result;
+}
+
+async function exchangeCode(params: URLSearchParams): Promise<CallbackResult> {
   const config: AuthConfig | null = authConfig;
   if (config === null) return { ok: false, reason: "This record does not offer sign-in." };
 
@@ -103,12 +120,43 @@ export async function completeSignIn(params: URLSearchParams): Promise<CallbackR
     return { ok: false, reason: params.get("error_description") ?? issuerError };
   }
 
-  const raw = sessionStorage.getItem(PENDING);
-  sessionStorage.removeItem(PENDING);
+  let raw: string | null;
+  try {
+    raw = sessionStorage.getItem(PENDING);
+    sessionStorage.removeItem(PENDING);
+  } catch {
+    return {
+      ok: false,
+      reason: "Allow this site's storage, then return to the record and sign in again.",
+    };
+  }
   if (raw === null) {
     return { ok: false, reason: "This sign-in did not start here. Try again from the site." };
   }
-  const pending = JSON.parse(raw) as Pending;
+  let pending: Pending;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null) throw new Error("invalid pending sign-in");
+    const fields = value as Record<string, unknown>;
+    if (
+      typeof fields["state"] !== "string" ||
+      fields["state"] === "" ||
+      typeof fields["verifier"] !== "string" ||
+      fields["verifier"] === "" ||
+      typeof fields["returnTo"] !== "string"
+    )
+      throw new Error("invalid pending sign-in");
+    pending = {
+      state: fields["state"],
+      verifier: fields["verifier"],
+      returnTo: fields["returnTo"],
+    };
+  } catch {
+    return {
+      ok: false,
+      reason: "The saved sign-in is invalid. Return to the record and try again.",
+    };
+  }
 
   // CSRF: the state must be the one this browser generated. Checked before the
   // code is sent anywhere, so a planted code is never redeemed.
@@ -125,22 +173,42 @@ export async function completeSignIn(params: URLSearchParams): Promise<CallbackR
     return { ok: false, reason: "The authorization server published no metadata document." };
   }
 
-  const response = await fetch(endpoints.token_endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: config.redirectUri,
-      client_id: config.clientId,
-      code_verifier: pending.verifier,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoints.token_endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: config.redirectUri,
+        client_id: config.clientId,
+        code_verifier: pending.verifier,
+      }),
+    });
+  } catch {
+    return {
+      ok: false,
+      reason: "Could not reach the authorization server. Check your connection and sign in again.",
+    };
+  }
   if (!response.ok) {
     return { ok: false, reason: `The issuer refused the exchange (${response.status}).` };
   }
 
-  const token = (await response.json()) as TokenResponse;
+  let token: TokenResponse;
+  try {
+    const value: unknown = await response.json();
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error("invalid token response");
+    }
+    token = value as TokenResponse;
+  } catch {
+    return {
+      ok: false,
+      reason: "The authorization server returned an invalid response. Try again from the record.",
+    };
+  }
   const accessToken = str(token.access_token);
   if (accessToken === null) return { ok: false, reason: "The issuer returned no access token." };
 
@@ -153,6 +221,11 @@ export async function completeSignIn(params: URLSearchParams): Promise<CallbackR
     accessToken,
     expiresAt: Date.now() + lifetime * 1000,
   };
-  writeSession(session);
+  if (!writeSession(session)) {
+    return {
+      ok: false,
+      reason: "Allow this site's storage, then return to the record and sign in again.",
+    };
+  }
   return { ok: true, returnTo: pending.returnTo };
 }

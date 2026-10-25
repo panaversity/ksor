@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -18,12 +19,7 @@ import {
 // Acceptance for specs/ksor/gateway/spec.md: the registration file an adopter
 // owns, exercised against the BUILT CLI's scaffold — the tree they actually get.
 
-const distCli = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
-  "..",
-  "dist",
-  "cli.mjs",
-);
+const distCli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "dist", "cli.mjs");
 
 /**
  * Enough context to BUILD a server. Registration only closes over ctx; nothing
@@ -58,7 +54,11 @@ function scaffold(): string {
   // published `exports` map without paying a `pnpm install` per case.
   const modules = path.join(project, "node_modules", "@panaversity");
   mkdirSync(modules, { recursive: true });
-  symlinkSync(path.resolve(distCli, "..", ".."), path.join(modules, "ksor"), "dir");
+  symlinkSync(
+    path.resolve(distCli, "..", ".."),
+    path.join(modules, "ksor"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   return project;
 }
 

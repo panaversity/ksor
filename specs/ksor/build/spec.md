@@ -292,6 +292,10 @@ the site's stamped rule-module version — the adopter-owned site is upgraded
 by `ksor migrate --write-site`, which offers the byte-copied rule modules as
 diffs (decision 4).
 
+Asset staging resolves relative and bundle-absolute links through the record
+checker's resolver, including percent-encoded paths and fragments. Encoded
+links do not bypass document, companion, audience, or path-containment rules.
+
 ## 4 · Acceptance
 
 1. `ksor build` on the emitted starter after its first commit: exit `0`;

@@ -265,7 +265,11 @@ OLDBODY
   );
   mkdirSync(path.join(site, "node_modules"), { recursive: true });
   for (const dep of ["yaml", "zod"]) {
-    symlinkSync(path.join(KSOR_NODE_MODULES, dep), path.join(site, "node_modules", dep), "dir");
+    symlinkSync(
+      path.join(KSOR_NODE_MODULES, dep),
+      path.join(site, "node_modules", dep),
+      process.platform === "win32" ? "junction" : "dir",
+    );
   }
   writeFileSync(path.join(site, "stage.mjs"), HARNESS);
   return { root, site, stage: path.join(site, ".staged-knowledge") };
@@ -405,6 +409,61 @@ function bytesOf(dir: string): Buffer {
     walkFiles(dir).map((f) => Buffer.concat([Buffer.from(f), readFileSync(path.join(dir, f))])),
   );
 }
+
+describe("encoded asset links", () => {
+  let work: string;
+  let fixture: Fixture;
+
+  beforeAll(() => {
+    work = realpathSync(mkdtempSync(path.join(tmpdir(), "ksor-encoded-assets-")));
+    fixture = writeRecord(path.join(work, "record"));
+  });
+  afterAll(() => rmSync(work, { recursive: true, force: true }));
+
+  it.each(["%64iagram.png", "./%64iagram.png#chart", "/guides/%64iagram.png"])(
+    "stages the asset referenced by %s",
+    (target) => {
+      const document = path.join(fixture.root, "knowledge/guides/getting-started.md");
+      writeFileSync(
+        document,
+        STABLE("Getting started", "A guide", "public") + `\n![diagram](${target})\n`,
+      );
+      writeLock(fixture.root);
+      const r = stage(fixture);
+      expect(r.status, r.stderr).toBe(0);
+      const asset = path.join(fixture.stage, "guides/diagram.png");
+      expect(existsSync(asset), `missing staged asset for ${target}`).toBe(true);
+      expect(readFileSync(asset)).toEqual(PNG);
+    },
+  );
+
+  it("decodes companion links without publishing a draft's companion as an asset", () => {
+    writeFileSync(
+      path.join(fixture.root, "knowledge/draft-doc.summary.md"),
+      "---\ntype: Summary\n---\n\nDRAFT_COMPANION_CANARY\n",
+    );
+    writeFileSync(
+      path.join(fixture.root, "knowledge/public-policy.md"),
+      STABLE("Public policy", "A policy", "public") + "\n[Draft summary](%64raft-doc.summary.md)\n",
+    );
+    writeLock(fixture.root);
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(path.join(fixture.stage, "draft-doc.summary.md"))).toBe(false);
+    expect(bytesOf(fixture.stage).toString("utf8")).not.toContain("DRAFT_COMPANION_CANARY");
+  });
+
+  it("does not turn a Markdown destination into an asset after removing its extension", () => {
+    writeFileSync(
+      path.join(fixture.root, "knowledge/guides/getting-started.md"),
+      STABLE("Getting started", "A guide", "public") + "\n[Document](diagram.png%2Emd)\n",
+    );
+    writeLock(fixture.root);
+    const r = stage(fixture);
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(path.join(fixture.stage, "guides/diagram.png"))).toBe(false);
+  });
+});
 
 describe("staging on the profile (build spec §3)", () => {
   let work: string;

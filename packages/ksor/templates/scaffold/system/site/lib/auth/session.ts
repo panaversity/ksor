@@ -64,11 +64,12 @@ export function readSession(): Session | null {
   }
 }
 
-export function writeSession(session: Session): void {
+export function writeSession(session: Session): boolean {
   try {
     sessionStorage.setItem(KEY, JSON.stringify(session));
+    return true;
   } catch {
-    /* storage unavailable: the reader stays signed out, which is honest */
+    return false;
   }
 }
 

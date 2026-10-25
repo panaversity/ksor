@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -20,12 +21,7 @@ import { afterEach, describe, expect, it } from "vitest";
  * is the EMITTED BYTES per manager; the install walks live in the gated e2e.
  */
 
-const distCli = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
-  "..",
-  "dist",
-  "cli.mjs",
-);
+const distCli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "dist", "cli.mjs");
 
 const AGENTS = {
   pnpm: "pnpm/11.22.0 npm/? node/v24.5.0 darwin arm64",
@@ -43,7 +39,11 @@ function scaffold(userAgent: string | undefined): { root: string; stdout: string
   const dir = mkdtempSync(path.join(tmpdir(), "ksor-mgr-"));
   workDirs.push(dir);
   const env: NodeJS.ProcessEnv = { ...process.env };
-  delete env.npm_config_user_agent;
+  // Child environments are case-insensitive on Windows; remove every spelling
+  // before selecting the manager this case intends to exercise.
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "npm_config_user_agent") delete env[key];
+  }
   if (userAgent !== undefined) env.npm_config_user_agent = userAgent;
   const result = spawnSync(process.execPath, [distCli, "init", "demo"], {
     cwd: dir,

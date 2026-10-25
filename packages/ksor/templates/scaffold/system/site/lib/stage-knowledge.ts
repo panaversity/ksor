@@ -31,7 +31,7 @@ import {
   type StageStamps,
 } from "./stage-manifest";
 import { checkRecord } from "../record/check";
-import { linkTargets } from "../record/citations";
+import { linkTargets, resolveLink } from "../record/citations";
 import { splitFrontmatter } from "../record/frontmatter";
 import { historicLedger } from "../record/git-ledger";
 import { generateIndexes } from "../record/index-file";
@@ -92,10 +92,18 @@ function refuseRecord(refusals: readonly Refusal[]): never {
  * audience. Both reproduced, 2026-08-25.
  */
 function assetTarget(recordDir: string, documentRel: string, target: string): string | null {
-  const clean = target.split("#")[0] ?? "";
-  const resolved = clean.startsWith("/")
-    ? path.resolve(recordDir, clean.slice(1))
-    : path.resolve(recordDir, path.dirname(documentRel), clean);
+  let destination = target.split("#")[0] ?? "";
+  try {
+    destination = decodeURIComponent(destination);
+  } catch {
+    // Match the checker's handling of malformed escapes as literal filenames.
+  }
+  // resolveLink removes .md for concept lookup; reject documents before that.
+  if (/\.mdx?$/i.test(destination)) return null;
+  // The checker decodes URL escapes; staging must resolve the same file.
+  const relative = resolveLink(documentRel.replace(/\.md$/, ""), target);
+  if (relative === null) return null;
+  const resolved = path.resolve(recordDir, relative);
   if (!resolved.startsWith(recordDir + path.sep)) return null;
   if (/\.mdx?$/i.test(resolved)) return null;
   if (isAttachment(path.basename(resolved))) return null;
