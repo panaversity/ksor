@@ -19,6 +19,7 @@ const FIELD_NAMES = [
   "approval",
   "effective_from",
   "stale_after",
+  "generated",
   "top_vec_sim",
 ];
 
@@ -45,6 +46,7 @@ const row = (score: unknown, topSim: unknown): unknown[] => [
   { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
   new Date("2026-08-21T00:00:00Z"),
   null,
+  { by: "process:ingest", at: "2026-08-22T10:00:00Z" },
   topSim,
 ];
 
@@ -59,6 +61,8 @@ describe("splitHits — the projection drift guard", () => {
     expect(hits[0]?.effectiveFrom).toBe("2026-08-21T00:00:00.000Z");
     expect(hits[0]?.trustTier).toBe(2);
     expect(hits[0]?.approval).toEqual({ by: "human:cfo", at: "2026-08-21T09:00:00Z" });
+    // The act that stamped the text, so a review older than it is visible as such.
+    expect(hits[0]?.generated).toEqual({ by: "process:ingest", at: "2026-08-22T10:00:00Z" });
   });
 
   it("a NULL top_vec_sim is a legitimate abstain signal, not an error", () => {

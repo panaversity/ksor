@@ -196,6 +196,17 @@ export interface HitGovernance {
     readonly at: string;
     readonly checked: "policy";
   } | null;
+  /**
+   * The content's last meaningful change (OKF §5.2) — who made it and when.
+   *
+   * `verified` is independent of this: a document edited AFTER its latest
+   * review still reads `human-reviewed`. Comparing `verified.at` with
+   * `generated.at` is how a consumer tells whether the review covers the text
+   * it was just handed, and the consumer here is an agent, so the record hands
+   * it the value. Null when the record holds none — a real state, not a
+   * missing one.
+   */
+  readonly generated: { readonly by: string; readonly at: string } | null;
 }
 
 export interface SearchHit {
@@ -251,6 +262,7 @@ export function hitGovernance(node: NodeGovernance): HitGovernance {
       node.approval === null
         ? null
         : { by: node.approval.by, at: node.approval.at, checked: "policy" },
+    generated: node.generated === null ? null : { by: node.generated.by, at: node.generated.at },
   };
 }
 

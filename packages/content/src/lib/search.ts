@@ -97,11 +97,11 @@ export const GATE_PREDICATE_DIGEST: string = createHash("sha256")
  */
 export function governanceColumns(alias: string): string {
   return `${alias}.doc_status, ${alias}.trust_tier, ${alias}.verified, ${alias}.approval,
-           ${alias}.effective_from, ${alias}.stale_after`;
+           ${alias}.effective_from, ${alias}.stale_after, ${alias}.generated`;
 }
 
 /** How many columns {@link governanceColumns} projects — the read path's width guard needs it. */
-export const GOVERNANCE_COLUMN_COUNT = 6;
+export const GOVERNANCE_COLUMN_COUNT = 7;
 
 const GOVERNANCE_COLUMNS = governanceColumns("n");
 
@@ -198,7 +198,7 @@ export interface HitAct {
 /**
  * The governance a NODE carries, in row shape.
  *
- * Split out of Hit because `read` projects the same six columns from the same
+ * Split out of Hit because `read` projects the same Seven columns from the same
  * table and must reach the same wire shape: one seam, so a surface cannot drift
  * into answering a second way about the same document (decision 18's rule,
  * applied to the governance block).
@@ -210,6 +210,8 @@ export interface NodeGovernance {
   readonly approval: HitAct | null;
   readonly effectiveFrom: string | null;
   readonly staleAfter: string | null;
+  /** The content's last meaningful change (OKF §5.2). One act, not a list. */
+  readonly generated: HitAct | null;
 }
 
 export interface Hit extends NodeGovernance {
@@ -235,7 +237,7 @@ export interface Hit extends NodeGovernance {
    */
 }
 
-const HIT_COLUMNS = 15;
+const HIT_COLUMNS = 16;
 
 /** Serialize a query vector as a pgvector literal. */
 export function vectorLiteral(vector: readonly number[]): string {
@@ -274,7 +276,7 @@ function toActs(value: unknown): HitAct[] | null {
   return acts.length === 0 ? null : acts;
 }
 
-/** The six {@link governanceColumns} columns starting at `at`, parsed once for both paths. */
+/** The seven {@link governanceColumns} columns starting at `at`, parsed once for both paths. */
 export function governanceFromRow(row: readonly unknown[], at: number): NodeGovernance {
   return {
     docStatus: row[at] === null ? null : String(row[at]),
@@ -283,6 +285,7 @@ export function governanceFromRow(row: readonly unknown[], at: number): NodeGove
     approval: toAct(row[at + 3]),
     effectiveFrom: toInstant(row[at + 4]),
     staleAfter: toInstant(row[at + 5]),
+    generated: toAct(row[at + 6]),
   };
 }
 

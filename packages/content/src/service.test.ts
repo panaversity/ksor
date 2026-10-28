@@ -218,6 +218,7 @@ describe("hitGovernance", () => {
     trustTier: 2,
     verified: [{ by: "human:kim", at: "2026-08-22T09:00:00Z" }],
     approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+    generated: { by: "fixture/1", at: "2026-08-20T09:00:00Z" },
     effectiveFrom: "2026-08-21T00:00:00.000Z",
     staleAfter: null,
   };
@@ -232,15 +233,26 @@ describe("hitGovernance", () => {
       // Never more than "policy" until change-control verification exists: an
       // inflated claim about what was checked is the failure this key prevents.
       approval: { by: "human:cfo", at: "2026-08-21T09:00:00Z", checked: "policy" },
+      // Passed through as stored: the content's last meaningful change (OKF §5.2).
+      generated: { by: "fixture/1", at: "2026-08-20T09:00:00Z" },
     });
   });
 
   it("reads a NULL tier as unverified, the way the SQL predicate does", () => {
     // NULL is a pre-2.5 carried row, and such a generation is refused at boot;
     // what this prevents is a `null` on a wire whose schema says "a tier".
-    const carried = hitGovernance({ ...base, trustTier: null, verified: null, approval: null });
+    const carried = hitGovernance({
+      ...base,
+      trustTier: null,
+      verified: null,
+      approval: null,
+      generated: null,
+    });
     expect(carried.trust_tier).toBe("unverified");
     expect(carried.verified).toBeNull();
     expect(carried.approval).toBeNull();
+    // Absent is a real state too: null on the wire, never undefined, so an
+    // agent cannot read "not reported" where the record has nothing.
+    expect(carried.generated).toBeNull();
   });
 });

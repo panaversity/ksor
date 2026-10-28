@@ -231,8 +231,10 @@ never loosens, asserted through real Postgres across every configuration.
 The default and the enforcement live in the HANDLER, so a registration
 scaffolded before the parameter existed keeps working and the boot inspection
 NOTICES its absence instead of refusing it. Every hit carries its
-`governance` — `status`, `trust_tier`, the latest `verified` act,
-`effective_from`, `stale_after`, and `approval` with `checked: "policy"`,
+`governance` — `status`, `trust_tier`, the latest `verified` act, `generated`
+(the act that stamped the text, so a `verified` act earlier than it names a
+review that predates the text), `effective_from`, `stale_after`, and `approval`
+with `checked: "policy"`,
 which is honest absence in the envelope's own idiom: policy-checked, not yet
 change-control-verified. `read` carries the same `governance` block, from the
 same columns through the same seam, and returns the concept's frontmatter
@@ -398,12 +400,13 @@ the file is supported and asserted: the compiled default serves the identical
 surface, compared over the protocol. The measurement that motivated it: three
 tool definitions cost ~2,990 always-resident tokens and one default `search`
 call ~3,541 — an agent pays for a record's tool surface out of its context
-window, so the record's owner decides what it says. Re-measured 2026-08-25
-after the trust floor, the per-hit governance and the trust-tier provenance
-sentences landed: the definitions are
-**17,394 chars / ~4,349 tokens** as transmitted — exact, they depend on the
-code alone — which is `search` 8,152 + `outline` 3,552 + `read` 5,686 =
-**17,390**, plus the four characters the `tools` array itself carries;
+window, so the record's owner decides what it says. Re-measured 2026-10-27
+after `generated` joined the per-hit governance block (#279); it was 17,394 /
+~4,349 on 2026-08-25, after the trust floor, the per-hit governance and the
+trust-tier provenance sentences landed. The definitions are
+**18,282 chars / ~4,571 tokens** as transmitted — exact, they depend on the
+code alone — which is `search` 8,596 + `outline` 3,552 + `read` 6,130 =
+**18,278**, plus the four characters the `tools` array itself carries;
 the per-call figures were NOT re-measured against that record, and
 `packages/ksor/docs/tool-surface.md` derives them from the 2026-08-23
 measurement plus the governance block's exactly-measured 262 chars a hit. The

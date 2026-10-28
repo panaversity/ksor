@@ -753,8 +753,9 @@ hand. The parenthetical is already corrected in §1.8.
 
 **And one the plan predicted correctly and is worth naming because it is a
 cost, not a win.** The tool surface grew: the served `tools` array measured
-17,394 chars ≈ 4,349 tokens on 2026-08-25 — the three definitions' own JSON
-sums to 17,390 of that, the array adding two brackets and two separators —
+18,282 chars ≈ 4,571 tokens on 2026-10-27 (17,394 ≈ 4,349 on 2026-08-25) — the
+three definitions' own JSON sums to 18,278 of that, the array adding two
+brackets and two separators —
 against ~2,990 tokens measured 2026-08-23 before the trust floor and the
 per-hit governance block. That is
 the price of an agent being able to tell a reviewed document from an

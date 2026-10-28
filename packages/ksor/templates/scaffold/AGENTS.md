@@ -410,13 +410,13 @@ the same defaults.
 
 Edit it because an agent pays for this surface out of its context window, twice.
 The definitions depend only on the code, so they are exact for every record
-(re-measured 2026-08-25 from the served `tools/list`); the per-call figures are
+(re-measured 2026-10-27 from the served `tools/list`); the per-call figures are
 the 2026-08-23 measurement against a live 81-document record, plus the
 governance block every hit now carries:
 
 |                                  |                                |
 | -------------------------------- | ------------------------------ |
-| all three tool definitions       | ~4,349 tokens, always resident |
+| all three tool definitions       | ~4,571 tokens, always resident |
 | one `search` at `k=10` (default) | ~4,196 tokens per call         |
 | one `search` at `k=5`            | ~2,330 tokens per call         |
 

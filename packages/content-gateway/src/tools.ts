@@ -196,6 +196,15 @@ const GOVERNANCE = z
           ),
       })
       .nullable(),
+    generated: z
+      .object({ by: z.string(), at: z.string() })
+      .nullable()
+      .describe(
+        "When this document's content last meaningfully changed, and which actor " +
+          "stamped it. Compare it with verified.at: a verified.at EARLIER than " +
+          "generated.at means the latest review predates the text you were handed. " +
+          "Null when the record holds none.",
+      ),
   })
   .describe("What this record has done about the DOCUMENT this passage came from.");
 

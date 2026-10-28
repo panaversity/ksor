@@ -90,6 +90,7 @@ interface WireHit {
       readonly at: string;
       readonly checked: string;
     } | null;
+    readonly generated: { readonly by: string; readonly at: string } | null;
   };
 }
 
@@ -256,7 +257,11 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
       // change control (phase B). The envelope says which it is, the way
       // `gate` says whether the record can abstain at all.
       approval: { by: "human:cfo", at: "2026-08-21T09:00:00.000Z", checked: "policy" },
+      // The content's last meaningful change (OKF §5.2). Without it an agent
+      // cannot tell whether `verified` covers the text it was just handed.
+      generated: { by: "fixture/1", at: "2026-08-20T09:00:00.000Z" },
     });
+
     expect(byslug.get("machine-confirmed")?.trust_tier).toBe("machine-confirmed");
     expect(byslug.get("machine-confirmed")?.verified).toEqual({
       by: "process:nightly-finance",
@@ -488,6 +493,38 @@ describe.runIf(adminDsn !== "")("the governance surface of `search` (db)", () =>
     expect(unverified.trust_tier).toBe("unverified");
     expect(unverified.verified).toBeNull();
     expect(unverified.approval?.checked).toBe("policy");
+  });
+
+  it("carries `generated`, so an agent can tell a review that predates the text", async () => {
+    // Issue #279: `verified` is independent of `generated.at` (OKF §5.2), so a
+    // document edited AFTER its last review still reads human-reviewed. The
+    // comparison is the consumer's, and the consumer is an agent, so the
+    // governance block must hand it the value to compare against.
+    const edited = { by: "human:kim", at: "2026-10-01T05:00:00.000Z" };
+    await pool.query(
+      "UPDATE content_nodes SET generated = $2::jsonb WHERE tenant_id = $1 AND slug = 'human-reviewed'",
+      [TENANT, JSON.stringify(edited)],
+    );
+    try {
+      const hits = (await searchAs(doorAt(undefined))).hits ?? [];
+      const fromSearch = hits.find((h) => h.slug === "human-reviewed")?.governance;
+      expect(fromSearch?.generated, JSON.stringify(fromSearch)).toEqual(edited);
+
+      // The scenario itself: the latest review is OLDER than the text.
+      expect(
+        Date.parse(fromSearch?.verified?.at ?? "") < Date.parse(fromSearch?.generated?.at ?? ""),
+        `verified ${fromSearch?.verified?.at} vs generated ${fromSearch?.generated?.at}`,
+      ).toBe(true);
+
+      // `read` is the same record, so it must say the same thing.
+      const fromRead = (await readAs(doorAt(undefined), "human-reviewed")).governance;
+      expect(fromRead.generated).toEqual(edited);
+    } finally {
+      await pool.query(
+        "UPDATE content_nodes SET generated = $2::jsonb WHERE tenant_id = $1 AND slug = 'human-reviewed'",
+        [TENANT, JSON.stringify({ by: "fixture/1", at: "2026-08-20T09:00:00.000Z" })],
+      );
+    }
   });
 
   it("REFUSES a floor it cannot recognise instead of serving the whole record", async () => {

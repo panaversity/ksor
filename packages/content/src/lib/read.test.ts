@@ -47,6 +47,7 @@ function node(path: string): DocumentNode {
     approval: null,
     effectiveFrom: null,
     staleAfter: null,
+    generated: null,
   };
 }
 
@@ -191,7 +192,7 @@ function fakeClient(
   return client as unknown as pg.PoolClient;
 }
 
-// The six governance columns ride on the same projection, from the LIVE row —
+// The seven governance columns ride on the same projection, from the LIVE row —
 // `read` carries them out beside the passage, so the node lookups fetch them.
 const GOVERNANCE_FIELDS = [
   "doc_status",
@@ -200,6 +201,7 @@ const GOVERNANCE_FIELDS = [
   "approval",
   "effective_from",
   "stale_after",
+  "generated",
 ];
 const NODE_FIELDS = [
   "node_id",
@@ -239,6 +241,7 @@ const CANDIDATE = [
   2,
   [{ by: "human:kim", at: "2026-08-22T09:00:00Z" }],
   { by: "human:cfo", at: "2026-08-21T09:00:00Z" },
+  null,
   null,
   null,
 ];

@@ -118,6 +118,27 @@
                       }
                     ]
                   },
+                  "generated": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "by": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["by", "at"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "When this document's content last meaningfully changed, and which actor stamped it. Compare it with verified.at: a verified.at EARLIER than generated.at means the latest review predates the text you were handed. Null when the record holds none."
+                  },
                   "stale_after": {
                     "anyOf": [
                       {
@@ -173,7 +194,8 @@
                   "verified",
                   "effective_from",
                   "stale_after",
-                  "approval"
+                  "approval",
+                  "generated"
                 ],
                 "type": "object"
               },
@@ -534,6 +556,27 @@
                 }
               ]
             },
+            "generated": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "by": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["by", "at"],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "When this document's content last meaningfully changed, and which actor stamped it. Compare it with verified.at: a verified.at EARLIER than generated.at means the latest review predates the text you were handed. Null when the record holds none."
+            },
             "stale_after": {
               "anyOf": [
                 {
@@ -589,7 +632,8 @@
             "verified",
             "effective_from",
             "stale_after",
-            "approval"
+            "approval",
+            "generated"
           ],
           "type": "object"
         },

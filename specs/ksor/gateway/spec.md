@@ -17,22 +17,22 @@ stays in the package.
 
 ## Why, measured
 
-**Definitions**, re-measured 2026-08-25 from the served `tools/list` of the
+**Definitions**, re-measured 2026-10-27 from the served `tools/list` of the
 default registration, at ~4 chars/token. They depend on the code alone, so they
 are exact for every record:
 
 |                                  | chars  | ~tokens |                                |
 | -------------------------------- | ------ | ------- | ------------------------------ |
-| tool definitions, as transmitted | 17,394 | 4,349   | **always resident in context** |
-| `search` alone                   | 8,152  | 2,038   | always resident                |
+| tool definitions, as transmitted | 18,282 | 4,571   | **always resident in context** |
+| `search` alone                   | 8,596  | 2,149   | always resident                |
 | `outline` alone                  | 3,552  | 888     | always resident                |
-| `read` alone                     | 5,686  | 1,422   | always resident                |
-| `outline` + `read`, if deleted   | 9,238  | 2,310   | the delete-both saving         |
+| `read` alone                     | 6,130  | 1,533   | always resident                |
+| `outline` + `read`, if deleted   | 9,682  | 2,421   | the delete-both saving         |
 
 The first row is the JSON of the whole `tools` array; every other row is one
 tool's own object. The array carries four characters no tool's row does — two
-brackets and two separators — so the three tools sum to **17,390** and the
-array is **17,394**. Deleting a tool saves that tool's own row.
+brackets and two separators — so the three tools sum to **18,278** and the
+array is **18,282**. Deleting a tool saves that tool's own row.
 
 **Replies** depend on the record's passages. These are the 2026-08-23
 measurement against the live book record (81 documents, 6,963 chunks) plus the
@@ -56,9 +56,15 @@ from reviews a document declares about itself, gated by no authority list, and
 both floors now say so instead of letting `human-reviewed` read as a check the
 record performed.
 
+Then `search` and `read` each gained **444 chars** for `generated`, the act that
+stamped a document's current text (#279) — 888 across the two, always resident.
+That buys an agent the ability to see that a review predates the text it was
+handed, which `approval.at` cannot show: re-approving unchanged text moves it
+without the content changing.
+
 Two consequences set the scope:
 
-1. **Dropping an unused tool is the largest win** — ~2,310 tokens for the whole
+1. **Dropping an unused tool is the largest win** — ~2,421 tokens for the whole
    session, whether or not the agent would ever have called them.
 2. **`k` is the result lever; `budgets.maximum_response_characters` is not.** It
    defaults to 120,000 and at ~1,700 chars a hit cannot bind before
@@ -199,7 +205,7 @@ real served record. 1 `content-gateway/src/floor-guarantees.test.ts`;
 dependency the scaffold does not have"); 3
 `ksor/src/served-surface.integration.test.ts` against
 `__fixtures__/served-surface.golden.json` — whose `tools` array measures
-17,394 chars and its three rows 8,152 / 3,552 / 5,686, the figures above; 4
+18,282 chars and its three rows 8,596 / 3,552 / 6,130, the figures above; 4
 and 5 `ksor/src/gateway-file.integration.test.ts` (deletable, identical
 surface; the three slugs by name); 7
 `content-gateway/src/gateway-notice.test.ts`. The example

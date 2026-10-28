@@ -16,26 +16,26 @@ An agent pays for this surface out of its context window, and it pays twice.
 Every tool's name, description and input schema is resident for the whole
 session; every answer spends more.
 
-**Definitions**, re-measured 2026-08-25 from the served `tools/list` of the
+**Definitions**, re-measured 2026-10-27 from the served `tools/list` of the
 default registration (~4 chars/token). These depend only on the code, so the
 numbers are exact for every record:
 
 |                                | chars  | ~tokens |                     |
 | ------------------------------ | ------ | ------- | ------------------- |
-| all three, as transmitted      | 17,394 | 4,349   | **always resident** |
-| `search` alone                 | 8,152  | 2,038   | always resident     |
+| all three, as transmitted      | 18,282 | 4,571   | **always resident** |
+| `search` alone                 | 8,596  | 2,149   | always resident     |
 | `outline` alone                | 3,552  | 888     | always resident     |
-| `read` alone                   | 5,686  | 1,422   | always resident     |
-| `outline` + `read`, if deleted | 9,238  | 2,310   | the saving below    |
+| `read` alone                   | 6,130  | 1,533   | always resident     |
+| `outline` + `read`, if deleted | 9,682  | 2,421   | the saving below    |
 
 **Two measurements, so read the first row apart from the rest.** Each tool's
 row is the JSON of that tool's own object; the first row is the JSON of the
 whole `tools` array, which carries four characters no tool's row does — its
 two brackets and the two separators between three tools. So the three tools
-sum to **17,390** and the array is **17,394**. Deleting a tool saves that
+sum to **18,278** and the array is **18,282**. Deleting a tool saves that
 tool's own row, not a share of the total.
 
-They grew, twice, and each rise is priced rather than absorbed. `search` was
+They grew, three times, and each rise is priced rather than absorbed. `search` was
 5,383 chars before the trust floor and the governance each hit now carries, and
 `read` 3,396 before it carried the same governance block beside the frontmatter.
 Then every tool gained exactly **220 chars** for the `audit` field that says
@@ -48,6 +48,12 @@ The last 520 of them are the price of that signal being HONEST: `trust_tier` is
 derived from reviews a document declares about itself, which no authority list
 gates, and both floors now say so rather than letting `human-reviewed` read as a
 check the record performed.
+
+Then `search` and `read` each gained **444 chars** for `generated` — the act
+that stamped the document's current text (#279) — 888 across the two, always
+resident. That buys an agent the ability to see that a review predates the text
+it was handed, which `approval.at` cannot show: re-approving unchanged text
+moves it without the content changing.
 
 **Replies** depend on your record's passages, so these are the 2026-08-23
 measurement against a live 81-document record (6,963 chunks), plus the
@@ -62,7 +68,7 @@ that record:
 | one `search`, `k=5`            | 9,319  | 2,330   | per call |
 | one `search`, `k=3`            | 4,939  | 1,235   | per call |
 
-An agent with five records attached carries ~20,000 tokens of definitions before
+An agent with five records attached carries ~23,000 tokens of definitions before
 doing any work.
 
 ## The three edits that pay
@@ -70,7 +76,7 @@ doing any work.
 ### 1. Delete a tool nothing calls
 
 The biggest win, and the easiest — delete its `registerTool` block. Dropping
-`outline` and `read` takes **9,238 chars (~2,310 tokens)** off every session,
+`outline` and `read` takes **9,682 chars (~2,421 tokens)** off every session,
 whether or not the agent would ever have called them.
 
 ### 2. Say what the record covers

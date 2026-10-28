@@ -185,16 +185,21 @@ enforcement live in the HANDLER, not in the adopter-owned registration
 working and the boot inspection NOTICES the absence rather than refusing it.
 
 **Every hit AND every `read` carries its governance**: `status`, `trust_tier`, the latest
-`verified` act (or null), `effective_from`, `stale_after`, and `approval` with
+`verified` act (or null), `generated` — the act that stamped the text an agent is
+reading (or null) — `effective_from`, `stale_after`, and `approval` with
 `checked: "policy"` — honest absence in the envelope's own idiom, exactly as
 `gate: "off"` is: the approver was checked against the Governance Policy's
-authority list and NOT against change control, which is phase B. It travels
-with the PASSAGE, because an agent deciding whether to rely on a sentence is
-deciding about the document it came from, and a per-response summary cannot
-say which of several hits was the reviewed one. `read` carries the same block,
-from the same six columns through the same seam, taken from the LIVE node row
-rather than a pinned one — a snapshot exists so a citation keeps resolving to
-the same bytes, never so the record's position on those bytes is frozen too.
+authority list and NOT against change control, which is phase B. `generated`
+travels BESIDE `verified` because comparing the two is the only way an agent can
+see that a document's latest review predates the text it was handed; `approval`
+cannot answer that, since re-approving unchanged text moves `approval.at`
+without the content changing. It travels with the PASSAGE, because an agent
+deciding whether to rely on a sentence is deciding about the document it came
+from, and a per-response summary cannot say which of several hits was the
+reviewed one. `read` carries the same block, from the same seven columns through
+the same seam, taken from the LIVE node row rather than a pinned one — a
+snapshot exists so a citation keeps resolving to the same bytes, never so the
+record's position on those bytes is frozen too.
 
 **`read` returns the concept's frontmatter byte-exact** — the author's bytes
 from `sources.frontmatter`, never a re-serialisation of the parsed columns:
