@@ -19,6 +19,119 @@ CONFIRMED unless marked otherwise. Disposition: **fixed** (code changed, in
 this PR), **spec-corrected** (the spec was wrong; amended same commit per
 its own code-wins rule), or **recorded** (deliberate, reason stated).
 
+## Question
+
+What defects, non-conformances, or areas for improvement exist in the `init` implementation, templates, kit, and site template when subjected to an adversarial review, and how should these be addressed (fixed, spec-corrected, or recorded) to ensure robustness, spec conformance, and a reliable adopter lifecycle?
+
+## Evidence
+
+The `init` implementation underwent an adversarial review on 2026-08-18, on the `init-implementation` branch, against `specs/ksor/init/spec.md`. Seven independent attack agents ran in parallel against the built CLI and shipped templates, using lenses covering init code, templates, kit + checker, site template, spec conformance, hostile environments, and adopter lifecycle. Findings were only counted if confirmed live, with 265 tool calls made.
+
+**Key Findings (all fixed unless otherwise noted):**
+
+**Blockers:**
+
+- `ksor init .` failed to validate cwd basename, stamping corrupt JSON (fixed: validates basename, refuses bad names).
+- `npm pack` dropped `.gitignore` files, leading to published tarballs lacking them (fixed: template ships as `gitignore`, renamed on emit; new test for shipped bytes).
+- `.gemini/settings.json` used retired `contextFileName` key, silently failing to load AGENTS.md (fixed: uses `{"context": {"fileName": [...]}}`).
+
+**Init CLI:**
+
+- No rollback for `ksor init .` on failure (fixed: writes recorded, removed on failure).
+- Environment failures (ENOSPC/EACCES) surfaced as raw stack traces (fixed: maps to `error: environment` + remedy).
+- Broken install (missing templates dir) gave raw ENOENT stack (fixed: preflight → `error: broken-install`).
+- Concurrent double-init died with ENOTEMPTY stack (fixed: routes ENOTEMPTY/EEXIST to `exists` refusal).
+- Nonzero `git init` incorrectly printed "git was not found" (fixed: distinguishes absent vs. failure, quotes git stderr).
+- Spec clause "stale stage dirs are reported, never deleted" unimplemented (fixed: pre-scan names leftovers).
+- Spec refusal `error: unsupported-platform` missing (fixed: pure version gate).
+- Name grammar accepted Windows-reserved device names (fixed: rejected in `isValidName`).
+- Extra args silently dropped (fixed: refused `bad-name`, suggests hyphenated join).
+- Workspace warning printed before target-state checks (fixed: moved after refusal checks).
+- `blocked` refusal gave only entry count, not names (fixed: lists up to 5 entry names).
+- Handoff/README said `pnpm install` with no fallback (fixed: one Corepack/npm line added).
+- Determinism tests used single name; vacuous theme assertion in e2e (fixed: second-name run, e2e asserts light ≠ dark backgrounds).
+
+**Format Checker (Scaffold Kit):**
+
+- Reference-style links not scanned (fixed: definitions resolved through escape/dead logic).
+- Single-quoted link titles skipped; angle-bracket destinations false-flagged; `~~~` fences/double-backtick spans not stripped (fixed: CommonMark title forms, `<…>` unwrap, both fence styles, longest-run code spans).
+- Skill-copy byte-identity one-directional (fixed: mirror walk both directions).
+- Interior spaces in file/dir names passed (fixed: whitespace rejection in portable-name rule).
+- UTF-8 BOM → "no frontmatter"; unclosed frontmatter silently absorbed body text (fixed: BOM stripped; malformed frontmatter named).
+- `.DS_Store` failed gate with misleading errors (fixed: OS junk skipped).
+- Empty record passed checker but broke build (fixed: "a KSoR is never empty" is named error).
+- `instance.md` not validated despite spec (fixed: closed key set enforced).
+- `superseded_by` checked for presence only (fixed: path-like values must resolve inside `knowledge/`).
+- Site content check missed uppercase extensions (fixed: case-insensitive extension test).
+- AGENTS.md prose drift (fixed: prose matches checker).
+- No automated coverage for these classes (fixed: new checker-torture integration test).
+
+**Site Template:**
+
+- `order` frontmatter advertised but not read (fixed: sorted page tree honors `order`).
+- `llms.txt` / `llms-full.txt` ignored `KSOR_BASE_PATH` (fixed: base-prefixed URLs, instance-name heading, asserted in e2e).
+- Home CTA hardcoded `/docs/example` (fixed: CTA derives from first page; empty-record state rendered).
+- 11 of 17 site deps were caret ranges (fixed: all pinned exactly).
+- `tailwind-merge` declared but unused (fixed: removed).
+- Workspace globs named nonexistent `system/gateways/*`, `system/packages/*` (fixed: comment marks them reserved).
+- `validate.yml` double-ran on same-repo PRs (fixed: push filtered to main).
+- Record with zero documents cannot build statically (recorded: checker K7, `pnpm dev` renders legible empty state).
+
+**Round Two (after two-shell proof and branding):**
+
+- Review 1: 0700 project root, `tel:` links reported dead, raw control bytes in torture suite diffed as binary, indented code samples failed, post-success errors masqueraded, stale suite path (all fixed).
+- Review 2: Shells silently disagreed on unordered reading order (loader tie order, flat sort approx.), swap install died under `CI=true`, umask-077 inverse mode fix, nested-list dead links passed, branding surface shipped without browser opening home page, null-stderr spawn failures reported TypeErrors (all fixed).
+- Delta attack: Identity split (one shell's name stamped constant, other from `instance.md`; now both read `instance.md`), checker-legal frontmatter that YAML rejects killed builds (unquoted colons now refused), Docusaurus's `numberPrefixParser` broke path identity for digit-prefixed files, non-ASCII filenames exported incompatible routes (now refused), CRC-corrupt PNG 500'd one shell and shipped silently on other (checker verifies PNG chunk CRCs), conformance suite trusted incidence (titles satisfiable from any page's nav, fixed ports, no asset probe, no divergence probes — all hardened).
+
+**Round Three through Seven:**
+
+- Round 3: Theme fetched typeface from Google at build time (offline builds impossible), 1,900 ported lines untypechecked, shells diverged on index-less folder ties.
+- Round 4: Guards only ran at birth (instance.md's name grammar, provenance list shape), `_partial.md` divergence, missing repo .gitattributes, orphaned dev-server process group.
+- Rounds 5 & 6 (attacked checker): Duplicate keys, malformed quoting, tight colons, tab indentation, flow-list types, stray backtick silently exempted links, `process.exit()` truncating piped reports, dangling symlink crashing run.
+- Every finding fixed same-round, with torture cases; conformance suite typechecks the shell where its dependencies exist.
+
+## Decision
+
+Numerous defects and non-conformances in the `init` implementation, templates, kit, and site template were identified and systematically addressed through an adversarial review process. Findings were categorized as fixed (code changed), spec-corrected (spec amended), or recorded (deliberate choice with reason stated).
+
+Key spec corrections include:
+
+- `ksor` not being a `devDependency` in the scaffold.
+- Using pnpm 11 `allowBuilds` deny-map instead of an empty allowlist.
+- Shadcn dropped from the shell.
+- `.gitignore` shipping as `gitignore` in the package.
+- Windows-reserved device names excluded from name grammar.
+- Refusal contract with `broken-install` and `environment` slugs at exit 3.
+- Governed directives deferred due to unratified grammar.
+- Two-implementation clause re-activated with a workbench shell and conformance suite.
+
+The standing lesson from the two-shell proof is that two implementations of one contract will disagree wherever the contract is silent. The conformance suite now explicitly pins the canonical answer for each discovered silence, enforcing the contract.
+
+## Rejected
+
+- **Plausible-but-unverified claims**: Dropped if not confirmed live by running the CLI, planting the defect, and reading bytes.
+- **Implicit `ksor` dependency in scaffold**: Rejected. The scaffold deliberately carries no `ksor` dependency to avoid breaking offline installs and because `ksor` is a scaffolding tool, not a runtime dependency.
+- **Empty `build-scripts` allowlist**: Rejected in favor of pnpm 11 `allowBuilds` deny-map, as pnpm 11 hard-fails until build scripts are decided.
+- **Shadcn dependency**: Rejected; nothing in the shell needed it.
+- **Inventing quiz semantics ad hoc for governed directives**: Rejected; shells pass directives through as readable text until a grammar is ratified.
+- **Implicitly trusting static Orama search wiring**: While initially verified clean against fumadocs 16.10.3 internals, the document notes that the `init` implementation now uses ZBSearch. This implies that the Orama search wiring approach was superseded.
+- **Ignoring empty records**: Rejected. "A KSoR is never empty" is now a named checker error, preventing empty records from passing the checker and breaking the build. The static export of an empty record is deliberately recorded as having no legitimate output.
+- **Relying on GitHub renders for `colorette` ANSI output**: Implicitly rejected; `grep` behavior needed explicit handling for ANSI escape codes in CI logs.
+- **Single-directional skill-copy byte-identity**: Rejected, now a mirror walk in both directions is performed.
+- **Unchecked reference-style links**: Rejected, reference definitions are now resolved through the same escape/dead logic.
+
+## Reversal
+
+- **Spec clauses on `ksor` dependency and `build-scripts` allowlist**: These were initially part of the spec but were corrected when the code revealed different behavior (e.g., unpublished `ksor` breaking offline installs, pnpm 11 `allowBuilds` requirements). This represents a reversal of the original spec's understanding based on live evidence.
+- **Two-implementation clause**: Initially deferred, it was re-activated by the owner on the same day, leading to the development of the workbench shell and conformance suite. This was a reversal of the temporary deferral.
+- **Adoption of Shadcn**: Initially part of "Next.js + Fumadocs + shadcn" but later dropped as nothing in the shell needed it. This is a reversal of the decision to include Shadcn.
+- **Ignoring Windows-reserved device names**: The initial `isValidName` did not reject these, but the spec grammar was amended, and rejection was implemented, reversing the acceptance of such names.
+- **Default site dependencies as caret ranges**: The spec + lock record promised exact pins, but 11 of 17 site deps were caret ranges. The fix to pin all exactly represents a reversal to adhere to the original promise.
+- **Pre-computed identity for shells**: Initially, one shell's name was a stamped constant, leading to identity splits. Both shells now read `instance.md`, reversing the pre-computed constant approach.
+- **Implicit trust in incidence for conformance suite**: The conformance suite initially trusted incidence (e.g., titles satisfiable from any page's nav). This was hardened to probe assets and divergence, reversing the reliance on incidence alone.
+- **Theme typeface fetching at build time**: Initially, the shipped shell fetched its typeface from Google at build time, making offline builds impossible. This was fixed, implying a reversal to a more self-contained or reproducible build process.
+- **Guards only running at birth**: Guards for `instance.md`'s name grammar and provenance list shape initially ran only at birth. This was fixed to ensure ongoing validation, reversing the limited scope.
+
 ## Blockers — all fixed
 
 | #   | Finding                                                                                                                                                                       | Disposition                                                                                                                                                |

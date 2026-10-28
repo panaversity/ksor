@@ -13,6 +13,116 @@ calibrated abstention, and fail-closed gateway become `ksor serve` and the
 packages under it. This document preserves the evidence trail and the
 method; the served surface's contract is `specs/ksor/serve/spec.md`.
 
+## Question
+
+How can the predecessor kernel's content Source of Record (SoR), including its retrieval, generations, calibrated abstention, and fail-closed gateway, be fully converted to TypeScript within this workspace, with tests included, to become `ksor serve` and its underlying packages, while preserving the evidence trail and method?
+
+## Evidence
+
+The conversion is based on the `sor-agentfactory @ b554f91` source (verified 2026-08-19).
+
+**Source Verification:**
+
+1.  **Embedding-provider seam merged**: PR #444 ("Part A") landed, making the kernel provider-agnostic. Vendor-coupling objection solved upstream.
+2.  **Seam clean**: Content gateway only reaches six symbols from `sor_gateway_kit` and `sor_platform`, with no edges to `sor-learning`, `sor-pedagogy`, or `zia-tutor`.
+3.  **MCP surface model-free**: `search`, `outline`, `read_lesson` return governed evidence; calling model composes prose. Serve never needs a generation-side model.
+
+**Manifest of Crossing Components:**
+
+- `packages/sor-content/` becomes `packages/content/` (ingest, chunking, generations, retrieval, calibrate, `schema.sql`).
+- `packages/sor-platform/` becomes `packages/postgres/` (trimmed `load_bundle`, pooled db endpoint, contracts, renamed 2026-08-20).
+- `packages/sor-gateway-kit/` becomes `packages/gateway-kit/` (auth + serve + harden + transport security).
+- `gateways/sor-content/` becomes the `ksor serve` door (fail-closed, MCP TS SDK, stateless Streamable HTTP).
+
+Mirroring source topology during conversion is deliberate for 1:1 mappability of Python test suite as oracle.
+
+**Dropped Components:**
+
+- Agent-Factory-Book-specific items (~1,600 lines with tests): `docusaurus_sidebar.py` ingest adapter, `rendered.py` MDX shell rendering, book's instance declaration.
+- Dropped kit modules: `wiring.build_gateway_server`, `manifest.py`, `publish.py`.
+- Never crosses: `sor-learning`, `sor-pedagogy`, `gateways/zia-tutor`, `instances/learning`, prompt skills.
+
+**Integration Question Resolution:**
+
+- **Python as sidecar (Option A) rejected**: `ksor init` would need Docker + a second language.
+- **Port contract to TS (Option B)** and **Extract Python as reference + conformance fixtures (Option C)**: C is how B is done safely.
+  1.  Fixtures first: Gold sets, `schema.sql`, calibration data extracted as conformance fixtures.
+  2.  Python suite is oracle: Each converted package matches oracle's observable behavior on fixtures; tests convert alongside.
+  3.  Method is crown jewel: `calibrate.py`'s calibrated abstention floor crosses with measurement discipline.
+
+**Placement (Owner-confirmed 2026-08-19):**
+
+- `ksor init` stays database-free.
+- Kernel is framework-owned (workspace packages, monorepo, boundary graph, changesets release).
+- CI embeds for real: `GEMINI_API_KEY` as repo secret, live calibration/retrieval evals run gated, deterministic test provider for fast tiers.
+
+**Adaptations for TypeScript (Python never needed):**
+
+- Visibility: Serve for audience X reads X's stage, leaks nothing past it.
+- Envelope as discriminated union: abstention is a type, provenance labels derive from citation + published generation.
+- `instance.md` grows keys (`embedding.*`, `database.*`, retrieval floors).
+- DB-backed test tier: Postgres suites land gated against service container in CI, local Postgres, or throwaway Neon in dev.
+
+**Outcome Ledger (2026-08-19):**
+
+- **Spine**: `schema.sql` verbatim + `renderSchema`; pool discipline; hybrid RRF SQL with riding abstention signal + `splitHits` drift guard; abstention gates; `instance.md` adaptation; snapshot HMAC; rlog; service read plane; gateway.
+- **Workers**: Chunker (33 cases/79 chunks); `plain-tree` adapter + manifest (golden manifest byte-for-byte); embedding seam (contract layer, retry asymmetry, single-flight cache, breaker); calibrate math (92 oracle assertions); `gateway-kit` (55 tests); read libs (68 tests).
+- **Acceptance**: Real MCP client spawns built binary; search with citations + snapshot, outline, byte-exact read, abstention as only passing answer, HTTP fail-closed boot. 424 unit + 114 integration + gated db tier, all green.
+
+**Decision-6 Drops (recorded):** Bundle transport + snapshot key ring as deployment machinery, Redis L2s, rate limiting, search result cache, Sentry, centroid routing (title-boost negative result), rerank, book vocabulary.
+
+**Divergences (commented in source):** JS/Python float rounding, code-point counting, BSD-sed `\b` no-op, pg NUMERIC-as-string coercion, promises cannot cancel.
+
+**Live Walk (2026-08-19):** Run against throwaway Neon (gemini-embedding-001/d1536). Three example-corpus documents ingested; synthesized calibration door live (Gemini wrote probes); report separable (max OOC 0.553 < min in-corpus 0.682); far-domain question ABSTAINED; scope-adjacent near-miss ABSTAINED.
+
+**CLI Walk (2026-08-19):** Full loop with real Gemini, example corpus, shipped binaries (`ksor-content schema --apply`, `psql INSERT`, `ksor-content ingest --flip`, `ksor-content calibrate`, `ksor-gateway`). MCP client verified `search`/`outline`/`read` tools: served purchase approval, abstained autovacuum daemon.
+
+**Post-Review Hardening (2026-08-19):** Two adversarial review passes drove fixes and three architectural decisions.
+
+- **Fixed (fail-closed, with regression tests):** Config layer fails closed (unknown instance keys refused, `vector_floor: uncalibrated` state); degradation fails closed (embed outage abstains); revocation closes snapshot window; node/window identity (window cursor is position index); DB serving bounded (pool checkout, `maxLifetimeSeconds`, per-request deadline, `/mcp` concurrency cap); correctness batch (CRLF normalized, embedding contract checks dimension, shrink guard counts nodes, sibling slug collisions named, OUTLINE child_count honors takedown deny, BOM-prefixed frontmatter strips, numeric CLI flags validate, graceful SIGTERM drain, half-applied-schema/missing-DSN exit codes).
+- **Carried-but-unused, resolved (rule 9):** `readcache` deleted; `RequiredEnvError` and `runServer` shutdown machinery wired; `platform` gained first tests.
+
+## Decision
+
+The owner (2026-08-19, AGENTS.md decision 11) decided to convert the predecessor kernel's content SoR entirely to TypeScript within this workspace, including all tests. This converted kernel will become `ksor serve` and its supporting packages, upholding production-proven retrieval, generations, calibrated abstention, and a fail-closed gateway. The served surface's contract is defined by `specs/ksor/serve/spec.md`.
+
+The conversion process involved:
+
+- Verifying the `sor-agentfactory @ b554f91` source and its merged embedding-provider seam and clean content gateway.
+- Mapping Python packages to TypeScript equivalents, deliberately mirroring topology for oracle-based testing.
+- Resolving integration by extracting fixtures and schema as conformance tests first, then porting packages to match observable behavior, with the Python test suite as the oracle. The `calibrate.py` method for calibrated abstention is a key intellectual asset carried over.
+- Confirming placement: `ksor init` remains database-free, the kernel is framework-owned within the monorepo, and CI embeds use `GEMINI_API_KEY` with gated evaluations.
+- Implementing TypeScript-specific adaptations for visibility, a discriminated union for the envelope, `instance.md` key growth, and a DB-backed test tier.
+
+**Post-review architectural decisions (2026-08-19):**
+
+- **Decision A (Four packages stay):** `platform`, `content`, `gateway-kit`, `content-gateway` remain separate packages, not as Python layout mirrors, but as seams required for the multi-record roadmap (e.g., future identity or praxis packages). This decision overrides the `turbo` removal precedent (Decision 5).
+- **Decision B (Move HTTP door to SDK's Web-standard transport - recommended for next PR):** Transition the HTTP door from hand-rolled `node:http` to `WebStandardStreamableHTTPServerTransport` with Hono. This deletes significant boilerplate and leverages SDK helpers, aligning with the 2026-07-28 protocol revision. _(Note: superseded 2026-08-20; kernel is bundled into `@panaversity/ksor`, which now carries `hono` + `@hono/node-server`, altering its zero-dep status)._
+- **Decision C (Migration path owed before adopters have data):** Before data exists and schema moves forward, a versioned plain-SQL migration runner keyed on `schema_meta` must exist (raw `pg`, no ORM). This is deferred but tracked.
+
+## Rejected
+
+- **Running Python kernel as a sidecar container (Option A)**: Rejected as it would force `ksor init` to require Docker and a second language, undermining the scaffold's core promise.
+- **Consolidating `platform` into `content`, or `kit` into the CLI/content-gateway**: Rejected to maintain architectural seams for a multi-record roadmap (Decision A). Folding `gateway-kit` would force future gateways to re-implement auth, and folding `platform` would force identity to depend on content for a pool.
+- **`drizzle-orm`**: Dropped as unused from the migration path for schema changes (Decision C).
+- **Bundle transport + snapshot key ring as deployment machinery**: Dropped in favor of an ephemeral default for deployment, keeping it honest.
+- **Redis L2s, rate limiting, search result cache, Sentry**: Dropped from the initial conversion, indicating these were not deemed essential for the core kernel functionality at this stage.
+- **Centroid routing**: Dropped, with its title-boost negative result carried in comments.
+- **Rerank**: Retired upstream and dropped from the conversion.
+- **Book vocabulary**: Specific to Agent-Factory-Book and dropped.
+- **Deprecated HTTP+SSE transport for MCP**: Explicitly rejected in favor of stateless Streamable HTTP (from `serve/spec.md` context).
+- **Spawn design for integration path**: The initial sketch of a zero-dep CLI launching a separately installed gateway under `system/gateways/` was superseded. The kernel is now bundled into `@panaversity/ksor`, and `ksor serve` runs the gateway's `main` in-process (Decision 12 revision).
+
+## Reversal
+
+- **Vendor-coupling objection to kernel conversion**: This was a potential blocking point, but it was _reversed_ because the embedding-provider seam was merged upstream (PR #444) before we asked it, making the kernel provider-agnostic.
+- **Initial deferral of two-implementation contract resolution**: The decision to defer resolution of differences between two implementations was _reversed_ by the owner's explicit instruction, leading to the development of the workbench shell and conformance suite.
+- **Zero-dependency status of `@panaversity/ksor`**: The decision (Decision B) to move the HTTP door to the SDK's Web-standard transport initially considered a runtime dependency on the _private_ `content-gateway` to keep the CLI zero-dep. However, this was _superseded_ on 2026-08-20. The kernel is now bundled into `@panaversity/ksor`, which now carries `hono` + `@hono/node-server` and is no longer zero-dep (AGENTS.md decision 13's revision). This is a significant reversal of the zero-dependency guarantee for the published CLI.
+- **`drizzle-orm` usage**: `drizzle-orm` was initially part of Decision 12 for the schema migration path but was later _dropped as unused_, reversing that part of the decision.
+- **Integration path spawn design**: The initially sketched spawn design (zero-dep CLI launching a separately installed gateway) was _superseded_ by the decision to bundle the kernel into `@panaversity/ksor` and run the gateway's `main` in-process (Decision 12 revision).
+- **Consolidation of packages**: The initial thought of consolidating packages (e.g., platform into content) was _reversed_ in Decision A, which affirmed that the four packages (`platform`, `content`, `gateway-kit`, `content-gateway`) should stay separate due to future multi-record roadmap needs.
+- **`pg` native checkout race**: The hand-rolled checkout race was _replaced by pg's native mechanism_, reversing the previous implementation.
+
 ## Source, verified
 
 `sor-agentfactory @ b554f91` (local read, 2026-08-19). Three facts checked
